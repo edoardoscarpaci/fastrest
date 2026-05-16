@@ -28,7 +28,7 @@ dependencies = [
     # pydantic-settings for env-var-based configuration (CORSConfig, TrustStore, etc.)
     "pydantic-settings>=2.0",
     # providify for DI wiring (@Configuration, @Provider, Inject[], DIContainer)
-    "providify>=0.1.6",
+    "providify>=1.0.0a0",
     # python-multipart is required for FastAPI form data parsing (file uploads, etc.)
     "python-multipart>=0.0.9",
 ]

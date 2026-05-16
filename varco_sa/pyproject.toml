@@ -22,7 +22,7 @@ dependencies = [
     # Workspace sibling — resolved from the monorepo via [tool.uv.sources] below.
     "varco-core",
     "sqlalchemy[asyncio]>=2.0",
-    "providify>=0.1.6",
+    "providify>=1.0.0a0",
 ]
 
 [project.urls]
