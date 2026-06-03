@@ -346,3 +346,23 @@ Redis Pub/Sub provides **at-most-once** delivery — messages published while
 no subscriber is connected are **silently dropped**.  If you need
 at-least-once or exactly-once delivery, use Redis Streams (planned as
 `varco_redis.streams` in a future release) or switch to `varco_kafka`.
+
+---
+
+## Migration 1.x → 2.0
+
+The no-op `@Configuration` aliases (`RedisEventBusConfiguration`,
+`RedisChannelManagerConfiguration`, `RedisStreamConfiguration`) were removed.
+Register the bus via scan instead:
+
+```python
+# Before (1.x)
+await container.ainstall(RedisEventBusConfiguration)
+
+# After (2.0)
+from varco_redis.di import bootstrap
+bootstrap(container)            # or: container.scan("varco_redis", recursive=True)
+```
+
+The opt-in cache (`RedisCacheConfiguration`, `RedisLayeredCacheConfiguration`)
+is unchanged — still installed with `await container.ainstall(...)`.

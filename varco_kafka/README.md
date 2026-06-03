@@ -127,25 +127,25 @@ async with KafkaEventBus(settings) as bus:
 
 ## DI integration
 
-`varco_kafka` ships two `@Configuration` classes so you can install only what
-each service needs:
+`varco_kafka` discovers its singletons (`KafkaEventBus`, `KafkaChannelManager`,
+their settings) via `container.scan(...)`. Use the `bootstrap()` helper:
 
 ```python
 from providify import DIContainer
 from varco_core.event import AbstractEventBus, ChannelManager
-from varco_kafka import KafkaEventBusConfiguration, KafkaChannelManagerConfiguration
+from varco_kafka.di import bootstrap
 
-# Services that only publish/consume events
-container = DIContainer()
-await container.ainstall(KafkaEventBusConfiguration)
+container = bootstrap(DIContainer())   # scans varco_kafka, registers @Singletons
 bus = await container.aget(AbstractEventBus)
-
-# Admin services that also manage topics
-await container.ainstall(KafkaChannelManagerConfiguration)
 manager = await container.aget(ChannelManager)
 
 await container.ashutdown()
 ```
+
+> **Migration 1.x → 2.0:** the no-op `KafkaEventBusConfiguration` /
+> `KafkaChannelManagerConfiguration` aliases were removed. Replace
+> `await container.ainstall(KafkaEventBusConfiguration)` with
+> `bootstrap(container)` (or `container.scan("varco_kafka", recursive=True)`).
 
 ---
 

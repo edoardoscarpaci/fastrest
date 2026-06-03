@@ -56,49 +56,6 @@ from __future__ import annotations
 from typing import Any
 
 
-# ── Backward-compatibility aliases ────────────────────────────────────────────
-# The old ``@Configuration`` classes are kept as no-op aliases so existing code
-# that calls ``container.ainstall(RedisEventBusConfiguration)`` does not break.
-# They no longer register any providers — scan handles everything.
-
-try:
-    from providify import Configuration  # noqa: PLC0415
-
-    @Configuration
-    class RedisEventBusConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        ``RedisEventBusSettings`` is now ``@Singleton``-decorated and
-        discovered automatically by ``container.scan("varco_redis", recursive=True)``.
-        The active bus (Pub/Sub or Streams) is selected by the ``_redis_active_bus``
-        ``@Provider`` in ``varco_redis.bus``, also discovered by scan.
-        """
-
-    @Configuration
-    class RedisChannelManagerConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        ``RedisChannelManager`` is ``@Singleton``-decorated and discovered
-        automatically by scan.
-        """
-
-    @Configuration
-    class RedisStreamConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        Set ``VARCO_REDIS_USE_STREAMS=true`` to activate ``RedisStreamEventBus``
-        instead of installing this configuration class.
-        """
-
-except ImportError:
-    RedisEventBusConfiguration = None  # type: ignore[assignment,misc]
-    RedisChannelManagerConfiguration = None  # type: ignore[assignment,misc]
-    RedisStreamConfiguration = None  # type: ignore[assignment,misc]
-
-
 # ── bootstrap ─────────────────────────────────────────────────────────────────
 
 
@@ -258,10 +215,6 @@ async def async_bootstrap(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
-    # Backward-compat aliases — kept so existing code doesn't break.
-    "RedisEventBusConfiguration",
-    "RedisChannelManagerConfiguration",
-    "RedisStreamConfiguration",
     "bootstrap",
     "async_bootstrap",
 ]

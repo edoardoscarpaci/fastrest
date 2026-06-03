@@ -45,40 +45,6 @@ from __future__ import annotations
 from typing import Any
 
 
-# ── Backward-compatibility aliases ────────────────────────────────────────────
-# ``KafkaEventBusConfiguration`` and ``KafkaChannelManagerConfiguration`` are
-# kept as no-op ``@Configuration`` classes so existing code that calls
-# ``container.ainstall(KafkaEventBusConfiguration)`` does not break.
-# They no longer register any providers — scan handles everything.
-
-try:
-    from providify import Configuration  # noqa: PLC0415
-
-    @Configuration
-    class KafkaEventBusConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        ``KafkaEventBusSettings`` is now ``@Singleton``-decorated and
-        discovered automatically by ``container.scan("varco_kafka", recursive=True)``.
-        Calling ``container.ainstall(KafkaEventBusConfiguration)`` is a no-op.
-        """
-
-    @Configuration
-    class KafkaChannelManagerConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        ``KafkaChannelManagerSettings`` is now ``@Singleton``-decorated and
-        discovered automatically by ``container.scan("varco_kafka", recursive=True)``.
-        Calling ``container.ainstall(KafkaChannelManagerConfiguration)`` is a no-op.
-        """
-
-except ImportError:
-    KafkaEventBusConfiguration = None  # type: ignore[assignment,misc]
-    KafkaChannelManagerConfiguration = None  # type: ignore[assignment,misc]
-
-
 # ── bootstrap ─────────────────────────────────────────────────────────────────
 
 
@@ -158,8 +124,5 @@ def bootstrap(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
-    # Backward-compat aliases — kept so existing code doesn't break.
-    "KafkaEventBusConfiguration",
-    "KafkaChannelManagerConfiguration",
     "bootstrap",
 ]

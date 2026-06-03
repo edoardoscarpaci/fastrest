@@ -33,7 +33,16 @@ varco_kafka/             — Kafka event bus backend (aiokafka)
   ├── channel.py         — KafkaChannel (topic routing)
   ├── dlq.py             — KafkaDLQ (dead letter queue)
   ├── config.py          — KafkaConfig (frozen dataclass)
-  └── di.py              — KafkaEventBusConfiguration (@Configuration)
+  └── di.py              — bootstrap() scan helper
+
+varco_nats/              — NATS JetStream event bus backend (nats-py)
+  ├── bus.py             — NatsEventBus(AbstractEventBus) — JetStream, durable consumers
+  ├── channel.py         — NatsStreamManager(ChannelManager) — backing-stream admin
+  ├── connection.py      — NatsConnectionSettings(ConnectionSettings)
+  ├── dlq.py             — NatsDLQ (dead letter queue, WorkQueue-retention stream)
+  ├── health.py          — NatsHealthCheck — connect + account_info() probe
+  ├── config.py          — NatsEventBusSettings, NatsDeliverySemantics
+  └── di.py              — bootstrap() scan helper
 
 varco_redis/             — Redis Pub/Sub event bus + cache backend (redis.asyncio)
   ├── bus.py             — RedisEventBus(AbstractEventBus)
@@ -43,7 +52,7 @@ varco_redis/             — Redis Pub/Sub event bus + cache backend (redis.asyn
   ├── channel.py         — RedisChannel (pubsub or stream routing)
   ├── dlq.py             — RedisDLQ (dead letter queue)
   ├── config.py          — RedisConfig, CacheConfig (frozen dataclasses)
-  └── di.py              — RedisEventBusConfiguration, RedisCacheConfiguration
+  └── di.py              — bootstrap() scan helper; RedisCacheConfiguration (opt-in cache)
 
 varco_sa/                — SQLAlchemy async ORM backend
   ├── __init__.py        — SAConfig, SAModelFactory, bind_repositories()
@@ -92,6 +101,7 @@ varco_ws/                — WebSocket and SSE push adapters (browser real-time 
 AbstractEventBus (ABC)
   ├── InMemoryEventBus        (tests)
   ├── KafkaEventBus           (varco_kafka)
+  ├── NatsEventBus            (varco_nats)    — NATS JetStream, durable, at-least-once
   └── RedisEventBus           (varco_redis)
 
 AbstractEventProducer (ABC)
@@ -104,6 +114,7 @@ EventConsumer (ABC)
 AbstractDeadLetterQueue (ABC)
   ├── InMemoryDeadLetterQueue (tests)
   ├── KafkaDLQ                (varco_kafka)
+  ├── NatsDLQ                 (varco_nats)    — WorkQueue-retention stream; exact count()
   └── RedisDLQ                (varco_redis)
 
 EventMiddleware (Callable[[Event, str, next] → Awaitable[None]])
@@ -611,10 +622,10 @@ cache = await InMemoryCache(
 # Container setup
 container = DIContainer()
 
-# Install backend configurations
-await container.ainstall(KafkaEventBusConfiguration)  # async setup
-container.install(SAConfiguration)                    # sync setup
-container.install(RedisCacheConfiguration)
+# Register backends: scan discovers @Singleton bus classes; cache is opt-in
+container.scan("varco_kafka", recursive=True)         # discovers Kafka bus
+container.install(SAModule)                            # sync setup
+await container.ainstall(RedisCacheConfiguration)     # async opt-in cache
 
 # Bind repositories (auto-derived from DomainModel fields)
 bind_repositories(container, User, Order, Product)

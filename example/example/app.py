@@ -186,8 +186,9 @@ def create_app() -> FastAPI:
     server_auth = JwtBearerAuth(registry=registry, required=False)
 
     # ── 2. DI container (sync installs only) ─────────────────────────────────
-    # Async installs (RedisEventBusConfiguration, RedisCacheConfiguration)
-    # happen inside _bootstrap so they can be awaited in the event loop.
+    # The async cache install (RedisCacheConfiguration) happens inside
+    # _bootstrap so it can be awaited in the event loop; the Redis bus is
+    # discovered by scan.
     container = DIContainer()
 
     # ── 3. SQLAlchemy ORM ─────────────────────────────────────────────────────

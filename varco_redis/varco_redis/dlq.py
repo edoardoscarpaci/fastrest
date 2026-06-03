@@ -559,7 +559,7 @@ class RedisDLQConfiguration:
         ``AbstractDeadLetterQueue`` — connected ``RedisDLQ`` singleton.
 
     Reuses ``RedisEventBusSettings`` if already registered (e.g. by
-    ``RedisEventBusConfiguration``).  If not, falls back to
+    ``scan()`` / ``bootstrap()``).  If not, falls back to
     ``RedisEventBusSettings.from_env()``.
 
     Lifecycle:
@@ -572,8 +572,9 @@ class RedisDLQConfiguration:
 
     Example (bus + DLQ)::
 
-        container = DIContainer()
-        await container.ainstall(RedisEventBusConfiguration)
+        from varco_redis.di import bootstrap
+
+        container = bootstrap(DIContainer())   # scans varco_redis bus singletons
         await container.ainstall(RedisDLQConfiguration)
 
         # Wire into an EventConsumer handler:
@@ -599,9 +600,9 @@ class RedisDLQConfiguration:
         """
         Default ``RedisEventBusSettings`` for the DLQ.
 
-        If ``RedisEventBusConfiguration`` was installed first, the container
-        resolves the already-registered ``RedisEventBusSettings`` singleton
-        instead of this provider.
+        If the bus was registered via ``scan()`` / ``bootstrap()`` first, the
+        container resolves the already-registered ``RedisEventBusSettings``
+        singleton instead of this provider.
 
         Returns:
             ``RedisEventBusSettings`` with development-friendly defaults.

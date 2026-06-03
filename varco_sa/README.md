@@ -285,6 +285,27 @@ POSTGRES_AUTH__PASSWORD=s3cret
 
 ---
 
+## Migration 1.x → 2.0
+
+`SQLAlchemyRepositoryProvider.__init__` is now the **DI-only** path (it takes an
+injected `SAConfig`). Direct construction moved to a `from_components()`
+classmethod:
+
+```python
+# Before (1.x)
+provider = SQLAlchemyRepositoryProvider(base=Base, session_factory=sessions)
+
+# After (2.0)
+provider = SQLAlchemyRepositoryProvider.from_components(
+    base=Base, session_factory=sessions
+)
+```
+
+The DI path (`container.get(SQLAlchemyRepositoryProvider)` with an `SAConfig`
+bound) is unchanged.
+
+---
+
 ## Links
 
 - **Repository**: https://github.com/edoardoscarpaci/varco

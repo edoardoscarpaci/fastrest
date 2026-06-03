@@ -660,12 +660,12 @@ class KafkaDLQConfiguration:
         ``AbstractDeadLetterQueue`` — started ``KafkaDLQ`` singleton.
 
     Reuses ``KafkaEventBusSettings`` if already registered by
-    ``KafkaEventBusConfiguration``.  If not, falls back to
+    ``scan()`` / ``bootstrap()``.  If not, falls back to
     ``KafkaEventBusSettings.from_env()``.
 
-    DESIGN: separate @Configuration from KafkaEventBusConfiguration
-        ✅ Services that only push to the DLQ (no relay) don't need to install
-           the full bus configuration.
+    DESIGN: keep the DLQ as a separate opt-in @Configuration
+        ✅ Services that only push to the DLQ (no relay) don't need to scan
+           the full bus.
         ✅ Both bind to their respective interfaces — no ambiguity.
         ❌ Two installs instead of one for the "bus + DLQ" case.
            Acceptable — privilege separation is worth the extra verbosity.
@@ -675,8 +675,7 @@ class KafkaDLQConfiguration:
 
     Example (bus + DLQ)::
 
-        container = DIContainer()
-        await container.ainstall(KafkaEventBusConfiguration)
+        container = bootstrap(DIContainer())   # scans varco_kafka bus singletons
         await container.ainstall(KafkaDLQConfiguration)
 
         dlq = await container.aget(AbstractDeadLetterQueue)
@@ -706,9 +705,9 @@ class KafkaDLQConfiguration:
         """
         Default ``KafkaEventBusSettings`` for the DLQ.
 
-        If ``KafkaEventBusConfiguration`` was installed first, the container
-        resolves the already-registered ``KafkaEventBusSettings`` singleton
-        instead of this provider.
+        If the bus was registered via ``scan()`` / ``bootstrap()`` first, the
+        container resolves the already-registered ``KafkaEventBusSettings``
+        singleton instead of this provider.
 
         Returns:
             ``KafkaEventBusSettings`` with development-friendly defaults.

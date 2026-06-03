@@ -8,9 +8,6 @@ All public symbols are importable directly from ``varco_redis``::
     from varco_redis import RedisEventBus, RedisEventBusSettings
     from varco_redis import RedisStreamEventBus              # at-least-once
     from varco_redis import RedisChannelManager, RedisChannelManagerSettings
-    from varco_redis import RedisEventBusConfiguration        # Providify DI (Pub/Sub)
-    from varco_redis import RedisStreamConfiguration          # Providify DI (Streams)
-    from varco_redis import RedisChannelManagerConfiguration  # Providify DI
 
 Layer map::
 
@@ -19,16 +16,14 @@ Layer map::
     varco_redis.RedisEventBus   ← THIS PACKAGE
         ↑ configured by
     varco_redis.RedisEventBusSettings
-        ↑ wired by (optional)
-    varco_redis.RedisEventBusConfiguration  ← Providify @Configuration
+        ↑ discovered by
+    container.scan("varco_redis", recursive=True)
 
     varco_core.event.channel.ChannelManager
         ↑ implemented by
     varco_redis.RedisChannelManager
         ↑ configured by
     varco_redis.RedisChannelManagerSettings (alias for RedisEventBusSettings)
-        ↑ wired by (optional)
-    varco_redis.RedisChannelManagerConfiguration
 
 Usage (standalone bus)::
 
@@ -54,11 +49,10 @@ Usage (standalone bus)::
 Usage (Providify DI)::
 
     from providify import DIContainer
-    from varco_redis import RedisEventBusConfiguration
+    from varco_redis.di import bootstrap
     from varco_core.event import AbstractEventBus
 
-    container = DIContainer()
-    await container.ainstall(RedisEventBusConfiguration)
+    container = bootstrap(DIContainer())   # scans varco_redis, registers @Singletons
 
     bus = await container.aget(AbstractEventBus)  # RedisEventBus singleton
 """
@@ -69,11 +63,6 @@ from varco_redis.bus import RedisEventBus
 from varco_redis.cache import RedisCache, RedisCacheConfiguration, RedisCacheSettings
 from varco_redis.channel import RedisChannelManager, RedisChannelManagerSettings
 from varco_redis.config import RedisEventBusSettings
-from varco_redis.di import (
-    RedisChannelManagerConfiguration,
-    RedisEventBusConfiguration,
-    RedisStreamConfiguration,
-)
 from varco_redis.dlq import RedisDLQ, RedisDLQConfiguration
 from varco_redis.conversation import RedisConversationStore
 from varco_redis.job_store import RedisJobStore
@@ -102,8 +91,4 @@ __all__ = [
     "RedisJobStore",
     # ── Rate limiting ──────────────────────────────────────────────────────────
     "RedisRateLimiter",
-    # ── DI configurations ──────────────────────────────────────────────────────
-    "RedisEventBusConfiguration",
-    "RedisStreamConfiguration",
-    "RedisChannelManagerConfiguration",
 ]

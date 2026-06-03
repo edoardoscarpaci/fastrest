@@ -1,14 +1,11 @@
 """
 tests.test_di
 =============
-Unit tests for varco_ws.di — DI bootstrap via scan and backward-compat aliases.
+Unit tests for varco_ws.di — DI bootstrap via scan.
 
 Covers:
     container.scan("varco_ws")   — discovers @Singleton WebSocketEventBus and
                                    SSEEventBus automatically.
-    WebSocketConfiguration       — backward-compat no-op alias; install() is safe.
-    SSEConfiguration             — backward-compat no-op alias; install() is safe.
-    varco_ws public __init__     — DI classes are exported at the package level.
 
 All tests use InMemoryEventBus — no real broker required.
 """
@@ -22,9 +19,6 @@ from providify import Provider
 from varco_core.event.base import AbstractEventBus
 from varco_core.event.memory import InMemoryEventBus
 
-from varco_ws import SSEConfiguration, WebSocketConfiguration
-from varco_ws.di import SSEConfiguration as SSEConfigurationDirect
-from varco_ws.di import WebSocketConfiguration as WebSocketConfigurationDirect
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
 
@@ -62,57 +56,12 @@ def _make_container_with_ws_scan() -> tuple[object, InMemoryEventBus]:
     WebSocketEventBus and SSEEventBus are registered as @Singleton.
 
     Use this in tests that need DI-resolved adapters — the new scan-based API
-    replaces the old container.install(WebSocketConfiguration) pattern.
+    is the supported scan-based registration pattern.
     """
     container, bus = _make_container_with_bus()
     # scan() discovers both @Singleton adapters — replaces install(XConfiguration).
     container.scan("varco_ws", recursive=True)
     return container, bus
-
-
-# ── __init__ re-export tests ───────────────────────────────────────────────────
-
-
-def test_websocket_configuration_exported_from_init() -> None:
-    """
-    WebSocketConfiguration must be importable from the top-level varco_ws package.
-    This guards against accidental removal from __init__.py.
-    """
-    assert WebSocketConfiguration is WebSocketConfigurationDirect
-
-
-def test_sse_configuration_exported_from_init() -> None:
-    """
-    SSEConfiguration must be importable from the top-level varco_ws package.
-    """
-    assert SSEConfiguration is SSEConfigurationDirect
-
-
-# ── Backward-compat install() tests ──────────────────────────────────────────
-
-
-def test_websocket_configuration_install_is_safe() -> None:
-    """
-    container.install(WebSocketConfiguration) must not raise.
-
-    WebSocketConfiguration is now a no-op @Configuration alias — calling install()
-    is safe and backward-compatible but does not register WebSocketEventBus.
-    Use container.scan("varco_ws", recursive=True) to register the adapter.
-    """
-    container, _ = _make_container_with_bus()
-    # Must not raise — backward-compat path is always safe.
-    container.install(WebSocketConfiguration)
-
-
-def test_sse_configuration_install_is_safe() -> None:
-    """
-    container.install(SSEConfiguration) must not raise.
-
-    SSEConfiguration is now a no-op @Configuration alias — install() is safe
-    but does not register SSEEventBus by itself.  Use scan instead.
-    """
-    container, _ = _make_container_with_bus()
-    container.install(SSEConfiguration)
 
 
 # ── Scan-based discovery tests ────────────────────────────────────────────────

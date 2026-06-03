@@ -72,7 +72,7 @@ def _make_provider(
         mock_factory.build.return_value = build_return
         mock_factory_cls.return_value = mock_factory
 
-        provider = SQLAlchemyRepositoryProvider(
+        provider = SQLAlchemyRepositoryProvider.from_components(
             base=MagicMock(spec=DeclarativeBase),
             session_factory=MagicMock(),
         )
@@ -189,7 +189,7 @@ def test_make_uow_passes_session_factory() -> None:
     mock_session_factory = MagicMock()
 
     with patch("varco_sa.provider.SAModelFactory"):
-        provider = SQLAlchemyRepositoryProvider(
+        provider = SQLAlchemyRepositoryProvider.from_components(
             base=MagicMock(spec=DeclarativeBase),
             session_factory=mock_session_factory,
         )
@@ -239,3 +239,51 @@ def test_get_built_returns_stored_tuple() -> None:
     result = provider._get_built(_User)
 
     assert result == (orm_cls, mapper)
+
+
+# ── constructor split: __init__ (DI) vs from_components() ──────────────────────
+
+
+def test_init_without_config_raises_type_error() -> None:
+    """
+    The DI-only ``__init__`` raises ``TypeError`` when no ``SAConfig`` is bound,
+    pointing callers at ``from_components()`` for direct construction.
+    """
+    with pytest.raises(TypeError, match="from_components"):
+        SQLAlchemyRepositoryProvider()
+
+
+def test_di_config_path_matches_from_components_state() -> None:
+    """
+    The DI ``config`` path and ``from_components()`` converge on the same
+    instance state (base, session_factory, empty build cache) via the shared
+    ``_init_from()`` helper.
+    """
+    base = MagicMock(spec=DeclarativeBase)
+    session_factory = MagicMock()
+
+    # Minimal SAConfig stand-in — the DI path reads these four attributes.
+    config = MagicMock()
+    config.base = base
+    config.engine = MagicMock()
+    config.session_options = {}
+    config.entity_classes = ()  # nothing to register upfront
+
+    # Patch async_sessionmaker so the DI path yields our session_factory, and
+    # SAModelFactory so no real ORM generation runs.
+    with patch("varco_sa.provider.SAModelFactory"), patch(
+        "varco_sa.provider.async_sessionmaker", return_value=session_factory
+    ):
+        di_provider = SQLAlchemyRepositoryProvider(config)
+        direct_provider = SQLAlchemyRepositoryProvider.from_components(
+            base=base, session_factory=session_factory
+        )
+
+    # Same base + session factory; both start with an empty build cache.
+    assert di_provider._base is direct_provider._base is base
+    assert (
+        di_provider._session_factory
+        is direct_provider._session_factory
+        is session_factory
+    )
+    assert di_provider._built == direct_provider._built == {}

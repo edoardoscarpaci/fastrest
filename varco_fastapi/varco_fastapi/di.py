@@ -8,7 +8,7 @@ varco_fastapi providers in a ``DIContainer``.  Install it alongside backend
 modules (SA, Redis, etc.) at application bootstrap::
 
     container = DIContainer()
-    await container.ainstall(KafkaEventBusConfiguration)
+    container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus
     container.install(SAModule)
     container.install(VarcoFastAPIModule)
     bind_clients(container, OrderClient, UserClient)
@@ -303,7 +303,6 @@ def create_varco_container(*packages: str) -> Any:
             "myapp",        # application-level @Singleton services
         )
         container.install(VarcoFastAPIModule)
-        await container.ainstall(RedisEventBusConfiguration)
         bind_repositories(container, User, Post)
         await container.awarm_up()  # triggers all @PostConstruct methods
 
@@ -374,13 +373,12 @@ def setup_event_producer(container: Any) -> None:
     """
     Bind ``BusEventProducer`` as the default ``AbstractEventProducer`` implementation.
 
-    Call once after an event bus module is installed
-    (e.g. ``RedisEventBusConfiguration``, ``KafkaEventBusConfiguration``)
-    to wire the producer abstraction that ``AsyncService`` and
-    ``CacheServiceMixin`` depend on::
+    Call once after an event bus has been registered (e.g. via
+    ``container.scan("varco_redis")`` / ``bootstrap()``) to wire the producer
+    abstraction that ``AsyncService`` and ``CacheServiceMixin`` depend on::
 
         container = DIContainer()
-        await container.ainstall(RedisEventBusConfiguration)  # binds AbstractEventBus
+        container.scan("varco_redis", recursive=True)  # binds AbstractEventBus
         container.install(SAModule)
         container.install(VarcoFastAPIModule)
         setup_event_producer(container)  # binds AbstractEventProducer → BusEventProducer
@@ -406,7 +404,7 @@ def setup_event_producer(container: Any) -> None:
     Args:
         container: The ``DIContainer`` to register the binding into.
                    Must have an ``AbstractEventBus`` binding already registered
-                   (from a bus module like ``RedisEventBusConfiguration``).
+                   (from a scanned bus package like ``varco_redis``).
 
     Raises:
         LookupError: Raised lazily at resolution time if ``AbstractEventBus``

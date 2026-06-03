@@ -59,7 +59,7 @@ in the FastAPI lifespan handler.  They are **not** started by the container.
 
 DESIGN: @Singleton on adapter classes over @Provider in @Configuration
     ✅ Scan discovers adapters automatically — no install() call needed.
-    ✅ Eliminates the WebSocketConfiguration / SSEConfiguration classes entirely.
+    ✅ No @Configuration classes required at all.
     ❌ The scan-discovered singleton always uses event_type=Event, channel="*"
        (all events, all channels) — per-channel adapters still need manual wiring.
 
@@ -70,40 +70,6 @@ Async safety:   ✅ No I/O at scan time; I/O happens in start().
 from __future__ import annotations
 
 from typing import Any
-
-
-# ── Backward-compatibility aliases ────────────────────────────────────────────
-# WebSocketConfiguration and SSEConfiguration are kept as no-op @Configuration
-# markers so existing code that calls container.install(WebSocketConfiguration)
-# does not break.  They no longer register any providers — the @Singleton
-# decorators on WebSocketEventBus and SSEEventBus handle registration via scan.
-
-try:
-    from providify import Configuration  # noqa: PLC0415
-
-    @Configuration
-    class WebSocketConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        ``WebSocketEventBus`` is now ``@Singleton``-decorated and
-        discovered automatically by ``container.scan("varco_ws", recursive=True)``.
-        Calling ``container.install(WebSocketConfiguration)`` is a no-op.
-        """
-
-    @Configuration
-    class SSEConfiguration:
-        """
-        Backward-compatibility alias — no longer registers any providers.
-
-        ``SSEEventBus`` is now ``@Singleton``-decorated and discovered
-        automatically by ``container.scan("varco_ws", recursive=True)``.
-        Calling ``container.install(SSEConfiguration)`` is a no-op.
-        """
-
-except ImportError:
-    WebSocketConfiguration = None  # type: ignore[assignment,misc]
-    SSEConfiguration = None  # type: ignore[assignment,misc]
 
 
 # ── bootstrap ─────────────────────────────────────────────────────────────────
@@ -177,8 +143,5 @@ def bootstrap(
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
-    # Backward-compat aliases — kept so existing code doesn't break.
-    "WebSocketConfiguration",
-    "SSEConfiguration",
     "bootstrap",
 ]

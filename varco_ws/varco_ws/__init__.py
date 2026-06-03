@@ -30,7 +30,6 @@ Quick start::
         return bus.sse_response(request)
 """
 
-from varco_ws.di import SSEConfiguration, WebSocketConfiguration
 from varco_ws.sse import SSEEventBus, SSEConnection
 from varco_ws.websocket import (
     BackpressurePolicy,
@@ -44,6 +43,4 @@ __all__ = [
     "WebSocketConnection",
     "SSEEventBus",
     "SSEConnection",
-    "WebSocketConfiguration",
-    "SSEConfiguration",
 ]

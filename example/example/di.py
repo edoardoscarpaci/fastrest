@@ -8,7 +8,7 @@ assembler, service, and consumer.  Install it alongside the backend and
 framework modules during application bootstrap::
 
     container = DIContainer(scan=["example", "varco_sa", "varco_redis"], recursive=True)
-    await container.ainstall(RedisEventBusConfiguration)
+    # The Redis bus is discovered by the scan above; opt into the cache explicitly.
     await container.ainstall(RedisCacheConfiguration)
     container.install(SAModule)
     container.install(VarcoFastAPIModule)

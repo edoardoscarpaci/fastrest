@@ -38,7 +38,9 @@ class SQLAlchemyRepositoryProvider(RepositoryProvider):
         engine   = create_async_engine("postgresql+asyncpg://...")
         sessions = async_sessionmaker(engine, expire_on_commit=False)
 
-        provider = SQLAlchemyRepositoryProvider(base=Base, session_factory=sessions)
+        provider = SQLAlchemyRepositoryProvider.from_components(
+            base=Base, session_factory=sessions
+        )
         provider.register(User, Post)   # ← or autodiscover("myapp.models")
 
         async with provider.make_uow() as uow:
@@ -65,57 +67,106 @@ class SQLAlchemyRepositoryProvider(RepositoryProvider):
     def __init__(
         self,
         config: Annotated[SAConfig, InjectMeta(optional=True)] = None,
-        *,
-        base: Any | None = None,
-        session_factory: Any | None = None,
     ) -> None:
         """
-        Args:
-            config:          Injected ``SAConfig`` — provides the engine,
-                             declarative base, entity classes, and session
-                             options.  Used by the DI container.
-            base:            Legacy keyword arg — ``DeclarativeBase`` subclass.
-                             Accepted for backward compatibility with direct
-                             construction (tests, non-DI usage).
-            session_factory: Legacy keyword arg — ``async_sessionmaker`` or
-                             any ``() → AsyncSession`` callable.
+        DI constructor — builds the provider from an injected ``SAConfig``.
 
-        DESIGN: dual-path constructor over separate factory method
-            ✅ Backward-compatible — existing tests and ``SAFastrestApp`` pass
-               ``base`` / ``session_factory`` directly and keep working.
-            ✅ DI path uses ``Inject[SAConfig]`` — single clean injection point.
-            ❌ Two code paths — accepted to avoid breaking the public API.
+        This is the path the providify container uses: it resolves ``SAConfig``
+        and passes it here.  For direct (non-DI) construction with an explicit
+        base + session factory, use :meth:`from_components` instead.
+
+        Args:
+            config: Injected ``SAConfig`` — provides the engine, declarative
+                    base, entity classes, and session options.  ``optional=True``
+                    so the container does not fail when no ``SAConfig`` is bound;
+                    in that case this constructor raises ``TypeError`` to point
+                    the caller at :meth:`from_components`.
 
         Raises:
-            TypeError: Neither ``config`` nor (``base`` + ``session_factory``)
-                       is provided.
+            TypeError: ``config`` is ``None`` (no ``SAConfig`` bound).  Use
+                       :meth:`from_components` for direct construction.
+
+        Example:
+            # DI: the container injects SAConfig automatically.
+            provider = container.get(SQLAlchemyRepositoryProvider)
         """
-        if config is not None:
-            # DI path: everything from the injected SAConfig value object.
-            self._base = config.base
-            self._session_factory = async_sessionmaker(
-                config.engine,
-                **config.session_options,
-            )
-            self._factory = SAModelFactory(base=config.base)
-            self._built: dict[type, tuple[type, Any]] = {}
-            # Register entities upfront so ORM tables are mapped
-            # before the first make_uow() call.
-            if config.entity_classes:
-                self.register(*config.entity_classes)
-        elif base is not None and session_factory is not None:
-            # Legacy path: direct construction with explicit base + factory.
-            # Used by SAFastrestApp, tests, and non-DI bootstrap code.
-            self._base = base
-            self._session_factory = session_factory
-            self._factory = SAModelFactory(base=base)
-            self._built = {}
-        else:
+        if config is None:
+            # No SAConfig bound — the caller is constructing directly without DI.
+            # Direct construction belongs in from_components(), which bypasses
+            # this DI-only constructor; guide them there instead of guessing.
             raise TypeError(
-                "SQLAlchemyRepositoryProvider requires either a ``SAConfig`` "
-                "injected via DI or explicit ``base`` + ``session_factory`` "
-                "keyword arguments for direct construction."
+                "SQLAlchemyRepositoryProvider() requires an injected ``SAConfig``. "
+                "For direct (non-DI) construction use "
+                "SQLAlchemyRepositoryProvider.from_components(base=..., "
+                "session_factory=...)."
             )
+
+        # DI path: derive the session factory from the engine, then converge on
+        # the shared field-init used by from_components().
+        session_factory = async_sessionmaker(
+            config.engine,
+            **config.session_options,
+        )
+        self._init_from(config.base, session_factory)
+        # Register entities upfront so ORM tables are mapped before the
+        # first make_uow() call.
+        if config.entity_classes:
+            self.register(*config.entity_classes)
+
+    @classmethod
+    def from_components(
+        cls,
+        *,
+        base: Any,
+        session_factory: Any,
+    ) -> SQLAlchemyRepositoryProvider:
+        """
+        Build a provider directly from a declarative base + session factory.
+
+        This is the non-DI / test / manual-bootstrap entry point (used by
+        ``SAFastrestApp`` and unit tests).  It bypasses the DI-only ``__init__``
+        via ``cls.__new__`` so there is no ``SAConfig`` requirement.
+
+        DESIGN: classmethod over a dual-path ``__init__``
+            ✅ ``__init__`` stays single-responsibility — the DI path only.
+            ✅ Direct construction is explicit and self-documenting at call sites.
+            ✅ Both paths converge on ``_init_from`` — one place builds the state.
+            ❌ Uses ``cls.__new__`` to skip ``__init__`` — a deliberate, documented
+               bypass (the only way to keep ``__init__`` DI-only while providify
+               always calls it with ``config``).
+
+        Args:
+            base:            Shared ``DeclarativeBase`` subclass.
+            session_factory: ``async_sessionmaker`` or any ``() → AsyncSession``.
+
+        Returns:
+            A ready provider.  Call ``register()`` / ``autodiscover()`` to map
+            entities before ``make_uow()``.
+
+        Example:
+            sessions = async_sessionmaker(engine, expire_on_commit=False)
+            provider = SQLAlchemyRepositoryProvider.from_components(
+                base=Base, session_factory=sessions
+            )
+            provider.register(User, Post)
+        """
+        # Bypass the DI-only __init__ (which requires a SAConfig).
+        self = cls.__new__(cls)
+        self._init_from(base, session_factory)
+        return self
+
+    def _init_from(self, base: Any, session_factory: Any) -> None:
+        """
+        Set the four instance fields shared by both construction paths.
+
+        Args:
+            base:            Declarative base the model factory builds against.
+            session_factory: Callable returning an ``AsyncSession``.
+        """
+        self._base = base
+        self._session_factory = session_factory
+        self._factory = SAModelFactory(base=base)
+        self._built: dict[type, tuple[type, Any]] = {}
 
     def register(self, *domain_classes: type[DomainModel]) -> None:
         for cls in domain_classes:

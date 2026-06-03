@@ -1,6 +1,6 @@
 [project]
 name          = "varco-kafka"
-version       = "1.0.6"
+version       = "2.0.0"
 description   = "Apache Kafka event bus backend for varco — KafkaEventBus built on aiokafka"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
@@ -24,7 +24,7 @@ dependencies = [
     # aiokafka is the async Kafka client used by KafkaEventBus.
     "aiokafka>=0.11",
     # providify is used directly for @Singleton / @PreDestroy on KafkaEventBus
-    # and for @Configuration / @Provider in varco_kafka.di.
+    # and for @Configuration / @Provider in varco_kafka.dlq (KafkaDLQConfiguration).
     # It is already a transitive dep via varco-core but listed here to make the
     # direct usage explicit and to protect against future varco-core decoupling.
     "providify>=1.0.0a0",

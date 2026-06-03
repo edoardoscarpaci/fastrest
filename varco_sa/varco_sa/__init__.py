@@ -13,7 +13,9 @@ All stable public symbols are importable directly from ``varco_sa``::
     from varco_core import QueryBuilder, QueryParams
     from varco_sa import SQLAlchemyRepositoryProvider
 
-    provider = SQLAlchemyRepositoryProvider(base=Base, session_factory=async_session)
+    provider = SQLAlchemyRepositoryProvider.from_components(
+        base=Base, session_factory=async_session
+    )
     provider.register(User, Post)
 
     async with provider.make_uow() as uow:

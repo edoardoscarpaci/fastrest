@@ -20,13 +20,24 @@ Tests verify:
 
 from __future__ import annotations
 
+import importlib
 import sys
 from unittest import mock
 
+import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from varco_fastapi.router.metrics import MetricsRouter
+
+# Some tests require prometheus_client (the varco-fastapi[prometheus] extra).
+# Skip them when it is absent rather than fail — the 503 degradation path is
+# covered by test_returns_503_when_prometheus_client_missing, which always runs.
+_prometheus_installed = importlib.util.find_spec("prometheus_client") is not None
+_requires_prometheus = pytest.mark.skipif(
+    not _prometheus_installed,
+    reason="prometheus_client not installed — run with: uv sync --extra prometheus",
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -50,6 +61,7 @@ def _make_metrics_app(prefix: str = "/metrics") -> FastAPI:
 # ── Basic endpoint tests ──────────────────────────────────────────────────────
 
 
+@_requires_prometheus
 async def test_metrics_endpoint_returns_200():
     """``GET /metrics`` returns HTTP 200 when prometheus_client is installed."""
     app = _make_metrics_app()
@@ -60,6 +72,7 @@ async def test_metrics_endpoint_returns_200():
     assert resp.status_code == 200
 
 
+@_requires_prometheus
 async def test_metrics_content_type_is_prometheus_text():
     """
     ``Content-Type`` header must contain ``text/plain`` for the classic
@@ -87,6 +100,7 @@ async def test_metrics_body_is_non_empty():
     assert len(resp.content) > 0
 
 
+@_requires_prometheus
 async def test_openmetrics_format_via_accept_header():
     """
     When ``Accept: application/openmetrics-text`` is sent, the response uses
@@ -146,6 +160,7 @@ async def test_default_prefix_is_slash_metrics():
     assert "/metrics" in routes
 
 
+@_requires_prometheus
 async def test_custom_prefix():
     """
     ``MetricsRouter(prefix="/observability/metrics")`` mounts at the custom path.

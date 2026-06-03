@@ -7,8 +7,6 @@ All public symbols are importable directly from ``varco_kafka``::
 
     from varco_kafka import KafkaEventBus, KafkaEventBusSettings
     from varco_kafka import KafkaChannelManager, KafkaChannelManagerSettings
-    from varco_kafka import KafkaEventBusConfiguration    # Providify DI
-    from varco_kafka import KafkaChannelManagerConfiguration  # Providify DI
 
 Layer map::
 
@@ -17,16 +15,14 @@ Layer map::
     varco_kafka.KafkaEventBus   ← THIS PACKAGE
         ↑ configured by
     varco_kafka.KafkaEventBusSettings
-        ↑ wired by (optional)
-    varco_kafka.KafkaEventBusConfiguration  ← Providify @Configuration
+        ↑ discovered by
+    container.scan("varco_kafka", recursive=True)
 
     varco_core.event.channel.ChannelManager
         ↑ implemented by
     varco_kafka.KafkaChannelManager
         ↑ configured by
     varco_kafka.KafkaChannelManagerSettings
-        ↑ wired by (optional)
-    varco_kafka.KafkaChannelManagerConfiguration
 
 Usage (standalone bus)::
 
@@ -64,11 +60,10 @@ Usage (standalone channel management)::
 Usage (Providify DI)::
 
     from providify import DIContainer
-    from varco_kafka import KafkaEventBusConfiguration
+    from varco_kafka.di import bootstrap
     from varco_core.event import AbstractEventBus
 
-    container = DIContainer()
-    await container.ainstall(KafkaEventBusConfiguration)
+    container = bootstrap(DIContainer())   # scans varco_kafka, registers @Singletons
 
     bus = await container.aget(AbstractEventBus)  # KafkaEventBus singleton
 """
@@ -78,7 +73,6 @@ from __future__ import annotations
 from varco_kafka.bus import KafkaEventBus
 from varco_kafka.channel import KafkaChannelManager, KafkaChannelManagerSettings
 from varco_kafka.config import KafkaDeliverySemantics, KafkaEventBusSettings
-from varco_kafka.di import KafkaChannelManagerConfiguration, KafkaEventBusConfiguration
 from varco_kafka.dlq import KafkaDLQ, KafkaDLQConfiguration
 
 __all__ = [
@@ -92,7 +86,4 @@ __all__ = [
     # ── Dead Letter Queue ──────────────────────────────────────────────────────
     "KafkaDLQ",
     "KafkaDLQConfiguration",
-    # ── DI configurations ──────────────────────────────────────────────────────
-    "KafkaEventBusConfiguration",
-    "KafkaChannelManagerConfiguration",
 ]

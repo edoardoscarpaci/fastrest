@@ -115,12 +115,12 @@ Three optional hooks chain via `super()` for mixin composition: `_scoped_params`
 
 ### DI wiring (providify)
 
-Every backend package ships a `di.py` with a `@Configuration` class. Wire backends into a `DIContainer` using `container.install()` or `await container.ainstall()`. The DI module is the only place that knows concrete types — application code always injects interfaces (`AbstractEventBus`, `AsyncRepository[D]`, `IUoWProvider`).
+Each backend package ships a `di.py` with a `bootstrap()` helper that runs `container.scan(...)` to discover its `@Singleton` classes. Some packages also expose an opt-in `@Configuration` for resources that need imperative async setup (e.g. `RedisCacheConfiguration`). The DI module is the only place that knows concrete types — application code always injects interfaces (`AbstractEventBus`, `AsyncRepository[D]`, `IUoWProvider`).
 
 ```python
 # Typical app bootstrap
 container = DIContainer()
-await container.ainstall(KafkaEventBusConfiguration)
+container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus @Singletons
 container.install(SAModule)
 bind_repositories(container, User, Post)
 ```
@@ -296,7 +296,7 @@ class NotificationConsumer(EventConsumer):
 
 # 4. Wire in DI
 container = DIContainer()
-await container.ainstall(KafkaEventBusConfiguration)
+container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus @Singletons
 container.install(NotificationConsumerModule)
 ```
 

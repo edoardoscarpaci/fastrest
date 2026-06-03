@@ -231,9 +231,9 @@ class SAFastrestApp:
         # in the config default, but callers may override it.
         session_factory = async_sessionmaker(config.engine, **config.session_options)
 
-        # Use the legacy keyword-arg path — SAFastrestApp is a non-DI coordinator
+        # Use the direct-construction path — SAFastrestApp is a non-DI coordinator
         # that constructs the provider directly with an already-built session factory.
-        self._provider = SQLAlchemyRepositoryProvider(
+        self._provider = SQLAlchemyRepositoryProvider.from_components(
             base=config.base,
             session_factory=session_factory,
         )

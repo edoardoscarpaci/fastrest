@@ -10,6 +10,7 @@
 members = [
     "varco_core",
     "varco_kafka",
+    "varco_nats",
     "varco_redis",
     "varco_beanie",
     "varco_sa",
