@@ -238,7 +238,7 @@ class SAAuditRepository(AuditRepository):
         consumer.register_to(event_bus)
     """
 
-    def __init__(self, session_factory: async_sessionmaker) -> None:  # type: ignore[type-arg]
+    def __init__(self, session_factory: async_sessionmaker) -> None:
         """
         Args:
             session_factory: ``async_sessionmaker`` for creating ``AsyncSession``

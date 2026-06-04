@@ -304,12 +304,12 @@ class AuditLogMixin(ServiceMixin):
         await self._producer._produce(  # type: ignore[attr-defined]
             AuditEvent(
                 entity_type=type(entity).__name__,
-                entity_id=str(entity.pk),  # type: ignore[attr-defined]
+                entity_id=str(entity.pk),
                 action="create",
                 actor_id=self._get_audit_actor(ctx),
                 # Record the full read_dto fields as the creation diff.
-                diff=read_dto.model_dump(),  # type: ignore[attr-defined]
-                tenant_id=ctx.metadata.get("tenant_id") if ctx else None,  # type: ignore[attr-defined]
+                diff=read_dto.model_dump(),
+                tenant_id=ctx.metadata.get("tenant_id") if ctx else None,
             ),
             channel=_AUDIT_CHANNEL,
         )
@@ -339,14 +339,14 @@ class AuditLogMixin(ServiceMixin):
         await self._producer._produce(  # type: ignore[attr-defined]
             AuditEvent(
                 entity_type=type(entity).__name__,
-                entity_id=str(entity.pk),  # type: ignore[attr-defined]
+                entity_id=str(entity.pk),
                 action="update",
                 actor_id=self._get_audit_actor(ctx),
                 diff={
-                    "before": before_dto.model_dump(),  # type: ignore[attr-defined]
-                    "after": read_dto.model_dump(),  # type: ignore[attr-defined]
+                    "before": before_dto.model_dump(),
+                    "after": read_dto.model_dump(),
                 },
-                tenant_id=ctx.metadata.get("tenant_id") if ctx else None,  # type: ignore[attr-defined]
+                tenant_id=ctx.metadata.get("tenant_id") if ctx else None,
             ),
             channel=_AUDIT_CHANNEL,
         )
@@ -372,7 +372,7 @@ class AuditLogMixin(ServiceMixin):
                 action="delete",
                 actor_id=self._get_audit_actor(ctx),
                 diff={},  # Entity is gone — no fields to record.
-                tenant_id=ctx.metadata.get("tenant_id") if ctx else None,  # type: ignore[attr-defined]
+                tenant_id=ctx.metadata.get("tenant_id") if ctx else None,
             ),
             channel=_AUDIT_CHANNEL,
         )

@@ -82,7 +82,7 @@ class JobPoller:
         self._stale_threshold = stale_threshold or timedelta(minutes=5)
         self._poll_interval = poll_interval
         self._batch_size = batch_size
-        self._task: asyncio.Task | None = None  # type: ignore[type-arg]
+        self._task: asyncio.Task | None = None
 
     def __repr__(self) -> str:
         return (

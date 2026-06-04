@@ -83,7 +83,7 @@ class SAHealthCheck(HealthCheck):
 
     def __init__(
         self,
-        config: Annotated[SAConfig, InjectMeta(optional=True)] = None,
+        config: Annotated[SAConfig | None, InjectMeta(optional=True)] = None,
         *,
         engine: AsyncEngine | None = None,
         timeout: float = 5.0,

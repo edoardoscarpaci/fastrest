@@ -100,7 +100,7 @@ class RedisHealthCheck(HealthCheck):
         """
         # Import here to avoid importing redis.asyncio in environments where
         # the Redis backend is not installed.
-        import redis.asyncio as aioredis  # type: ignore[import-untyped]
+        import redis.asyncio as aioredis
 
         start = time.monotonic()
         client: aioredis.Redis | None = None

@@ -400,7 +400,7 @@ def listen(
             # Attached directly to the function object — bound method lookup
             # proxies attribute access to __func__, so this is visible via
             # `getattr(bound_method, "__listen_entries__")` at register time.
-            func.__listen_entries__: list[_ListenEntry] = []
+            func.__listen_entries__: list[_ListenEntry] = []  # type: ignore[misc]
 
         for et in event_types:
             func.__listen_entries__.append(

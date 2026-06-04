@@ -233,7 +233,7 @@ class CorrelationIdFilter(logging.Filter):
             ``True`` — record is always passed through.
         """
         # Read task-local value; fall back to sentinel when unset
-        record.correlation_id = _correlation_id.get() or self.fallback  # type: ignore[attr-defined]
+        record.correlation_id = _correlation_id.get() or self.fallback
         return True
 
 

@@ -166,7 +166,7 @@ class KafkaEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[EventSerializer, InjectMeta(optional=True)] = None,
+        serializer: Annotated[EventSerializer | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -585,7 +585,7 @@ class KafkaEventBus(AbstractEventBus):
         if errors:
             if len(errors) == 1:
                 raise errors[0]
-            raise ExceptionGroup(
+            raise ExceptionGroup(  # type: ignore[type-var]
                 f"Kafka handlers raised {len(errors)} error(s) "
                 f"for {type(event).__name__!r} on channel {channel!r}",
                 errors,

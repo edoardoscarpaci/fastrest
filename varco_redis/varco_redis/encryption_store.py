@@ -146,15 +146,15 @@ class RedisEncryptionKeyStore:
         hash_key = self._hash_key(entry.kid)
         # Serialise all fields as strings — Redis Hash values are always bytes/str
         mapping = _entry_to_redis_mapping(entry)
-        await self._client.hset(hash_key, mapping=mapping)  # type: ignore[arg-type]
+        await self._client.hset(hash_key, mapping=mapping)  # type: ignore[misc]
 
         # Update tenant index — O(1) SADD per tenant
         if entry.tenant_id is not None:
-            await self._client.sadd(self._tenant_set_key(entry.tenant_id), entry.kid)
-            await self._client.sadd(self._all_tenants_set_key(), entry.tenant_id)
+            await self._client.sadd(self._tenant_set_key(entry.tenant_id), entry.kid)  # type: ignore[misc]
+            await self._client.sadd(self._all_tenants_set_key(), entry.tenant_id)  # type: ignore[misc]
         else:
             # Global key — add to dedicated global Set so load_for_tenant(None) works
-            await self._client.sadd(f"{self._prefix}:global", entry.kid)
+            await self._client.sadd(f"{self._prefix}:global", entry.kid)  # type: ignore[misc]
 
     async def load(self, kid: str) -> EncryptionKeyEntry | None:
         """
@@ -174,7 +174,7 @@ class RedisEncryptionKeyStore:
         """
         hash_key = self._hash_key(kid)
         # HGETALL returns {} when the key does not exist — not None
-        raw = await self._client.hgetall(hash_key)
+        raw = await self._client.hgetall(hash_key)  # type: ignore[misc]
         if not raw:
             return None
         return _redis_mapping_to_entry(raw)
@@ -205,9 +205,9 @@ class RedisEncryptionKeyStore:
         """
         if tenant_id is None:
             # Global keys use a dedicated set key
-            kids_raw = await self._client.smembers(f"{self._prefix}:global")
+            kids_raw = await self._client.smembers(f"{self._prefix}:global")  # type: ignore[misc]
         else:
-            kids_raw = await self._client.smembers(self._tenant_set_key(tenant_id))
+            kids_raw = await self._client.smembers(self._tenant_set_key(tenant_id))  # type: ignore[misc]
 
         if not kids_raw:
             return []
@@ -237,7 +237,7 @@ class RedisEncryptionKeyStore:
         Thread safety:  ✅ Read-only.
         Async safety:   ✅ Awaits aioredis SMEMBERS.
         """
-        raw = await self._client.smembers(self._all_tenants_set_key())
+        raw = await self._client.smembers(self._all_tenants_set_key())  # type: ignore[misc]
         tenants = [(t.decode("utf-8") if isinstance(t, bytes) else t) for t in raw]
         return sorted(tenants)
 
@@ -260,7 +260,7 @@ class RedisEncryptionKeyStore:
         hash_key = self._hash_key(kid)
 
         # Load first to get tenant_id before deleting the Hash
-        raw = await self._client.hgetall(hash_key)
+        raw = await self._client.hgetall(hash_key)  # type: ignore[misc]
         if not raw:
             return  # already gone — no-op
 
@@ -272,15 +272,15 @@ class RedisEncryptionKeyStore:
         # Remove from tenant index
         if entry.tenant_id is not None:
             tenant_set_key = self._tenant_set_key(entry.tenant_id)
-            await self._client.srem(tenant_set_key, kid)
+            await self._client.srem(tenant_set_key, kid)  # type: ignore[misc]
 
             # Remove tenant from global set if no more kids for this tenant
-            remaining = await self._client.scard(tenant_set_key)
+            remaining = await self._client.scard(tenant_set_key)  # type: ignore[misc]
             if remaining == 0:
-                await self._client.srem(self._all_tenants_set_key(), entry.tenant_id)
+                await self._client.srem(self._all_tenants_set_key(), entry.tenant_id)  # type: ignore[misc]
         else:
             # Global key — remove from global Set
-            await self._client.srem(f"{self._prefix}:global", kid)
+            await self._client.srem(f"{self._prefix}:global", kid)  # type: ignore[misc]
 
     # ── Maintenance helpers ────────────────────────────────────────────────────
 
@@ -304,7 +304,7 @@ class RedisEncryptionKeyStore:
                 cursor, match=scan_pattern, count=100
             )
             for key in keys:
-                raw = await self._client.hgetall(key)
+                raw = await self._client.hgetall(key)  # type: ignore[misc]
                 if not raw:
                     continue
                 try:
@@ -314,14 +314,14 @@ class RedisEncryptionKeyStore:
                     continue
 
                 if entry.tenant_id is not None:
-                    await self._client.sadd(
+                    await self._client.sadd(  # type: ignore[misc]
                         self._tenant_set_key(entry.tenant_id), entry.kid
                     )
-                    await self._client.sadd(
+                    await self._client.sadd(  # type: ignore[misc]
                         self._all_tenants_set_key(), entry.tenant_id
                     )
                 else:
-                    await self._client.sadd(f"{self._prefix}:global", entry.kid)
+                    await self._client.sadd(f"{self._prefix}:global", entry.kid)  # type: ignore[misc]
 
             if cursor == 0:
                 break

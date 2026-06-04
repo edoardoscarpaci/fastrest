@@ -141,39 +141,39 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
 
     async def find_by_id(self, pk: PK) -> D | None:
         """Find entity by primary key, wrapped in an OTel span."""
-        return await self._run_in_span("find_by_id", super().find_by_id, pk)
+        return await self._run_in_span("find_by_id", super().find_by_id, pk)  # type: ignore[safe-super]
 
     async def find_all(self) -> list[D]:
         """Retrieve all entities, wrapped in an OTel span."""
-        return await self._run_in_span("find_all", super().find_all)
+        return await self._run_in_span("find_all", super().find_all)  # type: ignore[safe-super]
 
     async def save(self, entity: D) -> D:
         """Persist entity (INSERT or UPDATE), wrapped in an OTel span."""
-        return await self._run_in_span("save", super().save, entity)
+        return await self._run_in_span("save", super().save, entity)  # type: ignore[safe-super]
 
     async def delete(self, entity: D) -> None:
         """Delete entity, wrapped in an OTel span."""
-        await self._run_in_span("delete", super().delete, entity)
+        await self._run_in_span("delete", super().delete, entity)  # type: ignore[safe-super]
 
     async def find_by_query(self, params: QueryParams) -> list[D]:
         """Filtered/paginated query, wrapped in an OTel span."""
-        return await self._run_in_span("find_by_query", super().find_by_query, params)
+        return await self._run_in_span("find_by_query", super().find_by_query, params)  # type: ignore[safe-super]
 
     async def count(self, params: QueryParams | None = None) -> int:
         """Count matching entities, wrapped in an OTel span."""
-        return await self._run_in_span("count", super().count, params)
+        return await self._run_in_span("count", super().count, params)  # type: ignore[safe-super]
 
     async def exists(self, pk: PK) -> bool:
         """Check entity existence by primary key, wrapped in an OTel span."""
-        return await self._run_in_span("exists", super().exists, pk)
+        return await self._run_in_span("exists", super().exists, pk)  # type: ignore[safe-super]
 
     async def save_many(self, entities: Sequence[D]) -> list[D]:
         """Bulk INSERT/UPDATE, wrapped in an OTel span."""
-        return await self._run_in_span("save_many", super().save_many, entities)
+        return await self._run_in_span("save_many", super().save_many, entities)  # type: ignore[safe-super]
 
     async def delete_many(self, entities: Sequence[D]) -> None:
         """Bulk DELETE, wrapped in an OTel span."""
-        await self._run_in_span("delete_many", super().delete_many, entities)
+        await self._run_in_span("delete_many", super().delete_many, entities)  # type: ignore[safe-super]
 
     async def update_many_by_query(
         self,
@@ -182,10 +182,10 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
     ) -> int:
         """Bulk UPDATE by query, wrapped in an OTel span."""
         return await self._run_in_span(
-            "update_many_by_query", super().update_many_by_query, params, update
+            "update_many_by_query", super().update_many_by_query, params, update  # type: ignore[safe-super]
         )
 
-    def stream_by_query(self, params: QueryParams) -> AsyncIterator[D]:  # type: ignore[override]
+    def stream_by_query(self, params: QueryParams) -> AsyncIterator[D]:
         """
         Async generator that wraps the backing ``stream_by_query`` in an OTel span.
 
@@ -201,7 +201,7 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
         """
         return self._stream_with_span(params)
 
-    async def _stream_with_span(self, params: QueryParams) -> AsyncIterator[D]:  # type: ignore[misc, return]
+    async def _stream_with_span(self, params: QueryParams) -> AsyncIterator[D]:
         """Async generator implementation for ``stream_by_query`` tracing."""
         cfg = self._tracing_config
         span_name = f"{type(self).__name__}.stream_by_query"
@@ -219,7 +219,7 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
                 current_span.set_attribute("correlation_id", cid)
 
             try:
-                async for entity in super().stream_by_query(params):
+                async for entity in super().stream_by_query(params):  # type: ignore[safe-super]
                     yield entity
             except Exception as exc:
                 if cfg.record_exception:

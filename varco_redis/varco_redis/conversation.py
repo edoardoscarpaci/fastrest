@@ -175,7 +175,7 @@ class RedisConversationStore(AbstractConversationStore):
         Async safety: ✅ RPUSH + optional EXPIRE (two commands, not atomic).
         """
         key = self._conv_key(task_id)
-        await self._client.rpush(key, _turn_to_json(turn))
+        await self._client.rpush(key, _turn_to_json(turn))  # type: ignore[misc]
         if self._ttl is not None:
             await self._client.expire(key, self._ttl)
         _logger.debug(
@@ -198,7 +198,7 @@ class RedisConversationStore(AbstractConversationStore):
         Async safety: ✅ Single LRANGE command.
         """
         key = self._conv_key(task_id)
-        raw_turns: list[bytes] = await self._client.lrange(key, 0, -1)
+        raw_turns: list[bytes] = await self._client.lrange(key, 0, -1)  # type: ignore[misc]
         turns: list[ConversationTurn] = []
         for raw in raw_turns:
             try:
@@ -245,7 +245,7 @@ class RedisConversationStore(AbstractConversationStore):
 
         Async safety: ✅ Single LLEN command.
         """
-        result = await self._client.llen(self._conv_key(task_id))
+        result = await self._client.llen(self._conv_key(task_id))  # type: ignore[misc]
         return result if result is not None else 0
 
     def __repr__(self) -> str:

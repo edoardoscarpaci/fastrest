@@ -742,7 +742,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
 
 def _make_create_handler(
     *,
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     route: Any,
     service: Any,
     server_auth: Any,
@@ -795,7 +795,7 @@ def _make_create_handler(
 
 def _make_read_handler(
     *,
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     route: Any,
     service: Any,
     server_auth: Any,
@@ -829,7 +829,7 @@ def _make_read_handler(
 
 def _make_update_handler(
     *,
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     route: Any,
     service: Any,
     server_auth: Any,
@@ -867,7 +867,7 @@ def _make_update_handler(
 
 def _make_patch_handler(
     *,
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     route: Any,
     service: Any,
     server_auth: Any,
@@ -909,7 +909,7 @@ def _make_patch_handler(
 
 def _make_delete_handler(
     *,
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     route: Any,
     service: Any,
     server_auth: Any,
@@ -943,7 +943,7 @@ def _make_delete_handler(
 
 def _make_list_handler(
     *,
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     route: Any,
     service: Any,
     server_auth: Any,
@@ -1049,7 +1049,7 @@ _CRUD_HANDLER_FACTORIES: dict[str, Any] = {
 
 def _make_custom_handler(
     *,
-    router_instance: VarcoRouter,  # type: ignore[type-arg]
+    router_instance: VarcoRouter,
     method_fn: Any,
     route: Any,
     server_auth: Any,
@@ -1207,7 +1207,7 @@ def _make_noop_handler(route: Any) -> Any:
 
 
 async def _submit_job(
-    router: VarcoRouter,  # type: ignore[type-arg]
+    router: VarcoRouter,
     job_runner: Any,
     auth: AuthContext | None,
     coro_fn: Any,

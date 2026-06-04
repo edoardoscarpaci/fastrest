@@ -57,7 +57,7 @@ class AsyncRepository(ABC, Generic[D, PK]):
     def __class_getitem__(cls, params: Any) -> Any:
         if not isinstance(params, tuple):
             params = (params, Any)
-        return super().__class_getitem__(params)
+        return super().__class_getitem__(params)  # type: ignore[misc]
 
     # ── Basic CRUD ─────────────────────────────────────────────────────────────
 

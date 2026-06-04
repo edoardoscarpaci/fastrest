@@ -60,7 +60,7 @@ from varco_core.model import DomainModel
 if TYPE_CHECKING:
     # Motor AsyncIOMotorDatabase — only needed for type hints; avoids importing
     # motor in environments that swap in a test double.
-    from motor.motor_asyncio import AsyncIOMotorDatabase  # type: ignore[import-untyped]
+    from motor.motor_asyncio import AsyncIOMotorDatabase
 
 _logger = logging.getLogger(__name__)
 

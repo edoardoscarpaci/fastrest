@@ -261,7 +261,7 @@ class Bulkhead:
         if self._semaphore is None:
             # Semaphore not yet created — all slots are free.
             return self.config.max_concurrent
-        return self._semaphore._value  # type: ignore[attr-defined]
+        return self._semaphore._value
 
     # ── Public methods ────────────────────────────────────────────────────────
 

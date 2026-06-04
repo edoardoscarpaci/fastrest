@@ -497,7 +497,7 @@ class TenantAwareService(
         # all other fields; only the named kwarg is changed.
         # type: ignore[return-value] because dataclasses.replace returns D but
         # mypy infers DomainModel for the **{field: val} unpacking pattern.
-        stamped: D = dataclasses.replace(entity, **{self._tenant_field: tid})  # type: ignore[assignment]
+        stamped: D = dataclasses.replace(entity, **{self._tenant_field: tid})
         # Chain to super so additional mixins can stamp their own fields.
         return super()._prepare_for_create(stamped, ctx)
 

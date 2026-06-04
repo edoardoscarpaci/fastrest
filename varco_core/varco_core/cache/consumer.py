@@ -193,7 +193,7 @@ class CacheInvalidationConsumer(EventConsumer):
     # NOT a compile-time constant here — it comes from self._channel which
     # is set in __init__.  The callable form ``lambda self: self._channel``
     # defers resolution to ``register_to``, when self is available.
-    @listen(CacheInvalidated, channel=lambda self: self._channel)  # type: ignore[arg-type]
+    @listen(CacheInvalidated, channel=lambda self: self._channel)
     async def _on_invalidation_event(self, event: CacheInvalidated) -> None:
         """
         Handle an incoming ``CacheInvalidated`` event.

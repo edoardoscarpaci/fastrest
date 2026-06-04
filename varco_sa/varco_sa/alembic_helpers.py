@@ -212,7 +212,7 @@ def print_create_ddl(
     # Build a mock engine for the requested dialect
     engine = create_engine(
         f"{dialect}://",
-        strategy="mock",  # type: ignore[call-overload]
+        strategy="mock",
         executor=_capture,
     )
 

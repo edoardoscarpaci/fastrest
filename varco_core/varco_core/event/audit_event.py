@@ -42,7 +42,7 @@ from typing import Any, ClassVar, Literal
 from varco_core.event.base import Event
 
 
-class AuditEvent(Event):
+class AuditEvent(Event):  # type: ignore[misc]
     """
     Domain event emitted when an entity is created, updated, or deleted.
 

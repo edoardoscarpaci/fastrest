@@ -164,8 +164,8 @@ def cached(
         def _resolve_cache(args: tuple[Any, ...]) -> CacheBackend:
             if callable(cache) and not isinstance(cache, CacheBackend):
                 # Factory form — pass first arg (self/cls) to get the backend
-                return cache(args[0]) if args else cache()  # type: ignore[return-value]
-            return cache  # type: ignore[return-value]
+                return cache(args[0]) if args else cache()
+            return cache
 
         # ── Key builder ───────────────────────────────────────────────────────
 
@@ -213,13 +213,13 @@ def cached(
         async def invalidate_all() -> None:
             """Flush all entries managed by this cache backend."""
             # Resolve cache without arguments — must be module-level backend
-            _cache = cache if isinstance(cache, CacheBackend) else cache(None)  # type: ignore[arg-type]
+            _cache = cache if isinstance(cache, CacheBackend) else cache(None)
             await _cache.clear()
             _logger.debug("@cached[%s]: invalidate_all() called.", ns)
 
         wrapper.invalidate = invalidate  # type: ignore[attr-defined]
         wrapper.invalidate_all = invalidate_all  # type: ignore[attr-defined]
-        wrapper.__cache__ = cache  # type: ignore[attr-defined]  — for introspection
+        wrapper.__cache__ = cache  # type: ignore[attr-defined]
 
         return wrapper  # type: ignore[return-value]
 

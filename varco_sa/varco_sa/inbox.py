@@ -463,7 +463,7 @@ class SAPollerInboxRepository(InboxRepository):
             ...  # poller re-publishes unprocessed entries in background
     """
 
-    def __init__(self, session_factory: async_sessionmaker) -> None:  # type: ignore[type-arg]
+    def __init__(self, session_factory: async_sessionmaker) -> None:
         """
         Args:
             session_factory: ``async_sessionmaker`` for creating sessions.

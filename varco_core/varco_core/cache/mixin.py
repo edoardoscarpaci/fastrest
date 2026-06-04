@@ -314,12 +314,12 @@ class CacheServiceMixin(
                 self._cache_namespace,
                 key,
             )
-            return hit  # type: ignore[return-value]
+            return hit
 
         _logger.debug(
             "CacheServiceMixin[%s]: cache miss for key %r.", self._cache_namespace, key
         )
-        result = await super().get(pk, ctx)  # type: ignore[misc]
+        result = await super().get(pk, ctx)
         await self._cache.set(key, result, ttl=self._cache_ttl)
         return result
 
@@ -350,14 +350,14 @@ class CacheServiceMixin(
                 self._cache_namespace,
                 key,
             )
-            return hit  # type: ignore[return-value]
+            return hit
 
         _logger.debug(
             "CacheServiceMixin[%s]: cache miss for list key %r.",
             self._cache_namespace,
             key,
         )
-        result = await super().list(params, ctx)  # type: ignore[misc]
+        result = await super().list(params, ctx)
         await self._cache.set(key, result, ttl=self._cache_ttl)
         return result
 
@@ -377,7 +377,7 @@ class CacheServiceMixin(
         Returns:
             ``ReadDTO`` of the newly created entity.
         """
-        result = await super().create(dto, ctx)  # type: ignore[misc]
+        result = await super().create(dto, ctx)
         tenant_id: str | None = ctx.metadata.get("tenant_id") if ctx else None
         await self._invalidate_list(tenant_id=tenant_id)
         _logger.debug(
@@ -400,7 +400,7 @@ class CacheServiceMixin(
         Returns:
             ``ReadDTO`` reflecting the updated state.
         """
-        result = await super().update(pk, dto, ctx)  # type: ignore[misc]
+        result = await super().update(pk, dto, ctx)
         tenant_id: str | None = ctx.metadata.get("tenant_id") if ctx else None
         get_key = self._cache_key("get", pk, tenant_id=tenant_id)
         await self._cache.delete(get_key)
@@ -422,7 +422,7 @@ class CacheServiceMixin(
             pk:  Entity primary key.
             ctx: Auth context — tenant_id scopes list invalidation.
         """
-        await super().delete(pk, ctx)  # type: ignore[misc]
+        await super().delete(pk, ctx)
         tenant_id: str | None = ctx.metadata.get("tenant_id") if ctx else None
         get_key = self._cache_key("get", pk, tenant_id=tenant_id)
         await self._cache.delete(get_key)

@@ -182,7 +182,9 @@ class InMemoryCache(CacheBackend):
         self,
         settings: CacheSettings | None = None,
         *,
-        strategy: Annotated[InvalidationStrategy, InjectMeta(optional=True)] = None,
+        strategy: Annotated[
+            InvalidationStrategy | None, InjectMeta(optional=True)
+        ] = None,
         max_size: int | None = None,
     ) -> None:
         """

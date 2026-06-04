@@ -109,7 +109,7 @@ class KafkaHealthCheck(HealthCheck):
         """
         # Import here to keep the top-level import fast and avoid importing
         # aiokafka in environments where the Kafka backend is not installed.
-        from aiokafka import AIOKafkaProducer  # type: ignore[import-untyped]
+        from aiokafka import AIOKafkaProducer
 
         start = time.monotonic()
         producer: AIOKafkaProducer | None = None

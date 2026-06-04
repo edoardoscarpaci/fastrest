@@ -119,7 +119,7 @@ class MemcachedHealthCheck(HealthCheck):
         """
         # Import here to avoid importing aiomcache in environments where
         # the Memcached backend is not installed.
-        import aiomcache  # type: ignore[import-untyped]
+        import aiomcache
 
         start = time.monotonic()
         client: aiomcache.Client | None = None

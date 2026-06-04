@@ -201,7 +201,7 @@ class SoftDeleteService(
         # constructor defaults or mixin ordering in the MRO.
         # type: ignore[assignment] — dataclasses.replace loses the TypeVar D
         # through the **kwargs unpacking; the result is still D at runtime.
-        active: D = dataclasses.replace(entity, **{self._soft_delete_field: None})  # type: ignore[assignment]
+        active: D = dataclasses.replace(entity, **{self._soft_delete_field: None})
         return super()._prepare_for_create(active, ctx)
 
     # ── Overridden CRUD ───────────────────────────────────────────────────────

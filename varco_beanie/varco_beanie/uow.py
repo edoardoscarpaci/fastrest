@@ -60,7 +60,7 @@ class BeanieUnitOfWork(AsyncUnitOfWork):
 
     async def _begin(self) -> None:
         if self._session is None:
-            self._session = await self._client.start_session()
+            self._session = await self._client.start_session()  # type: ignore[misc]
         if self._transactional:
             self._session.start_transaction()
         for attr, factory in self._repo_factories.items():

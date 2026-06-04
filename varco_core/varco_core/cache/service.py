@@ -115,7 +115,7 @@ _logger = logging.getLogger(__name__)
 # ── CacheInvalidationEvent ─────────────────────────────────────────────────────
 
 
-class CacheInvalidated(Event):
+class CacheInvalidated(Event):  # type: ignore[misc]
     """
     Domain event published after a mutating operation invalidates cache entries.
 
@@ -322,7 +322,7 @@ class CachedService:
         """
         key = self._list_key(**kwargs)
         # List results are typed as list[entity_type], not entity_type itself.
-        list_hint = list[self._entity_type] if self._entity_type is not None else None  # type: ignore[valid-type]
+        list_hint = list[self._entity_type] if self._entity_type is not None else None
         return await self._get_or_set(
             key, lambda: self._service.list(**kwargs), type_hint=list_hint
         )

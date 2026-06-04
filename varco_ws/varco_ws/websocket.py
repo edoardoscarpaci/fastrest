@@ -399,7 +399,7 @@ class WebSocketEventBus:
     def __init__(
         self,
         # DI injects the AbstractEventBus singleton when constructed by scan.
-        bus: Inject[AbstractEventBus],  # type: ignore[type-arg]
+        bus: Inject[AbstractEventBus],
         *,
         event_type: type[Event] = Event,
         channel: str = "*",

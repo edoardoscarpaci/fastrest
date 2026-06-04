@@ -179,7 +179,7 @@ def cast_raw(entity: DomainModel, orm_type: type[OT]) -> OT:
             f"got {type(raw).__name__!r}. "
             "Check that the correct backend is active."
         )
-    return raw  # type: ignore[return-value]
+    return raw
 
 
 # ── domain_replace ────────────────────────────────────────────────────────────

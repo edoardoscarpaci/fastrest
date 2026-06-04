@@ -111,7 +111,7 @@ class AllRouteMixin(
 
 class CRUDRouter(
     AllRouteMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],  # type: ignore[misc]
+    VarcoCRUDRouter[D, PK, C, R, U],
 ):
     """
     Pre-composed router with all six HTTP CRUD endpoints.
@@ -147,7 +147,7 @@ class CRUDRouter(
 class ReadOnlyRouter(
     ListMixin,
     ReadMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],  # type: ignore[misc]
+    VarcoCRUDRouter[D, PK, C, R, U],
 ):
     """
     Pre-composed router with read-only access (GET / + GET /{id}).
@@ -172,7 +172,7 @@ class WriteRouter(
     UpdateMixin,
     PatchMixin,
     DeleteMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],  # type: ignore[misc]
+    VarcoCRUDRouter[D, PK, C, R, U],
 ):
     """
     Pre-composed router with write-only access (POST, PUT, PATCH, DELETE).
@@ -200,7 +200,7 @@ class NoDeleteRouter(
     ReadMixin,
     UpdateMixin,
     PatchMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],  # type: ignore[misc]
+    VarcoCRUDRouter[D, PK, C, R, U],
 ):
     """
     Pre-composed router with all CRUD endpoints except DELETE.

@@ -266,7 +266,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         result = await self._session.get(self._mapper._orm_cls, pk)
         return result is not None
 
-    async def stream_by_query(  # type: ignore[override]
+    async def stream_by_query(
         self,
         params: QueryParams,
     ) -> AsyncIterator[D]:
@@ -394,10 +394,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
                     )
                 self._mapper.sync_to_orm(entity, raw)
             await self._session.flush()
-            results.extend(
-                self._mapper.from_orm(e._raw_orm)  # type: ignore[arg-type]
-                for e in updates
-            )
+            results.extend(self._mapper.from_orm(e._raw_orm) for e in updates)
 
         return results
 
@@ -503,7 +500,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         result = await self._session.execute(stmt)
         await self._session.flush()
         # rowcount is reliable for UPDATE/DELETE on all supported SA backends
-        return result.rowcount  # type: ignore[return-value]
+        return result.rowcount
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

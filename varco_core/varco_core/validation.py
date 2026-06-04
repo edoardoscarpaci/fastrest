@@ -297,7 +297,7 @@ VALID: Final[ValidationResult] = ValidationResult()
 
 
 @runtime_checkable
-class Validator(Protocol[T]):
+class Validator(Protocol[T]):  # type: ignore[misc]
     """
     Structural protocol for anything that can validate a value of type ``T``.
 
@@ -569,7 +569,7 @@ class DomainModelValidator(ABC, Generic[D]):
 
 
 @runtime_checkable
-class AsyncValidator(Protocol[T]):
+class AsyncValidator(Protocol[T]):  # type: ignore[misc]
     """
     Structural protocol for validators that require I/O.
 

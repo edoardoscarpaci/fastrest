@@ -454,7 +454,7 @@ class JobRunner(AbstractJobRunner):
                 continue
 
             # Re-create the coroutine from stored args and schedule it
-            coro = registry.invoke(claimed.task_payload)  # type: ignore[union-attr]
+            coro = registry.invoke(claimed.task_payload)
             await self._submit_claimed(claimed, coro)
             recovered += 1
             logger.info(

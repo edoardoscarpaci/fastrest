@@ -66,7 +66,7 @@ class SQLAlchemyRepositoryProvider(RepositoryProvider):
 
     def __init__(
         self,
-        config: Annotated[SAConfig, InjectMeta(optional=True)] = None,
+        config: Annotated[SAConfig | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         DI constructor — builds the provider from an injected ``SAConfig``.

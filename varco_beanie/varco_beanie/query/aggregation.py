@@ -134,9 +134,9 @@ class BeanieAggregationApplicator(QueryApplicator):
                 allowed_fields=allowed_fields or None,
             )
 
-    def apply_query(
+    def apply_query(  # type: ignore[override]
         self,
-        query: Pipeline,
+        query: Pipeline,  # type: ignore[override]
         node: TransformerNode,
         *args: Any,
         **kwargs: Any,
@@ -167,9 +167,9 @@ class BeanieAggregationApplicator(QueryApplicator):
         mongo_filter: dict[str, Any] = self._compiler.visit(node)
         return list(query) + [{"$match": mongo_filter}]
 
-    def apply_sort(
+    def apply_sort(  # type: ignore[override]
         self,
-        query: Pipeline,
+        query: Pipeline,  # type: ignore[override]
         sort_fields: list[SortField] | None = None,
         *args: Any,
         **kwargs: Any,
@@ -203,9 +203,9 @@ class BeanieAggregationApplicator(QueryApplicator):
         }
         return list(query) + [{"$sort": sort_doc}]
 
-    def apply_pagination(
+    def apply_pagination(  # type: ignore[override]
         self,
-        query: Pipeline,
+        query: Pipeline,  # type: ignore[override]
         limit: int | None,
         offset: int | None,
         *args: Any,

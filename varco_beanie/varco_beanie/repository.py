@@ -389,9 +389,9 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
 
         result = await self._mapper._orm_cls.find(mongo_filter).update({"$set": update})
         # Motor's UpdateResult.modified_count = documents actually changed
-        return result.modified_count  # type: ignore[return-value]
+        return result.modified_count
 
-    async def stream_by_query(  # type: ignore[override]
+    async def stream_by_query(
         self,
         params: QueryParams,
     ) -> AsyncIterator[D]:

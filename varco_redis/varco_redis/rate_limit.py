@@ -306,7 +306,7 @@ class RedisRateLimiter(RateLimiter):
         # can safely evict this key.  Add 1 second margin.
         ttl = int(self.config.period) + 1
 
-        result = await redis.eval(  # type: ignore[attr-defined]
+        result = await redis.eval(  # type: ignore[misc]
             _SLIDING_WINDOW_SCRIPT,
             1,  # number of KEYS
             redis_key,  # KEYS[1]
@@ -360,7 +360,7 @@ class RedisRateLimiter(RateLimiter):
         now = time.time()
         window_low = now - self.config.period
 
-        raw = await redis.eval(  # type: ignore[attr-defined]
+        raw = await redis.eval(  # type: ignore[misc]
             _RETRY_AFTER_SCRIPT,
             1,
             redis_key,

@@ -154,9 +154,7 @@ class AsyncValidatorServiceMixin(
 
     #: DI-injected ``AsyncValidator[D]`` singleton.
     #: ``None`` when no ``AsyncValidator[D]`` is registered in the container.
-    _async_validator_entity: ClassVar[  # type: ignore[misc]
-        Annotated[Any, InjectMeta(optional=True)]
-    ] = None
+    _async_validator_entity: ClassVar[Annotated[Any, InjectMeta(optional=True)]] = None
 
     # ── Extension hook override ────────────────────────────────────────────────
 
@@ -202,7 +200,7 @@ class AsyncValidatorServiceMixin(
             result.raise_if_invalid()
 
         # Always chain — other mixins in the MRO may override this hook.
-        await super()._validate_entity_async(entity, ctx)  # type: ignore[misc]
+        await super()._validate_entity_async(entity, ctx)
 
 
 __all__ = ["AsyncValidatorServiceMixin"]

@@ -94,6 +94,7 @@ Async safety:   ✅ add/sub/record are synchronous calls — safe from any
 from __future__ import annotations
 
 from typing import Any, Literal
+from typing import TypeAlias
 
 from opentelemetry import metrics as otel_metrics
 
@@ -108,7 +109,7 @@ from varco_core.observability.metrics import _instrument_cache
 # "counter"         — monotone, only .add() with non-negative values
 # "updown_counter"  — bidirectional, .add() and .sub() (negative add) both valid
 # "histogram"       — distribution, .record() any float value
-MetricKind: type = Literal["counter", "updown_counter", "histogram"]
+MetricKind: TypeAlias = Literal["counter", "updown_counter", "histogram"]
 
 
 # ── Metric ───────────────────────────────────────────────────────────────────

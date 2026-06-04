@@ -489,7 +489,7 @@ class MCPAdapter:
             # Bare client with no auth / middleware — suitable for internal calls
             # DESIGN: bare client for convenience; callers should inject a configured
             # client for production (with JwtClientAuth, tracing, etc.)
-            self._client = _Client(base_url=base_url)  # type: ignore[assignment]
+            self._client = _Client(base_url=base_url)
 
         # Pre-compute tool list at construction time — routes don't change
         # after class definition so this is safe and avoids re-introspecting
@@ -676,7 +676,7 @@ class MCPAdapter:
         Thread safety:  ✅ Creates a new FastMCP instance — no shared state.
         """
         try:
-            from mcp import FastMCP  # type: ignore[import-untyped]  # noqa: PLC0415
+            from mcp import FastMCP  # noqa: PLC0415
         except ImportError as exc:
             raise ImportError(
                 "The 'mcp' package is required to run MCPAdapter as an MCP server. "
@@ -748,10 +748,10 @@ class MCPAdapter:
         server = self.to_mcp_server()
         # mcp SDK provides an ASGI app we can mount
         try:
-            mcp_app = server.sse_app()  # type: ignore[attr-defined]
+            mcp_app = server.sse_app()
         except AttributeError:
             # Older mcp SDK versions use asgi_app()
-            mcp_app = server.asgi_app()  # type: ignore[attr-defined]
+            mcp_app = server.asgi_app()
         app.mount(path, mcp_app)
         _logger.info(
             "MCPAdapter: mounted %d tools at %s for %s%s",

@@ -20,7 +20,7 @@ class SessionContext(AbstractAsyncContextManager):
         return self.session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        current_session.reset(self.token)  # type: ignore
+        current_session.reset(self.token)
         if exc_type:
             await self.session.rollback()
         else:

@@ -64,7 +64,7 @@ V = TypeVar("V")
 
 
 @runtime_checkable
-class AsyncCache(Protocol[K, V]):
+class AsyncCache(Protocol[K, V]):  # type: ignore[misc]
     """
     Structural protocol for async cache backends.
 

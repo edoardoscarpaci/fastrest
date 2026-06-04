@@ -219,7 +219,7 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
                        construction itself is synchronous; I/O is lazy.
     """
 
-    def _repo_factory(provider: RepositoryProvider) -> AsyncRepository:  # type: ignore[type-arg]
+    def _repo_factory(provider: RepositoryProvider) -> AsyncRepository:
         # provider is injected by the container (resolved as RepositoryProvider
         # singleton from SAModule.repository_provider()).
         # get_repository() returns the correct AsyncSQLAlchemyRepository
@@ -230,7 +230,7 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
     # registers this binding under AsyncRepository[entity_cls], not the bare
     # unparameterised AsyncRepository.  Without this patch, all entity repos
     # would collide under the same unparameterised interface.
-    _repo_factory.__annotations__["return"] = AsyncRepository[entity_cls]
+    _repo_factory.__annotations__["return"] = AsyncRepository[entity_cls]  # type: ignore[misc, valid-type]
 
     # Give the closure a descriptive __name__ for debugging / describe() output.
     _repo_factory.__name__ = f"_repo_factory_{entity_cls.__name__}"

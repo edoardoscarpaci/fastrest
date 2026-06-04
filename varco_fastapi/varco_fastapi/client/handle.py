@@ -141,7 +141,7 @@ class JobHandle:
         # _request returns None for 204; jobs always return 200 with body
         if response is None:
             return {}
-        return response  # type: ignore[return-value]
+        return response
 
     async def wait(
         self,

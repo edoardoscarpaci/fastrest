@@ -483,7 +483,7 @@ class DomainMigrator:
         # ── Execute rollback ──────────────────────────────────────────────────
         for step in reversed(steps_to_undo):
             # Pre-flight guarantees step is a StepSpec with a non-None down
-            data = step.down(data)  # type: ignore[union-attr]
+            data = step.down(data)
 
         data["definition_version"] = to_version
         return data

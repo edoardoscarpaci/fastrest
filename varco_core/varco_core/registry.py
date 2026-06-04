@@ -86,7 +86,7 @@ class DomainModelRegistry:
         Returns:
             List of classes.  Empty if no class has been decorated yet.
         """
-        return list(cls._classes.keys())  # type: ignore[return-value]
+        return list(cls._classes.keys())
 
     @classmethod
     def clear(cls) -> None:

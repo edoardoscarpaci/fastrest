@@ -186,11 +186,11 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
     # ClassVar directly in tests (e.g. _service = MockService()).  The ClassVar
     # annotation without a default value acts as a documentation-only type hint;
     # the actual value is always an instance attribute after construction.
-    _service: ClassVar[AsyncService[D, PK, C, R, U] | None]  # type: ignore[type-arg]
+    _service: ClassVar[AsyncService[D, PK, C, R, U] | None]
 
     def __init__(
         self,
-        service: Inject[AsyncService[D, PK, C, R, U]] | None = None,  # type: ignore[override]
+        service: Inject[AsyncService[D, PK, C, R, U]] | None = None,
         *,
         auth: AbstractServerAuth | None = None,
         task_registry: Instance[TaskRegistry] | None = None,
@@ -236,13 +236,13 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
 
         if service is not None:
             # DI-injected: store on the instance, takes priority over ClassVar.
-            self._service = service  # type: ignore[assignment]
+            self._service = service
         # If service is None, fall back to ClassVar _service (test-only pattern).
 
         if auth is not None:
             # Instance attribute shadows the ClassVar — each router instance can
             # carry its own auth strategy without touching the class definition.
-            self._auth = auth  # type: ignore[assignment]
+            self._auth = auth
 
         # Only write instance attributes when values are provided — same rationale as
         # _job_runner in VarcoRouter.__init__: if the param is None (default, no DI),

@@ -304,7 +304,7 @@ class VarcoTask:
             - Sync function → returns a non-awaitable.  The asyncio event loop
               will raise ``TypeError: object NoneType can't be used in 'await' expression``.
         """
-        return self._fn(*args, **kwargs)  # type: ignore[return-value]
+        return self._fn(*args, **kwargs)
 
     def payload(self, *args: Any, **kwargs: Any) -> TaskPayload:
         """
@@ -368,7 +368,7 @@ class VarcoTask:
             ✅ Custom serializers work without changing TaskRegistry
         """
         deserialized_args, deserialized_kwargs = self._deserialize_payload(payload)
-        return self._fn(*deserialized_args, **deserialized_kwargs)  # type: ignore[return-value]
+        return self._fn(*deserialized_args, **deserialized_kwargs)
 
     def _deserialize_payload(
         self,

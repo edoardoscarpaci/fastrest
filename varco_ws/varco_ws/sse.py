@@ -209,7 +209,7 @@ class SSEEventBus:
         self,
         # DI injects the AbstractEventBus singleton when constructed by scan.
         # Keyword-only defaults (event_type, channel, max_queue_size) remain for manual wiring.
-        bus: Inject[AbstractEventBus],  # type: ignore[type-arg]
+        bus: Inject[AbstractEventBus],
         *,
         event_type: type[Event] = Event,
         channel: str = "*",

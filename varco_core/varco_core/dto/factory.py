@@ -304,7 +304,7 @@ def generate_dtos(domain_cls: type) -> DTOSet:
         if f.default is not MISSING:
             # Concrete default (e.g. ``published: bool = False``)
             create_fields[f.name] = (clean, f.default)
-        elif f.default_factory is not MISSING:  # type: ignore[misc]
+        elif f.default_factory is not MISSING:
             # Factory default (e.g. ``tags: list[str] = field(default_factory=list)``)
             # Wrap in Field() so Pydantic does not share the mutable default
             create_fields[f.name] = (clean, Field(default_factory=f.default_factory))

@@ -149,7 +149,7 @@ def span(func: _F) -> _F: ...
 def span(config: SpanConfig) -> Callable[[_F], _F]: ...
 
 
-def span(
+def span(  # type: ignore[misc]
     func: _F | SpanConfig | None = None,
     config: SpanConfig | None = None,
 ) -> _F | Callable[[_F], _F]:
@@ -215,7 +215,7 @@ def span(
     def decorator(fn: _F) -> _F:
         return _make_wrapper(fn, effective_config)
 
-    return decorator  # type: ignore[return-value]
+    return decorator
 
 
 # ── Internal wrapper builder ───────────────────────────────────────────────────

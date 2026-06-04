@@ -401,7 +401,7 @@ class InMemoryEventBus(AbstractEventBus):
             if len(errors) == 1:
                 # Unwrap single error — cleaner traceback than a 1-item ExceptionGroup
                 raise errors[0]
-            raise ExceptionGroup(
+            raise ExceptionGroup(  # type: ignore[type-var]
                 f"Event handlers raised {len(errors)} error(s) "
                 f"for {type(event).__name__!r} on channel {channel!r}",
                 errors,

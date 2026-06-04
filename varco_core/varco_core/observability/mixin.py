@@ -135,7 +135,7 @@ class TracingServiceMixin(AsyncService[D, PK, C, R, U], ABC, Generic[D, PK, C, R
 
     async def read(self, pk: PK, ctx: AuthContext = _ANON_CTX) -> R:
         """Read an entity by primary key, wrapped in an OTel span."""
-        return await self._run_in_span("read", super().read, pk, ctx)
+        return await self._run_in_span("read", super().read, pk, ctx)  # type: ignore[misc]
 
     async def update(self, pk: PK, dto: U, ctx: AuthContext = _ANON_CTX) -> R:
         """Update an entity, wrapped in an OTel span."""

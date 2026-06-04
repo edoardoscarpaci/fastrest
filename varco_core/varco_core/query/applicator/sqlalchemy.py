@@ -103,13 +103,13 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
 
     # ── QueryApplicator implementation ─────────────────────────────────────────
 
-    def apply_query(
+    def apply_query(  # type: ignore[override]
         self,
         query: Select,  # type: ignore[override]
         node: TransformerNode,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:
+    ) -> Select:  # type: ignore[override]
         """
         Apply an AST filter node as ``JOIN`` + ``WHERE`` clauses to ``query``.
 
@@ -152,7 +152,7 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
         # Use .where() — the SQLAlchemy 2.x API; .filter() is legacy ORM only
         return query.where(filter_expr)
 
-    def apply_pagination(
+    def apply_pagination(  # type: ignore[override]
         self,
         query: Select,  # type: ignore[override]
         limit: int | None,
@@ -179,13 +179,13 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
             query = query.offset(offset)
         return query
 
-    def apply_sort(
+    def apply_sort(  # type: ignore[override]
         self,
         query: Select,  # type: ignore[override]
         sort_fields: list[SortField] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:
+    ) -> Select:  # type: ignore[override]
         """
         Apply ``ORDER BY`` clauses to ``query``, with relationship JOIN support.
 

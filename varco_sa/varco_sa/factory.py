@@ -575,8 +575,8 @@ class SAModelFactory:
                 # Determine the SA column type from the source / target PK columns.
                 # We look up the mapped table's PK to infer the correct type rather
                 # than hard-coding Integer — domain PKs can be UUID or String.
-                src_pk_col = list(sa.inspect(orm_cls).mapper.primary_key)[0]  # type: ignore[attr-defined]
-                tgt_pk_col = list(sa.inspect(target_orm_cls).mapper.primary_key)[0]  # type: ignore[attr-defined]
+                src_pk_col = list(sa.inspect(orm_cls).mapper.primary_key)[0]
+                tgt_pk_col = list(sa.inspect(target_orm_cls).mapper.primary_key)[0]
 
                 # DESIGN: assoc table FK column types mirror the actual PK types
                 #   ✅ Handles UUID, String, and Integer PKs without hard-coding

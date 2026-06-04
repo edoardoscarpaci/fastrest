@@ -320,7 +320,7 @@ class SkillAdapter:
             )  # noqa: PLC0415
 
             # Bare client with no auth — for internal / development use only
-            self._client = _Client(base_url=base_url)  # type: ignore[assignment]
+            self._client = _Client(base_url=base_url)
 
         # Pre-compute skill list at construction time — routes are immutable
         all_routes = introspect_routes(router_cls)

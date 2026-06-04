@@ -404,7 +404,7 @@ class InboxPoller:
         self._poll_interval = poll_interval
         self._batch_size = batch_size
         # Background asyncio Task — created in start(), cancelled in stop().
-        self._task: asyncio.Task | None = None  # type: ignore[type-arg]
+        self._task: asyncio.Task | None = None
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -645,7 +645,7 @@ def _make_inbox_wrapper(
         try:
             # Call the inner handler (may be a retry wrapper or raw method).
             if _asyncio.iscoroutinefunction(handler):
-                await handler(event)  # type: ignore[operator]
+                await handler(event)
             else:
                 handler(event)  # type: ignore[operator]
 

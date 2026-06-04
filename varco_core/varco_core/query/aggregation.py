@@ -448,7 +448,7 @@ class SQLAlchemyAggregationApplicator:
         if col is None:
             raise FieldNotFound(
                 field,
-                self._model_cls.__tablename__,  # type: ignore[attr-defined]
+                self._model_cls.__tablename__,
             )
         return col
 
@@ -480,13 +480,13 @@ class SQLAlchemyAggregationApplicator:
                 # func.count(col) → COUNT(col); func.count() → COUNT(*)
                 agg = func.count(target) if target is not None else func.count()
             case AggregationFunc.SUM:
-                agg = func.sum(target)
+                agg = func.sum(target)  # type: ignore[assignment]
             case AggregationFunc.AVG:
-                agg = func.avg(target)
+                agg = func.avg(target)  # type: ignore[assignment]
             case AggregationFunc.MIN:
-                agg = func.min(target)
+                agg = func.min(target)  # type: ignore[assignment]
             case AggregationFunc.MAX:
-                agg = func.max(target)
+                agg = func.max(target)  # type: ignore[assignment]
             case _:
                 # Defensive branch — AggregationFunc is exhaustive, but future
                 # enum additions before updating this match will hit here.

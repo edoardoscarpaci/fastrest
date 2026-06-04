@@ -188,9 +188,9 @@ def error_code_for(exc: ServiceException) -> AnyErrorCode:
     # Custom map takes precedence — checked first on every class in the MRO.
     for cls in type(exc).__mro__:
         if cls in _CUSTOM_CODE_MAP:
-            return _CUSTOM_CODE_MAP[cls]  # type: ignore[index]
+            return _CUSTOM_CODE_MAP[cls]
         if cls in _EXCEPTION_CODE_MAP:
-            return _EXCEPTION_CODE_MAP[cls]  # type: ignore[index]
+            return _EXCEPTION_CODE_MAP[cls]
 
     # No match found — internal server error as catch-all
     return FastrestErrorCodes.INTERNAL_ERROR

@@ -86,7 +86,7 @@ from varco_core.event.base import Event
 # ── EntityEvent ────────────────────────────────────────────────────────────────
 
 
-class EntityEvent(Event):
+class EntityEvent(Event):  # type: ignore[misc]
     """
     Base class for all entity lifecycle events.
 
@@ -134,7 +134,7 @@ class EntityEvent(Event):
 # ── EntityCreatedEvent ────────────────────────────────────────────────────────
 
 
-class EntityCreatedEvent(EntityEvent):
+class EntityCreatedEvent(EntityEvent):  # type: ignore[misc]
     """
     Emitted by ``AsyncService.create()`` after the UoW commits.
 
@@ -164,7 +164,7 @@ class EntityCreatedEvent(EntityEvent):
 # ── EntityUpdatedEvent ────────────────────────────────────────────────────────
 
 
-class EntityUpdatedEvent(EntityEvent):
+class EntityUpdatedEvent(EntityEvent):  # type: ignore[misc]
     """
     Emitted by ``AsyncService.update()`` after the UoW commits.
 
@@ -188,7 +188,7 @@ class EntityUpdatedEvent(EntityEvent):
 # ── EntityDeletedEvent ────────────────────────────────────────────────────────
 
 
-class EntityDeletedEvent(EntityEvent):
+class EntityDeletedEvent(EntityEvent):  # type: ignore[misc]
     """
     Emitted by ``AsyncService.delete()`` after the UoW commits.
 

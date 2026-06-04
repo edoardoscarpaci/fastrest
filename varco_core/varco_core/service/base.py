@@ -105,7 +105,7 @@ nothing (``NoopEventProducer`` is used as the fallback).
             authorizer:   Inject[AbstractAuthorizer],
             assembler:    Inject[AbstractDTOAssembler[...]],
             # ↓ MUST be re-declared here so providify can inject it
-            producer: Annotated[AbstractEventProducer, InjectMeta(optional=True)] = None,
+            producer: Annotated[AbstractEventProducer | None, InjectMeta(optional=True)] = None,
         ) -> None:
             super().__init__(
                 uow_provider=uow_provider,

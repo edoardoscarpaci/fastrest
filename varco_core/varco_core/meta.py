@@ -83,13 +83,13 @@ _T2 = TypeVar("_T2")
 _T3 = TypeVar("_T3")
 
 # Two-field composite key — the most common case (e.g. user_id + role_id).
-CompositeKey2: TypeAlias = tuple[_T1, _T2]  # type: ignore[type-arg]
+CompositeKey2: TypeAlias = tuple[_T1, _T2]
 
 # Three-field composite key — less common but present in ternary junction tables.
-CompositeKey3: TypeAlias = tuple[_T1, _T2, _T3]  # type: ignore[type-arg]
+CompositeKey3: TypeAlias = tuple[_T1, _T2, _T3]
 
 # Untyped alias for generic code that only checks ``isinstance(pk, tuple)``.
-CompositeKey: TypeAlias = tuple  # type: ignore[type-arg]
+CompositeKey: TypeAlias = tuple
 
 
 @dataclasses.dataclass(frozen=True)

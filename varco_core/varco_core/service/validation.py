@@ -174,9 +174,7 @@ class ValidatorServiceMixin(
 
     #: Resolved by the DI container — the registered ``Validator[D]`` singleton.
     #: ``None`` when no ``Validator[D]`` is registered in the container.
-    _validator_entity: ClassVar[  # type: ignore[misc]
-        Annotated[Any, InjectMeta(optional=True)]
-    ] = None
+    _validator_entity: ClassVar[Annotated[Any, InjectMeta(optional=True)]] = None
 
     # ── Extension hook override ────────────────────────────────────────────────
 
@@ -230,7 +228,7 @@ class ValidatorServiceMixin(
             validator.validate(entity).raise_if_invalid()
 
         # Always chain — other mixins in the MRO may override _validate_entity.
-        super()._validate_entity(entity, ctx)  # type: ignore[misc]
+        super()._validate_entity(entity, ctx)
 
 
 __all__ = ["ValidatorServiceMixin"]
