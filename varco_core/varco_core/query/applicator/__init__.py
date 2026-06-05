@@ -4,19 +4,17 @@ varco_core.query.applicator
 Strategy classes that apply AST nodes, sort directives, and pagination to
 backend-native query objects.
 
-    QueryApplicator          — abstract strategy base
-    SQLAlchemyQueryApplicator — concrete SA 2.x ``Select`` applicator
+    QueryApplicator — abstract strategy base
 
-Import from the sub-modules directly::
+Import from the sub-module directly::
 
     from varco_core.query.applicator.applicator import QueryApplicator
-    from varco_core.query.applicator.sqlalchemy import SQLAlchemyQueryApplicator
+
+For the SQLAlchemy implementation see ``varco_sa.query.applicator``.
 """
 
 from varco_core.query.applicator.applicator import QueryApplicator
-from varco_core.query.applicator.sqlalchemy import SQLAlchemyQueryApplicator
 
 __all__ = [
     "QueryApplicator",
-    "SQLAlchemyQueryApplicator",
 ]

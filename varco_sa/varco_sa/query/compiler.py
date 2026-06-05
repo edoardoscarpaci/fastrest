@@ -1,13 +1,9 @@
 """
-varco_core.query.visitor.sqlalchemy
+varco_sa.query.compiler
 ========================================
 Translates AST query nodes into SQLAlchemy filter expressions, with optional
 automatic JOIN resolution for dotted relationship paths such as
 ``"author.name"`` or ``"author.department.city"``.
-
-This visitor is backend-specific but lives in ``varco_core`` because the
-SQLAlchemy type system (``DeclarativeBase``, ``ColumnElement``) is the common
-ground shared between ``varco_sa`` and any direct SA usage.
 
 Join traversal lifecycle
 ------------------------

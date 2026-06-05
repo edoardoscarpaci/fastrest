@@ -25,7 +25,7 @@ from varco_core.query.type import (
     Operation,
     OrNode,
 )
-from varco_core.query.visitor.sqlalchemy import SQLAlchemyQueryCompiler
+from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 
 
 # ── Minimal SA models — flat ───────────────────────────────────────────────────

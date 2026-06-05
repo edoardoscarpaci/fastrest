@@ -19,8 +19,8 @@ from varco_core.query.type import (
     SortField,
     SortOrder,
 )
-from varco_core.query.visitor.sqlalchemy import SQLAlchemyQueryCompiler
-from varco_core.query.applicator.sqlalchemy import SQLAlchemyQueryApplicator
+from varco_sa.query.compiler import SQLAlchemyQueryCompiler
+from varco_sa.query.applicator import SQLAlchemyQueryApplicator
 
 
 # ── Minimal SA model — flat ────────────────────────────────────────────────────

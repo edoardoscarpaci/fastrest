@@ -24,7 +24,7 @@ from varco_core.mapper import AbstractMapper
 from varco_core.model import DomainModel
 from varco_core.query.params import QueryParams
 from varco_core.query.type import SortOrder
-from varco_core.query.visitor.sqlalchemy import SQLAlchemyQueryCompiler
+from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 from varco_core.repository import AsyncRepository
 
 from sqlalchemy import asc, desc

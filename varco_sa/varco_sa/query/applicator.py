@@ -1,5 +1,5 @@
 """
-varco_core.query.applicator.sqlalchemy
+varco_sa.query.applicator
 ==========================================
 SQLAlchemy-specific ``QueryApplicator`` that applies AST nodes, sort directives,
 and pagination to a SQLAlchemy 2.x ``Select`` statement.
@@ -23,7 +23,7 @@ from sqlalchemy.orm import DeclarativeBase
 
 from varco_core.query.applicator.applicator import QueryApplicator
 from varco_core.query.type import SortField, SortOrder, TransformerNode
-from varco_core.query.visitor.sqlalchemy import SQLAlchemyQueryCompiler
+from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 
 
 class SQLAlchemyQueryApplicator(QueryApplicator):

@@ -66,7 +66,7 @@ from varco_sa.schema_guard import SchemaGuard, SchemaDrift, SchemaDriftReport
 from varco_sa.uow import SQLAlchemyUnitOfWork
 
 # SA-specific applicator is in varco_core (no session; pure SA expressions)
-from varco_core.query.applicator.sqlalchemy import SQLAlchemyQueryApplicator
+from varco_sa.query.applicator import SQLAlchemyQueryApplicator
 from varco_sa.type_coercion import registry_from_sa_model
 
 __all__ = [
