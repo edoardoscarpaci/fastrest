@@ -47,6 +47,7 @@ import httpx
 
 if TYPE_CHECKING:
     from varco_fastapi.auth.trust_store import TrustStore
+    from varco_fastapi.client.config import ClientConfig
     from varco_fastapi.client.configurator import ClientConfigurator
     from varco_fastapi.client.middleware import (
         AbstractClientMiddleware,
@@ -658,6 +659,9 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
         self,
         base_url: str | None = None,
         *,
+        port: int | None = None,
+        verify: bool | str = True,
+        config: ClientConfig | None = None,
         configurator: ClientConfigurator | None = None,
         profile: ClientProfile | None = None,
         middleware: tuple[AbstractClientMiddleware, ...] | None = None,
@@ -666,17 +670,51 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
     ) -> None:
         """
         Args:
-            base_url:     Explicit base URL.  Overrides configurator and env vars.
+            base_url:     Explicit base URL.  Overrides configurator, config, and env vars.
+            port:         Optional port number appended to the resolved ``base_url``
+                          (e.g. ``port=8080`` turns ``"http://host"`` into
+                          ``"http://host:8080"``).
+            verify:       TLS verification.  ``True`` = system CAs (default),
+                          ``False`` = skip verification, ``str`` = path to CA bundle.
+            config:       ``ClientConfig`` bundle.  Explicit kwargs override config fields.
             configurator: Per-instance configurator for URL / proxy / headers.
             profile:      Per-instance profile (middleware / TLS / timeout).
             middleware:   Extra middleware appended to the profile's stack.
             trust_store:  TLS trust config override.
             timeout:      Timeout override in seconds.
 
+        Raises:
+            ValueError: When no ``base_url`` can be resolved AND no configurator
+                        is attached.  Pass ``base_url=`` or set a class-level
+                        ``_configurator`` to avoid this.
+
         Edge cases:
-            - ``base_url`` is required unless configurator provides a URL.
+            - ``base_url`` kwarg wins over ``config.base_url`` when both are given.
+            - ``port`` kwarg wins over ``config.port`` when both are given.
             - ``middleware`` tuple is appended to, not replacing, profile middleware.
+            - When a ``ClientConfigurator`` is present, URL resolution is deferred
+              to it — no ``ValueError`` is raised even if ``base_url`` is None.
         """
+        # --- Merge config bundle (lowest priority) then override with explicit kwargs ---
+        # config fields act as defaults; any explicit kwarg silently wins over them.
+        if config is not None:
+            if base_url is None:
+                base_url = config.base_url
+            if port is None:
+                port = config.port
+            # verify: explicit kwarg default is True, so only use config when caller
+            # did not change it from the default — we distinguish by checking identity
+            # against the sentinel default True value.  Since verify=True is also the
+            # config default, we just always let an explicit non-default kwarg win.
+            # Simplest: if verify is still the default (True) and config sets something,
+            # use config.  Otherwise the caller passed an explicit value, keep it.
+            if verify is True and config.verify is not True:
+                verify = config.verify
+            if middleware is None and config.middleware:
+                middleware = config.middleware
+            if timeout is None and config.timeout != 30.0:
+                timeout = config.timeout
+
         # Resolve configurator: per-instance > class-level
         _configurator = configurator or (
             type(self)._configurator() if type(self)._configurator else None
@@ -684,12 +722,36 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
 
         # Resolve base URL: explicit > configurator.get_url()
         if base_url:
-            self._base_url: str = base_url
+            resolved_url: str = base_url
         elif _configurator is not None:
-            self._base_url = _configurator.get_url()
+            resolved_url = _configurator.get_url()
         else:
-            # No URL — will raise on first _request() call
-            self._base_url = ""
+            resolved_url = ""
+
+        # Append port when provided — only when not already embedded in the URL.
+        # We check for ":" after the scheme separator to avoid double-appending.
+        if port is not None and resolved_url:
+            # Strip trailing slash so ":port/" doesn't become "/:port/"
+            base_stripped = resolved_url.rstrip("/")
+            # Find the host portion (after "://") and check if port is already there
+            after_scheme = base_stripped.split("://", 1)[-1]
+            if ":" not in after_scheme:
+                resolved_url = f"{base_stripped}:{port}"
+
+        self._base_url: str = resolved_url
+
+        # Fail fast: no URL and no configurator means every request will error.
+        # Raise here with a helpful message instead of on the first HTTP call.
+        if not self._base_url and _configurator is None:
+            raise ValueError(
+                f"{type(self).__name__}: no base_url configured. "
+                "Pass base_url=... to the constructor, provide a ClientConfig with "
+                "base_url set, or set a class-level _configurator that implements "
+                "get_url() / default_url()."
+            )
+
+        # Store verify so _build_httpx_client() can pass it to httpx
+        self._verify: bool | str = verify
 
         # Resolve profile: explicit kwarg > configurator.profile() > class _profile > default
         resolved_profile: ClientProfile
@@ -734,8 +796,19 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
         """
         Construct the ``httpx.AsyncClient`` with resolved config.
 
+        TLS verification priority:
+        1. ``trust_store`` on the profile (builds an ``ssl.SSLContext``) — used when
+           set (e.g. mTLS or custom CA chain).
+        2. ``self._verify`` (``bool`` or ``str``) — passed straight to httpx when no
+           ``TrustStore`` is present.  ``False`` disables certificate verification;
+           a ``str`` path points to a CA bundle file.
+
         Returns:
             Configured ``httpx.AsyncClient`` instance.
+
+        Edge cases:
+            - Both ``trust_store`` and ``verify=str`` supplied → ``trust_store`` wins
+              because it is the more explicit configuration.
         """
         kwargs: dict[str, Any] = {
             "base_url": self._base_url,
@@ -744,7 +817,11 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
         if self._proxy_url:
             kwargs["proxy"] = self._proxy_url
         if self._resolved_profile.trust_store is not None:
+            # TrustStore builds a full ssl.SSLContext (supports mTLS, custom CAs)
             kwargs["verify"] = self._resolved_profile.trust_store.build_ssl_context()
+        else:
+            # Scalar verify: True (system CAs), False (skip), or str (CA bundle path)
+            kwargs["verify"] = self._verify
         return httpx.AsyncClient(**kwargs)
 
     async def _request(
@@ -917,8 +994,75 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
 VarcoClient = AsyncVarcoClient
 
 
+def make_client(
+    router_cls: type,
+    base_url: str | None = None,
+    *,
+    port: int | None = None,
+    verify: bool | str = True,
+    config: ClientConfig | None = None,
+    middleware: tuple[AbstractClientMiddleware, ...] = (),
+    timeout: float = 30.0,
+    profile: ClientProfile | None = None,
+) -> AsyncVarcoClient:
+    """
+    Factory that creates a typed ``AsyncVarcoClient`` subclass at runtime without
+    requiring a ``class MyClient(AsyncVarcoClient[MyRouter]): pass`` declaration.
+
+    The dynamically created class is indistinguishable from a manually declared
+    subclass — ``_VarcoClientMeta`` runs normally and injects all CRUD methods.
+
+    DESIGN: runtime class creation via _VarcoClientMeta over manual subclassing
+        ✅ One-liner client creation — no boilerplate subclass required
+        ✅ ``_VarcoClientMeta`` runs once; generated methods live on the class
+        ✅ Returned client is a real ``AsyncVarcoClient`` subclass (isinstance check works)
+        ❌ Class name is synthetic (``"{Router}Client"``) — not importable by name
+
+    Args:
+        router_cls: The ``VarcoRouter`` subclass that defines the endpoints.
+        base_url:   Target service base URL.
+        port:       Optional port appended to ``base_url``.
+        verify:     TLS verification flag or CA bundle path.
+        config:     ``ClientConfig`` bundle (explicit kwargs override config fields).
+        middleware: Middleware stack applied to every request.
+        timeout:    Request timeout in seconds.
+        profile:    ``ClientProfile`` instance (middleware / TLS / timeout bundle).
+
+    Returns:
+        A fully configured ``AsyncVarcoClient`` instance with typed CRUD methods
+        derived from ``router_cls``.
+
+    Raises:
+        ValueError: If no ``base_url`` can be resolved (see ``AsyncVarcoClient.__init__``).
+
+    Example::
+
+        client = make_client(ItemRouter, "https://api.example.com", timeout=5.0)
+        items = await client.list()
+    """
+    # Build a class whose __orig_bases__ looks like AsyncVarcoClient[router_cls]
+    # so _VarcoClientMeta._resolve_router_type() picks it up and injects CRUD methods.
+    ClientClass = _VarcoClientMeta(
+        f"{router_cls.__name__}Client",
+        (AsyncVarcoClient,),
+        # __orig_bases__ is what Generic machinery stores; the metaclass reads it
+        # to find the router type parameter.
+        {"__orig_bases__": (AsyncVarcoClient[router_cls],)},  # type: ignore[index]
+    )
+    return ClientClass(
+        base_url,
+        port=port,
+        verify=verify,
+        config=config,
+        middleware=middleware or None,
+        timeout=timeout if timeout != 30.0 else None,
+        profile=profile,
+    )
+
+
 __all__ = [
     "ClientProfile",
     "AsyncVarcoClient",
     "VarcoClient",
+    "make_client",
 ]
