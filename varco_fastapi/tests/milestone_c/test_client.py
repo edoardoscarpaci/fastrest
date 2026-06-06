@@ -314,15 +314,14 @@ def test_varco_client_generates_crud_methods():
         ), f"Method '{method_name}' not generated on ItemClient"
 
 
-async def test_varco_client_no_url_raises():
-    """_request() raises RuntimeError when no base URL is configured."""
+def test_varco_client_no_url_raises():
+    """Constructor raises ValueError immediately when no base URL is configured."""
 
     class ItemClient(AsyncVarcoClient[ItemRouter]):
         pass
 
-    client = ItemClient()
-    with pytest.raises(RuntimeError, match="no base URL"):
-        await client._request("GET", "/", body=None, path_params={}, query_params={})
+    with pytest.raises(ValueError, match="base_url"):
+        ItemClient()
 
 
 async def test_varco_client_request_sends_correct_http():

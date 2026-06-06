@@ -56,6 +56,12 @@ otel = [
 prometheus = [
     "opentelemetry-exporter-prometheus>=0.43b0",
 ]
+# OpenAPI client support — YAML spec parsing (JSON is built-in)
+# Install with: pip install 'varco-fastapi[openapi]'
+openapi = ["pyyaml>=6.0"]
+
+[project.scripts]
+varco-gen = "varco_fastapi.client.openapi_gen:main"
 
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
