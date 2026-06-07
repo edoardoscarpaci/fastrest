@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    pass
+    from varco_fastapi.auth.guard import RouteGuard
 
 
 # ── ResolvedRoute ─────────────────────────────────────────────────────────────
@@ -110,6 +110,11 @@ class ResolvedRoute:
     # Empty tuple → adapter defaults to ("application/json",)
     skill_input_modes: tuple[str, ...] = field(default_factory=tuple)
     skill_output_modes: tuple[str, ...] = field(default_factory=tuple)
+
+    # ── Route-level authorization guard ───────────────────────────────────────
+    # Populated from _RouteEntry.requires; None means no guard.
+    # Excluded from hash/compare — RouteGuard.predicate may hold callables.
+    requires: RouteGuard | None = field(default=None, hash=False, compare=False)
 
 
 # ── Path parameter extraction ──────────────────────────────────────────────────
@@ -343,6 +348,7 @@ def introspect_routes(
                 skill_description=entry.skill_description,
                 skill_input_modes=tuple(entry.skill_input_modes or ()),
                 skill_output_modes=tuple(entry.skill_output_modes or ()),
+                requires=entry.requires,
             )
             if enabled_routes is None or attr_name in enabled_routes:
                 routes.append(route)

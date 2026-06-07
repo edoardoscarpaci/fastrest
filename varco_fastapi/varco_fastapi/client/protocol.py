@@ -36,17 +36,14 @@ class ClientProtocol(Protocol[R_co]):
     ``AsyncVarcoClient[R]`` satisfies this protocol.  Any custom client or
     test double that implements these methods also satisfies it.
 
-    The generic parameter ``R`` is the ``VarcoRouter`` subclass the client
-    targets.  It is covariant here — ``ClientProtocol[OrderRouter]`` is a
+    The generic parameter ``R_co`` is the ``VarcoRouter`` subclass the client
+    targets.  It is covariant — ``ClientProtocol[OrderRouter]`` is a
     structural supertype of any concrete client for ``OrderRouter``.
 
     CRUD methods below are the "base shape".  The metaclass on
     ``AsyncVarcoClient`` generates concrete overloads with typed DTOs
     (e.g. ``create(body: CreateOrderDTO) -> OrderReadDTO``).  The protocol
     captures the structural contract without requiring concrete types.
-
-    Args:
-        R_co: The ``VarcoRouter`` subclass this client targets.
 
     Thread safety:  ✅ Protocol defines no state.
     Async safety:   ✅ All CRUD methods are async coroutines.

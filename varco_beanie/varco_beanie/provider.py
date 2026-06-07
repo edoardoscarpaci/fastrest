@@ -39,10 +39,9 @@ class BeanieRepositoryProvider(RepositoryProvider):
         async with provider.make_uow() as uow:
             user = await uow.users.save(User(name="Edo", email="..."))
 
-    Args:
-        mongo_client:  Connected ``AsyncMongoClient`` (pymongo>=4.11).
-        db_name:       MongoDB database name.
-        transactional: Use MongoDB transactions (replica set required).
+    Connection details (mongo client, database name, and transaction flag) are
+    read from the injected ``BeanieSettings`` — pass those fields when
+    constructing ``BeanieSettings``.
 
     Edge cases:
         - ``await provider.init()`` must be called once at startup, after all

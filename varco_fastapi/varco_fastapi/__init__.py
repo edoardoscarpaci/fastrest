@@ -110,6 +110,14 @@ from varco_fastapi.auth.client_auth import (
     JwtClientAuth,
 )
 from varco_fastapi.auth.trust_store import TrustStore
+from varco_fastapi.auth.guard import (
+    RouteGuard,
+    allow_anonymous,
+    require_grant,
+    require_predicate,
+    require_roles,
+    require_scopes,
+)
 
 # ── Middleware ────────────────────────────────────────────────────────────────
 from varco_fastapi.middleware.error import ErrorMiddleware
@@ -138,6 +146,7 @@ from varco_fastapi.router.mixins import (
 from varco_fastapi.router.presets import (
     AllRouteMixin,
     CRUDRouter,
+    GenericRouter,
     NoDeleteRouter,
     ReadOnlyRouter,
     WriteRouter,
@@ -238,6 +247,13 @@ __all__ = [
     "AbstractClientAuth",
     "JwtClientAuth",
     "TrustStore",
+    # Route-level authorization guards
+    "RouteGuard",
+    "require_scopes",
+    "require_roles",
+    "require_grant",
+    "require_predicate",
+    "allow_anonymous",
     # Middleware
     "ErrorMiddleware",
     "MetricsMiddleware",
@@ -248,6 +264,7 @@ __all__ = [
     "install_cors",
     # Router
     "VarcoRouter",
+    "GenericRouter",
     "VarcoCRUDRouter",
     "RouterMixin",
     "AllRouteMixin",

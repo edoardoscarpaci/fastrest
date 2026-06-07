@@ -450,7 +450,8 @@ class AbstractJobStore(ABC):
             job: The job to save.
 
         Raises:
-            Any backend-specific persistence error.
+            Exception: Any backend-specific persistence error propagates
+                to the caller unchanged.
 
         Edge cases:
             - Saving a terminal job (COMPLETED, FAILED, CANCELLED) is valid —
@@ -615,7 +616,8 @@ class AbstractJobRunner(ABC):
             coro: The coroutine to execute in the background.
 
         Raises:
-            Any store-specific error from ``store.save()``.
+            Exception: Any store-specific error from ``store.save()`` propagates
+                to the caller unchanged.
 
         Edge cases:
             - If ``store.save()`` raises, ``coro`` is closed immediately (no leak).
@@ -729,7 +731,8 @@ class AbstractJobRunner(ABC):
             The ``UUID`` of the newly created job.
 
         Raises:
-            Any store-specific error from ``store.save()``.
+            Exception: Any store-specific error from ``store.save()`` propagates
+                to the caller unchanged.
 
         Edge cases:
             - All values in ``args`` and ``kwargs`` must be JSON-serializable.

@@ -36,9 +36,10 @@ from __future__ import annotations
 import logging
 from typing import Any, TypeVar, Optional, Final
 from uuid import uuid4
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 from providify import DIContainer
 
 _logger = logging.getLogger(__name__)
@@ -129,11 +130,15 @@ class DISessionMiddleware(BaseHTTPMiddleware):
           accessible from ContextVar without per-request isolation.
     """
 
-    def __init__(self, app, *, container: Optional[DIContainer] = None) -> None:
+    def __init__(
+        self, app: ASGIApp, *, container: Optional[DIContainer] = None
+    ) -> None:
         super().__init__(app)
         self._container = container or DIContainer.current()
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """Store the container in the ContextVar for this request."""
         session_id = request.headers.get(_REQUEST_ID_HEADER) or _generate_session_id()
         async with self._container.asession(session_id):

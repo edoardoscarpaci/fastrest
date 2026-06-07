@@ -156,8 +156,8 @@ def create_span(
                 s.set_attribute("result.count", str(len(result)))
 
     Raises:
-        Any exception raised inside the ``with`` block — always re-raised
-        after being optionally recorded on the span.
+        Exception: Any exception raised inside the ``with`` block — always
+            re-raised after being optionally recorded on the span.
 
     Edge cases:
         - Nested ``create_span`` calls create parent-child spans automatically

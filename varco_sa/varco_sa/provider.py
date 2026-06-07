@@ -53,9 +53,9 @@ class SQLAlchemyRepositoryProvider(RepositoryProvider):
       ❌ Two providers with the same ``Base`` would conflict on tablenames —
          use one provider per ``Base`` per process
 
-    Args:
-        base:            Shared ``DeclarativeBase`` subclass.
-        session_factory: ``async_sessionmaker`` or any ``() → AsyncSession``.
+    When constructing directly (without DI), use :meth:`from_components` and
+    pass ``base`` (shared ``DeclarativeBase`` subclass) and ``session_factory``
+    (``async_sessionmaker`` or any ``() → AsyncSession``).
 
     Edge cases:
         - Call ``register()`` / ``autodiscover()`` before

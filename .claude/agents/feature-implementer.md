@@ -108,7 +108,67 @@ uv run pytest varco_[affected_package]/tests/
 - Repeat until the entire test suite is green.
 - The two known pre-existing failures are acceptable: `test_cache.py::TestTTLStrategy::test_cache_evicts_expired_on_read` and `test_event.py::TestJsonEventSerializer::test_serialize_produces_bytes` — do not count these as failures you introduced.
 
-### STEP 6: DOCUMENTATION UPDATE
+### STEP 6: TECHNICAL FEATURE DOCUMENTATION
+
+**Only for genuine features** — skip this step for bug fixes, minor changes, or purely internal refactors that add no new public API surface.
+
+After tests pass, create a dedicated `.md` file in `technical_docs/features/` (the MkDocs docs_dir, at the **repository root**):
+
+```
+technical_docs/features/[feature-name].md
+```
+
+Use `kebab-case` matching the primary class or concept (e.g., `technical_docs/features/route-guard.md`, `technical_docs/features/redis-rate-limiter.md`, `technical_docs/features/outbox-relay.md`). After creating the page, add it to the `Features` section of the `nav` in `mkdocs.yml` so it appears in the generated site (`make docs`).
+
+**The file must cover all of the following sections:**
+
+```markdown
+# [Feature Name]
+
+## Overview
+One-paragraph summary: what problem this solves and why it exists.
+
+## Architecture
+Where it lives in the layer hierarchy (varco_core / backend package).
+Include a diagram or ASCII hierarchy if useful.
+
+## Core Concepts
+The key classes, protocols, and data structures. For each one:
+- What it is
+- Its responsibility
+- Any invariants or contracts it upholds
+
+## How to Use It
+Step-by-step usage with realistic code examples covering:
+- Basic usage (happy path)
+- Configuration options
+- Common compositions or patterns
+
+## Call Flow / Request Lifecycle
+A walkthrough of exactly what happens at runtime, from entry point to exit:
+- Which methods are called, in which order
+- Where decisions are made
+- What gets passed between components
+
+## Integration Points
+Where in the codebase this feature is wired in or consumed:
+- Which modules import it
+- Which DI registrations set it up
+- Which routers / services / handlers use it
+
+## Edge Cases & Pitfalls
+Things that could go wrong and how to avoid them. Mirror the CLAUDE.md pitfalls table format where relevant.
+
+## Testing
+How to test this feature:
+- Which fixtures or in-memory fakes to use
+- Which test file covers it
+- Any integration test considerations
+```
+
+This documentation is part of the same commit as the code — never a follow-up.
+
+### STEP 7: DOCUMENTATION UPDATE
 
 After tests pass:
 
@@ -117,7 +177,7 @@ After tests pass:
 - Update any relevant `README.md` files.
 - Documentation updates go in the same logical unit as the code — never as a follow-up.
 
-### STEP 7: COMPLETION REPORT
+### STEP 8: COMPLETION REPORT
 
 Present a structured summary to the user:
 
@@ -140,6 +200,9 @@ Present a structured summary to the user:
 ### Test results
 [All green / Known pre-existing failures excluded]
 
+### Technical documentation
+[`technical_docs/features/feature-name.md`](technical_docs/features/feature-name.md) — created / 'N/A — bug fix or minor change'
+
 ### Architectural notes
 [Any design decisions the user should be aware of]
 ```
@@ -157,6 +220,7 @@ Present a structured summary to the user:
 | Layer boundary | Every new class | Confirm it belongs in core vs backend |
 | Test coverage | Every feature | Unit tests always; integration tests when applicable |
 | Test suite green | After implementation | Run tests, fix failures, re-run until clean |
+| Feature doc | New feature (not bugfix/minor) | Create `technical_docs/features/[feature-name].md` with all required sections |
 | Docs updated | After tests pass | ARCHITECTURE.md + CLAUDE.md + README as needed |
 
 ---

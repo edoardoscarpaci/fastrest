@@ -205,6 +205,51 @@ All field names below assume a prefix of `MY_SVC_` — replace it with your own.
 
 ---
 
+## Service-free (generic) REST servers
+
+Use `GenericRouter` when the server has no `AsyncService` or repository — for example a
+data-transformation pipeline, an API gateway, or computed analytics routes.  All
+cross-cutting features (middleware, telemetry, auth, authorization) work identically.
+
+```python
+from varco_fastapi.router.presets import GenericRouter
+from varco_fastapi.router.endpoint import route
+from varco_fastapi.auth import JwtBearerAuth
+from varco_fastapi.auth.guard import require_scopes, require_roles, allow_anonymous
+
+class ReportRouter(GenericRouter):
+    _prefix = "/reports"
+    _auth = JwtBearerAuth(...)
+
+    # Requires scope — denies 403 if caller does not have "reports:read"
+    @route("GET", "/summary", requires=require_scopes("reports:read"))
+    async def get_summary(self, ctx) -> dict:
+        return {"total": 42}
+
+    # Requires role
+    @route("DELETE", "/cache", requires=require_roles("admin"))
+    async def purge_cache(self, ctx) -> None: ...
+
+    # Public endpoint — allow_anonymous bypasses auth checks entirely
+    @route("GET", "/status", requires=allow_anonymous())
+    async def status(self, ctx) -> dict:
+        return {"ok": True}
+
+app = create_varco_app(routers=[ReportRouter])
+```
+
+**Available guard helpers** (`varco_fastapi.auth.guard`):
+
+| Helper | Description |
+|---|---|
+| `require_scopes(*s, all=True)` | All (or any) OAuth scopes must be present |
+| `require_roles(*r, all=True)` | All (or any) named roles must be present |
+| `require_grant(action, key)` | `ctx.can(action, resource_key)` must be True |
+| `require_predicate(fn)` | Custom sync/async callable returning bool |
+| `allow_anonymous()` | Anonymous callers pass through (public endpoints) |
+
+---
+
 ## Related packages
 
 | Package | Description |

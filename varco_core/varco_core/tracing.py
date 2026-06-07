@@ -145,8 +145,8 @@ async def correlation_context(correlation_id: str) -> AsyncIterator[str]:
                 logger.info("handling request", extra={"cid": cid})
 
     Raises:
-        Any exception raised inside the ``async with`` body is propagated
-        unchanged after the context is restored.
+        Exception: Any exception raised inside the ``async with`` body is
+            propagated unchanged after the context is restored.
 
     Edge cases:
         - Empty string is accepted — no validation is performed on the value.

@@ -50,6 +50,7 @@ from __future__ import annotations
 
 from typing import TypeVar
 
+from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.crud import VarcoCRUDRouter
 from varco_fastapi.router.mixins import (
     CreateMixin,
@@ -223,6 +224,43 @@ class NoDeleteRouter(
     """
 
 
+# ── GenericRouter ─────────────────────────────────────────────────────────────
+
+
+GenericRouter = VarcoRouter
+"""
+Alias for ``VarcoRouter`` with no generic type parameters.
+
+The "blessed" entry point for **service-free** routers — servers that process
+data, act as proxies/gateways, or expose computed endpoints without a
+``AsyncService`` or repository behind them.
+
+It is identical to ``VarcoRouter`` at runtime; the name signals intent and
+mirrors the client-side ``GenericClient`` convention.
+
+All cross-cutting features (middleware, telemetry, auth, ``RouteGuard``) work
+exactly the same as on a service-backed router.
+
+Usage::
+
+    from varco_fastapi.router.presets import GenericRouter
+    from varco_fastapi.router.endpoint import route
+    from varco_fastapi.auth.guard import require_scopes
+    from varco_fastapi.auth import JwtBearerAuth
+
+    class ReportRouter(GenericRouter):
+        _prefix = "/reports"
+        _auth = JwtBearerAuth(...)
+
+        @route("GET", "/summary", requires=require_scopes("reports:read"))
+        async def get_summary(self, ctx) -> dict:
+            return {"total": 42}
+
+Thread safety:  ✅ Same as ``VarcoRouter`` — ClassVars are read-only after class definition.
+Async safety:   ✅ ``build_router()`` is synchronous.
+"""
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
@@ -231,4 +269,5 @@ __all__ = [
     "ReadOnlyRouter",
     "WriteRouter",
     "NoDeleteRouter",
+    "GenericRouter",
 ]

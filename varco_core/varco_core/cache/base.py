@@ -71,9 +71,8 @@ class AsyncCache(Protocol[K, V]):  # type: ignore[misc]
     All methods are ``async def``.  Implementations must satisfy this
     interface structurally — they do NOT need to inherit from ``AsyncCache``.
 
-    Type parameters:
-        K: Cache key type (must be hashable for most backends).
-        V: Cache value type.
+    ``K`` is the cache key type (must be hashable for most backends);
+    ``V`` is the cache value type.
 
     Thread safety:  ❌  Not thread-safe — implementations may use shared state.
     Async safety:   ✅  All methods are coroutines.

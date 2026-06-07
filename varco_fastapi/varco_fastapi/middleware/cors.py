@@ -29,7 +29,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 
 @dataclass(frozen=True)
@@ -138,7 +141,7 @@ class CORSConfig:
 
         Args:
             d: Dict with optional keys matching the dataclass field names.
-               Tuple-typed fields also accept lists.
+                Tuple-typed fields also accept lists.
 
         Returns:
             A ``CORSConfig`` with values from the dict merged over defaults.
@@ -181,7 +184,7 @@ class CORSConfig:
         return cls(allow_origins=())
 
 
-def install_cors(app, config: CORSConfig | None = None) -> None:
+def install_cors(app: FastAPI, config: CORSConfig | None = None) -> None:
     """
     Add Starlette ``CORSMiddleware`` to ``app`` using ``CORSConfig``.
 

@@ -833,6 +833,13 @@ filtered_query = transformer.transform(base_query, params, User)
 
 - **Router mixins**: `CreateMixin`, `ReadMixin`, `UpdateMixin`, `DeleteMixin`, `ListMixin`,
   `StreamMixin` — compose standard HTTP endpoints without boilerplate.
+- **Service-free routers**: `GenericRouter` (alias for `VarcoRouter` with no type args) is the
+  entry point for data-processing, proxy, or computed-endpoint servers with no `AsyncService`
+  or repository.  All cross-cutting features (middleware, telemetry, auth) apply unchanged.
+- **Route-level authorization**: `RouteGuard` (`varco_fastapi.auth.guard`) is a declarative,
+  immutable predicate attached to any `@route` via `requires=`.  Constructor helpers:
+  `require_scopes`, `require_roles`, `require_grant`, `require_predicate`, `allow_anonymous`.
+  Evaluated against `AuthContext` before the handler runs; denial → HTTP 403.
 - **Auth middleware**: `AuthMiddleware` validates JWT bearer tokens using `TrustedIssuerRegistry`.
 - **Lifecycle auto-discovery**: `create_varco_app` calls `_collect_lifecycle_components()` which
   discovers `AbstractEventBus`, `AbstractDistributedLock`, `CacheBackend`, and — if `varco_ws`

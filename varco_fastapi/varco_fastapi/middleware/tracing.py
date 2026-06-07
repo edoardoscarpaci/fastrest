@@ -32,9 +32,10 @@ from __future__ import annotations
 
 import logging
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from varco_core.tracing import current_correlation_id
 
@@ -84,7 +85,7 @@ class TracingMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         enable_otel: bool = True,
         tracer_name: str = "varco_fastapi",
@@ -100,7 +101,9 @@ class TracingMiddleware(BaseHTTPMiddleware):
                 "TracingMiddleware: opentelemetry SDK not installed — OTel disabled."
             )
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """
         Handle the request, optionally wrapping it in an OTel span.
 

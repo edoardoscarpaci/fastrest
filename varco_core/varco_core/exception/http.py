@@ -273,7 +273,7 @@ def register_error_code(
         error_code:    The ``ErrorCode`` to associate with it.
 
     Raises:
-        Nothing — silently replaces an existing mapping.
+        TypeError: Never raised — silently replaces an existing mapping.
 
     Edge cases:
         - Not thread-safe after request handling begins — call at startup only.

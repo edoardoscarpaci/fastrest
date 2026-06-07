@@ -139,11 +139,9 @@ def cached(
 
     Returns:
         A decorated coroutine function with two extra attributes:
-
-        - ``invalidate(*args, **kwargs)`` — evict the entry for these
-          specific call arguments.
-        - ``invalidate_all()`` — flush all entries managed by this backend
-          (calls ``cache.clear()``).
+        ``invalidate(*args, **kwargs)`` evicts the entry for specific call
+        arguments; ``invalidate_all()`` flushes all entries managed by this
+        backend (calls ``cache.clear()``).
 
     Example::
 

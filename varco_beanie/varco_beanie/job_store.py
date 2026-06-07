@@ -343,9 +343,9 @@ class BeanieJobStore(AbstractJobStore):
     Thread safety:  ✅ No mutable instance state — Motor pool is coroutine-safe.
     Async safety:   ✅ All methods are ``async def``.
 
-    Args:
-        (none) — ``BeanieJobStore`` uses the Beanie global document registry
-                 initialized by ``init_beanie()`` or ``provider.init()``.
+    ``BeanieJobStore`` takes no constructor arguments — it uses the Beanie
+    global document registry initialized by ``init_beanie()`` or
+    ``provider.init()``.
 
     Edge cases:
         - ``JobDocument`` must be registered with Beanie before any method is

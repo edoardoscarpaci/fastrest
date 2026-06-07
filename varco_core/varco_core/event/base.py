@@ -635,7 +635,8 @@ class AbstractEventBus(ABC):
             events: List of ``(event, channel)`` tuples to publish in order.
 
         Raises:
-            Any exception raised by ``publish()`` for any individual event.
+            Exception: Any exception raised by ``publish()`` for any individual
+                event propagates to the caller unchanged.
 
         Edge cases:
             - An empty list is a no-op.

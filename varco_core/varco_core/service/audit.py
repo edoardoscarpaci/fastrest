@@ -184,7 +184,8 @@ class AuditRepository(ABC):
             entry: The ``AuditEntry`` to persist.
 
         Raises:
-            Any DB-level exception from the underlying driver.
+            Exception: Any DB-level exception from the underlying driver
+                propagates unchanged.
 
         Edge cases:
             - Should be idempotent on ``entry_id`` collision — use INSERT

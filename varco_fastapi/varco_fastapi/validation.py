@@ -52,9 +52,7 @@ class ConfigurationError(Exception):
 
     Carries the misconfigured object name and a human-readable fix suggestion
     so the developer can resolve the issue without reading source code.
-
-    Args:
-        message: Actionable error message — what is wrong and how to fix it.
+    Pass an actionable message explaining what is wrong and how to fix it.
 
     Example::
 
@@ -121,7 +119,11 @@ def validate_router_class(router_cls: type, *, strict: bool = False) -> None:
         )
 
     # ── Check 3: generic type args fully resolved (best-effort) ──────────────
-    _check_generic_args(router_cls, strict=strict)
+    # A service-free router (no CRUD mixins, no _service) has no domain model
+    # and legitimately carries no D/PK/C/R/U type args.  Only run the type-arg
+    # check when the router actually uses the CRUD machinery.
+    if _is_service_backed(router_cls):
+        _check_generic_args(router_cls, strict=strict)
 
     _logger.debug("validate_router_class: %s OK (prefix=%r)", name, prefix)
 
@@ -165,6 +167,30 @@ def _has_any_route(router_cls: type) -> bool:
             or hasattr(obj, "__sse_route_entry__")
         ):
             return True
+    return False
+
+
+def _is_service_backed(router_cls: type) -> bool:
+    """
+    Return ``True`` if the router uses CRUD mixins or has a ``_service`` set.
+
+    Service-free routers (only ``@route`` methods, no CRUD mixins) do not need
+    ``D/PK/C/R/U`` type args — skipping the generic-arg check avoids a spurious
+    warning/error for intentionally plain data-processing routers.
+
+    Args:
+        router_cls: The ``VarcoRouter`` subclass to inspect.
+
+    Returns:
+        ``True`` when the router is CRUD/service-backed and type args matter.
+    """
+    # Any CRUD mixin in the MRO means generic type args are load-bearing
+    for cls in router_cls.__mro__:
+        if getattr(cls, "_CRUD_ACTION", None) is not None:
+            return True
+    # Explicit _service ClassVar also requires type args for model binding
+    if getattr(router_cls, "_service", None) is not None:
+        return True
     return False
 
 

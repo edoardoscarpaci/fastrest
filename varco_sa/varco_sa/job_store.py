@@ -416,7 +416,7 @@ class SAJobStore(AbstractJobStore):
             - The job is not found.
             - The job is not in PENDING state.
             - (PostgreSQL only) The row is already locked by a concurrent
-              worker (SKIP LOCKED skips it).
+                worker (SKIP LOCKED skips it).
 
         Async safety: ✅ Uses ``engine.begin()`` — fully atomic transaction.
         """

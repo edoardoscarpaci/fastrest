@@ -34,7 +34,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass
+    from varco_fastapi.auth.guard import RouteGuard
 
 
 # ── _RouteEntry ────────────────────────────────────────────────────────────────
@@ -116,6 +116,13 @@ class _RouteEntry:
     # MIME types the skill returns.  Default: ["application/json"]
     skill_output_modes: list[str] | None = None
 
+    # ── Route-level authorization guard ───────────────────────────────────────
+    # When set, the guard is checked against the AuthContext BEFORE the handler
+    # runs.  Denial raises ServiceAuthorizationError → HTTP 403.
+    # Requires _auth to be set on the router (build_router() raises otherwise),
+    # unless guard.allow_anonymous is True.
+    requires: RouteGuard | None = None
+
 
 # ── @route decorator ───────────────────────────────────────────────────────────
 
@@ -150,6 +157,8 @@ def route(
     skill_description: str | None = None,
     skill_input_modes: list[str] | None = None,
     skill_output_modes: list[str] | None = None,
+    # ── Route-level authorization ─────────────────────────────────────────────
+    requires: RouteGuard | None = None,
 ) -> Callable:
     """
     Decorator to declare a custom HTTP endpoint on a ``VarcoRouter`` subclass.
@@ -250,6 +259,7 @@ def route(
             skill_description=skill_description,
             skill_input_modes=skill_input_modes,
             skill_output_modes=skill_output_modes,
+            requires=requires,
         )
         func.__route_entry__ = entry
         return func

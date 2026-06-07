@@ -37,9 +37,10 @@ import asyncio
 import logging
 from typing import Any
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 from fastapi import HTTPException
 
 from varco_core.exception.service import (
@@ -88,7 +89,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         debug: bool = False,
         include_trace_id: bool = True,
@@ -97,7 +98,9 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         self._debug = debug
         self._include_trace_id = include_trace_id
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """
         Process the request, catching all exceptions and mapping them to JSON.
 

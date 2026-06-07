@@ -382,6 +382,42 @@ page = await user_service.list(params, tenant_id=current_user.tenant_id)
 - Extend `ASTVisitor` subclasses to handle it (e.g., `SQLAlchemyFilterVisitor`)
 - Test on every backend (SQLAlchemy, Beanie, etc.)
 
+#### Scenario: Build a service-free / data-processing REST server
+
+Use `GenericRouter` (alias for `VarcoRouter` with no type args) when the server
+has no `AsyncService` or repository — e.g. a data-transformation pipeline, an
+API gateway, or computed analytics routes.  All cross-cutting features (middleware,
+telemetry, auth, `RouteGuard` authorization) work identically to a service-backed router.
+
+```python
+from varco_fastapi.router.presets import GenericRouter
+from varco_fastapi.router.endpoint import route
+from varco_fastapi.auth import JwtBearerAuth
+from varco_fastapi.auth.guard import require_scopes, require_roles
+
+class ReportRouter(GenericRouter):
+    _prefix = "/reports"
+    _auth = JwtBearerAuth(...)               # authentication stays in middleware
+
+    @route("GET", "/summary", requires=require_scopes("reports:read"))
+    async def get_summary(self, ctx: AuthContext) -> dict:
+        return {"total": compute_total(ctx)}
+
+    @route("DELETE", "/cache", requires=require_roles("admin"))
+    async def purge_cache(self, ctx: AuthContext) -> None:
+        invalidate_cache()
+
+# Wire exactly like a normal router
+app = create_varco_app(routers=[ReportRouter])
+```
+
+**Key facts**:
+- `validate_router_class` does NOT warn about missing generic type args (`D/PK/C/R/U`) for a `GenericRouter` — they are legitimately absent.
+- `requires=` kwarg on `@route` takes a `RouteGuard` (built with `require_scopes`, `require_roles`, `require_grant`, `require_predicate`, or `allow_anonymous`).
+- Guard is checked **before** the handler runs; denial raises `ServiceAuthorizationError` → HTTP 403.
+- If `ctx` is declared in the handler, `_auth` must be set (or it will not be populated).
+- For truly public endpoints (no auth needed), use `requires=allow_anonymous()` or omit `requires=` altogether and don't declare `ctx`.
+
 #### Scenario: Integrate a new external API (with resilience)
 
 ```python
@@ -484,6 +520,8 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Per-call Bulkhead** | Concurrency never limited, dependency can be overwhelmed | Instance has its own fresh semaphore each call | Shared `Bulkhead` per external dependency, same as `CircuitBreaker` |
 | **InMemoryRateLimiter in multi-pod** | Each pod has its own counter; total rate = N × configured rate | Per-process storage, not shared | Use `varco_redis.RedisRateLimiter` for distributed (multi-pod) enforcement |
 | **Hedging non-idempotent writes** | Duplicate side-effects (email sent twice, double charge) | Both hedged copies execute concurrently | Only apply `@hedge` to idempotent reads/upserts; never to INSERT or transactional writes |
+| **`requires=` without `_auth`** | `RuntimeError` at `build_router()` startup | Guard can never be satisfied with no `AuthContext` | Set `_auth` on the router, or use `allow_anonymous()` if the route is public |
+| **`ctx` declared but no `_auth`** | Handler gets 500 (missing argument) | Without auth middleware, no `AuthContext` is injected | Set `_auth` on the router or remove `ctx` from the handler signature |
 
 ---
 

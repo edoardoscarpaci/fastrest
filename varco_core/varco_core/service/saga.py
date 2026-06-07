@@ -459,8 +459,9 @@ class SagaOrchestrator:
             Final ``SagaState`` after all steps (or compensations) complete.
 
         Raises:
-            Nothing — all exceptions from steps and compensations are caught
-            and encoded in the returned ``SagaState``.
+            Exception: Never raised — all exceptions from steps and
+                compensations are caught and encoded in the returned
+                ``SagaState``.
 
         Async safety:   ✅ Awaits each step callable sequentially.
 
@@ -506,7 +507,8 @@ class SagaOrchestrator:
             is not found in the repository.
 
         Raises:
-            Nothing — exceptions are encoded in the returned state.
+            Exception: Never raised — exceptions are encoded in the returned
+                state.
 
         Edge cases:
             - If the saga is already COMPLETED / COMPENSATED / FAILED (terminal

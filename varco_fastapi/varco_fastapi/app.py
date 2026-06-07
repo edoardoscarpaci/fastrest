@@ -633,11 +633,15 @@ def _mount_router(app: Any, router_cls: type, container: Any | None) -> None:
         # build_router() is an instance method — instantiate with no args.
         # Routers are lightweight value objects; the DI container is only needed
         # for CRUD operations that inject a service (not at router-build time).
+        # build_router() already embeds _prefix and _tags in the APIRouter —
+        # do NOT pass prefix=/tags= again here or routes are doubled.
         api_router = router_cls().build_router()
-        prefix = getattr(router_cls, "_prefix", "") or ""
-        tags = getattr(router_cls, "_tags", None) or []
-        app.include_router(api_router, prefix=prefix, tags=tags)
-        _logger.debug("_mount_router: mounted %s at %s", router_cls.__name__, prefix)
+        app.include_router(api_router)
+        _logger.debug(
+            "_mount_router: mounted %s at %s",
+            router_cls.__name__,
+            getattr(router_cls, "_prefix", ""),
+        )
     except Exception as exc:
         _logger.error(
             "_mount_router: failed to mount %s: %s",

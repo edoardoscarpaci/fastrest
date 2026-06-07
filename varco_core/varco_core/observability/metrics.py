@@ -181,8 +181,8 @@ def counter(cfg: CounterConfig) -> Callable[[_F], _F]:
         ``functools.wraps``.
 
     Raises:
-        Any exception from the wrapped function — this decorator never
-        swallows exceptions.
+        Exception: Any exception from the wrapped function — this decorator
+            never swallows exceptions.
 
     Edge cases:
         - No active ``MeterProvider`` → OTel returns a no-op meter; the
@@ -246,8 +246,8 @@ def histogram(cfg: HistogramConfig) -> Callable[[_F], _F]:
         A decorator that wraps the target function with histogram instrumentation.
 
     Raises:
-        Any exception from the wrapped function — re-raised after recording
-        the duration.
+        Exception: Any exception from the wrapped function — re-raised after
+            recording the duration.
 
     Edge cases:
         - Exceptions: duration is still recorded so latency outliers from

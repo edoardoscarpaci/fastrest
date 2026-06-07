@@ -74,8 +74,9 @@ class AbstractClientAuth(ABC):
             names (e.g. ``"Authorization"``, ``"X-API-Key"``).
 
         Raises:
-            Any error from the underlying credential source (key loading,
-            network errors for token refresh, etc.).
+            Exception: Any error from the underlying credential source (key
+                loading, network errors for token refresh, etc.) propagates
+                unchanged.
 
         Edge cases:
             - Implementations should cache tokens and refresh only when near

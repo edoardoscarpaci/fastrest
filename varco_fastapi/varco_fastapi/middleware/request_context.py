@@ -39,9 +39,10 @@ import logging
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, AsyncIterator
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 from varco_fastapi.auth.server_auth import AbstractServerAuth, AnonymousAuth
 from varco_fastapi.context import auth_context, request_scope
@@ -100,7 +101,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         server_auth: AbstractServerAuth | None = None,
         tenant_field: str = "tenant_id",
@@ -111,7 +112,9 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         self._tenant_field = tenant_field
         self._enable_tenant_context = enable_tenant_context
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """
         Set up all request-scoped ContextVars, call next, then clean up.
 

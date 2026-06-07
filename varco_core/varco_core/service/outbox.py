@@ -259,8 +259,9 @@ class OutboxRepository(ABC):
             entry: The outbox entry to persist.
 
         Raises:
-            Any DB-level exception raised by the underlying driver (e.g.
-            ``sqlalchemy.exc.IntegrityError`` on a duplicate ``entry_id``).
+            Exception: Any DB-level exception raised by the underlying driver
+                (e.g. ``sqlalchemy.exc.IntegrityError`` on a duplicate
+                ``entry_id``) propagates unchanged.
 
         Edge cases:
             - If the transaction is rolled back after ``save()``, the entry is

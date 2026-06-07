@@ -372,9 +372,10 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
         _auth:       ``AbstractServerAuth`` instance used for all routes.
         _event_bus:  ``AbstractEventBus`` for WebSocket/SSE mixins.
 
-    Usage::
+    Service-backed usage (CRUD router)::
 
-        class OrderRouter(CreateMixin, ReadMixin, ListMixin, VarcoRouter[Order, UUID, OrderCreateDTO, OrderReadDTO, OrderUpdateDTO]):
+        class OrderRouter(CreateMixin, ReadMixin, ListMixin,
+                          VarcoRouter[Order, UUID, OrderCreateDTO, OrderReadDTO, OrderUpdateDTO]):
             _prefix = "/orders"
             _tags = ["orders"]
             _service = container.get(OrderService)
@@ -382,6 +383,38 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
 
         router = OrderRouter().build_router()
         app.include_router(router)
+
+    Service-free usage (data-processing / proxy / computed endpoints):
+
+        Use ``GenericRouter`` (a plain alias for ``VarcoRouter`` with no type args)
+        when the server has no ``AsyncService`` or repository behind it — for example
+        a data-transformation pipeline, an API gateway, or computed analytics routes.
+        All cross-cutting features still apply: middleware, telemetry, auth, and
+        ``RouteGuard`` authorization are identical to the service-backed path.
+
+        from varco_fastapi.router.presets import GenericRouter
+        from varco_fastapi.router.endpoint import route
+        from varco_fastapi.auth.guard import require_scopes
+
+        class ReportRouter(GenericRouter):
+            _prefix = "/reports"
+            _auth = JwtBearerAuth(...)
+
+            @route("GET", "/summary", requires=require_scopes("reports:read"))
+            async def get_summary(self, ctx: AuthContext) -> dict:
+                return {"total": compute_total()}
+
+            @route("POST", "/refresh", requires=require_roles("admin"))
+            async def refresh_cache(self, ctx: AuthContext) -> None:
+                ...
+
+        Validation notes for service-free routers:
+        - ``_prefix`` is still required.
+        - At least one ``@route`` method is still required.
+        - Generic type args ``[D, PK, C, R, U]`` are NOT required (and
+          ``validate_router_class`` will not warn about them being absent).
+        - Setting ``requires=`` without ``_auth`` raises ``RuntimeError``
+          at ``build_router()`` time (unless ``allow_anonymous()`` guard is used).
 
     Thread safety:  ✅ ClassVars are read-only after class definition.
     Async safety:   ✅ build_router() is synchronous; generated closures are async-safe.
@@ -533,6 +566,19 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
 
         # Collect sorted routes via shared introspection
         routes = introspect_routes(router_cls, type_args=type_args)
+
+        # Build-time safety: a RouteGuard without an auth strategy can never be
+        # satisfied (there is no AuthContext to check).  Fail loudly so the
+        # misconfiguration is caught at startup, not silently at request time.
+        server_auth_present = getattr(self, "_auth", None) is not None
+        if not server_auth_present:
+            for r in routes:
+                if r.requires is not None and not r.requires.allow_anonymous:
+                    raise RuntimeError(
+                        f"{router_cls.__name__}.{r.name}: route has `requires` guard "
+                        f"but the router has no `_auth` strategy set.  Either set "
+                        f"`_auth` on the router or use `allow_anonymous()` guard."
+                    )
 
         api_router = APIRouter(prefix=prefix, tags=tags)
 
@@ -1099,12 +1145,18 @@ def _make_custom_handler(
     # DESIGN: no **kwargs in handler signature — FastAPI doesn't understand them
     #   ✅ FastAPI only injects declared parameters (path, query, body, Depends)
     #   ❌ Path param names/types must match the method's expectations; type is Any
+    guard = route.requires
+
     if auth_dep is not None:
 
         async def custom_handler(
             request: Request,
             auth: AuthContext = auth_dep,
         ) -> Any:
+            # Route-level authorization — checked before handler runs.
+            if guard is not None:
+                await guard.check(auth)
+
             # Read with_async from query string directly — avoids internal Depends()
             with_async = (
                 request.query_params.get("with_async", "false").lower() == "true"

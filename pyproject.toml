@@ -36,3 +36,15 @@ providify = { path = "vendor/providify-0.1.6-py3-none-any.whl" }
 dev = [
     "asyncpg>=0.31.0",
 ]
+# Documentation tooling — MkDocs Material + mkdocstrings (Google-style docstrings).
+# Installed via `make docs-deps`; the built HTML site lands in ./site (gitignored).
+docs = [
+    # Pin mkdocs<2: the original maintainer plans a backward-incompatible v2 that
+    # drops the plugin/theme system. Pinning keeps the current build reproducible.
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5.0",
+    "mkdocstrings[python]>=0.26.0",
+    "mkdocs-gen-files>=0.5.0",
+    "mkdocs-literate-nav>=0.6.1",
+    "mkdocs-section-index>=0.3.9",
+]

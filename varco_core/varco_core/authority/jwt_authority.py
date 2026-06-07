@@ -150,7 +150,8 @@ class JwtAuthority:
             algorithm:   JWT signing algorithm (e.g. ``"RS256"``).
 
         Raises:
-            Nothing — callers are responsible for passing valid key objects.
+            TypeError: Never raised here — callers are responsible for passing
+                valid key objects; any mismatch surfaces at signing time.
         """
         self._private_key = private_key
         self._public_key = public_key

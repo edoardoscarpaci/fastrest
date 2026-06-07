@@ -345,8 +345,9 @@ class Validator(Protocol[T]):  # type: ignore[misc]
             A ``ValidationResult`` with one or more errors otherwise.
 
         Raises:
-            Nothing — validators collect errors rather than raising immediately.
-            Callers raise by calling ``result.raise_if_invalid()``.
+            ValidationError: Never raised directly — validators collect errors
+                rather than raising.  Call ``result.raise_if_invalid()`` at
+                the call site to raise.
         """
         ...
 
@@ -514,8 +515,9 @@ class DomainModelValidator(ABC, Generic[D]):
             A result with one or more errors otherwise.
 
         Raises:
-            Nothing — collect errors and return them; never raise directly.
-            Call ``result.raise_if_invalid()`` at the call site to raise.
+            ValidationError: Never raised directly — collect errors and return
+                them.  Call ``result.raise_if_invalid()`` at the call site to
+                raise.
 
         Edge cases:
             - ``value._raw_orm`` is ``None`` during ``create`` — the entity has
@@ -620,8 +622,8 @@ class AsyncValidator(Protocol[T]):  # type: ignore[misc]
             A result with one or more errors otherwise.
 
         Raises:
-            Nothing — collect errors and return; never raise directly.
-            Callers raise by calling ``result.raise_if_invalid()``.
+            ValidationError: Never raised directly — collect errors and return.
+                Callers raise by calling ``result.raise_if_invalid()``.
         """
         ...
 
@@ -756,7 +758,7 @@ class AsyncDomainModelValidator(ABC, Generic[D]):
             A result with one or more errors otherwise.
 
         Raises:
-            Nothing — collect errors and return; never raise directly.
+            ValidationError: Never raised directly — collect errors and return.
 
         Edge cases:
             - ``value._raw_orm`` is ``None`` during ``create`` — the entity

@@ -12,6 +12,14 @@ Server-side (incoming requests):
     ``CompositeServerAuth``   — try each strategy in order; first success wins
     ``WebSocketAuth``         — auth for WebSocket upgrade (header/protocol/query)
 
+Route-level authorization guards (service-free routers):
+    ``RouteGuard``            — immutable declarative guard for @route handlers
+    ``require_scopes``        — guard requiring OAuth scope(s)
+    ``require_roles``         — guard requiring role name(s)
+    ``require_grant``         — guard requiring ctx.can(action, resource_key)
+    ``require_predicate``     — guard backed by an arbitrary callable
+    ``allow_anonymous``       — guard that passes anonymous callers through
+
 Client-side (outbound requests):
     ``AbstractClientAuth``    — base ABC for header injection
     ``BearerTokenAuth``       — static Bearer token
@@ -41,6 +49,14 @@ from varco_fastapi.auth.server_auth import (
     PassthroughAuth,
     WebSocketAuth,
 )
+from varco_fastapi.auth.guard import (
+    RouteGuard,
+    allow_anonymous,
+    require_grant,
+    require_predicate,
+    require_roles,
+    require_scopes,
+)
 from varco_fastapi.auth.trust_store import TrustStore
 
 __all__ = [
@@ -52,6 +68,13 @@ __all__ = [
     "AnonymousAuth",
     "CompositeServerAuth",
     "WebSocketAuth",
+    # Route-level authorization guards
+    "RouteGuard",
+    "require_scopes",
+    "require_roles",
+    "require_grant",
+    "require_predicate",
+    "allow_anonymous",
     # Client-side
     "AbstractClientAuth",
     "BearerTokenAuth",

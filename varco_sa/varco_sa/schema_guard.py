@@ -258,8 +258,9 @@ class SchemaGuard:
             ``report.has_drift`` is ``False`` if everything is in sync.
 
         Raises:
-            Never raises ``SchemaDrift`` — all errors are returned in the report.
-            Driver exceptions (e.g. connection refused) propagate unchanged.
+            SchemaDrift: Never raised by this method — all drift is returned
+                in the report.  Driver exceptions (e.g. connection refused)
+                propagate unchanged.
 
         Example:
             drift = await guard.report(engine)

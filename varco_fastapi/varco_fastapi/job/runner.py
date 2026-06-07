@@ -272,8 +272,9 @@ class JobRunner(AbstractJobRunner):
             coro: The coroutine to run in the background.
 
         Raises:
-            Any store-specific error from ``store.save()``.  If saving fails,
-            ``coro`` is closed so no coroutine is leaked.
+            Exception: Any store-specific error from ``store.save()``
+                propagates to the caller; ``coro`` is closed first so no
+                coroutine is leaked.
 
         Async safety:   ✅ Returns after scheduling; does not wait for task completion.
 
@@ -359,8 +360,9 @@ class JobRunner(AbstractJobRunner):
             The ``UUID`` of the newly created job.
 
         Raises:
-            Any store-specific error from ``store.save()``.  If saving fails,
-            the coroutine is closed to prevent resource leaks.
+            Exception: Any store-specific error from ``store.save()``
+                propagates to the caller; the coroutine is closed first to
+                prevent resource leaks.
 
         Async safety:   ✅ Returns after scheduling; does not block until completion.
 

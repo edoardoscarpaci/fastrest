@@ -219,9 +219,6 @@ class MemcachedCache(CacheBackend):
         Creates an ``aiomcache.Client`` connection pool.  The pool does not
         eagerly connect — the first operation will establish the connection.
 
-        Args:
-            (none)
-
         Raises:
             RuntimeError: If already started.
         """

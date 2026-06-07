@@ -31,9 +31,10 @@ from __future__ import annotations
 import logging
 import time
 
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 
 _logger = logging.getLogger("varco_fastapi.access")
 
@@ -62,7 +63,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
     def __init__(
         self,
-        app,
+        app: ASGIApp,
         *,
         logger: logging.Logger | None = None,
         log_level: int = logging.INFO,
@@ -75,7 +76,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         self._error_level = error_level
         self._skip_paths = skip_paths or set()
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """
         Log the request and response.
 

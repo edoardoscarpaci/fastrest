@@ -73,12 +73,9 @@ class ServiceProtocol(Protocol[D, PK, C, R, U]):  # type: ignore[misc]
     Any object that implements all five CRUD methods plus ``paged_list``
     satisfies this protocol, regardless of its inheritance hierarchy.
 
-    Type parameters:
-        D   — ``DomainModel`` subclass (e.g. ``Post``)
-        PK  — Primary key type (e.g. ``int``, ``UUID``)
-        C   — ``CreateDTO`` subclass
-        R   — ``ReadDTO`` subclass
-        U   — ``UpdateDTO`` subclass
+    Generic over five type parameters: ``D`` (``DomainModel`` subclass),
+    ``PK`` (primary key type, e.g. ``int`` or ``UUID``), ``C`` (CreateDTO
+    subclass), ``R`` (ReadDTO subclass), and ``U`` (UpdateDTO subclass).
 
     Usage::
 

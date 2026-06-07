@@ -151,8 +151,9 @@ class AuthoritySource:
                        time, which is a minor optimisation for hot paths.
 
         Raises:
-            Nothing — authority is stored as-is; any protocol mismatch will
-            only surface at ``load()``/``refresh()`` call time.
+            TypeError: Never raised here — authority is stored as-is; any
+                protocol mismatch will only surface at ``load()``/``refresh()``
+                call time.
 
         Edge cases:
             - The ``authority`` reference is stored directly — not copied.

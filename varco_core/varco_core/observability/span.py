@@ -184,9 +184,9 @@ def span(  # type: ignore[misc]
         via ``functools.wraps``.
 
     Raises:
-        Any exception raised by the wrapped function — this decorator never
-        swallows exceptions.  When ``SpanConfig.record_exception`` is True
-        the exception is recorded on the span before re-raising.
+        Exception: Any exception raised by the wrapped function — this decorator
+            never swallows exceptions.  When ``SpanConfig.record_exception`` is
+            ``True`` the exception is recorded on the span before re-raising.
 
     Edge cases:
         - No active ``TracerProvider`` (e.g. in unit tests that skip DI) →

@@ -1,0 +1,80 @@
+site_name: Varco
+site_description: Async Python monorepo for event-driven, layered services
+docs_dir: technical_docs
+site_dir: site
+
+# DESIGN: MkDocs Material + mkdocstrings over Sphinx
+#   ✅ Consumes the hand-written markdown feature docs natively (no myst-parser).
+#   ✅ mkdocstrings/griffe renders the repo's Google-style docstrings out of the box.
+#   ✅ Material theme produces a modern, searchable site — the "official" docs.
+#   ✅ One site hosts both conceptual feature docs and the auto API reference.
+#   ❌ API reference quality is bounded by docstring completeness (the doc agent's job).
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - scripts/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            docstring_section_style: table
+            show_source: true
+            show_root_heading: true
+            show_if_no_docstring: false
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            merge_init_into_class: true
+            filters:
+              - "!^_"
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Features:
+      - RouteGuard: features/route-guard.md
+      - Generic Router: features/generic-router.md
+  - API Reference: reference/

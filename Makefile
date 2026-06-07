@@ -12,7 +12,10 @@
 #   make build            — build wheels for all packages
 #   make build PKG=varco_redis — build one package
 #   make publish          — publish all dist/* to PyPI (requires UV_PUBLISH_TOKEN)
-#   make clean            — remove all dist/ directories
+#   make docs-deps        — install documentation tooling (mkdocs + mkdocstrings)
+#   make docs             — build the static HTML docs site into ./site
+#   make docs-serve       — live-reload docs preview at http://127.0.0.1:8000
+#   make clean            — remove all dist/ directories and the built docs site
 
 .DEFAULT_GOAL := help
 
@@ -65,7 +68,10 @@ help:
 	@echo "  make build                   build wheels + sdists (all packages)"
 	@echo "  make build PKG=varco_redis   build one package"
 	@echo "  make publish                 publish dist/* to PyPI"
-	@echo "  make clean                   remove all dist/ directories"
+	@echo "  make docs-deps               install documentation tooling"
+	@echo "  make docs                    build static HTML docs into ./site"
+	@echo "  make docs-serve              live-reload docs preview"
+	@echo "  make clean                   remove all dist/ directories + ./site"
 	@echo ""
 
 # ── Install / sync ────────────────────────────────────────────────────────────
@@ -124,7 +130,37 @@ publish:
 		fi; \
 	)
 
+# ── Docs ──────────────────────────────────────────────────────────────────────
+# MkDocs Material + mkdocstrings. The API reference is generated from package
+# docstrings at build time (scripts/gen_ref_pages.py); hand-written feature docs
+# live in technical_docs/features/. Output goes to ./site (gitignored).
+#
+# DOCS_ENV silences the MkDocs-2.0 banners injected by mkdocs-material
+# (NO_MKDOCS_2_WARNING) and by the properdocs fork pulled in transitively by the
+# gen-files/literate-nav/section-index plugins (DISABLE_MKDOCS_2_WARNING). We pin
+# mkdocs<2 in the docs dependency group so a future v2 can't silently break the build.
+DOCS_ENV := NO_MKDOCS_2_WARNING=1 DISABLE_MKDOCS_2_WARNING=true
+
+.PHONY: docs-deps
+docs-deps:
+	uv sync --group docs
+
+# Normal build — produces ./site even while docstring coverage is still improving.
+.PHONY: docs
+docs: docs-deps
+	$(DOCS_ENV) uv run mkdocs build
+
+# Completeness gate — fails on any docstring/reference warning. This is the target
+# the api-docs-maintainer agent drives toward (clean strict build = docs complete).
+.PHONY: docs-strict
+docs-strict: docs-deps
+	$(DOCS_ENV) uv run mkdocs build --strict
+
+.PHONY: docs-serve
+docs-serve: docs-deps
+	$(DOCS_ENV) uv run mkdocs serve
+
 # ── Clean ─────────────────────────────────────────────────────────────────────
 .PHONY: clean
 clean:
-	rm -rf $(foreach pkg,$(_TARGETS),$(pkg)/dist) dist/
+	rm -rf $(foreach pkg,$(_TARGETS),$(pkg)/dist) dist/ site/

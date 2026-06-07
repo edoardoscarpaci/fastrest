@@ -264,7 +264,8 @@ class InboxRepository(ABC):
             entry: The ``InboxEntry`` to persist.
 
         Raises:
-            Any DB-level exception from the underlying driver.
+            Exception: Any DB-level exception from the underlying driver
+                propagates unchanged.
 
         Edge cases:
             - Calling outside a transaction context is implementation-defined;

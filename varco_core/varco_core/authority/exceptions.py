@@ -93,10 +93,8 @@ class KeyLoadError(AuthorityError):
 
     Wraps the underlying cause (network error, file not found, invalid PEM,
     malformed JWKS JSON, etc.) via exception chaining so the original
-    exception is always visible in the traceback.
-
-    Args:
-        message: Human-readable explanation of what failed and why.
+    exception is always visible in the traceback.  Pass a human-readable
+    explanation of what failed and why as the message argument.
 
     Example::
 

@@ -252,8 +252,8 @@ class TrustedIssuerRegistry:
                        but should be distinguishable in ``jwks(label)`` calls.
 
         Raises:
-            Nothing — replaces any existing entry with the same label silently
-            (consistent with ``register()`` behaviour).
+            KeyError: Never raised — replaces any existing entry with the same
+                label silently (consistent with ``register()`` behaviour).
 
         Edge cases:
             - ``label`` collision: if a label derived from the issuer already
