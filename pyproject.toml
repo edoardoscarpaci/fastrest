@@ -17,6 +17,7 @@ members = [
     "varco_memcached",
     "varco_ws",
     "varco_fastapi",
+    "varco_casbin",
 ]
 
 [tool.uv.sources]

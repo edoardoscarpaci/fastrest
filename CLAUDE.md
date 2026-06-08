@@ -48,15 +48,17 @@ varco_kafka       — Kafka event bus backend (aiokafka)
 varco_redis       — Redis Pub/Sub event bus + cache backend (redis.asyncio)
 varco_sa          — SQLAlchemy async ORM backend
 varco_beanie      — Beanie/MongoDB async ODM backend
+varco_casbin      — Casbin policy-engine authorization backend (ACL/RBAC/ABAC + REST admin)
 ```
 
 ### Dependency graph
 
 ```
 varco_kafka  ──┐
-varco_redis  ──┤─→ varco_core
-varco_sa     ──┤
-varco_beanie ──┘
+varco_redis  ──┤
+varco_sa     ──┤─→ varco_core
+varco_beanie ──┤
+varco_casbin ──┘   (+ optional varco_fastapi for the REST admin router)
 ```
 
 `varco_core` is the only package without a `[tool.uv.sources]` sibling reference. All backend packages resolve it from the workspace rather than PyPI during development.
@@ -235,6 +237,52 @@ payload = await registry.verify(raw_token)
 ```
 
 Key sources (`varco_core.authority.sources`): `PemFile`, `PemFolder`, `JwksUrl`, `OidcDiscovery`. `TrustedIssuerRegistry.from_env()` reads issuer config from environment variables.
+
+### Authorization — policy engine (varco_core.auth.policy + varco_casbin)
+
+Two layers of authorization coexist:
+
+- **Static, token-derived** (`varco_core.auth.base`) — `AuthContext.can(action, resource_key)`
+  over JWT-encoded `ResourceGrant`s. Zero-latency, stateless. Helpers: `GrantBasedAuthorizer`,
+  `RoleBasedAuthorizer`, `OwnershipAuthorizer`. `BaseAuthorizer` is the permissive fallback.
+- **Dynamic, engine-driven** (`varco_core.auth.policy`) — a pluggable `PolicyEngine` evaluating
+  ACL/RBAC/ABAC rules held outside the token (file or DB), editable at runtime.
+
+```
+AsyncService → AbstractAuthorizer            (the seam services already inject)
+                  ↑ implemented by
+              PolicyEngineAuthorizer          (bridge — raises ServiceAuthorizationError on deny)
+                  ↓ delegates to
+              PolicyEngine.enforce(EnforcementRequest)   (hot path, backend-agnostic)
+              PolicyManagement.add/remove/list/reload    (cold admin surface)
+                  ↑ both implemented by
+              varco_casbin.CasbinPolicyEngine  (wraps casbin.AsyncEnforcer)
+```
+
+`RequestMapper` maps `(AuthContext, Action, Resource)` → `EnforcementRequest` (subject/object/action
++ ABAC `subject_attrs`/`object_attrs` + optional `domain`). It reuses `_default_resource_key`, so
+token grants and engine rules share one resource-key namespace. Override `subject_for` /
+`object_for` / `domain_for` for custom keying (e.g. tenant domains).
+
+**Wiring** (`varco_casbin.di`):
+```python
+container = bootstrap(DIContainer())     # binds CasbinPolicyEngine → PolicyEngine + PolicyManagement
+enable_policy_authorizer(container)      # OPT-IN: binds PolicyEngineAuthorizer → AbstractAuthorizer
+```
+
+**Rules**:
+- The authorizer is **opt-in** via `enable_policy_authorizer(container)` — it is NOT a scanned
+  `@Configuration` (scan auto-activates those), so importing/bootstrapping `varco_casbin` never
+  silently shadows an app's own authorizer.
+- `CasbinPolicyEngine` must be a **shared singleton** (DI handles this) — a per-call engine reloads
+  policy every request.
+- `CasbinSettings` (pydantic `BaseSettings`) is registered via a `@Provider` in `bootstrap`, NOT
+  `@Singleton` — providify cannot inject pydantic's `**values` constructor.
+- The REST admin API is `build_policy_router(engine, server_auth=..., admin_role="admin")` (requires
+  the `varco-casbin[fastapi]` extra) — a FastAPI `APIRouter`, not a `VarcoRouter`, because policy
+  mutations carry JSON bodies and `@route` custom handlers inject only `ctx` + path params.
+- Persisted dynamic CRUD needs `adapter="sqlalchemy"` (the `varco-casbin[sqlalchemy]` extra); the
+  default `memory` adapter is non-durable.
 
 ---
 
@@ -522,6 +570,11 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Hedging non-idempotent writes** | Duplicate side-effects (email sent twice, double charge) | Both hedged copies execute concurrently | Only apply `@hedge` to idempotent reads/upserts; never to INSERT or transactional writes |
 | **`requires=` without `_auth`** | `RuntimeError` at `build_router()` startup | Guard can never be satisfied with no `AuthContext` | Set `_auth` on the router, or use `allow_anonymous()` if the route is public |
 | **`ctx` declared but no `_auth`** | Handler gets 500 (missing argument) | Without auth middleware, no `AuthContext` is injected | Set `_auth` on the router or remove `ctx` from the handler signature |
+| **Per-call `CasbinPolicyEngine`** | Policy reloaded every request; slow, in-memory edits lost | A new enforcer is built per call | Resolve it as a DI singleton (`bootstrap`); share one instance |
+| **Policy authorizer silently active** | App's own authorizer is shadowed unexpectedly | A scanned `@Configuration` auto-activates on `scan` | The authorizer is opt-in via `enable_policy_authorizer(container)`; don't make it a scanned config |
+| **`@Singleton` on pydantic `BaseSettings`** | `LookupError: Cannot resolve 'values'` at resolution | providify injects pydantic's `**values` ctor param | Register settings via a `@Provider` (see `varco_casbin.di`), not `@Singleton` |
+| **`memory` adapter in production** | Policies vanish on restart | The in-memory adapter has no durable store | Use `adapter="sqlalchemy"` (`varco-casbin[sqlalchemy]`) for persisted CRUD |
+| **Sync Casbin adapter with AsyncEnforcer** | `RuntimeError: Invalid parameters for enforcer` | `AsyncEnforcer` requires an `AsyncAdapter` | Use `casbin.persist.adapters.asyncio.*` (the factory in `varco_casbin.adapter` already does) |
 
 ---
 

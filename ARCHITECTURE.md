@@ -89,7 +89,19 @@ varco_memcached/         — Memcached cache backend (aiomcache)
 varco_ws/                — WebSocket and SSE push adapters (browser real-time events)
   ├── websocket.py       — WebSocketEventBus (push adapter), WebSocketConnection
   └── sse.py             — SSEEventBus (push adapter), SSEConnection, _STOP_SENTINEL
+
+varco_casbin/            — Casbin policy-engine authorization backend (ACL/RBAC/ABAC)
+  ├── engine.py          — CasbinPolicyEngine(PolicyEngine, PolicyManagement) — wraps casbin.AsyncEnforcer; _AttrStr ABAC bridge
+  ├── config.py          — CasbinSettings (model preset/path/text + adapter selector)
+  ├── adapter.py         — build_adapter() factory (memory | file | sqlalchemy async)
+  ├── router.py          — build_policy_router() — FastAPI APIRouter REST admin ([fastapi] extra)
+  ├── models/*.conf      — bundled Casbin models: acl, rbac, rbac_domains, abac
+  └── di.py              — bootstrap() scan helper; enable_policy_authorizer() (opt-in authorizer)
 ```
+
+> Authorization seam lives in **varco_core.auth.policy** (PolicyEngine, PolicyManagement,
+> EnforcementRequest, RequestMapper, PolicyEngineAuthorizer). See *Authorization* in CLAUDE.md
+> and `technical_docs/features/casbin-authorization.md`.
 
 ---
 
@@ -256,6 +268,25 @@ KeySource (ABC)
   ├── PemFolder(path)
   ├── JwksUrl(url)
   └── OidcDiscovery(issuer_url)
+```
+
+### Authorization — policy engine (varco_core.auth.policy)
+
+```
+AbstractAuthorizer (ABC)                         — service-layer gate; authorize(ctx, action, resource)
+  ├── BaseAuthorizer            (permissive fallback, priority -(2**31))
+  ├── GrantBasedAuthorizer / RoleBasedAuthorizer / OwnershipAuthorizer  (static, token-derived)
+  └── PolicyEngineAuthorizer    (dynamic — bridges to a PolicyEngine; opt-in)
+
+PolicyEngine (ABC)                               — enforce(EnforcementRequest) → bool  (hot path)
+  └── CasbinPolicyEngine        (varco_casbin)   — also implements PolicyManagement
+      └── OpaPolicyEngine        (varco_opa, design only — see opa-design.md)
+
+PolicyManagement (ABC)                           — add/remove/list policies + role assignments + reload
+  └── CasbinPolicyEngine        (varco_casbin)
+
+RequestMapper                                    — (AuthContext, Action, Resource) → EnforcementRequest
+  └── override subject_for / object_for / domain_for for custom keying / multi-tenant domains
 ```
 
 ### Resilience

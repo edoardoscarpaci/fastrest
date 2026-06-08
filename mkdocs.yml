@@ -77,4 +77,6 @@ nav:
   - Features:
       - RouteGuard: features/route-guard.md
       - Generic Router: features/generic-router.md
+      - Casbin Authorization: features/casbin-authorization.md
+      - OPA Backend (Design): features/opa-design.md
   - API Reference: reference/
