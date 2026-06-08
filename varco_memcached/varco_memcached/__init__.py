@@ -15,7 +15,15 @@ Usage::
         await cache.set("user:42", user_obj, ttl=300)
         result = await cache.get("user:42")
 
-DI wiring::
+DI wiring (recommended — one call)::
+
+    from varco_memcached.di import async_bootstrap
+    from varco_core.cache import CacheBackend
+
+    container = await async_bootstrap()
+    cache = await container.aget(CacheBackend)
+
+DI wiring (manual)::
 
     from providify import DIContainer
     from varco_memcached.cache import MemcachedCacheConfiguration
@@ -33,6 +41,7 @@ from varco_memcached.cache import (
     MemcachedCacheConfiguration,
     MemcachedCacheSettings,
 )
+from varco_memcached.di import async_bootstrap, bootstrap
 from varco_memcached.health import MemcachedHealthCheck
 
 __all__ = [
@@ -40,4 +49,6 @@ __all__ = [
     "MemcachedCache",
     "MemcachedCacheConfiguration",
     "MemcachedHealthCheck",
+    "bootstrap",
+    "async_bootstrap",
 ]
