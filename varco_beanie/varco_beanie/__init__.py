@@ -44,6 +44,7 @@ providify DI integration::
 """
 
 from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
+from varco_beanie.conversation import BeanieConversationStore, ConversationTurnDocument
 from varco_beanie.query.aggregation import BeanieAggregationApplicator
 from varco_beanie.di import BeanieModule, BeanieSettings, bind_repositories
 from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
@@ -71,6 +72,9 @@ __all__ = [
     # Bootstrap
     "BeanieConfig",
     "BeanieFastrestApp",
+    # ── Conversation store (multi-turn A2A) ───────────────────────────────────
+    "ConversationTurnDocument",
+    "BeanieConversationStore",
     # ── Inbox pattern ─────────────────────────────────────────────────────────
     "InboxDocument",
     "BeanieInboxRepository",
