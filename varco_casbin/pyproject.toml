@@ -30,6 +30,9 @@ dependencies = [
 fastapi = ["varco-fastapi"]
 # Durable, dynamic-CRUD policy store backed by an async SQLAlchemy adapter.
 sqlalchemy = ["casbin-async-sqlalchemy-adapter>=1.4", "sqlalchemy[asyncio]>=2.0"]
+# Durable, dynamic-CRUD policy store backed by MongoDB via Beanie.
+# Ideal for Beanie-backed apps that want to avoid pulling in SQLAlchemy.
+beanie = ["beanie>=2.0", "motor>=3.0"]
 
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
@@ -49,6 +52,9 @@ dev = [
     "sqlalchemy[asyncio]>=2.0",
     "aiosqlite>=0.20",
     "testcontainers[postgres]>=4.0",
+    "beanie>=2.0",
+    "motor>=3.0",
+    "testcontainers[mongodb]>=4.0",
 ]
 
 [build-system]

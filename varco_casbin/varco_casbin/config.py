@@ -14,8 +14,9 @@ Environment variables (prefix ``VARCO_CASBIN_``)
 
     VARCO_CASBIN_MODEL_PRESET=rbac          # acl | rbac | rbac_domains | abac
     VARCO_CASBIN_MODEL_PATH=/etc/app.conf   # explicit model file (overrides preset)
-    VARCO_CASBIN_ADAPTER=sqlalchemy         # memory | file | sqlalchemy
+    VARCO_CASBIN_ADAPTER=sqlalchemy         # memory | file | sqlalchemy | beanie
     VARCO_CASBIN_DB_URL=postgresql+asyncpg://localhost/app
+    VARCO_CASBIN_DB_NAME=myapp              # required for adapter=beanie
     VARCO_CASBIN_POLICY_PATH=/etc/policy.csv
     VARCO_CASBIN_ADMIN_ROLE=admin
 """
@@ -60,15 +61,24 @@ class CasbinSettings(VarcoSettings):
         - ``"sqlalchemy"`` — durable DB store at ``db_url`` (requires the
           ``varco-casbin[sqlalchemy]`` extra).  Needed for the dynamic
           persisted CRUD admin API in multi-process deployments.
+        - ``"beanie"``     — durable MongoDB store (requires the
+          ``varco-casbin[beanie]`` extra).  Needs both ``db_url`` and
+          ``db_name``.  Ideal for Beanie-backed apps that want to avoid
+          pulling in the SQLAlchemy stack for policy storage alone.
 
     Attributes:
         model_text:   Inline Casbin model text, or ``None``.
         model_path:   Filesystem path to a ``.conf`` model, or ``None``.
         model_preset: Bundled preset name — ``acl`` / ``rbac`` /
                       ``rbac_domains`` / ``abac``.
-        adapter:      Persistence adapter — ``memory`` / ``file`` / ``sqlalchemy``.
+        adapter:      Persistence adapter — ``memory`` / ``file`` /
+                      ``sqlalchemy`` / ``beanie``.
         policy_path:  CSV policy path for the ``file`` adapter.
-        db_url:       SQLAlchemy URL for the ``sqlalchemy`` adapter.
+        db_url:       Connection URL.  For ``sqlalchemy``: an async SQLAlchemy
+                      URL.  For ``beanie``: a MongoDB connection string (e.g.
+                      ``"mongodb://localhost:27017"``).
+        db_name:      MongoDB database name — required for ``adapter="beanie"``.
+                      Unused by other adapters.
         auto_save:    When ``True``, each mutation is persisted immediately
                       through the adapter (the basis of dynamic persisted CRUD).
         admin_role:   Role the management router requires by default.
@@ -80,6 +90,8 @@ class CasbinSettings(VarcoSettings):
         - ``adapter="sqlalchemy"`` with ``db_url=None`` is a configuration
           error — ``build_adapter`` raises ``ValueError`` rather than silently
           falling back to memory.
+        - ``adapter="beanie"`` with ``db_url=None`` or ``db_name=None`` is a
+          configuration error — both fields are required for the Beanie adapter.
         - An unknown ``model_preset`` raises ``ValueError`` at resolution time
           listing the valid presets.
 
@@ -91,6 +103,10 @@ class CasbinSettings(VarcoSettings):
         # Durable ABAC backed by Postgres
         CasbinSettings(model_preset="abac", adapter="sqlalchemy",
                        db_url="postgresql+asyncpg://localhost/app")
+
+        # Durable RBAC backed by MongoDB (Beanie app — no SQLAlchemy needed)
+        CasbinSettings(model_preset="rbac", adapter="beanie",
+                       db_url="mongodb://localhost:27017", db_name="myapp")
     """
 
     # protected_namespaces=() — allow ``model_*`` field names (model_text /
@@ -105,9 +121,10 @@ class CasbinSettings(VarcoSettings):
     model_path: str | None = None
     model_preset: str = "rbac"
 
-    adapter: Literal["memory", "file", "sqlalchemy"] = "memory"
+    adapter: Literal["memory", "file", "sqlalchemy", "beanie"] = "memory"
     policy_path: str | None = None
     db_url: str | None = None
+    db_name: str | None = None
 
     auto_save: bool = True
     admin_role: str = "admin"

@@ -68,3 +68,17 @@ except ImportError:
     # varco_fastapi / fastapi not installed — the management router is
     # simply unavailable; the engine and DI still work.
     pass
+
+# The Beanie adapter lives behind the optional [beanie] extra.  Export lazily
+# so importing varco_casbin does not require beanie / motor installed.
+try:  # pragma: no cover - import-guard branch
+    from varco_casbin.beanie_adapter import (
+        BeanieAdapter,
+        CasbinRuleDocument,
+    )  # noqa: F401
+
+    __all__ += ["BeanieAdapter", "CasbinRuleDocument"]
+except ImportError:
+    # beanie / motor not installed — the Beanie adapter is unavailable;
+    # the engine, DI, and other adapters still work normally.
+    pass

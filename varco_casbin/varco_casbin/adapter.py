@@ -10,6 +10,7 @@ The adapter is *where policy rules live*.  ``build_adapter`` turns a
     "memory"     → None (policies live only in the enforcer's RAM — dev/tests)
     "file"       → casbin FileAdapter (CSV on disk — single process)
     "sqlalchemy" → casbin_async_sqlalchemy_adapter.Adapter (durable, dynamic CRUD)
+    "beanie"     → varco_casbin.BeanieAdapter (durable, MongoDB-backed via Beanie)
 
 DESIGN: a factory function rather than per-adapter @Singletons
     ✅ One injection point — the engine asks the factory for whatever the
@@ -45,15 +46,18 @@ def build_adapter(settings: CasbinSettings) -> Any | None:
 
     Raises:
         ValueError:   ``adapter`` is unknown, or a required parameter
-                      (``policy_path`` for file, ``db_url`` for sqlalchemy)
-                      is missing — fail fast rather than silently degrade.
+                      (``policy_path`` for file, ``db_url`` / ``db_name`` for
+                      beanie / sqlalchemy) is missing — fail fast rather than
+                      silently degrade.
         ImportError:  ``adapter="sqlalchemy"`` but the optional
-                      ``varco-casbin[sqlalchemy]`` extra is not installed.
+                      ``varco-casbin[sqlalchemy]`` extra is not installed; or
+                      ``adapter="beanie"`` but ``varco-casbin[beanie]`` is not.
 
     Edge cases:
         - ``"memory"`` returns ``None`` — a process restart loses all policy.
         - ``"file"`` is single-process only; concurrent writers can corrupt
-          the CSV.  Use ``"sqlalchemy"`` for the dynamic persisted CRUD API.
+          the CSV.  Use ``"sqlalchemy"`` or ``"beanie"`` for dynamic persisted
+          CRUD with multi-process safety.
     """
     kind = settings.adapter
 
@@ -91,11 +95,35 @@ def build_adapter(settings: CasbinSettings) -> Any | None:
 
         return Adapter(settings.db_url)
 
+    # Durable async MongoDB/Beanie adapter — the dynamic persisted CRUD store
+    # for Beanie-backed applications that want to avoid a SQLAlchemy dependency.
+    if kind == "beanie":
+        if not settings.db_url:
+            raise ValueError(
+                "CasbinSettings.adapter='beanie' requires VARCO_CASBIN_DB_URL "
+                "(e.g. 'mongodb://localhost:27017')."
+            )
+        if not settings.db_name:
+            raise ValueError(
+                "CasbinSettings.adapter='beanie' requires VARCO_CASBIN_DB_NAME "
+                "(the target MongoDB database name, e.g. 'myapp')."
+            )
+        try:
+            # Lazy import — only needed when the beanie extra is selected.
+            from varco_casbin.beanie_adapter import BeanieAdapter  # noqa: PLC0415
+        except ImportError as exc:  # pragma: no cover - import-guard branch
+            raise ImportError(
+                "adapter='beanie' needs the optional dependency. "
+                "Install it with: pip install 'varco-casbin[beanie]'."
+            ) from exc
+
+        return BeanieAdapter(db_url=settings.db_url, db_name=settings.db_name)
+
     # Unreachable while the Literal and this branch stay in sync, but guards
     # against a future settings change that forgets to update the factory.
     raise ValueError(
         f"Unknown Casbin adapter {kind!r}. "
-        f"Valid options: 'memory', 'file', 'sqlalchemy'."
+        f"Valid options: 'memory', 'file', 'sqlalchemy', 'beanie'."
     )
 
 

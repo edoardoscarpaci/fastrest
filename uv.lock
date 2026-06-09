@@ -1021,6 +1021,18 @@ wheels = [
 ]
 
 [[package]]
+name = "motor"
+version = "3.7.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pymongo" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/ae/96b88362d6a84cb372f7977750ac2a8aed7b2053eed260615df08d5c84f4/motor-3.7.1.tar.gz", hash = "sha256:27b4d46625c87928f331a6ca9d7c51c2f518ba0e270939d395bc1ddc89d64526", size = 280997, upload-time = "2025-05-14T18:56:33.653Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/9a/35e053d4f442addf751ed20e0e922476508ee580786546d699b0567c4c67/motor-3.7.1-py3-none-any.whl", hash = "sha256:8a63b9049e38eeeb56b4fdd57c3312a6d1f25d01db717fe7d82222393c410298", size = 74996, upload-time = "2025-05-14T18:56:31.665Z" },
+]
+
+[[package]]
 name = "nats-py"
 version = "2.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1951,6 +1963,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+beanie = [
+    { name = "beanie" },
+    { name = "motor" },
+]
 fastapi = [
     { name = "varco-fastapi" },
 ]
@@ -1962,32 +1978,39 @@ sqlalchemy = [
 [package.dev-dependencies]
 dev = [
     { name = "aiosqlite" },
+    { name = "beanie" },
     { name = "casbin-async-sqlalchemy-adapter" },
+    { name = "motor" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "testcontainers" },
+    { name = "testcontainers", extra = ["mongodb"] },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "beanie", marker = "extra == 'beanie'", specifier = ">=2.0" },
     { name = "casbin", specifier = ">=1.36" },
     { name = "casbin-async-sqlalchemy-adapter", marker = "extra == 'sqlalchemy'", specifier = ">=1.4" },
+    { name = "motor", marker = "extra == 'beanie'", specifier = ">=3.0" },
     { name = "providify", path = "vendor/providify-0.1.6-py3-none-any.whl" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "sqlalchemy", extras = ["asyncio"], marker = "extra == 'sqlalchemy'", specifier = ">=2.0" },
     { name = "varco-core", editable = "varco_core" },
     { name = "varco-fastapi", marker = "extra == 'fastapi'", editable = "varco_fastapi" },
 ]
-provides-extras = ["fastapi", "sqlalchemy"]
+provides-extras = ["fastapi", "sqlalchemy", "beanie"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "aiosqlite", specifier = ">=0.20" },
+    { name = "beanie", specifier = ">=2.0" },
     { name = "casbin-async-sqlalchemy-adapter", specifier = ">=1.4" },
+    { name = "motor", specifier = ">=3.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+    { name = "testcontainers", extras = ["mongodb"], specifier = ">=4.0" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.0" },
 ]
 
