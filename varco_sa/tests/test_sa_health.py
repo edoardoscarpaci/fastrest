@@ -1,18 +1,31 @@
 """
-Unit tests for varco_sa.health.SAHealthCheck
-=============================================
+Unit tests for varco_sa.health
+===============================
+Covers:
+  - ``SAHealthCheck`` — liveness probe (SELECT 1)
+  - ``SAPoolSaturationCheck`` — pool-saturation readiness probe
+
 Uses an in-memory SQLite engine (no mock) for the "healthy" path, and
 monkeypatching for error/timeout scenarios.  No external database required
 for unit tests.
 
 Sections
 --------
-- Healthy probe     — SELECT 1 on real SQLite → HEALTHY with latency
-- Timeout           — _probe hangs → wait_for fires → UNHEALTHY
-- DB error          — engine raises OperationalError → UNHEALTHY with detail
-- Never-raise       — exceptions never propagate to the caller
-- Repr              — human-readable string for logging
-- Integration       — real PostgreSQL via testcontainers (marked integration)
+SAHealthCheck
+    - Healthy probe     — SELECT 1 on real SQLite → HEALTHY with latency
+    - Timeout           — _probe hangs → wait_for fires → UNHEALTHY
+    - DB error          — engine raises OperationalError → UNHEALTHY with detail
+    - Never-raise       — exceptions never propagate to the caller
+    - Repr              — human-readable string for logging
+    - Integration       — real PostgreSQL via testcontainers (marked integration)
+
+SAPoolSaturationCheck
+    - name property     — returns "sqlalchemy-pool"
+    - Not saturated     — pool_metrics mock returns is_saturated=False → HEALTHY
+    - Saturated         — pool_metrics mock returns is_saturated=True → DEGRADED
+    - Detail format     — detail string contains checked_out and total counts
+    - Constructor error — neither config nor engine → TypeError
+    - Never-raise       — unexpected pool_metrics exception → UNHEALTHY
 """
 
 from __future__ import annotations
@@ -24,7 +37,8 @@ import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from varco_core.health import HealthStatus
-from varco_sa.health import SAHealthCheck
+from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
+from varco_sa.pool_metrics import SAPoolMetrics
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -134,6 +148,178 @@ async def test_check_never_raises(sqlite_engine) -> None:
 async def test_repr_contains_timeout(sqlite_engine) -> None:
     check = SAHealthCheck(engine=sqlite_engine, timeout=3.5)
     assert "3.5" in repr(check)
+
+
+# ── SAPoolSaturationCheck: helpers ───────────────────────────────────────────
+
+
+def _make_metrics(*, checked_out: int, size: int, max_overflow: int) -> SAPoolMetrics:
+    """
+    Build a synthetic ``SAPoolMetrics`` snapshot for use in unit tests.
+
+    Using a real ``SAPoolMetrics`` frozen dataclass (rather than a MagicMock)
+    ensures that ``is_saturated``, ``utilisation``, and all other computed
+    properties behave exactly as they would at runtime.
+
+    Args:
+        checked_out:   Connections currently held by active sessions.
+        size:          Base pool size (``pool_size`` kwarg to create_engine).
+        max_overflow:  Overflow allowance (``max_overflow`` kwarg).
+
+    Returns:
+        A frozen ``SAPoolMetrics`` instance with ``checked_in`` inferred as
+        ``max(0, size - checked_out)`` for a plausible snapshot.
+        ``invalid`` is 0 and ``pool_type`` is ``"QueuePool"`` (typical defaults).
+    """
+    import datetime
+
+    # checked_in is the remainder of the base pool; clamp to 0 when overflowed.
+    checked_in = max(0, size - checked_out)
+    return SAPoolMetrics(
+        captured_at=datetime.datetime.now(datetime.timezone.utc),
+        size=size,
+        checked_in=checked_in,
+        checked_out=checked_out,
+        overflow=max(0, checked_out - size),
+        max_overflow=max_overflow,
+        # invalid=0: no broken connections in these unit-test scenarios.
+        invalid=0,
+        # pool_type="QueuePool": the default pool class; irrelevant to health logic.
+        pool_type="QueuePool",
+    )
+
+
+# ── SAPoolSaturationCheck: name ───────────────────────────────────────────────
+
+
+async def test_pool_saturation_name(sqlite_engine) -> None:
+    # The name must be distinct from SAHealthCheck ("sqlalchemy") so health
+    # dashboards can tell apart connectivity and pool-utilisation issues.
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+    assert check.name == "sqlalchemy-pool"
+
+
+# ── SAPoolSaturationCheck: HEALTHY when not saturated ────────────────────────
+
+
+async def test_pool_not_saturated_returns_healthy(sqlite_engine) -> None:
+    # Simulate a pool with 5/10 connections in use — well below saturation.
+    metrics = _make_metrics(checked_out=5, size=10, max_overflow=0)
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    assert result.status is HealthStatus.HEALTHY
+
+
+async def test_pool_empty_returns_healthy(sqlite_engine) -> None:
+    # Freshly created pool with nothing checked out — must be HEALTHY.
+    metrics = _make_metrics(checked_out=0, size=5, max_overflow=5)
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    assert result.status is HealthStatus.HEALTHY
+
+
+# ── SAPoolSaturationCheck: DEGRADED when saturated ───────────────────────────
+
+
+async def test_pool_saturated_returns_degraded(sqlite_engine) -> None:
+    # Pool of 5 + overflow of 5 = 10 total; all 10 checked out → saturated.
+    metrics = _make_metrics(checked_out=10, size=5, max_overflow=5)
+    assert metrics.is_saturated  # sanity-check the fixture itself
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    assert result.status is HealthStatus.DEGRADED
+
+
+async def test_pool_at_base_limit_with_no_overflow_is_degraded(sqlite_engine) -> None:
+    # max_overflow=0 means the base pool size IS the hard limit.
+    metrics = _make_metrics(checked_out=5, size=5, max_overflow=0)
+    assert metrics.is_saturated
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    assert result.status is HealthStatus.DEGRADED
+
+
+# ── SAPoolSaturationCheck: detail format ──────────────────────────────────────
+
+
+async def test_pool_detail_contains_checked_out_and_total(sqlite_engine) -> None:
+    # Detail must include "checked_out=N/M" so operators can see raw numbers
+    # in health dashboards without parsing status enums.
+    metrics = _make_metrics(checked_out=3, size=5, max_overflow=5)
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    # Total = size(5) + max_overflow(5) = 10
+    assert result.detail is not None
+    assert "checked_out=3" in result.detail
+    assert "10" in result.detail  # total capacity visible in detail
+
+
+async def test_pool_detail_present_when_healthy(sqlite_engine) -> None:
+    # Unlike SAHealthCheck (detail=None on HEALTHY), the pool probe always
+    # provides detail so operators can monitor utilisation trends.
+    metrics = _make_metrics(checked_out=0, size=5, max_overflow=5)
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    assert result.status is HealthStatus.HEALTHY
+    assert result.detail is not None
+
+
+# ── SAPoolSaturationCheck: constructor validation ─────────────────────────────
+
+
+async def test_pool_saturation_check_requires_config_or_engine() -> None:
+    # Constructing without either config or engine is a programming error;
+    # TypeError is the correct signal (wrong arguments, not a runtime failure).
+    with pytest.raises(TypeError, match="SAPoolSaturationCheck requires"):
+        SAPoolSaturationCheck()
+
+
+# ── SAPoolSaturationCheck: never-raise contract ───────────────────────────────
+
+
+async def test_pool_saturation_check_never_raises(sqlite_engine) -> None:
+    # If pool_metrics() unexpectedly raises (e.g. pool replaced at runtime),
+    # the probe must still return a result rather than propagating the exception
+    # and crashing the aggregated health endpoint.
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", side_effect=RuntimeError("unexpected")):
+        result = await check.check()
+
+    assert result.status is HealthStatus.UNHEALTHY
+    assert result.detail is not None
+
+
+# ── SAPoolSaturationCheck: component name in result ──────────────────────────
+
+
+async def test_pool_saturation_result_component_matches_name(sqlite_engine) -> None:
+    # HealthResult.component must match check.name — required by the aggregator.
+    metrics = _make_metrics(checked_out=0, size=5, max_overflow=5)
+    check = SAPoolSaturationCheck(engine=sqlite_engine)
+
+    with patch("varco_sa.health.pool_metrics", return_value=metrics):
+        result = await check.check()
+
+    assert result.component == check.name
 
 
 # ── Integration: real PostgreSQL ──────────────────────────────────────────────

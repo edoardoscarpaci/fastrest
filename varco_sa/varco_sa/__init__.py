@@ -68,6 +68,7 @@ from varco_sa.uow import SQLAlchemyUnitOfWork
 # SA-specific applicator is in varco_core (no session; pure SA expressions)
 from varco_sa.query.applicator import SQLAlchemyQueryApplicator
 from varco_sa.type_coercion import registry_from_sa_model
+from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
 
 __all__ = [
     # ── DI integration ────────────────────────────────────────────────────────
@@ -118,4 +119,7 @@ __all__ = [
     "conversation_metadata",
     # ── Advisory lock ─────────────────────────────────────────────────────────
     "SAAdvisoryLock",
+    # ── Health probes ──────────────────────────────────────────────────────────
+    "SAHealthCheck",
+    "SAPoolSaturationCheck",
 ]
