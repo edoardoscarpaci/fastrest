@@ -44,6 +44,7 @@ providify DI integration::
 """
 
 from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
+from varco_beanie.deduplication import BeanieDeduplicator, DeduplicationDocument
 from varco_beanie.conversation import BeanieConversationStore, ConversationTurnDocument
 from varco_beanie.query.aggregation import BeanieAggregationApplicator
 from varco_beanie.di import BeanieModule, BeanieSettings, bind_repositories
@@ -95,4 +96,7 @@ __all__ = [
     "IndexDriftReport",
     # ── Health probe ──────────────────────────────────────────────────────────
     "BeanieHealthCheck",
+    # ── Deduplication ─────────────────────────────────────────────────────────
+    "BeanieDeduplicator",
+    "DeduplicationDocument",
 ]

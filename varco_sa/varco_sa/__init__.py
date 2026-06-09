@@ -69,6 +69,7 @@ from varco_sa.uow import SQLAlchemyUnitOfWork
 from varco_sa.query.applicator import SQLAlchemyQueryApplicator
 from varco_sa.type_coercion import registry_from_sa_model
 from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
+from varco_sa.deduplication import SADeduplicator, SADedupConfig, dedup_metadata
 
 __all__ = [
     # ── DI integration ────────────────────────────────────────────────────────
@@ -122,4 +123,8 @@ __all__ = [
     # ── Health probes ──────────────────────────────────────────────────────────
     "SAHealthCheck",
     "SAPoolSaturationCheck",
+    # ── Deduplication ─────────────────────────────────────────────────────────
+    "SADeduplicator",
+    "SADedupConfig",
+    "dedup_metadata",
 ]
