@@ -1,11 +1,13 @@
 """
 tests.test_di
 =============
-Unit tests for varco_ws.di — DI bootstrap via scan.
+Unit tests for varco_ws.di — DI bootstrap via scan plus per-channel helpers.
 
 Covers:
-    container.scan("varco_ws")   — discovers @Singleton WebSocketEventBus and
-                                   SSEEventBus automatically.
+    container.scan("varco_ws")     — discovers @Singleton WebSocketEventBus and
+                                     SSEEventBus automatically.
+    bind_websocket_adapter()       — registers a per-channel WebSocketEventBus.
+    bind_sse_adapter()             — registers a per-channel SSEEventBus.
 
 All tests use InMemoryEventBus — no real broker required.
 """
@@ -19,8 +21,10 @@ from providify import Provider
 from varco_core.event.base import AbstractEventBus
 from varco_core.event.memory import InMemoryEventBus
 
+from varco_core.event.base import Event
+from varco_ws.di import bind_sse_adapter, bind_websocket_adapter
 from varco_ws.sse import SSEEventBus
-from varco_ws.websocket import WebSocketEventBus
+from varco_ws.websocket import BackpressurePolicy, WebSocketEventBus
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -239,3 +243,242 @@ async def test_sse_bus_is_functional_after_start() -> None:
         assert "hello" in message
 
     await sse_bus.stop()
+
+
+# ── bind_websocket_adapter tests ──────────────────────────────────────────────
+
+
+def test_bind_websocket_adapter_calls_provide() -> None:
+    """
+    ``bind_websocket_adapter()`` must call ``container.provide()`` exactly once
+    so a factory is registered.
+
+    Uses a mock container to verify the provide() call without any DI machinery.
+    """
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    mock_container = MagicMock()
+    bind_websocket_adapter(mock_container, event_type=Event, channel="orders")
+
+    # One and only one binding must be registered.
+    mock_container.provide.assert_called_once()
+
+
+def test_bind_websocket_adapter_creates_correct_bus() -> None:
+    """
+    The factory registered by ``bind_websocket_adapter()`` must produce a
+    ``WebSocketEventBus`` configured with the supplied ``event_type`` and
+    ``channel``.
+    """
+
+    class PingEvent(Event):
+        __event_type__ = "test.ping"
+
+    container, bus = _make_container_with_bus()
+    bind_websocket_adapter(container, event_type=PingEvent, channel="pings")
+
+    ws_bus = container.get(WebSocketEventBus)
+
+    assert isinstance(ws_bus, WebSocketEventBus)
+    # Verify the adapter was built with the exact channel and event_type requested.
+    assert ws_bus._channel == "pings"
+    assert ws_bus._event_type is PingEvent
+    # Verify it wraps the AbstractEventBus registered in the container.
+    assert ws_bus._bus is bus
+
+
+def test_bind_websocket_adapter_default_event_type_is_event() -> None:
+    """
+    When ``event_type`` is omitted, the adapter must default to the base ``Event``
+    class (subscribing to all events).
+    """
+    container, _ = _make_container_with_bus()
+    bind_websocket_adapter(container, channel="*")
+
+    ws_bus = container.get(WebSocketEventBus)
+    assert ws_bus._event_type is Event
+
+
+def test_bind_websocket_adapter_custom_backpressure_policy() -> None:
+    """
+    ``bind_websocket_adapter()`` must forward ``backpressure_policy`` to the
+    constructed ``WebSocketEventBus``.
+    """
+    container, _ = _make_container_with_bus()
+    bind_websocket_adapter(
+        container,
+        channel="*",
+        backpressure_policy=BackpressurePolicy.BLOCK,
+    )
+
+    ws_bus = container.get(WebSocketEventBus)
+    assert ws_bus._backpressure_policy is BackpressurePolicy.BLOCK
+
+
+def test_bind_websocket_adapter_closure_capture() -> None:
+    """
+    Two consecutive calls to ``bind_websocket_adapter()`` with different
+    ``(event_type, channel)`` must each register an independent factory —
+    the closure must capture binding-time values, not the final loop variable.
+
+    DESIGN: This tests the "capture in local variable" pattern that prevents
+    the classic Python loop-closure bug where all closures share the same
+    late-bound variable.
+    """
+
+    class OrderEvent(Event):
+        __event_type__ = "test.order"
+
+    class ShipmentEvent(Event):
+        __event_type__ = "test.shipment"
+
+    container_a, bus_a = _make_container_with_bus()
+    container_b, bus_b = _make_container_with_bus()
+
+    bind_websocket_adapter(container_a, event_type=OrderEvent, channel="orders")
+    bind_websocket_adapter(container_b, event_type=ShipmentEvent, channel="shipments")
+
+    ws_a = container_a.get(WebSocketEventBus)
+    ws_b = container_b.get(WebSocketEventBus)
+
+    # Each adapter must carry its own captured values — not the other's.
+    assert ws_a._channel == "orders"
+    assert ws_a._event_type is OrderEvent
+    assert ws_b._channel == "shipments"
+    assert ws_b._event_type is ShipmentEvent
+
+
+def test_bind_websocket_adapter_importerror_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    When providify is not installed (ImportError on import), ``bind_websocket_adapter``
+    must return without raising so callers in environments without providify are
+    unaffected.
+    """
+    import builtins  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    original_import = builtins.__import__
+
+    def _block_providify(name: str, *args: object, **kwargs: object) -> object:
+        if name == "providify":
+            raise ImportError("providify not installed")
+        return original_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    # Remove any cached providify module so our hook fires.
+    providify_cached = {k: v for k, v in sys.modules.items() if "providify" in k}
+    for k in providify_cached:
+        monkeypatch.delitem(sys.modules, k, raising=False)
+
+    monkeypatch.setattr(builtins, "__import__", _block_providify)
+
+    mock_container = MagicMock()
+    # Must not raise even though providify is unavailable.
+    bind_websocket_adapter(mock_container, channel="orders")
+
+    # No provide() call should have been made.
+    mock_container.provide.assert_not_called()
+
+
+# ── bind_sse_adapter tests ────────────────────────────────────────────────────
+
+
+def test_bind_sse_adapter_calls_provide() -> None:
+    """
+    ``bind_sse_adapter()`` must call ``container.provide()`` exactly once.
+    """
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    mock_container = MagicMock()
+    bind_sse_adapter(mock_container, event_type=Event, channel="orders")
+
+    mock_container.provide.assert_called_once()
+
+
+def test_bind_sse_adapter_creates_correct_bus() -> None:
+    """
+    The factory registered by ``bind_sse_adapter()`` must produce an
+    ``SSEEventBus`` configured with the supplied ``event_type`` and ``channel``.
+    """
+
+    class StatusEvent(Event):
+        __event_type__ = "test.status"
+
+    container, bus = _make_container_with_bus()
+    bind_sse_adapter(container, event_type=StatusEvent, channel="status")
+
+    sse_bus = container.get(SSEEventBus)
+
+    assert isinstance(sse_bus, SSEEventBus)
+    assert sse_bus._channel == "status"
+    assert sse_bus._event_type is StatusEvent
+    assert sse_bus._bus is bus
+
+
+def test_bind_sse_adapter_default_event_type_is_event() -> None:
+    """
+    When ``event_type`` is omitted, the adapter must default to the base ``Event``
+    class (subscribing to all events).
+    """
+    container, _ = _make_container_with_bus()
+    bind_sse_adapter(container, channel="*")
+
+    sse_bus = container.get(SSEEventBus)
+    assert sse_bus._event_type is Event
+
+
+def test_bind_sse_adapter_closure_capture() -> None:
+    """
+    Two consecutive calls to ``bind_sse_adapter()`` with different
+    ``(event_type, channel)`` must each register an independent factory.
+    """
+
+    class AlertEvent(Event):
+        __event_type__ = "test.alert"
+
+    class MetricEvent(Event):
+        __event_type__ = "test.metric"
+
+    container_a, _ = _make_container_with_bus()
+    container_b, _ = _make_container_with_bus()
+
+    bind_sse_adapter(container_a, event_type=AlertEvent, channel="alerts")
+    bind_sse_adapter(container_b, event_type=MetricEvent, channel="metrics")
+
+    sse_a = container_a.get(SSEEventBus)
+    sse_b = container_b.get(SSEEventBus)
+
+    assert sse_a._channel == "alerts"
+    assert sse_a._event_type is AlertEvent
+    assert sse_b._channel == "metrics"
+    assert sse_b._event_type is MetricEvent
+
+
+def test_bind_sse_adapter_importerror_guard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    When providify is not installed, ``bind_sse_adapter`` must return without
+    raising.
+    """
+    import builtins  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+    from unittest.mock import MagicMock  # noqa: PLC0415
+
+    original_import = builtins.__import__
+
+    def _block_providify(name: str, *args: object, **kwargs: object) -> object:
+        if name == "providify":
+            raise ImportError("providify not installed")
+        return original_import(name, *args, **kwargs)  # type: ignore[arg-type]
+
+    providify_cached = {k: v for k, v in sys.modules.items() if "providify" in k}
+    for k in providify_cached:
+        monkeypatch.delitem(sys.modules, k, raising=False)
+
+    monkeypatch.setattr(builtins, "__import__", _block_providify)
+
+    mock_container = MagicMock()
+    bind_sse_adapter(mock_container, channel="status")
+
+    mock_container.provide.assert_not_called()

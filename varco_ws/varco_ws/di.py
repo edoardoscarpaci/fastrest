@@ -42,15 +42,18 @@ Or manually::
 Per-channel adapters
 --------------------
 The scan-discovered singletons subscribe to all events on all channels.
-For per-channel adapters, wire them manually in the FastAPI lifespan handler::
+For per-channel adapters, use ``bind_websocket_adapter()`` / ``bind_sse_adapter()``
+instead of manual lifespan boilerplate::
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        bus = container.get(AbstractEventBus)
-        orders_ws = WebSocketEventBus(bus, event_type=OrderEvent, channel="orders")
-        await orders_ws.start()
-        yield
-        await orders_ws.stop()
+    from varco_ws.di import bootstrap, bind_websocket_adapter, bind_sse_adapter
+    from myapp.events import OrderEvent
+
+    bootstrap(container)
+    bind_websocket_adapter(container, event_type=OrderEvent, channel="orders")
+    bind_sse_adapter(container, event_type=OrderEvent, channel="orders")
+
+    orders_ws  = container.get(WebSocketEventBus)   # per-channel singleton
+    orders_sse = container.get(SSEEventBus)          # per-channel singleton
 
 Lifecycle
 ---------
@@ -61,7 +64,8 @@ DESIGN: @Singleton on adapter classes over @Provider in @Configuration
     ✅ Scan discovers adapters automatically — no install() call needed.
     ✅ No @Configuration classes required at all.
     ❌ The scan-discovered singleton always uses event_type=Event, channel="*"
-       (all events, all channels) — per-channel adapters still need manual wiring.
+       (all events, all channels) — use bind_websocket_adapter()/bind_sse_adapter()
+       when per-channel filtering is needed.
 
 Thread safety:  ✅ Safe — DI registration is single-threaded at startup.
 Async safety:   ✅ No I/O at scan time; I/O happens in start().
@@ -140,8 +144,253 @@ def bootstrap(
     return container
 
 
+# ── bind_websocket_adapter ────────────────────────────────────────────────────
+
+
+def bind_websocket_adapter(
+    container: Any,
+    *,
+    event_type: Any = None,
+    channel: str = "*",
+    max_queue_size: int = 100,
+    backpressure_policy: Any = None,
+) -> None:
+    """
+    Register a per-channel ``WebSocketEventBus`` singleton in a providify
+    ``DIContainer``.
+
+    After this call ``container.get(WebSocketEventBus)`` returns the adapter
+    configured for the requested ``event_type`` and ``channel``.  This is the
+    DI-native alternative to manually instantiating
+    ``WebSocketEventBus(bus, event_type=..., channel=...)`` inside a FastAPI
+    lifespan handler.
+
+    Usage::
+
+        from varco_ws.di import bootstrap, bind_websocket_adapter
+        from myapp.events import OrderEvent
+
+        bootstrap(container)                         # scan varco_ws
+        bind_websocket_adapter(
+            container,
+            event_type=OrderEvent,
+            channel="orders",
+        )
+
+        orders_ws = container.get(WebSocketEventBus)
+        # Start in the FastAPI lifespan handler — not here:
+        @asynccontextmanager
+        async def lifespan(app):
+            await orders_ws.start()
+            yield
+            await orders_ws.stop()
+
+    Args:
+        container:           A providify ``DIContainer`` instance.
+        event_type:          Event class to subscribe to.  ``None`` defaults to
+                             ``Event`` (all events).
+        channel:             Bus channel to subscribe to.  ``"*"`` means all channels.
+        max_queue_size:      Per-client outbound queue depth.  0 = unbounded.
+                             Default matches ``WebSocketEventBus`` default (100).
+        backpressure_policy: Action when a client queue is full.  ``None``
+                             defaults to ``BackpressurePolicy.DROP_OLDEST``.
+
+    Returns:
+        None
+
+    Raises:
+        Nothing — if providify is not installed the function logs a warning and
+        returns without raising.
+
+    Edge cases:
+        - Calling twice with the same ``event_type``/``channel`` replaces the
+          previous binding — providify last-registration wins.
+        - The adapter is **not** started automatically; call ``start()`` in the
+          FastAPI lifespan handler.
+        - ``AbstractEventBus`` must already be registered before the factory is
+          resolved (not before this call) — registration order does not matter.
+
+    Thread safety:  ✅ Registration is intended at bootstrap (single-threaded).
+    Async safety:   ✅ No I/O during registration.
+    """
+    try:
+        # Lazy import — providify is an optional dependency.
+        # The guard mirrors bind_mcp_adapter in varco_fastapi.
+        from providify import Provider  # noqa: PLC0415
+    except ImportError:
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).warning(
+            "bind_websocket_adapter: providify not installed — "
+            "WebSocketEventBus not registered in DI."
+        )
+        return
+
+    # Resolve defaults that live in the varco_ws module — imported here to
+    # keep the module-level import list minimal and match the lazy-import
+    # pattern used throughout the package.
+    from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
+    from varco_ws.websocket import (  # noqa: PLC0415
+        BackpressurePolicy,
+        WebSocketEventBus,
+    )
+
+    # Capture every arg into a local binding-time variable so that the closure
+    # does NOT close over the parameter names (which would alias the last call's
+    # values if bind_websocket_adapter is called in a loop for multiple channels).
+    _event_type = event_type if event_type is not None else Event
+    _channel = channel
+    _max_queue_size = max_queue_size
+    _backpressure_policy = (
+        backpressure_policy
+        if backpressure_policy is not None
+        else BackpressurePolicy.DROP_OLDEST
+    )
+
+    @Provider(singleton=True)
+    def _ws_factory() -> WebSocketEventBus:
+        """Singleton WebSocketEventBus factory — built once at first injection.
+
+        DESIGN: closes over ``container`` to resolve AbstractEventBus directly,
+        rather than declaring ``Inject[AbstractEventBus]`` as a parameter.
+        This avoids the ``from __future__ import annotations`` problem: deferred
+        evaluation turns the ``Inject[...]`` hint into a string, so providify
+        cannot recognise it as an injection point.  The closure approach is the
+        same pattern used by ``bind_mcp_adapter`` in ``varco_fastapi``.
+        """
+        bus = container.get(AbstractEventBus)
+        return WebSocketEventBus(
+            bus,
+            event_type=_event_type,
+            channel=_channel,
+            max_queue_size=_max_queue_size,
+            backpressure_policy=_backpressure_policy,
+        )
+
+    # Patch the return annotation so providify can resolve Inject[WebSocketEventBus].
+    # Without this, the annotation is the string "WebSocketEventBus" (due to
+    # `from __future__ import annotations`) and providify cannot look up the class.
+    _ws_factory.__annotations__["return"] = WebSocketEventBus
+
+    container.provide(_ws_factory)
+
+
+# ── bind_sse_adapter ──────────────────────────────────────────────────────────
+
+
+def bind_sse_adapter(
+    container: Any,
+    *,
+    event_type: Any = None,
+    channel: str = "*",
+    max_queue_size: int = 100,
+) -> None:
+    """
+    Register a per-channel ``SSEEventBus`` singleton in a providify
+    ``DIContainer``.
+
+    After this call ``container.get(SSEEventBus)`` returns the adapter
+    configured for the requested ``event_type`` and ``channel``.  This is the
+    DI-native alternative to manually instantiating
+    ``SSEEventBus(bus, event_type=..., channel=...)`` inside a FastAPI
+    lifespan handler.
+
+    Usage::
+
+        from varco_ws.di import bootstrap, bind_sse_adapter
+        from myapp.events import OrderEvent
+
+        bootstrap(container)                  # scan varco_ws
+        bind_sse_adapter(
+            container,
+            event_type=OrderEvent,
+            channel="orders",
+        )
+
+        orders_sse = container.get(SSEEventBus)
+        # Start in the FastAPI lifespan handler — not here:
+        @asynccontextmanager
+        async def lifespan(app):
+            await orders_sse.start()
+            yield
+            await orders_sse.stop()
+
+    Args:
+        container:      A providify ``DIContainer`` instance.
+        event_type:     Event class to subscribe to.  ``None`` defaults to
+                        ``Event`` (all events).
+        channel:        Bus channel to subscribe to.  ``"*"`` means all channels.
+        max_queue_size: Per-subscriber queue depth.  0 = unbounded.
+                        Default matches ``SSEEventBus`` default (100).
+
+    Returns:
+        None
+
+    Raises:
+        Nothing — if providify is not installed the function logs a warning and
+        returns without raising.
+
+    Edge cases:
+        - Calling twice with the same ``event_type``/``channel`` replaces the
+          previous binding — providify last-registration wins.
+        - The adapter is **not** started automatically; call ``start()`` in the
+          FastAPI lifespan handler.
+        - ``AbstractEventBus`` must already be registered before the factory is
+          resolved (not before this call) — registration order does not matter.
+
+    Thread safety:  ✅ Registration is intended at bootstrap (single-threaded).
+    Async safety:   ✅ No I/O during registration.
+    """
+    try:
+        # Lazy import — providify is an optional dependency.
+        from providify import Provider  # noqa: PLC0415
+    except ImportError:
+        import logging  # noqa: PLC0415
+
+        logging.getLogger(__name__).warning(
+            "bind_sse_adapter: providify not installed — "
+            "SSEEventBus not registered in DI."
+        )
+        return
+
+    # Resolve defaults imported lazily to keep module-level import list minimal.
+    from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
+    from varco_ws.sse import SSEEventBus  # noqa: PLC0415
+
+    # Capture every arg at binding time — same closure-capture pattern as
+    # bind_websocket_adapter and bind_mcp_adapter in varco_fastapi.
+    _event_type = event_type if event_type is not None else Event
+    _channel = channel
+    _max_queue_size = max_queue_size
+
+    @Provider(singleton=True)
+    def _sse_factory() -> SSEEventBus:
+        """Singleton SSEEventBus factory — built once at first injection.
+
+        DESIGN: closes over ``container`` to resolve AbstractEventBus directly
+        rather than declaring ``Inject[AbstractEventBus]`` as a parameter.
+        Avoids the ``from __future__ import annotations`` string-annotation
+        problem — same pattern as ``bind_mcp_adapter`` in ``varco_fastapi``.
+        """
+        bus = container.get(AbstractEventBus)
+        return SSEEventBus(
+            bus,
+            event_type=_event_type,
+            channel=_channel,
+            max_queue_size=_max_queue_size,
+        )
+
+    # Patch the return annotation so providify can resolve Inject[SSEEventBus].
+    # Mirrors the same pattern used in bind_mcp_adapter (varco_fastapi).
+    _sse_factory.__annotations__["return"] = SSEEventBus
+
+    container.provide(_sse_factory)
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
     "bootstrap",
+    "bind_websocket_adapter",
+    "bind_sse_adapter",
 ]
