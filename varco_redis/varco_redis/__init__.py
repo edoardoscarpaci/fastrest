@@ -64,6 +64,7 @@ from varco_redis.cache import RedisCache, RedisCacheConfiguration, RedisCacheSet
 from varco_redis.channel import RedisChannelManager, RedisChannelManagerSettings
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.dlq import RedisDLQ, RedisDLQConfiguration
+from varco_redis.stream_dlq import RedisStreamDLQ, RedisStreamDLQConfiguration
 from varco_redis.conversation import RedisConversationStore
 from varco_redis.job_store import RedisJobStore
 from varco_redis.rate_limit import RedisRateLimiter
@@ -85,6 +86,8 @@ __all__ = [
     # ── Dead Letter Queue ──────────────────────────────────────────────────────
     "RedisDLQ",
     "RedisDLQConfiguration",
+    "RedisStreamDLQ",
+    "RedisStreamDLQConfiguration",
     # ── Conversation store ─────────────────────────────────────────────────────
     "RedisConversationStore",
     # ── Job store ──────────────────────────────────────────────────────────────
