@@ -58,6 +58,7 @@ from varco_fastapi.middleware.session import (
     get_container,
     get_session_dependency,
 )
+from varco_fastapi.middleware.profiling import ProfilingMiddleware, ProfilingSettings
 from varco_fastapi.middleware.tracing import TracingMiddleware
 
 # ── MiddlewareEntry type ──────────────────────────────────────────────────────
@@ -157,6 +158,8 @@ def install_middleware_stack(
 __all__ = [
     "ErrorMiddleware",
     "MetricsMiddleware",
+    "ProfilingMiddleware",
+    "ProfilingSettings",
     "RequestContextMiddleware",
     "TracingMiddleware",
     "RequestLoggingMiddleware",

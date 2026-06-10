@@ -40,6 +40,9 @@ dependencies = [
     "opentelemetry-api>=1.20",
     "opentelemetry-sdk>=1.20",
     "opentelemetry-exporter-otlp-proto-grpc>=1.20",
+    # psutil is used by varco_core.profiling for RSS memory delta tracking
+    # and is available as a convenience export via register_gauge in observability.
+    "psutil>=5.9",
 ]
 
 [project.urls]

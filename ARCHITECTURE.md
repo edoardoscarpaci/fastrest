@@ -16,6 +16,7 @@ varco_core/              — Domain model, service layer, event system, resilien
   ├── query/             — QueryParser → AST → QueryTransformer → backend applicator
   │   └── aggregation.py — AggregationFunc, AggregationExpression, AggregationQuery, SA applicator
   ├── resilience/        — @timeout, @retry, @circuit_breaker decorators
+  ├── profiling/         — @profile, profiled(), ProfileSession, pluggable CPU/memory backends
   ├── lock.py            — AbstractDistributedLock, InMemoryLock, LockHandle
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
@@ -679,6 +680,7 @@ event_bus: AbstractEventBus = container.resolve(AbstractEventBus)
 | `cache/` | Cache abstraction, backends, invalidation | `AsyncCache`, `CacheBackend`, `InvalidationStrategy`, `@cached` decorator |
 | `query/` | Query AST, parser, visitors, transformers | `QueryParams`, `FilterNode`, `ASTVisitor`, `QueryTransformer` |
 | `resilience/` | Retry, timeout, circuit breaker, rate limiting, bulkhead, hedged requests | `@retry`, `@timeout`, `@circuit_breaker`, `@rate_limit`, `@bulkhead`, `@hedge` |
+| `profiling/` | Diagnostic CPU/memory profiler; pluggable backends | `@profile`, `profiled()`, `ProfileSession`, `ProfileConfig`, `ProfileReport`, `CpuProfilerBackend`, `MemoryProfilerBackend` |
 | `authority/` | JWT signing, verification, key rotation | `JwtAuthority`, `TrustedIssuerRegistry`, `MultiKeyAuthority` |
 | `auth/` | User/role/permission abstractions | `AbstractAuthorizer`, permission models |
 | `repository.py` | Repository protocol | `AsyncRepository[D, PK]` |
@@ -971,6 +973,77 @@ returns 503 when `prometheus_client` is absent; the `OtelConfiguration` logs an 
 `__init__` time) using a module-level `_instruments: dict[str, Any]` cache. This ensures they
 are bound to the live `MeterProvider` set by `OtelConfiguration`, not the no-op provider
 active at import time.
+
+#### Diagnostic Profiler — `ProfilingMiddleware` + `varco_core.profiling`
+
+The profiler fills the gap left by aggregate metrics: while `MetricsMiddleware` answers
+*"how slow on average"*, the profiler answers *"which function is hot"* and *"what allocated
+this memory"* via deep per-call introspection.
+
+**`varco_core.profiling`** — backend-agnostic profiling primitives:
+
+| Symbol | Role |
+|---|---|
+| `@profile()` / `profiled()` | Decorator and context-manager primitives |
+| `ProfileSession` | Dual sync/async context manager; drives backends through start→collect |
+| `ProfileConfig` | Frozen config: backends, top_n, sort_by, otel, track_rss |
+| `ProfileReport` | Immutable result: wall/cpu time, top functions, mem delta, RSS, artifacts |
+| `CpuProfilerBackend` | Protocol — implement to add pyinstrument, py-spy, etc. |
+| `MemoryProfilerBackend` | Protocol — implement to add memray, etc. |
+| `register_cpu_backend()` / `register_memory_backend()` | Name registry for backend factories |
+
+**Built-in backends**: `"cprofile"` (deterministic CPU via `cProfile`) and
+`"tracemalloc"` (memory snapshots + diff via `tracemalloc`). Both are registered at import time.
+
+**Off by default** — zero overhead when disabled:
+
+```python
+from varco_core.profiling import profile, profiled, set_profiling_enabled
+
+set_profiling_enabled(True)   # or set VARCO_PROFILING_ENABLED=true
+
+@profile()
+async def slow_query() -> list[Row]: ...
+
+async with profiled("batch_job") as s:
+    await process()
+print(s.report.format())   # human-readable table
+```
+
+**Adding a new backend** (e.g. pyinstrument):
+
+```python
+from varco_core.profiling import CpuProfilerBackend, register_cpu_backend
+
+class PyinstrumentBackend:
+    name = "pyinstrument"
+    def start(self) -> None: ...
+    def collect(self, top_n, sort_by) -> CpuProfileResult: ...
+
+register_cpu_backend("pyinstrument", PyinstrumentBackend)
+# Then: ProfileConfig(cpu_backend="pyinstrument")
+```
+
+**`ProfilingMiddleware`** (`varco_fastapi.middleware.profiling`) — ASGI middleware that
+profiles one HTTP request at a time:
+- Config via `ProfilingSettings` (env prefix `VARCO_PROFILER_`): `enabled`, `slow_threshold_ms`,
+  `mem_threshold_mb`, `attach_headers`, `skip_paths`, `top_n`, `track_rss`.
+- Uses a process-wide `asyncio.Lock` (lazy); concurrent requests **pass through unprofiled**
+  rather than blocking.
+- Threshold gating: only logs when `wall_ms >= slow_threshold_ms`.
+- `attach_headers=True` adds `X-Profile-Wall-Ms` / `X-Profile-Mem-Kb` response headers.
+
+**Wiring**:
+```python
+app = create_varco_app(container, enable_profiling=True)
+# or:
+app.add_middleware(ProfilingMiddleware, settings=ProfilingSettings(enabled=True, attach_headers=True))
+```
+
+**Middleware stack placement** (innermost — closest to route handler):
+```
+CORS → Error → Tracing → Metrics → Logging → RequestContext → Profiling → route
+```
 
 #### SkillAdapter — Google A2A protocol
 

@@ -31,6 +31,7 @@ pip install varco-core
 - **Dead Letter Queue** — `AbstractDeadLetterQueue`, `InMemoryDeadLetterQueue`; failed events routed after retry exhaustion
 - **Transactional Outbox** — `OutboxEntry`, `OutboxRepository`, `OutboxRelay`; at-least-once event delivery via DB-backed outbox
 - **Resilience** — `@retry` with exponential back-off, `CircuitBreaker` (CLOSED / OPEN / HALF_OPEN), `@timeout`; composable on any sync/async callable
+- **Diagnostic profiler** — `@profile`, `profiled()`, `ProfileSession`; pluggable CPU/memory backends (`cprofile`, `tracemalloc`; extensible to pyinstrument/memray/py-spy)
 - **Async cache** — `InMemoryCache`, `LayeredCache`, `CachedService`; pluggable invalidation strategies (TTL, Explicit, Tagged, EventDriven, Composite)
 - **Validation** — `Validator` protocol, `DomainModelValidator`, `CompositeValidator`, `ValidationResult`; collect-all business-invariant validation
 - **Serialization** — `Serializer` protocol, `JsonSerializer` (Pydantic-backed), `NoOpSerializer`; pluggable ser/deser for bus and cache backends
@@ -365,6 +366,47 @@ async def charge(amount: float) -> str:
 @circuit_breaker(CircuitBreakerConfig(failure_threshold=5))
 async def resilient_call() -> Response: ...
 ```
+
+### Profiling — diagnostic CPU + memory profiler
+
+Find slow functions and memory allocations on-demand.  Off by default (zero overhead when
+disabled); activate per-operation with a decorator or context manager.
+
+```python
+from varco_core.profiling import profile, profiled, ProfileConfig, set_profiling_enabled
+
+# Enable globally (or set VARCO_PROFILING_ENABLED=true in env)
+set_profiling_enabled(True)
+
+# Decorator — works on sync and async functions
+@profile(ProfileConfig(top_n=10))
+async def slow_query() -> list[Row]:
+    return await db.execute("SELECT ...")
+
+# Context manager — gives direct access to the report
+async with profiled("batch_export") as session:
+    rows = await db.fetch_all()
+    await write_csv(rows)
+print(session.report.format())
+```
+
+The profiler is **extensible**: plug in pyinstrument, memray, or py-spy by implementing
+a one-method protocol and registering it by name — no changes to the engine, decorator,
+or middleware:
+
+```python
+from varco_core.profiling import CpuProfilerBackend, CpuProfileResult, register_cpu_backend
+
+class PyinstrumentBackend:
+    name = "pyinstrument"
+    def start(self) -> None: ...
+    def collect(self, top_n: int, sort_by: str) -> CpuProfileResult: ...
+
+register_cpu_backend("pyinstrument", PyinstrumentBackend)
+cfg = ProfileConfig(cpu_backend="pyinstrument")  # use it anywhere
+```
+
+Built-in backends: `"cprofile"` (deterministic CPU) and `"tracemalloc"` (memory snapshots).
 
 ### Dead Letter Queue (DLQ)
 

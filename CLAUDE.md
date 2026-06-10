@@ -165,6 +165,64 @@ async def on_order(self, event: OrderPlacedEvent) -> None: ...
 
 The `SAConfig` object (engine + declarative base + entity classes) is the single injectable configuration object — it doubles as the DI settings object, avoiding a parallel `SASettings` class.
 
+### Profiling (varco_core.profiling)
+
+Diagnostic CPU + memory profiler. Complements the aggregate OTel observability layer
+(spans/metrics answer "how slow on average"; the profiler answers "which function is hot"
+and "what allocated this memory").
+
+**Off by default — zero overhead when disabled:**
+
+```python
+from varco_core.profiling import profile, profiled, ProfileConfig, set_profiling_enabled
+
+# Enable globally (or set VARCO_PROFILING_ENABLED=true)
+set_profiling_enabled(True)
+
+# Decorator form — works on sync and async functions
+@profile(ProfileConfig(top_n=10))
+async def slow_query() -> list[Row]: ...
+
+# Context manager form — gives access to the report
+async with profiled("batch_job") as session:
+    await process_batch()
+print(session.report.format())
+```
+
+**FastAPI middleware:**
+
+```python
+# Env-var driven:
+# VARCO_PROFILER_ENABLED=true VARCO_PROFILER_ATTACH_HEADERS=true
+
+app = create_varco_app(container, enable_profiling=True)
+```
+
+**Adding a custom backend (memray, pyinstrument, py-spy):**
+
+```python
+from varco_core.profiling import CpuProfilerBackend, CpuProfileResult, register_cpu_backend
+
+class PyinstrumentBackend:
+    name = "pyinstrument"
+    def start(self) -> None: ...
+    def collect(self, top_n: int, sort_by: str) -> CpuProfileResult: ...
+
+register_cpu_backend("pyinstrument", PyinstrumentBackend)
+cfg = ProfileConfig(cpu_backend="pyinstrument")
+```
+
+**Rules:**
+- `cProfile` and `tracemalloc` are **process-global** — one session at a time. The FastAPI
+  middleware serialises with a process-wide `asyncio.Lock`; concurrent requests pass through
+  unprofiled rather than blocking.
+- `cProfile` across an `await` captures all coroutines on the event loop thread. Use it for
+  CPU-bound or isolated async work; use a sampling backend (pyinstrument) for busy loops.
+- `tracemalloc` prior state is always **restored** on session exit — safe to use in apps
+  that already enable it.
+- **Never leave profiling always-on in production** — `cProfile`/`tracemalloc` add 20–100%
+  overhead. Use the kill-switch (`set_profiling_enabled`) or `VARCO_PROFILING_ENABLED`.
+
 ### Cache system (varco_core.cache)
 
 `AsyncCache[K, V]` is a `runtime_checkable` Protocol; `CacheBackend[K, V]` is the ABC backends subclass (adds `start()`/`stop()` lifecycle). Hierarchy:
@@ -300,6 +358,8 @@ enable_policy_authorizer(container)      # OPT-IN: binds PolicyEngineAuthorizer 
    - Cache? → In-memory, Redis, and layered exist
    - ORM? → SQLAlchemy and Beanie exist
    - Query filtering? → AST + visitor pattern handles this; extend `ASTVisitor` if needed
+   - CPU profiling? → `"cprofile"` backend exists; add pyinstrument/py-spy by implementing `CpuProfilerBackend`
+   - Memory profiling? → `"tracemalloc"` backend exists; add memray by implementing `MemoryProfilerBackend`
 
 3. **Identify the layer boundary** — Where does this feature live?
    - Protocol/ABC in `varco_core`? → Used by app code
@@ -466,6 +526,52 @@ app = create_varco_app(routers=[ReportRouter])
 - If `ctx` is declared in the handler, `_auth` must be set (or it will not be populated).
 - For truly public endpoints (no auth needed), use `requires=allow_anonymous()` or omit `requires=` altogether and don't declare `ctx`.
 
+#### Scenario: Profile a slow operation
+
+```python
+from varco_core.profiling import profile, profiled, ProfileConfig, set_profiling_enabled
+
+# 1. Enable globally (or VARCO_PROFILING_ENABLED=true in env)
+set_profiling_enabled(True)
+
+# 2a. Decorator form — wraps every call
+@profile(ProfileConfig(top_n=10))
+async def slow_query() -> list[Row]:
+    return await db.execute("SELECT ...")
+
+# 2b. Context manager form — gives access to the report object
+async with profiled("batch_export") as session:
+    rows = await db.fetch_all()
+    await write_csv(rows)
+print(session.report.format())   # human-readable table to stderr/logs
+
+# 3. FastAPI: enable via env var or create_varco_app flag
+#    VARCO_PROFILER_ENABLED=true VARCO_PROFILER_ATTACH_HEADERS=true
+app = create_varco_app(container, enable_profiling=True)
+# → X-Profile-Wall-Ms + X-Profile-Mem-Kb headers on each response
+```
+
+**Swap in a future backend (e.g. memray):**
+
+```python
+from varco_core.profiling import MemoryProfilerBackend, MemoryProfileResult, register_memory_backend
+
+class MemrayBackend:
+    name = "memray"
+    def start(self) -> None: ...
+    def collect(self, top_n: int) -> MemoryProfileResult: ...
+
+register_memory_backend("memray", MemrayBackend)
+cfg = ProfileConfig(memory_backend="memray")
+```
+
+**Caveats**:
+- `cProfile` and `tracemalloc` are process-global — one session at a time.  The middleware
+  serialises via an `asyncio.Lock`; concurrent requests pass through unprofiled.
+- `cProfile` across `await` captures all coroutines on the loop thread.  Best for
+  CPU-bound or isolated coroutines; use a sampling backend for concurrent async code.
+- Always disable after diagnosis: `set_profiling_enabled(False)` or unset the env var.
+
 #### Scenario: Integrate a new external API (with resilience)
 
 ```python
@@ -575,6 +681,10 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **`@Singleton` on pydantic `BaseSettings`** | `LookupError: Cannot resolve 'values'` at resolution | providify injects pydantic's `**values` ctor param | Register settings via a `@Provider` (see `varco_casbin.di`), not `@Singleton` |
 | **`memory` adapter in production** | Policies vanish on restart | The in-memory adapter has no durable store | Use `adapter="sqlalchemy"` (`varco-casbin[sqlalchemy]`) for persisted CRUD |
 | **Sync Casbin adapter with AsyncEnforcer** | `RuntimeError: Invalid parameters for enforcer` | `AsyncEnforcer` requires an `AsyncAdapter` | Use `casbin.persist.adapters.asyncio.*` (the factory in `varco_casbin.adapter` already does) |
+| **Profiling left always-on** | 20–100% overhead in production | `cProfile`/`tracemalloc` are expensive deterministic tools | Default is off (`VARCO_PROFILING_ENABLED=false`); activate only to diagnose a hotspot |
+| **Two profiling sessions concurrent** | Contaminated reports (each session records the other's frames) | `cProfile`/`tracemalloc` are process-global | The middleware serialises with a `Lock`; for manual use, never profile two operations simultaneously |
+| **`cProfile` across `await` on a busy loop** | Report includes frames from other coroutines | `cProfile` captures the whole event loop thread | Use a sampling backend (e.g. pyinstrument) for concurrent async code; cProfile is best for CPU-bound or isolated coroutines |
+| **tracemalloc state not restored** | App's own tracemalloc usage broken after a profiling session | Session left tracemalloc on when it found it off (or vice versa) | `TracemallocMemoryBackend.collect()` always restores the prior tracing state; if writing a custom memory backend, do the same |
 
 ---
 
@@ -593,6 +703,14 @@ Am I adding a new capability?
 │
 ├─ Resilience pattern (new retry/timeout/breaker variant)?
 │  └─ → varco_core.resilience (decorator + config)
+│
+├─ Profiling / performance diagnostic?
+│  ├─ New CPU backend (pyinstrument, py-spy)?
+│  │  └─ → implement CpuProfilerBackend + register_cpu_backend()
+│  ├─ New memory backend (memray)?
+│  │  └─ → implement MemoryProfilerBackend + register_memory_backend()
+│  └─ New profiling primitive (service mixin, consumer wrapper)?
+│     └─ → varco_core.profiling (use ProfileSession as the engine)
 │
 ├─ Authentication/JWT feature?
 │  └─ → varco_core.authority (protocol) + varco_core.authority.sources (key sources)

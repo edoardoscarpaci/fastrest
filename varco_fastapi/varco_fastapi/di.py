@@ -82,7 +82,9 @@ from varco_core.event.producer import AbstractEventProducer, BusEventProducer
 from providify import Configuration, Provider, Singleton
 
 if TYPE_CHECKING:
-    pass
+    from varco_fastapi.middleware.profiling import (
+        ProfilingSettings,
+    )
 
 
 # ── Singleton stamps for varco_core classes (no providify dep there) ──────────
@@ -225,6 +227,20 @@ class VarcoFastAPIModule:
             A ``ClientProfile`` configured from the environment.
         """
         return ClientProfile.from_env()
+
+    @Provider(singleton=True)
+    def profiling_settings(self) -> "ProfilingSettings":
+        """
+        Diagnostic profiler settings loaded from ``VARCO_PROFILER_*`` env vars.
+
+        Returns:
+            A ``ProfilingSettings`` instance configured from the environment.
+        """
+        from varco_fastapi.middleware.profiling import (
+            ProfilingSettings,
+        )  # noqa: PLC0415
+
+        return ProfilingSettings()
 
     @Provider(singleton=True)
     def task_registry(self) -> TaskRegistry:

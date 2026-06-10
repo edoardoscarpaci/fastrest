@@ -102,6 +102,7 @@ def create_varco_app(
     enable_logging: bool = True,
     enable_error_middleware: bool = True,
     enable_metrics: bool = False,
+    enable_profiling: bool = False,
     mcp_adapter: MCPAdapter | None = None,
     mcp_path: str = "/mcp",
     skill_adapter: SkillAdapter | None = None,
@@ -127,7 +128,7 @@ def create_varco_app(
     5. Create ``FastAPI`` instance with the lifespan.
     6. Register exception handlers.
     7. Apply middleware stack (CORS → Error → Tracing → Metrics → Logging →
-       RequestContext → Session).
+       RequestContext → Profiling → Session).
     8. Apply any ``extra_middleware`` layers.
     9. Mount each router via ``build_router()`` + ``app.include_router()``.
     10. Mount ``MCPAdapter`` if provided.
@@ -156,6 +157,10 @@ def create_varco_app(
         enable_tracing:             Add ``TracingMiddleware`` (correlation ID + OTel).
         enable_logging:             Add ``RequestLoggingMiddleware``.
         enable_error_middleware:    Add ``ErrorMiddleware`` (exception → JSON response).
+        enable_profiling:           Add ``ProfilingMiddleware`` (diagnostic CPU/memory
+                                    profiler).  Default: ``False``.  Also respects the
+                                    ``VARCO_PROFILER_ENABLED`` env var.  See
+                                    ``ProfilingSettings`` for threshold/header options.
         enable_metrics:             Add ``MetricsMiddleware`` and mount ``MetricsRouter``
                                     at ``GET /metrics``.  Default: ``False``.  Requires
                                     ``OtelConfig(prometheus_enabled=True)`` in the DI
@@ -273,7 +278,13 @@ def create_varco_app(
     # We want: CORS → Error → Tracing → RequestContext → Session
     # So we add them in reverse: Session → RequestContext → Tracing → Error → CORS
 
-    # Inner: RequestContextMiddleware (populates auth ContextVars)
+    # Innermost: ProfilingMiddleware — placed closest to the route handler so
+    # the report attributes cost to the endpoint, not to outer middleware layers.
+    # Only one request profiled at a time; concurrent requests pass through unprofiled.
+    if enable_profiling:
+        _try_add_profiling_middleware(app)
+
+    # RequestContextMiddleware (populates auth ContextVars)
     if container is not None:
         _try_add_request_context_middleware(app, container)
 
@@ -583,6 +594,32 @@ def _try_add_request_context_middleware(app: Any, container: Any) -> None:
             app.add_middleware(RequestContextMiddleware)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _try_add_profiling_middleware(app: Any) -> None:
+    """Add ``ProfilingMiddleware`` to the app, reading settings from env vars.
+
+    Placed innermost in the middleware stack so profiling attributes cost to
+    the route handler, not to outer layers (error handling, auth, tracing).
+
+    Skipped silently if ``varco_core.profiling`` is not importable.
+
+    Args:
+        app: The ``FastAPI`` instance.
+    """
+    try:
+        from varco_fastapi.middleware.profiling import (  # noqa: PLC0415
+            ProfilingMiddleware,
+            ProfilingSettings,
+        )
+
+        settings = ProfilingSettings()
+        app.add_middleware(ProfilingMiddleware, settings=settings)
+    except Exception:  # noqa: BLE001
+        _logger.warning(
+            "create_varco_app: enable_profiling=True but ProfilingMiddleware "
+            "could not be initialised — profiling middleware skipped."
+        )
 
 
 def _resolve_cors(container: Any) -> Any:
