@@ -12,6 +12,7 @@ members = [
     "varco-beanie",
     "varco-casbin",
     "varco-core",
+    "varco-examples",
     "varco-fastapi",
     "varco-kafka",
     "varco-memcached",
@@ -2083,6 +2084,33 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
+]
+
+[[package]]
+name = "varco-examples"
+version = "0.1.0"
+source = { virtual = "examples" }
+
+[package.dev-dependencies]
+dev = [
+    { name = "asyncpg" },
+    { name = "httpx" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "testcontainers", extra = ["mongodb", "redis"] },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "pytest", specifier = ">=8.0" },
+    { name = "pytest-asyncio", specifier = ">=0.24" },
+    { name = "testcontainers", extras = ["postgres", "redis", "kafka", "mongodb"], specifier = ">=4.14" },
+    { name = "uvicorn", specifier = ">=0.42" },
 ]
 
 [[package]]

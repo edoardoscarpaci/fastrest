@@ -1,0 +1,23 @@
+[project]
+name    = "varco-examples"
+version = "0.1.0"
+description = "Runnable reference apps covering every varco package and major feature"
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.28",
+    "testcontainers[postgres,redis,kafka,mongodb]>=4.14",
+    "uvicorn>=0.42",
+    "asyncpg>=0.31.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode                        = "auto"
+asyncio_default_fixture_loop_scope  = "session"
+asyncio_default_test_loop_scope     = "session"
+markers = [
+    "integration: requires Docker (testcontainers) — skipped by default",
+]
