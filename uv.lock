@@ -1946,7 +1946,7 @@ wheels = [
 
 [[package]]
 name = "varco-beanie"
-version = "1.0.6"
+version = "1.1.0"
 source = { editable = "varco_beanie" }
 dependencies = [
     { name = "beanie" },
@@ -1981,7 +1981,7 @@ dev = [
 
 [[package]]
 name = "varco-casbin"
-version = "2.0.0"
+version = "2.1.0"
 source = { editable = "varco_casbin" }
 dependencies = [
     { name = "casbin" },
@@ -2044,7 +2044,7 @@ dev = [
 
 [[package]]
 name = "varco-core"
-version = "1.0.6"
+version = "1.1.0"
 source = { editable = "varco_core" }
 dependencies = [
     { name = "cryptography" },
@@ -2087,7 +2087,7 @@ dev = [
 
 [[package]]
 name = "varco-fastapi"
-version = "1.0.6"
+version = "1.1.0"
 source = { editable = "varco_fastapi" }
 dependencies = [
     { name = "fastapi" },
@@ -2157,7 +2157,7 @@ dev = [
 
 [[package]]
 name = "varco-kafka"
-version = "2.0.0"
+version = "2.1.0"
 source = { editable = "varco_kafka" }
 dependencies = [
     { name = "aiokafka" },
@@ -2190,7 +2190,7 @@ dev = [
 
 [[package]]
 name = "varco-memcached"
-version = "1.0.6"
+version = "1.1.0"
 source = { editable = "varco_memcached" }
 dependencies = [
     { name = "aiomcache" },
@@ -2223,7 +2223,7 @@ dev = [
 
 [[package]]
 name = "varco-nats"
-version = "2.0.0"
+version = "2.1.0"
 source = { editable = "varco_nats" }
 dependencies = [
     { name = "nats-py" },
@@ -2256,7 +2256,7 @@ dev = [
 
 [[package]]
 name = "varco-redis"
-version = "2.0.0"
+version = "2.1.0"
 source = { editable = "varco_redis" }
 dependencies = [
     { name = "providify" },
@@ -2289,7 +2289,7 @@ dev = [
 
 [[package]]
 name = "varco-sa"
-version = "2.0.0"
+version = "2.1.0"
 source = { editable = "varco_sa" }
 dependencies = [
     { name = "providify" },
@@ -2327,7 +2327,7 @@ dev = [
 
 [[package]]
 name = "varco-ws"
-version = "2.0.0"
+version = "2.1.0"
 source = { editable = "varco_ws" }
 dependencies = [
     { name = "varco-core" },
