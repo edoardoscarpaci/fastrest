@@ -84,3 +84,62 @@ to be a list fails with `TypeError: string indices must be integers, not 'str'`.
 **Severity**: Non-breaking — correct by design; callers must be aware of the envelope shape.
 
 **Fixed in**: `examples/01-minimal-crud-api/tests/test_smoke.py`
+
+---
+
+## 02-api-gateway-guards (Wave 2)
+
+### F05 — `ErrorMiddleware` re-raises `HTTPException` from inner middleware, producing 500 instead of 401/403
+
+**Smell**: `ErrorMiddleware.dispatch` catches `HTTPException` and does `raise` — intending to let
+FastAPI's built-in exception handler convert it to a proper HTTP response. This works correctly
+when the exception originates from a **route handler**: FastAPI's `exception_handler` machinery
+intercepts it before it reaches the middleware stack.
+
+However, when `HTTPException` is raised inside another `BaseHTTPMiddleware` (e.g.
+`RequestContextMiddleware` when `JwtBearerAuth` rejects an invalid token), Starlette's
+`BaseHTTPMiddleware` stream machinery propagates the exception *outward* through all middleware
+layers. `ErrorMiddleware.dispatch` catches it with `call_next(request)` and re-raises it with
+`raise`. The re-raised exception reaches Starlette's outermost `ServerErrorMiddleware`, which:
+- In production (uvicorn): renders an HTML 500 page.
+- In tests using `httpx.AsyncClient(transport=ASGITransport(..., raise_app_exceptions=False))`:
+  returns a 500 JSON/text response.
+
+The result: an invalid Bearer token produces a 500, not a 401, when the client does not crash on
+the unhandled exception (i.e. with `raise_app_exceptions=False`).
+
+**Fix**: Convert `HTTPException` to a `JSONResponse` in `ErrorMiddleware.dispatch` instead of
+re-raising it. This preserves the correct status code and all response headers
+(`WWW-Authenticate`, etc.) regardless of whether the exception originated from a route handler
+or from inner middleware.
+
+**Severity**: Breaking — invalid tokens return 500 instead of 401 in all deployments where
+`BaseHTTPMiddleware` is used for both `ErrorMiddleware` and `RequestContextMiddleware`.
+
+**File fixed**: `varco_fastapi/varco_fastapi/middleware/error.py`
+
+---
+
+### F06 — `httpx.ASGITransport` does not trigger the ASGI lifespan
+
+**Smell**: `httpx.AsyncClient(transport=ASGITransport(app))` does not send `lifespan.startup`
+or `lifespan.shutdown` events. Any initialization deferred to `VarcoLifespan._setup` (e.g.
+`registry.load_all()`, `bus.start()`) never runs, leaving the app in a partially initialized
+state.
+
+In this example, `registry.load_all()` was initially deferred to `_bootstrap` (the lifespan
+setup). With ASGITransport, the keyset is never populated, so every JWT verification raises
+`UnknownKidError` and all authenticated requests get 401.
+
+Routes registered via `app.include_router()` inside `_bootstrap` are also never mounted, making
+all endpoints 404.
+
+**Fix**: In this example, register routes synchronously in `create_app()` (only `load_all()`
+needs the event loop, so keep that in `_bootstrap`). In tests, call `await registry.load_all()`
+explicitly in the `client` fixture before the `AsyncClient` is used.
+
+**Severity**: Non-breaking as a framework issue — this is a known `httpx` limitation, not a
+varco bug. Document the pattern for test authors: call async init explicitly in test fixtures
+when using `ASGITransport`.
+
+**Fixed in**: `examples/02-api-gateway-guards/app.py`, `tests/test_smoke.py`
