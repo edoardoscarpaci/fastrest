@@ -143,3 +143,7 @@ varco bug. Document the pattern for test authors: call async init explicitly in 
 when using `ASGITransport`.
 
 **Fixed in**: `examples/02-api-gateway-guards/app.py`, `tests/test_smoke.py`
+
+---
+
+## 04-profiling-hotspot — no new findings
