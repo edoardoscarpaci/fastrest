@@ -113,10 +113,27 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         """
         try:
             return await call_next(request)
-        except HTTPException:
-            # Let FastAPI handle its own HTTPException — it formats headers
-            # and detail correctly (e.g. 307 redirects, auth challenges).
-            raise
+        except HTTPException as exc:
+            # Convert HTTPException to a JSON response here rather than re-raising.
+            # When HTTPException is raised inside another BaseHTTPMiddleware (e.g.
+            # RequestContextMiddleware), it propagates through BaseHTTPMiddleware's
+            # stream machinery and exits the middleware stack as an unhandled exception
+            # before FastAPI's own exception handlers can intercept it.
+            # Returning a proper response here ensures the caller receives the correct
+            # status code (e.g. 401 for an invalid Bearer token) instead of a 500.
+            # DESIGN: return response over re-raise
+            #   ✅ Correct status code reaches the client when auth raises HTTPException
+            #      from inside middleware (e.g. JwtBearerAuth inside RequestContextMiddleware).
+            #   ✅ WWW-Authenticate and other auth challenge headers are preserved.
+            #   ❌ Bypasses FastAPI's built-in HTTPException handler — but that handler
+            #      only runs for exceptions from route handlers, not middleware, so the
+            #      behaviour for route-handler HTTPExceptions is unchanged.
+            headers = dict(exc.headers) if exc.headers else {}
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=headers,
+            )
         except asyncio.CancelledError:
             # Task cancellation — propagate immediately.
             raise
