@@ -147,3 +147,53 @@ when using `ASGITransport`.
 ---
 
 ## 04-profiling-hotspot — no new findings
+
+---
+
+## 06-grant-based-authz
+
+### F07 — Grant-based auth requires DELETE in the write grant; ownership is a second layer
+
+**Smell**: `GrantBasedAuthorizer.authorize()` is called by `AsyncService` before `_check_entity`
+for READ/UPDATE/DELETE. A write grant without `Action.DELETE` means the authorizer raises 403
+before the ownership check in `_check_entity` ever runs. The two layers are sequential, not
+composed: the grant check is a type-level gate; `_check_entity` is an instance-level gate.
+
+**Fix**: Include `Action.DELETE` in the write grant constant if you want users to be able to
+delete their own documents. The ownership check in `_check_entity` then provides the
+instance-level guard (only the owner or an admin can actually delete a specific document).
+
+**Pattern confirmed**:
+- `GrantBasedAuthorizer` → type-level: "can this token class perform this action on documents?"
+- `_check_entity` → instance-level: "does this token own this specific document?"
+
+Both checks must pass for DELETE. If the type-level grant is absent, the instance-level check
+never runs. Document your write grant's action set explicitly in your `auth.py` constants.
+
+**Severity**: Non-breaking (correct design) but requires explicit awareness when assigning
+grants. Callers should not expect `_check_entity` to be the only gate — the authorizer always
+runs first.
+
+**Fixed in**: `examples/06-grant-based-authz/auth.py` — `DOCS_WRITE_GRANT` includes DELETE.
+
+---
+
+### F08 — `_check_entity` must raise `ServiceNotFoundError`, never `ServiceAuthorizationError`, for ownership checks
+
+**Smell**: It is tempting to raise `ServiceAuthorizationError` (→ 403) when a non-owner tries
+to access a document — the caller *is* unauthorized. But returning 403 reveals the document's
+existence, enabling existence oracle attacks (caller can determine "document exists but isn't
+mine" by alternating tokens).
+
+**Fix**: Always raise `ServiceNotFoundError` (→ 404) in `_check_entity` when the entity should
+be invisible from the caller's perspective (wrong tenant, wrong owner). `ServiceAuthorizationError`
+is reserved for cases where the entity's *existence* is not sensitive (e.g., a type-level deny
+before the entity is fetched, like "you cannot read any documents of this type at all").
+
+**Rule confirmed**: `_check_entity` contract in `AsyncService`:
+- Raise `ServiceNotFoundError` for cross-cutting entity-level blocks (ownership, tenancy).
+- Raise `ServiceAuthorizationError` only for type-level or collection-level blocks where
+  existence disclosure is not a concern.
+
+**Fixed in**: `examples/06-grant-based-authz/service.py` — `_check_entity` raises
+`ServiceNotFoundError(entity.pk, Document)`.
