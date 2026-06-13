@@ -1,5 +1,18 @@
 # Findings — API Ergonomics Log
 
+### 18-realtime-ws-sse — no new findings
+
+`WebSocketEventBus` and `SSEEventBus` are adapters that wrap an existing
+`AbstractEventBus`; they are not `AbstractEventBus` implementations.
+The in-process wiring pattern (bus → ws_bus + sse_bus, both started in the
+FastAPI lifespan) is clean and requires no DI container for simple examples.
+
+`TestClient` WebSocket works directly with `websocket_connect("/ws")` and
+`ws.receive_text()` — no event loop management needed.
+SSE endpoint testing at the adapter layer (checking `subscriber_count` and
+reading directly from the `SSEConnection._queue`) is more reliable than
+trying to drive a streaming HTTP response to completion in tests.
+
 Running log of API smells, friction points, and fixes discovered while building each example.
 Each entry: the smell → the fix → whether it was breaking → the CHANGELOG entry reference.
 
