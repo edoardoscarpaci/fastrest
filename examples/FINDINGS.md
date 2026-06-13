@@ -197,3 +197,61 @@ before the entity is fetched, like "you cannot read any documents of this type a
 
 **Fixed in**: `examples/06-grant-based-authz/service.py` — `_check_entity` raises
 `ServiceNotFoundError(entity.pk, Document)`.
+
+---
+
+## 11-query-filtering
+
+### F09 — Lark grammar `ESCAPED_STRING` requires double-quotes; single-quoted strings cause `UnexpectedCharacters`
+
+**Smell**: The varco `grammar.lark` uses Lark's built-in `ESCAPED_STRING` terminal for string
+values. `ESCAPED_STRING` only accepts **double-quoted** strings (e.g. `"electronics"`). Passing
+single-quoted strings (e.g. `category = 'electronics'`) causes a Lark
+`UnexpectedCharacters: No terminal matches ''' in the current parser context` error which, if
+uncaught, propagates as a 500 Internal Server Error.
+
+This affects:
+- String equality: `category = "books"` ✅ / `category = 'books'` ❌
+- IN lists: `category IN ("books", "home")` ✅ / `category IN ('books', 'home')` ❌
+- LIKE: `name LIKE "widget"` ✅ / `name LIKE 'widget'` ❌
+- Boolean strings (since the grammar has no bool literal): `in_stock = "True"` ✅
+
+**Fix**: Document the double-quote requirement prominently and validate / normalise client input
+in production (swap `'...'` to `"..."` at the HTTP adapter layer, or return a 422 with a clear
+message). Numeric and identifier values (`price >= 50.0`, `id = 1`) do not use quotes and are
+unaffected.
+
+**Severity**: Non-breaking (correct Lark behaviour) but a common source of confusion when
+building REST clients against the filter endpoint. Always validate `q=` input and return 422
+with a human-readable message on parse errors rather than propagating `lark.UnexpectedCharacters`
+as a 500.
+
+**Noted in**: `examples/11-query-filtering/README.md` and test docstrings.
+
+---
+
+### F10 — `@route` / `GenericRouter` does not inject `Request` into handlers; use plain `APIRouter` + `Query()` for query-param-heavy endpoints
+
+**Smell**: varco's `@route` decorator in `GenericRouter` only injects `ctx` (AuthContext) and
+path parameters into the handler method.  It does **not** forward the raw `starlette.Request`
+object.  A handler that declares `request: Request` as a parameter receives a
+`TypeError: list_products() missing 1 required positional argument: 'request'` at call time.
+
+This means `GenericRouter` cannot be used for endpoints that need access to raw query string
+params (e.g. `request.query_params.getlist("filter")`).
+
+**Fix**: For query-param-heavy read endpoints, use a plain FastAPI `APIRouter` with `Query()`
+dependency parameters instead of `GenericRouter`.  `Query()` gives OpenAPI schema and
+validation for free while keeping the handler signature explicit and testable.
+
+**When to use each**:
+- `GenericRouter` + `@route` — service-free handlers that need only `ctx` (AuthContext) and
+  path params; no need for request-level access.
+- Plain `APIRouter` + `Query()` — handlers that consume query string params directly
+  (filter, sort, pagination, etc.).
+
+**Severity**: Non-breaking (correct design — `@route` intentionally limits handler signatures
+to the varco-managed injection surface). Document the `APIRouter` escape hatch for query-param
+endpoints.
+
+**Noted in**: `examples/11-query-filtering/router.py` DESIGN block.
