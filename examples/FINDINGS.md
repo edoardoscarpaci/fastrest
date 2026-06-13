@@ -232,6 +232,7 @@ as a 500.
 
 ### F10 — `@route` / `GenericRouter` does not inject `Request` into handlers; use plain `APIRouter` + `Query()` for query-param-heavy endpoints
 
+
 **Smell**: varco's `@route` decorator in `GenericRouter` only injects `ctx` (AuthContext) and
 path parameters into the handler method.  It does **not** forward the raw `starlette.Request`
 object.  A handler that declares `request: Request` as a parameter receives a
@@ -255,3 +256,69 @@ to the varco-managed injection surface). Document the `APIRouter` escape hatch f
 endpoints.
 
 **Noted in**: `examples/11-query-filtering/router.py` DESIGN block.
+
+---
+
+## 19-resilience-payment-gateway
+
+### F11 — `@timeout` covers the entire retry loop, not per-attempt
+
+**Observed**: When stacking `@timeout(0.5)` (outer) and `@retry(max_attempts=3)` (inner), the
+0.5 s budget is shared across ALL retry attempts, not reset per attempt. With `base_delay=0.05`
+and 3 attempts, the full retry sequence (3 calls × ~0 ms stub latency + 2 × 50 ms delays = ~100 ms)
+fits within 0.5 s easily. However, in production with real network calls (say 200 ms each), a
+0.5 s outer timeout allows at most two attempts (200 ms + 200 ms = 400 ms) before the timeout fires.
+
+**Pattern confirmed**: stack `@timeout` outermost for an overall SLA budget; `@retry` covers
+per-attempt transient failures within that budget. If per-attempt timeouts are needed, apply a
+separate `@timeout` to the inner function before `@retry`.
+
+**Severity**: Non-breaking (correct design) but a common source of confusion. Document
+explicitly in any gateway code that stacks these two decorators.
+
+---
+
+### F12 — `CircuitOpenError` must be excluded from `RetryPolicy.retryable_on`
+
+**Observed**: `@retry` with default `retryable_on=(Exception,)` will retry on `CircuitOpenError`
+because it is an `Exception` subclass. This means the retry loop burns all its attempts trying
+to call a circuit that is already OPEN — each attempt gets `CircuitOpenError` immediately
+(fast-fail), counts as a "retry", and exhausts the budget. The final error returned is
+`RetryExhaustedError` wrapping `CircuitOpenError`, which is confusing.
+
+**Fix**: Always narrow `retryable_on` to the specific transient error types (e.g.
+`retryable_on=(RuntimeError, ConnectionError)`) so that `CircuitOpenError` propagates
+immediately without consuming retry attempts.
+
+**Rule confirmed**: When stacking `@retry` outside a circuit breaker, always set
+`retryable_on` to exclude `CircuitOpenError`.
+
+---
+
+### F13 — `@hedge` exists and is fully functional
+
+`@hedge` / `HedgeConfig` are present in `varco_core.resilience` and export correctly from
+`varco_core.resilience.__init__`. The decorator works as documented: issues a speculative
+duplicate call after `delay` seconds, accepts the first result, and cancels the other.
+
+In this example `@hedge(HedgeConfig(delay=0.05))` is applied to `get_balance()`. In the happy
+path the stub returns in < 1 ms so the hedge never fires — no extra stub calls, no overhead.
+
+**Usage rule confirmed**: only apply `@hedge` to idempotent operations. The example
+intentionally omits it from `charge()` to avoid double-charging.
+
+---
+
+### F14 — Circuit breaker `.reset()` is the correct test isolation mechanism for class-level singletons
+
+**Observed**: `PaymentGateway` uses class-level `CircuitBreaker` singletons. Tests that trip the
+circuit (e.g. by sending 3 `ALWAYS_FAIL` requests) leave the breaker OPEN for subsequent tests.
+The correct fix is `CircuitBreaker.reset()` (or the wrapper `PaymentGateway.reset_breakers()`),
+called at the start of each test or in a `pytest.fixture`.
+
+An alternative — creating a fresh `PaymentGateway` per test — does NOT reset the breaker
+because the breaker is class-level. Only `reset()` or the class-level singletons being replaced
+works.
+
+**Rule confirmed**: For tests that need circuit-breaker isolation, always call `reset()` on
+the shared instance — do not rely on creating a new gateway instance.
