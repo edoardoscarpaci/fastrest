@@ -322,3 +322,46 @@ works.
 
 **Rule confirmed**: For tests that need circuit-breaker isolation, always call `reset()` on
 the shared instance — do not rely on creating a new gateway instance.
+
+---
+
+### 21-async-job-runner — F15, F16
+
+#### F15 — `lifespan=True` on `ASGITransport` is required to start `JobRunner` in tests
+
+`JobRunner.start()` must be called before jobs can be enqueued — it sets `_started = True` and
+resolves the optional `event_bus` injection.  When using `httpx.ASGITransport`, passing no extra
+options skips the ASGI lifespan, so `runner.start()` is never called and jobs may behave
+unexpectedly.
+
+The fix: use `ASGITransport(app=test_app, raise_app_exceptions=True)` combined with a
+session-scoped `async with httpx.AsyncClient(...)` — the `async with` block triggers the lifespan
+context manager on entry and calls `runner.stop()` on exit.  No manual `start()` / `stop()` in
+test fixtures needed.
+
+**Rule confirmed**: always use `async with httpx.AsyncClient(transport=ASGITransport(...))` (not
+a plain `AsyncClient` instantiation) so the FastAPI lifespan fires in tests.
+
+#### F16 — `await asyncio.sleep(0)` drives asyncio.Task-per-job jobs in tests; repeated ticks needed for jobs with internal `sleep`
+
+`JobRunner` schedules one `asyncio.Task` per job.  A single `await asyncio.sleep(0)` yields to
+the event loop and lets the task step forward once.  For jobs that call `asyncio.sleep(...)` 
+internally (even a very short duration like `0.001s`), a single `sleep(0)` is not enough — the
+task suspends at its own sleep and does not reach the terminal state.
+
+The reliable pattern is a short polling loop:
+
+```python
+terminal = {"completed", "failed", "cancelled"}
+for _ in range(50):
+    await asyncio.sleep(0)
+    resp = await client.get(f"/v1/jobs/{job_id}")
+    if resp.json()["status"] in terminal:
+        break
+```
+
+Each tick either advances the task one step or finds it already finished.  50 ticks × ~0 wall
+clock = effectively instant in tests while robust to tasks with sub-millisecond internal delays.
+
+**Avoid `asyncio.sleep(0.1)` in tests** — it couples test speed to wall-clock time.  Ticks are
+cheaper and more deterministic.
