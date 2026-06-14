@@ -378,3 +378,50 @@ clock = effectively instant in tests while robust to tasks with sub-millisecond 
 
 **Avoid `asyncio.sleep(0.1)` in tests** — it couples test speed to wall-clock time.  Ticks are
 cheaper and more deterministic.
+
+---
+
+### 12-cache-look-aside-redis
+
+#### F17 — `ASGITransport` does not trigger FastAPI lifespan; pre-start backends in test fixtures
+
+**Severity**: Breaking (tests always fail without workaround)
+
+When using `httpx.AsyncClient(transport=ASGITransport(app=app))`, FastAPI's
+`lifespan` context manager is **never called**.  Any backend that requires an
+explicit `start()` call (e.g. `RedisCache`, `JobRunner`) will raise at first use:
+
+```
+RuntimeError: RedisCache is not started. Call 'await cache.start()' first.
+```
+
+**Fix**: Accept pre-built (pre-started) backend objects in `create_app()`, so
+test fixtures manage the lifecycle themselves:
+
+```python
+# app.py — accept pre-started cache_layer from tests
+def create_app(redis_url, *, cache_layer=None):
+    _cache = cache_layer or ProductCacheLayer(redis_url)
+    _manage = cache_layer is None
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        if _manage:
+            await _cache.start()
+        try:
+            yield
+        finally:
+            if _manage:
+                await _cache.stop()
+
+# test fixture — manage lifecycle explicitly
+async with ProductCacheLayer(redis_url) as cache:
+    app = create_app(redis_url, cache_layer=cache)
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), ...) as c:
+        yield c
+```
+
+This pattern appears in examples 12, 21 (JobRunner).  Add it to the project
+template so future examples don't repeat the same mistake.
+
+**See also**: F06 (ASGITransport lifespan note from example 04).
