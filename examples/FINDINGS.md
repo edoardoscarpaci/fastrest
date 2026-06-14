@@ -425,3 +425,76 @@ This pattern appears in examples 12, 21 (JobRunner).  Add it to the project
 template so future examples don't repeat the same mistake.
 
 **See also**: F06 (ASGITransport lifespan note from example 04).
+
+---
+
+### 20-distributed-rate-limit
+
+#### F18 — Redis sorted-set keys persist within the sliding window; tests must use unique key prefixes per fixture call
+
+**Severity**: Breaking (cross-test contamination causes spurious 429s on the first call)
+
+`RedisRateLimiter` stores a sorted set per rate-limit key in Redis.  The key
+lives for `ceil(period) + 1` seconds (the auto-expire TTL).  When multiple test
+fixtures share the **same Redis key prefix**, the sorted set from one test's
+fixture call is still visible to the next fixture call within the same 1-second
+window — the new fixture's "first" call sees a full window and gets a 429.
+
+**Symptom**:
+```
+assert first.status_code == 200
+AssertionError: {"detail":"Rate limit exceeded. Retry after 0.987 seconds."}
+assert 429 == 200
+```
+
+**Fix**: Give each fixture call a unique `channel_prefix` with a UUID:
+
+```python
+import uuid
+from varco_redis.config import RedisEventBusSettings
+from varco_redis.rate_limit import RedisRateLimiter
+
+prefix = f"test:{uuid.uuid4().hex[:8]}:"
+settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
+async with RedisRateLimiter(config, settings=settings) as limiter:
+    ...
+```
+
+The `channel_prefix` is prepended to every Redis key the limiter touches
+(`{prefix}rl:{key}`), so each fixture call gets a completely isolated counter
+namespace.
+
+**Rule**: Any test fixture that creates a `RedisRateLimiter` with a tight rate
+limit (where cross-test bleed would cause false failures) MUST use a
+fixture-scoped unique prefix.  High-rate fixtures (rate=100+) are immune to
+this because a few stale entries don't exhaust the budget.
+
+**Contrast with `InMemoryRateLimiter`**: In-memory limiters are always
+fixture-isolated because each fixture call creates a fresh Python object with
+an empty `deque`.  No special prefixing needed.
+
+---
+
+### F15 — Redis Pub/Sub subscriptions registered before `start()` are applied on connect
+
+**Example**: `16-redis-pubsub-streams`
+
+`RedisEventBus.subscribe()` (and `EventConsumer.register_to()`) can be called
+**before** `bus.start()`.  The bus tracks pending channels in
+`_subscribed_channels`; when `start()` connects to Redis it immediately calls
+`pubsub.subscribe(*_subscribed_channels)`.
+
+This means the correct test fixture ordering is:
+
+```python
+consumer._setup()   # register_to(bus) — subscription stored in _subscribed_channels
+await bus.start()   # connects, subscribes to channels, starts listener task
+```
+
+If you call `_setup()` **after** `start()`, `subscribe()` calls
+`asyncio.ensure_future(pubsub.subscribe(...))` to catch up — but that
+fire-and-forget future may not have completed before the first `publish()`.
+Doing it before `start()` is the safe, deterministic ordering.
+
+**Rule**: call `consumer._setup()` (or `register_to(bus)`) before `bus.start()`.
+This applies to both `RedisEventBus` and `RedisStreamEventBus`.
