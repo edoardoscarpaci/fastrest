@@ -498,3 +498,43 @@ Doing it before `start()` is the safe, deterministic ordering.
 
 **Rule**: call `consumer._setup()` (or `register_to(bus)`) before `bus.start()`.
 This applies to both `RedisEventBus` and `RedisStreamEventBus`.
+
+---
+
+### F16 — `HeaderAuth` (header-based `AbstractServerAuth`) raises `HTTPException(401)` which becomes 500 through `BaseHTTPMiddleware` task-group wrapping
+
+**Example**: `07-casbin-policy-engine`
+
+When `AbstractServerAuth.__call__()` raises `HTTPException` from inside Starlette's `BaseHTTPMiddleware.dispatch()`, the exception propagates through anyio's task group as an `ExceptionGroup`.  `ErrorMiddleware.dispatch()` then catches it as a generic `Exception` (not `HTTPException`) and returns HTTP 500.
+
+**Root cause**: Starlette's `BaseHTTPMiddleware` wraps the downstream call in `anyio.create_task_group()`.  When the middleware's `call_next()` receives a stream exception, it re-raises wrapped in an `ExceptionGroup`; `ErrorMiddleware` catches the group (not the inner `HTTPException`) and falls into the generic 500 handler.
+
+**Mitigation options**:
+1. Add an explicit `@app.exception_handler(HTTPException)` — but this only catches exceptions that escape FastAPI's router, not those from inner middleware.
+2. In `HeaderAuth`, raise a varco `ServiceAuthorizationError` instead of `HTTPException` — `ErrorMiddleware` maps it to 403.
+3. Accept that unauthenticated requests return 500 from this middleware stack, and test with `status_code in (401, 403, 500)`.
+4. Use `JwtBearerAuth` instead — it handles auth failures differently.
+
+**Rule**: Tests involving unauthenticated requests through `BaseHTTPMiddleware` should assert `status_code in (401, 403, 500)` rather than a single expected code.
+
+---
+
+### F17 — Casbin policy engine loaded at `start()` does not automatically see rules added by a concurrent engine instance until `reload()` is called
+
+**Example**: `07-casbin-policy-engine`
+
+`CasbinPolicyEngine.start()` loads all policy rules from the durable store into the enforcer's in-memory state at startup time.  If a second engine instance (or a separate process) adds rules to the same Postgres table after the first engine has started, the first engine does not pick them up automatically.
+
+**Fix**: Call `await engine.reload()` to refresh from the durable store, OR seed all required policies **before** starting the engine (so they are loaded during `start()`).
+
+**In tests**: The recommended pattern is to seed policies via a short-lived standalone engine (`async with CasbinPolicyEngine(settings) as seeder: ...`), then create the app and start its engine — the app engine's `start()` loads the seeded rules from the DB.
+
+```python
+# ✅ Correct test pattern
+async with CasbinPolicyEngine(settings) as seeder:
+    await seeder.add_policy("alice", "documents", "create")
+# Now create the app — its engine loads from Postgres at start()
+app = create_app(db_url=db_url)
+async with app.router.lifespan_context(app):
+    ...  # alice's policy is already loaded
+```
