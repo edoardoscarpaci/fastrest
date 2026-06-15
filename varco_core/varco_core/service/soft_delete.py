@@ -57,7 +57,7 @@ from typing import ClassVar, Generic, TypeVar
 from varco_core.auth import Action, AuthContext, Resource
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
 from varco_core.exception.service import ServiceNotFoundError
-from varco_core.model import DomainModel
+from varco_core.model import DomainModel, domain_replace
 from varco_core.query.builder import QueryBuilder
 from varco_core.query.params import QueryParams
 from varco_core.service.base import AsyncService, _ANON_CTX
@@ -199,9 +199,9 @@ class SoftDeleteService(
         """
         # Always reset — guarantees new entities start active regardless of
         # constructor defaults or mixin ordering in the MRO.
-        # type: ignore[assignment] — dataclasses.replace loses the TypeVar D
-        # through the **kwargs unpacking; the result is still D at runtime.
-        active: D = dataclasses.replace(entity, **{self._soft_delete_field: None})
+        # domain_replace preserves init=False fields (pk, _raw_orm) on Python ≤ 3.12,
+        # ensuring the repository issues an UPDATE (not INSERT).
+        active: D = domain_replace(entity, **{self._soft_delete_field: None})
         return super()._prepare_for_create(active, ctx)
 
     # ── Overridden CRUD ───────────────────────────────────────────────────────
@@ -257,10 +257,10 @@ class SoftDeleteService(
                 Resource(entity_type=self._entity_type(), entity=entity),
             )
 
-            # Stamp deleted_at — dataclasses.replace preserves _raw_orm so
-            # the repository issues an UPDATE (not INSERT).
+            # domain_replace preserves init=False fields (pk, _raw_orm) on Python ≤ 3.12,
+            # ensuring the repository issues an UPDATE (not INSERT).
             now = datetime.now(UTC)
-            soft_deleted = dataclasses.replace(entity, **{self._soft_delete_field: now})
+            soft_deleted = domain_replace(entity, **{self._soft_delete_field: now})
             await self._get_repo(uow).save(soft_deleted)
 
     async def restore(self, pk: PK, ctx: AuthContext = _ANON_CTX) -> R:
@@ -310,7 +310,7 @@ class SoftDeleteService(
                 Resource(entity_type=self._entity_type(), entity=entity),
             )
 
-            # Clear deleted_at — entity becomes active again.
-            restored = dataclasses.replace(entity, **{self._soft_delete_field: None})
+            # domain_replace preserves init=False fields (pk, _raw_orm) on Python ≤ 3.12.
+            restored = domain_replace(entity, **{self._soft_delete_field: None})
             saved = await self._get_repo(uow).save(restored)
             return self._assembler.to_read_dto(saved)
