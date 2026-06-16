@@ -716,3 +716,34 @@ from varco_core.event import InMemoryEventBus
 
 **Severity**: Breaking (import error at startup). The `varco_core.event.bus` sub-package does
 not exist; `memory.py` is a direct child of `varco_core/event/`.
+
+---
+
+### F29 — `DomainEvent` does not exist; the event base class is `Event` from `varco_core.event`
+
+`from varco_core.event.base import DomainEvent` raises `ImportError: cannot import name 'DomainEvent'`.
+The only concrete event base class is `Event` (a frozen Pydantic `BaseModel`):
+
+```python
+# ❌ Wrong — DomainEvent does not exist
+from varco_core.event.base import DomainEvent
+
+@dataclass(frozen=True)
+class OrderCreatedEvent(DomainEvent):
+    event_id: UUID = field(default_factory=uuid4)
+    order_id: str = ""
+
+# ✅ Correct — subclass the Pydantic Event; event_id is already inherited
+from varco_core.event import Event
+
+class OrderCreatedEvent(Event):
+    __event_type__ = "order.created"
+    order_id: str = ""
+    amount: float = 0.0
+```
+
+`Event` already provides `event_id: UUID` and `timestamp: datetime` fields — do not redeclare them.
+Declare `__event_type__` as a `ClassVar[str]` for deterministic serialization across process boundaries.
+
+**Severity**: Breaking (import error at startup).
+**File fixed**: `examples/17-transactional-outbox/events.py`

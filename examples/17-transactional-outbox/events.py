@@ -7,27 +7,25 @@ Events are persisted to the outbox table by ``OrderService.create()`` within
 the same DB transaction as the ``Order`` row.  The ``OutboxRelay`` background
 task reads pending entries and publishes them to the event bus.
 
-DESIGN: frozen dataclass events
-    ✅ Immutable — safe to share across threads and tasks.
-    ✅ ``@dataclass`` interop with ``JsonEventSerializer`` — field names match
-       the JSON payload keys automatically.
+DESIGN: Pydantic Event subclass
+    ✅ Immutable — ``Event`` is ``BaseModel(frozen=True)``, safe to share.
+    ✅ ``JsonEventSerializer`` serializes via ``model_dump()`` — field names
+       match JSON payload keys automatically.
+    ✅ ``event_id`` is inherited from ``Event`` — unique per instance, used
+       by ``SADeduplicator`` as the idempotency key.
     ❌ Adding fields in future requires a migration of the serialized ``payload``
        bytes in the outbox table if old entries exist.
 
-Thread safety:  ✅ Frozen dataclass; no mutable state.
+Thread safety:  ✅ Frozen Pydantic model; no mutable state.
 Async safety:   ✅ Pure value object; no I/O.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from uuid import UUID, uuid4
-
-from varco_core.event.base import DomainEvent
+from varco_core.event import Event
 
 
-@dataclass(frozen=True)
-class OrderCreatedEvent(DomainEvent):
+class OrderCreatedEvent(Event):
     """
     Emitted when a new ``Order`` is persisted to the database.
 
@@ -40,7 +38,8 @@ class OrderCreatedEvent(DomainEvent):
         order_id: UUID of the newly created order (as string for JSON-safe
                   serialization).
         amount:   Order total — same value as ``Order.amount``.
-        event_id: Auto-generated UUID per event instance for idempotency.
+        event_id: Auto-generated UUID per event instance (inherited from
+                  ``Event``); used by ``SADeduplicator`` as the idempotency key.
 
     Edge cases:
         - Two ``OrderCreatedEvent`` instances with different ``event_id`` values
@@ -50,12 +49,11 @@ class OrderCreatedEvent(DomainEvent):
         - ``amount`` is informational in this event — downstream consumers should
           re-fetch the order from the DB if they need authoritative data.
 
-    Thread safety:  ✅ Frozen dataclass; immutable after construction.
+    Thread safety:  ✅ Frozen Pydantic model; immutable after construction.
     Async safety:   ✅ Pure value object; no I/O.
     """
 
-    # Unique event identifier — used by SADeduplicator as the idempotency key.
-    event_id: UUID = field(default_factory=uuid4)
+    __event_type__ = "order.created"
 
     # Order fields mirrored from the domain entity for consumer convenience.
     order_id: str = ""
