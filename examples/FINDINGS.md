@@ -1,24 +1,15 @@
 # Findings — API Ergonomics Log
 
-### 18-realtime-ws-sse — no new findings
-
-`WebSocketEventBus` and `SSEEventBus` are adapters that wrap an existing
-`AbstractEventBus`; they are not `AbstractEventBus` implementations.
-The in-process wiring pattern (bus → ws_bus + sse_bus, both started in the
-FastAPI lifespan) is clean and requires no DI container for simple examples.
-
-`TestClient` WebSocket works directly with `websocket_connect("/ws")` and
-`ws.receive_text()` — no event loop management needed.
-SSE endpoint testing at the adapter layer (checking `subscriber_count` and
-reading directly from the `SSEConnection._queue`) is more reliable than
-trying to drive a streaming HTTP response to completion in tests.
-
 Running log of API smells, friction points, and fixes discovered while building each example.
-Each entry: the smell → the fix → whether it was breaking → the CHANGELOG entry reference.
+Each entry: the smell → the fix → whether it was breaking → the file(s) changed.
 
 ---
 
-## 01-minimal-crud-api (Wave 1)
+## 00-full-stack-post-api — no new findings
+
+---
+
+## 01-minimal-crud-api
 
 ### F01 — `ProfilingSettings` string-interface binding breaks all `@Provider` injection
 
@@ -100,7 +91,7 @@ to be a list fails with `TypeError: string indices must be integers, not 'str'`.
 
 ---
 
-## 02-api-gateway-guards (Wave 2)
+## 02-api-gateway-guards
 
 ### F05 — `ErrorMiddleware` re-raises `HTTPException` from inner middleware, producing 500 instead of 401/403
 
@@ -213,9 +204,63 @@ before the entity is fetched, like "you cannot read any documents of this type a
 
 ---
 
+## 07-casbin-policy-engine
+
+### F09 — `HeaderAuth` raises `HTTPException(401)` which becomes 500 through `BaseHTTPMiddleware` task-group wrapping
+
+When `AbstractServerAuth.__call__()` raises `HTTPException` from inside Starlette's
+`BaseHTTPMiddleware.dispatch()`, the exception propagates through anyio's task group as an
+`ExceptionGroup`. `ErrorMiddleware.dispatch()` then catches it as a generic `Exception` (not
+`HTTPException`) and returns HTTP 500.
+
+**Root cause**: Starlette's `BaseHTTPMiddleware` wraps the downstream call in
+`anyio.create_task_group()`. When the middleware's `call_next()` receives a stream exception,
+it re-raises wrapped in an `ExceptionGroup`; `ErrorMiddleware` catches the group (not the inner
+`HTTPException`) and falls into the generic 500 handler.
+
+**Mitigation options**:
+1. Add an explicit `@app.exception_handler(HTTPException)` — but this only catches exceptions
+   that escape FastAPI's router, not those from inner middleware.
+2. In `HeaderAuth`, raise a varco `ServiceAuthorizationError` instead of `HTTPException` —
+   `ErrorMiddleware` maps it to 403.
+3. Accept that unauthenticated requests return 500 from this middleware stack, and test with
+   `status_code in (401, 403, 500)`.
+4. Use `JwtBearerAuth` instead — it handles auth failures differently.
+
+**Rule**: Tests involving unauthenticated requests through `BaseHTTPMiddleware` should assert
+`status_code in (401, 403, 500)` rather than a single expected code.
+
+---
+
+### F10 — Casbin policy engine loaded at `start()` does not automatically see rules added by a concurrent engine instance until `reload()` is called
+
+`CasbinPolicyEngine.start()` loads all policy rules from the durable store into the enforcer's
+in-memory state at startup time. If a second engine instance (or a separate process) adds rules
+to the same Postgres table after the first engine has started, the first engine does not pick
+them up automatically.
+
+**Fix**: Call `await engine.reload()` to refresh from the durable store, OR seed all required
+policies **before** starting the engine (so they are loaded during `start()`).
+
+**In tests**: The recommended pattern is to seed policies via a short-lived standalone engine
+(`async with CasbinPolicyEngine(settings) as seeder: ...`), then create the app and start its
+engine — the app engine's `start()` loads the seeded rules from the DB.
+
+```python
+# ✅ Correct test pattern
+async with CasbinPolicyEngine(settings) as seeder:
+    await seeder.add_policy("alice", "documents", "create")
+# Now create the app — its engine loads from Postgres at start()
+app = create_app(db_url=db_url)
+async with app.router.lifespan_context(app):
+    ...  # alice's policy is already loaded
+```
+
+---
+
 ## 11-query-filtering
 
-### F09 — Lark grammar `ESCAPED_STRING` requires double-quotes; single-quoted strings cause `UnexpectedCharacters`
+### F11 — Lark grammar `ESCAPED_STRING` requires double-quotes; single-quoted strings cause `UnexpectedCharacters`
 
 **Smell**: The varco `grammar.lark` uses Lark's built-in `ESCAPED_STRING` terminal for string
 values. `ESCAPED_STRING` only accepts **double-quoted** strings (e.g. `"electronics"`). Passing
@@ -243,20 +288,19 @@ as a 500.
 
 ---
 
-### F10 — `@route` / `GenericRouter` does not inject `Request` into handlers; use plain `APIRouter` + `Query()` for query-param-heavy endpoints
-
+### F12 — `@route` / `GenericRouter` does not inject `Request` into handlers; use plain `APIRouter` + `Query()` for query-param-heavy endpoints
 
 **Smell**: varco's `@route` decorator in `GenericRouter` only injects `ctx` (AuthContext) and
-path parameters into the handler method.  It does **not** forward the raw `starlette.Request`
-object.  A handler that declares `request: Request` as a parameter receives a
+path parameters into the handler method. It does **not** forward the raw `starlette.Request`
+object. A handler that declares `request: Request` as a parameter receives a
 `TypeError: list_products() missing 1 required positional argument: 'request'` at call time.
 
 This means `GenericRouter` cannot be used for endpoints that need access to raw query string
 params (e.g. `request.query_params.getlist("filter")`).
 
 **Fix**: For query-param-heavy read endpoints, use a plain FastAPI `APIRouter` with `Query()`
-dependency parameters instead of `GenericRouter`.  `Query()` gives OpenAPI schema and
-validation for free while keeping the handler signature explicit and testable.
+dependency parameters instead of `GenericRouter`. `Query()` gives OpenAPI schema and validation
+for free while keeping the handler signature explicit and testable.
 
 **When to use each**:
 - `GenericRouter` + `@route` — service-free handlers that need only `ctx` (AuthContext) and
@@ -272,131 +316,22 @@ endpoints.
 
 ---
 
-## 19-resilience-payment-gateway
+## 12-cache-look-aside-redis
 
-### F11 — `@timeout` covers the entire retry loop, not per-attempt
-
-**Observed**: When stacking `@timeout(0.5)` (outer) and `@retry(max_attempts=3)` (inner), the
-0.5 s budget is shared across ALL retry attempts, not reset per attempt. With `base_delay=0.05`
-and 3 attempts, the full retry sequence (3 calls × ~0 ms stub latency + 2 × 50 ms delays = ~100 ms)
-fits within 0.5 s easily. However, in production with real network calls (say 200 ms each), a
-0.5 s outer timeout allows at most two attempts (200 ms + 200 ms = 400 ms) before the timeout fires.
-
-**Pattern confirmed**: stack `@timeout` outermost for an overall SLA budget; `@retry` covers
-per-attempt transient failures within that budget. If per-attempt timeouts are needed, apply a
-separate `@timeout` to the inner function before `@retry`.
-
-**Severity**: Non-breaking (correct design) but a common source of confusion. Document
-explicitly in any gateway code that stacks these two decorators.
-
----
-
-### F12 — `CircuitOpenError` must be excluded from `RetryPolicy.retryable_on`
-
-**Observed**: `@retry` with default `retryable_on=(Exception,)` will retry on `CircuitOpenError`
-because it is an `Exception` subclass. This means the retry loop burns all its attempts trying
-to call a circuit that is already OPEN — each attempt gets `CircuitOpenError` immediately
-(fast-fail), counts as a "retry", and exhausts the budget. The final error returned is
-`RetryExhaustedError` wrapping `CircuitOpenError`, which is confusing.
-
-**Fix**: Always narrow `retryable_on` to the specific transient error types (e.g.
-`retryable_on=(RuntimeError, ConnectionError)`) so that `CircuitOpenError` propagates
-immediately without consuming retry attempts.
-
-**Rule confirmed**: When stacking `@retry` outside a circuit breaker, always set
-`retryable_on` to exclude `CircuitOpenError`.
-
----
-
-### F13 — `@hedge` exists and is fully functional
-
-`@hedge` / `HedgeConfig` are present in `varco_core.resilience` and export correctly from
-`varco_core.resilience.__init__`. The decorator works as documented: issues a speculative
-duplicate call after `delay` seconds, accepts the first result, and cancels the other.
-
-In this example `@hedge(HedgeConfig(delay=0.05))` is applied to `get_balance()`. In the happy
-path the stub returns in < 1 ms so the hedge never fires — no extra stub calls, no overhead.
-
-**Usage rule confirmed**: only apply `@hedge` to idempotent operations. The example
-intentionally omits it from `charge()` to avoid double-charging.
-
----
-
-### F14 — Circuit breaker `.reset()` is the correct test isolation mechanism for class-level singletons
-
-**Observed**: `PaymentGateway` uses class-level `CircuitBreaker` singletons. Tests that trip the
-circuit (e.g. by sending 3 `ALWAYS_FAIL` requests) leave the breaker OPEN for subsequent tests.
-The correct fix is `CircuitBreaker.reset()` (or the wrapper `PaymentGateway.reset_breakers()`),
-called at the start of each test or in a `pytest.fixture`.
-
-An alternative — creating a fresh `PaymentGateway` per test — does NOT reset the breaker
-because the breaker is class-level. Only `reset()` or the class-level singletons being replaced
-works.
-
-**Rule confirmed**: For tests that need circuit-breaker isolation, always call `reset()` on
-the shared instance — do not rely on creating a new gateway instance.
-
----
-
-### 21-async-job-runner — F15, F16
-
-#### F15 — `lifespan=True` on `ASGITransport` is required to start `JobRunner` in tests
-
-`JobRunner.start()` must be called before jobs can be enqueued — it sets `_started = True` and
-resolves the optional `event_bus` injection.  When using `httpx.ASGITransport`, passing no extra
-options skips the ASGI lifespan, so `runner.start()` is never called and jobs may behave
-unexpectedly.
-
-The fix: use `ASGITransport(app=test_app, raise_app_exceptions=True)` combined with a
-session-scoped `async with httpx.AsyncClient(...)` — the `async with` block triggers the lifespan
-context manager on entry and calls `runner.stop()` on exit.  No manual `start()` / `stop()` in
-test fixtures needed.
-
-**Rule confirmed**: always use `async with httpx.AsyncClient(transport=ASGITransport(...))` (not
-a plain `AsyncClient` instantiation) so the FastAPI lifespan fires in tests.
-
-#### F16 — `await asyncio.sleep(0)` drives asyncio.Task-per-job jobs in tests; repeated ticks needed for jobs with internal `sleep`
-
-`JobRunner` schedules one `asyncio.Task` per job.  A single `await asyncio.sleep(0)` yields to
-the event loop and lets the task step forward once.  For jobs that call `asyncio.sleep(...)` 
-internally (even a very short duration like `0.001s`), a single `sleep(0)` is not enough — the
-task suspends at its own sleep and does not reach the terminal state.
-
-The reliable pattern is a short polling loop:
-
-```python
-terminal = {"completed", "failed", "cancelled"}
-for _ in range(50):
-    await asyncio.sleep(0)
-    resp = await client.get(f"/v1/jobs/{job_id}")
-    if resp.json()["status"] in terminal:
-        break
-```
-
-Each tick either advances the task one step or finds it already finished.  50 ticks × ~0 wall
-clock = effectively instant in tests while robust to tasks with sub-millisecond internal delays.
-
-**Avoid `asyncio.sleep(0.1)` in tests** — it couples test speed to wall-clock time.  Ticks are
-cheaper and more deterministic.
-
----
-
-### 12-cache-look-aside-redis
-
-#### F17 — `ASGITransport` does not trigger FastAPI lifespan; pre-start backends in test fixtures
+### F13 — `ASGITransport` does not trigger FastAPI lifespan; pre-start backends in test fixtures
 
 **Severity**: Breaking (tests always fail without workaround)
 
-When using `httpx.AsyncClient(transport=ASGITransport(app=app))`, FastAPI's
-`lifespan` context manager is **never called**.  Any backend that requires an
-explicit `start()` call (e.g. `RedisCache`, `JobRunner`) will raise at first use:
+When using `httpx.AsyncClient(transport=ASGITransport(app=app))`, FastAPI's `lifespan` context
+manager is **never called**. Any backend that requires an explicit `start()` call (e.g.
+`RedisCache`, `JobRunner`) will raise at first use:
 
 ```
 RuntimeError: RedisCache is not started. Call 'await cache.start()' first.
 ```
 
-**Fix**: Accept pre-built (pre-started) backend objects in `create_app()`, so
-test fixtures manage the lifecycle themselves:
+**Fix**: Accept pre-built (pre-started) backend objects in `create_app()`, so test fixtures
+manage the lifecycle themselves:
 
 ```python
 # app.py — accept pre-started cache_layer from tests
@@ -421,31 +356,124 @@ async with ProductCacheLayer(redis_url) as cache:
         yield c
 ```
 
-This pattern appears in examples 12, 21 (JobRunner).  Add it to the project
-template so future examples don't repeat the same mistake.
-
-**See also**: F06 (ASGITransport lifespan note from example 04).
+This pattern appears in examples 12, 14, 15, 16, 21. **See also**: F06.
 
 ---
 
-### 20-distributed-rate-limit
+## 16-redis-pubsub-streams
 
-#### F18 — Redis sorted-set keys persist within the sliding window; tests must use unique key prefixes per fixture call
+### F14 — Redis Pub/Sub subscriptions registered before `start()` are applied on connect
+
+`RedisEventBus.subscribe()` (and `EventConsumer.register_to()`) can be called **before**
+`bus.start()`. The bus tracks pending channels in `_subscribed_channels`; when `start()`
+connects to Redis it immediately calls `pubsub.subscribe(*_subscribed_channels)`.
+
+This means the correct test fixture ordering is:
+
+```python
+consumer._setup()   # register_to(bus) — subscription stored in _subscribed_channels
+await bus.start()   # connects, subscribes to channels, starts listener task
+```
+
+If you call `_setup()` **after** `start()`, `subscribe()` calls
+`asyncio.ensure_future(pubsub.subscribe(...))` to catch up — but that fire-and-forget future
+may not have completed before the first `publish()`. Doing it before `start()` is the safe,
+deterministic ordering.
+
+**Rule**: call `consumer._setup()` (or `register_to(bus)`) before `bus.start()`. This applies
+to both `RedisEventBus` and `RedisStreamEventBus`.
+
+---
+
+## 18-realtime-ws-sse — no new findings
+
+`WebSocketEventBus` and `SSEEventBus` are adapters that wrap an existing `AbstractEventBus`;
+they are not `AbstractEventBus` implementations. The in-process wiring pattern (bus → ws_bus +
+sse_bus, both started in the FastAPI lifespan) is clean and requires no DI container for simple
+examples.
+
+`TestClient` WebSocket works directly with `websocket_connect("/ws")` and `ws.receive_text()`
+— no event loop management needed. SSE endpoint testing at the adapter layer (checking
+`subscriber_count` and reading directly from the `SSEConnection._queue`) is more reliable than
+trying to drive a streaming HTTP response to completion in tests.
+
+---
+
+## 19-resilience-payment-gateway
+
+### F15 — `@timeout` covers the entire retry loop, not per-attempt
+
+**Observed**: When stacking `@timeout(0.5)` (outer) and `@retry(max_attempts=3)` (inner), the
+0.5 s budget is shared across ALL retry attempts, not reset per attempt. With `base_delay=0.05`
+and 3 attempts, the full retry sequence (3 calls × ~0 ms stub latency + 2 × 50 ms delays = ~100 ms)
+fits within 0.5 s easily. However, in production with real network calls (say 200 ms each), a
+0.5 s outer timeout allows at most two attempts (200 ms + 200 ms = 400 ms) before the timeout fires.
+
+**Pattern confirmed**: stack `@timeout` outermost for an overall SLA budget; `@retry` covers
+per-attempt transient failures within that budget. If per-attempt timeouts are needed, apply a
+separate `@timeout` to the inner function before `@retry`.
+
+**Severity**: Non-breaking (correct design) but a common source of confusion.
+
+---
+
+### F16 — `CircuitOpenError` must be excluded from `RetryPolicy.retryable_on`
+
+**Observed**: `@retry` with default `retryable_on=(Exception,)` will retry on `CircuitOpenError`
+because it is an `Exception` subclass. This means the retry loop burns all its attempts trying
+to call a circuit that is already OPEN — each attempt gets `CircuitOpenError` immediately
+(fast-fail), counts as a "retry", and exhausts the budget. The final error returned is
+`RetryExhaustedError` wrapping `CircuitOpenError`, which is confusing.
+
+**Fix**: Always narrow `retryable_on` to the specific transient error types (e.g.
+`retryable_on=(RuntimeError, ConnectionError)`) so that `CircuitOpenError` propagates
+immediately without consuming retry attempts.
+
+**Rule confirmed**: When stacking `@retry` outside a circuit breaker, always set
+`retryable_on` to exclude `CircuitOpenError`.
+
+---
+
+### F17 — `@hedge` exists and is fully functional
+
+`@hedge` / `HedgeConfig` are present in `varco_core.resilience` and export correctly from
+`varco_core.resilience.__init__`. The decorator works as documented: issues a speculative
+duplicate call after `delay` seconds, accepts the first result, and cancels the other.
+
+In this example `@hedge(HedgeConfig(delay=0.05))` is applied to `get_balance()`. In the happy
+path the stub returns in < 1 ms so the hedge never fires — no extra stub calls, no overhead.
+
+**Usage rule confirmed**: only apply `@hedge` to idempotent operations. The example
+intentionally omits it from `charge()` to avoid double-charging.
+
+---
+
+### F18 — Circuit breaker `.reset()` is the correct test isolation mechanism for class-level singletons
+
+**Observed**: `PaymentGateway` uses class-level `CircuitBreaker` singletons. Tests that trip the
+circuit (e.g. by sending 3 `ALWAYS_FAIL` requests) leave the breaker OPEN for subsequent tests.
+The correct fix is `CircuitBreaker.reset()` (or the wrapper `PaymentGateway.reset_breakers()`),
+called at the start of each test or in a `pytest.fixture`.
+
+An alternative — creating a fresh `PaymentGateway` per test — does NOT reset the breaker
+because the breaker is class-level. Only `reset()` or replacing the class-level singletons works.
+
+**Rule confirmed**: For tests that need circuit-breaker isolation, always call `reset()` on
+the shared instance — do not rely on creating a new gateway instance.
+
+---
+
+## 20-distributed-rate-limit
+
+### F19 — Redis sorted-set keys persist within the sliding window; tests must use unique key prefixes per fixture call
 
 **Severity**: Breaking (cross-test contamination causes spurious 429s on the first call)
 
-`RedisRateLimiter` stores a sorted set per rate-limit key in Redis.  The key
-lives for `ceil(period) + 1` seconds (the auto-expire TTL).  When multiple test
-fixtures share the **same Redis key prefix**, the sorted set from one test's
-fixture call is still visible to the next fixture call within the same 1-second
-window — the new fixture's "first" call sees a full window and gets a 429.
-
-**Symptom**:
-```
-assert first.status_code == 200
-AssertionError: {"detail":"Rate limit exceeded. Retry after 0.987 seconds."}
-assert 429 == 200
-```
+`RedisRateLimiter` stores a sorted set per rate-limit key in Redis. The key lives for
+`ceil(period) + 1` seconds (the auto-expire TTL). When multiple test fixtures share the **same
+Redis key prefix**, the sorted set from one test's fixture call is still visible to the next
+fixture call within the same 1-second window — the new fixture's "first" call sees a full window
+and gets a 429.
 
 **Fix**: Give each fixture call a unique `channel_prefix` with a UUID:
 
@@ -460,101 +488,101 @@ async with RedisRateLimiter(config, settings=settings) as limiter:
     ...
 ```
 
-The `channel_prefix` is prepended to every Redis key the limiter touches
-(`{prefix}rl:{key}`), so each fixture call gets a completely isolated counter
-namespace.
+The `channel_prefix` is prepended to every Redis key the limiter touches (`{prefix}rl:{key}`),
+so each fixture call gets a completely isolated counter namespace.
 
-**Rule**: Any test fixture that creates a `RedisRateLimiter` with a tight rate
-limit (where cross-test bleed would cause false failures) MUST use a
-fixture-scoped unique prefix.  High-rate fixtures (rate=100+) are immune to
-this because a few stale entries don't exhaust the budget.
+**Rule**: Any test fixture that creates a `RedisRateLimiter` with a tight rate limit MUST use a
+fixture-scoped unique prefix. High-rate fixtures (rate=100+) are immune because a few stale
+entries don't exhaust the budget.
 
-**Contrast with `InMemoryRateLimiter`**: In-memory limiters are always
-fixture-isolated because each fixture call creates a fresh Python object with
-an empty `deque`.  No special prefixing needed.
+**Contrast with `InMemoryRateLimiter`**: In-memory limiters are always fixture-isolated because
+each fixture call creates a fresh Python object with an empty `deque`. No special prefixing needed.
 
 ---
 
-### F15 — Redis Pub/Sub subscriptions registered before `start()` are applied on connect
+## 21-async-job-runner
 
-**Example**: `16-redis-pubsub-streams`
+### F20 — `async with httpx.AsyncClient(...)` is required to trigger FastAPI lifespan in tests
 
-`RedisEventBus.subscribe()` (and `EventConsumer.register_to()`) can be called
-**before** `bus.start()`.  The bus tracks pending channels in
-`_subscribed_channels`; when `start()` connects to Redis it immediately calls
-`pubsub.subscribe(*_subscribed_channels)`.
+`JobRunner.start()` must be called before jobs can be enqueued — it sets `_started = True` and
+resolves the optional `event_bus` injection. When using `httpx.ASGITransport` without entering
+the client as a context manager, the ASGI lifespan is skipped and `runner.start()` is never
+called.
 
-This means the correct test fixture ordering is:
+**Fix**: always use `async with httpx.AsyncClient(transport=ASGITransport(...))` (not a plain
+`AsyncClient` instantiation) so the FastAPI lifespan fires on entry and `runner.stop()` runs on
+exit. No manual `start()` / `stop()` in test fixtures needed.
+
+---
+
+### F21 — `await asyncio.sleep(0)` drives asyncio.Task-per-job jobs in tests; repeated ticks needed for jobs with internal `sleep`
+
+`JobRunner` schedules one `asyncio.Task` per job. A single `await asyncio.sleep(0)` yields to
+the event loop and lets the task step forward once. For jobs that call `asyncio.sleep(...)`
+internally (even a very short duration like `0.001s`), a single `sleep(0)` is not enough — the
+task suspends at its own sleep and does not reach the terminal state.
+
+The reliable pattern is a short polling loop:
 
 ```python
-consumer._setup()   # register_to(bus) — subscription stored in _subscribed_channels
-await bus.start()   # connects, subscribes to channels, starts listener task
+terminal = {"completed", "failed", "cancelled"}
+for _ in range(50):
+    await asyncio.sleep(0)
+    resp = await client.get(f"/v1/jobs/{job_id}")
+    if resp.json()["status"] in terminal:
+        break
 ```
 
-If you call `_setup()` **after** `start()`, `subscribe()` calls
-`asyncio.ensure_future(pubsub.subscribe(...))` to catch up — but that
-fire-and-forget future may not have completed before the first `publish()`.
-Doing it before `start()` is the safe, deterministic ordering.
+Each tick either advances the task one step or finds it already finished. 50 ticks × ~0 wall
+clock = effectively instant in tests while robust to tasks with sub-millisecond internal delays.
 
-**Rule**: call `consumer._setup()` (or `register_to(bus)`) before `bus.start()`.
-This applies to both `RedisEventBus` and `RedisStreamEventBus`.
+**Avoid `asyncio.sleep(0.1)` in tests** — it couples test speed to wall-clock time.
 
 ---
 
-### F16 — `HeaderAuth` (header-based `AbstractServerAuth`) raises `HTTPException(401)` which becomes 500 through `BaseHTTPMiddleware` task-group wrapping
+## 22-multi-tenant-soft-delete
 
-**Example**: `07-casbin-policy-engine`
+### F22 — `dataclasses.replace()` resets `init=False` fields on `DomainModel`; use `domain_replace()` instead
 
-When `AbstractServerAuth.__call__()` raises `HTTPException` from inside Starlette's `BaseHTTPMiddleware.dispatch()`, the exception propagates through anyio's task group as an `ExceptionGroup`.  `ErrorMiddleware.dispatch()` then catches it as a generic `Exception` (not `HTTPException`) and returns HTTP 500.
+**Smell**: `SoftDeleteService` used `dataclasses.replace(entity, **{field: value})` to stamp
+`deleted_at`, restore it to `None`, and reset it in `_prepare_for_create`. On Python ≤ 3.12,
+`dataclasses.replace()` resets **all** `init=False` fields (`_raw_orm`, `pk`) to their defaults
+(`None`). The repository then sees a domain object with no ORM row attached and issues an
+`INSERT` instead of an `UPDATE`, creating a duplicate row at best and raising a primary-key
+conflict at worst.
 
-**Root cause**: Starlette's `BaseHTTPMiddleware` wraps the downstream call in `anyio.create_task_group()`.  When the middleware's `call_next()` receives a stream exception, it re-raises wrapped in an `ExceptionGroup`; `ErrorMiddleware` catches the group (not the inner `HTTPException`) and falls into the generic 500 handler.
-
-**Mitigation options**:
-1. Add an explicit `@app.exception_handler(HTTPException)` — but this only catches exceptions that escape FastAPI's router, not those from inner middleware.
-2. In `HeaderAuth`, raise a varco `ServiceAuthorizationError` instead of `HTTPException` — `ErrorMiddleware` maps it to 403.
-3. Accept that unauthenticated requests return 500 from this middleware stack, and test with `status_code in (401, 403, 500)`.
-4. Use `JwtBearerAuth` instead — it handles auth failures differently.
-
-**Rule**: Tests involving unauthenticated requests through `BaseHTTPMiddleware` should assert `status_code in (401, 403, 500)` rather than a single expected code.
-
----
-
-### F17 — Casbin policy engine loaded at `start()` does not automatically see rules added by a concurrent engine instance until `reload()` is called
-
-**Example**: `07-casbin-policy-engine`
-
-`CasbinPolicyEngine.start()` loads all policy rules from the durable store into the enforcer's in-memory state at startup time.  If a second engine instance (or a separate process) adds rules to the same Postgres table after the first engine has started, the first engine does not pick them up automatically.
-
-**Fix**: Call `await engine.reload()` to refresh from the durable store, OR seed all required policies **before** starting the engine (so they are loaded during `start()`).
-
-**In tests**: The recommended pattern is to seed policies via a short-lived standalone engine (`async with CasbinPolicyEngine(settings) as seeder: ...`), then create the app and start its engine — the app engine's `start()` loads the seeded rules from the DB.
+**Fix**: Replace all three call sites with `domain_replace()` from `varco_core.model`:
 
 ```python
-# ✅ Correct test pattern
-async with CasbinPolicyEngine(settings) as seeder:
-    await seeder.add_policy("alice", "documents", "create")
-# Now create the app — its engine loads from Postgres at start()
-app = create_app(db_url=db_url)
-async with app.router.lifespan_context(app):
-    ...  # alice's policy is already loaded
+from varco_core.model import DomainModel, domain_replace
+
+# ❌ Before — resets _raw_orm and pk on Python ≤ 3.12
+active = dataclasses.replace(entity, **{self._soft_delete_field: None})
+
+# ✅ After — preserves all init=False fields
+active = domain_replace(entity, **{self._soft_delete_field: None})
 ```
+
+**Severity**: Breaking on Python ≤ 3.12 — soft-delete, restore, and create operations all
+silently turn UPDATEs into INSERTs, corrupting the database.
+
+**File fixed**: `varco_core/varco_core/service/soft_delete.py` — three call sites in
+`_prepare_for_create`, `delete`, and `restore`.
 
 ---
 
 ## 03-observability-metrics
 
-### F18 — OTel global `MeterProvider` cannot be replaced once set; patch the internal getter in tests
-
-**Example**: `03-observability-metrics`
+### F23 — OTel global `MeterProvider` cannot be replaced once set; patch the internal getter in tests
 
 `opentelemetry.metrics.set_meter_provider()` is a one-way door: the SDK silently ignores a
-second `set_meter_provider()` call if a non-default provider is already registered.  This means
+second `set_meter_provider()` call if a non-default provider is already registered. This means
 tests that call `create_app()` multiple times (each of which calls `set_meter_provider()`) will
 share the first provider's metric readers across all test instances, making assertion isolation
 impossible.
 
 **Fix**: In tests, patch at `opentelemetry.metrics._internal.get_meter_provider` (the internal
-getter used by `get_meter()`) rather than calling `set_meter_provider()`.  This lets each test
+getter used by `get_meter()`) rather than calling `set_meter_provider()`. This lets each test
 inject an `InMemoryMetricReader`-backed provider without fighting the one-shot global:
 
 ```python
@@ -565,25 +593,22 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 reader = InMemoryMetricReader()
 provider = MeterProvider(metric_readers=[reader])
 with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
-    # MetricsMiddleware now records into `reader`
     resp = await client.get("/v1/posts")
     metrics = reader.get_metrics_data()
 ```
 
 **Severity**: Non-breaking — the global provider works correctly in production (only set once at
-startup).  This pattern is only needed in tests that want to assert on recorded metric values.
+startup). This pattern is only needed in tests that want to assert on recorded metric values.
 
 ---
 
 ## 05-jwt-authority-rotation
 
-### F19 — `MultiKeyAuthority.retire()` raises `ValueError` if the target `kid` is still the active signing key
-
-**Example**: `05-jwt-authority-rotation`
+### F24 — `MultiKeyAuthority.retire()` raises `ValueError` if the target `kid` is still the active signing key
 
 `MultiKeyAuthority.retire(kid)` refuses to retire the current signing key — it would leave the
-authority with no signer for new tokens.  Calling `retire("svc:A")` before rotating to a new
-key raises `ValueError: cannot retire the active signing key`.
+authority with no signer for new tokens. Calling `retire("svc:A")` before rotating to a new key
+raises `ValueError: cannot retire the active signing key`.
 
 **Rule**: always `rotate()` to the new key first, then `retire()` the old one:
 
@@ -592,20 +617,18 @@ multi.rotate(new_authority)   # svc:B becomes active signer
 multi.retire("svc:A")         # safe — svc:B is now signing
 ```
 
-**Severity**: Non-breaking (correct design — enforces the invariant that there is always an active
-signer).  The `ValueError` message is clear.  Document the required ordering in any key-rotation
-runbook.
+**Severity**: Non-breaking (correct design — enforces the invariant that there is always an
+active signer). The `ValueError` message is clear. Document the required ordering in any
+key-rotation runbook.
 
 ---
 
 ## 10-beanie-mongo
 
-### F20 — `BeanieRepositoryProvider.init()` must be called before the ASGI app receives requests; `ASGITransport` skips lifespan
-
-**Example**: `10-beanie-mongo`
+### F25 — `BeanieRepositoryProvider.init()` must be called before the ASGI app receives requests; `ASGITransport` skips lifespan
 
 `BeanieRepositoryProvider.init()` calls `init_beanie()` which registers all `Document` classes
-with the Motor client globally.  In production this runs in the FastAPI `startup` hook.  When
+with the Motor client globally. In production this runs in the FastAPI `startup` hook. When
 using `httpx.AsyncClient(transport=ASGITransport(app))`, the startup hook is never fired, so
 `init_beanie()` is never called and every query raises `CollectionWasNotInitialized`.
 
@@ -615,7 +638,7 @@ hook:
 
 ```python
 provider = BeanieRepositoryProvider(settings=BeanieSettings(...))
-await provider.init()                         # calls init_beanie() once
+await provider.init()                           # calls init_beanie() once
 app = create_app(mongo_url, provider=provider)  # startup hook is no-op
 async with httpx.AsyncClient(transport=ASGITransport(app=app), ...) as client:
     ...
@@ -623,7 +646,7 @@ async with httpx.AsyncClient(transport=ASGITransport(app=app), ...) as client:
 
 **Rule**: any `create_app()` that uses a Beanie (or other async-init) backend must accept an
 optional pre-initialized backend argument so test fixtures can manage the lifecycle without
-triggering lifespan.  This is the same pattern as F17 (Redis cache) and F06 (event bus).
+triggering lifespan. Same pattern as F13 (Redis cache) and F06 (event bus).
 
 ---
 
@@ -631,39 +654,35 @@ triggering lifespan.  This is the same pattern as F17 (Redis cache) and F06 (eve
 
 `LayeredCache(l1, l2)` starts/stops all layers automatically via `start()`/`stop()`.
 `NoOpCache` is the correct injection for unit tests that should not hit Memcached.
-No API friction beyond what is already documented in F17.
+No API friction beyond what is already documented in F13.
 
 ---
 
 ## 14-kafka-order-events
 
-### F21 — `KafkaEventBus` must be fully started before `register_to()` is called; pre-started bus pattern applies
+### F26 — `KafkaEventBus` must be fully started before `register_to()` is called
 
-**Example**: `14-kafka-order-events`
-
-`KafkaEventBus.start()` connects to the broker and creates topics.  Calling
+`KafkaEventBus.start()` connects to the broker and creates topics. Calling
 `consumer.register_to(bus)` before `bus.start()` stores the subscription in
 `_subscribed_channels`, which is fine for `RedisEventBus` (it catches up on connect) but
 `KafkaEventBus` requires the producer and consumer group to be initialized first.
 
 **Fix**: the pre-started bus pattern (`create_app(bus=pre_started_bus)`) remains the correct
 approach for `ASGITransport` test isolation, but the fixture must call `await bus.start()` before
-passing it to `create_app()`, and `create_app()` must call `consumer._setup()` / `register_to()`
-**after** passing the started bus in.  Starting the bus first, then registering consumers, is the
-safe, deterministic order for Kafka.
+passing it to `create_app()`, and `create_app()` must wire `consumer._setup()` / `register_to()`
+**after** the started bus is passed in. Starting the bus first, then registering consumers, is
+the safe, deterministic order for Kafka.
 
 ---
 
 ## 15-nats-jetstream-events
 
-### F22 — NATS `durable_name` must be unique per test fixture; reusing a name with a different subject filter raises `BadRequest`
+### F27 — NATS `durable_name` must be unique per test fixture; reusing a name with a different subject filter raises `BadRequest`
 
-**Example**: `15-nats-jetstream-events`
-
-NATS JetStream durable consumers are server-side objects identified by `(stream_name, durable_name)`.
-If two test fixtures (or two test runs) create a consumer with the same `durable_name` but a
-different subject filter or starting position, the server rejects the second create with
-`400 Bad Request: consumer already exists`.
+NATS JetStream durable consumers are server-side objects identified by `(stream_name,
+durable_name)`. If two test fixtures (or two test runs) create a consumer with the same
+`durable_name` but a different subject filter or starting position, the server rejects the
+second create with `400 Bad Request: consumer already exists`.
 
 **Fix**: generate a unique `durable_name` per fixture call using a short UUID suffix:
 
@@ -680,9 +699,7 @@ cross-fixture consumer conflicts on the shared NATS server.
 
 ## 17-transactional-outbox
 
-### F23 — `InMemoryEventBus` must be imported from `varco_core.event.memory`, not `varco_core.event.bus.memory`
-
-**Example**: `17-transactional-outbox`
+### F28 — `InMemoryEventBus` must be imported from `varco_core.event.memory`, not `varco_core.event.bus.memory`
 
 `from varco_core.event.bus.memory import InMemoryEventBus` raises `ModuleNotFoundError`.
 The correct import path is:
@@ -697,5 +714,5 @@ The public re-export in `varco_core.event` also works:
 from varco_core.event import InMemoryEventBus
 ```
 
-**Severity**: Breaking (import error at startup).  The `varco_core.event.bus` sub-package does
+**Severity**: Breaking (import error at startup). The `varco_core.event.bus` sub-package does
 not exist; `memory.py` is a direct child of `varco_core/event/`.

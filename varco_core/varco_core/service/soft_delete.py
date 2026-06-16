@@ -38,9 +38,11 @@ DESIGN: hook-based over CRUD override
        bypass ``_check_entity`` to fetch them.  This is intentional and
        documented.
 
-DESIGN: ``deleted_at`` stamped via ``dataclasses.replace()`` (not ORM)
+DESIGN: ``deleted_at`` stamped via ``domain_replace()`` (not ORM)
     ✅ Keeps service layer ORM-agnostic.
-    ✅ ``_raw_orm`` is preserved — the repository sees an UPDATE, not INSERT.
+    ✅ ``_raw_orm`` and ``pk`` (``init=False`` fields) are preserved — the
+       repository sees an UPDATE, not INSERT.  ``dataclasses.replace()`` would
+       reset these fields to ``None`` on Python ≤ 3.12.
     ❌ Requires ``deleted_at`` to be declared with ``init=True`` on the model
        (see ``SoftDeleteMixin``).
 
@@ -218,7 +220,7 @@ class SoftDeleteService(
         1. Fetch the entity (raises ``ServiceNotFoundError`` if missing).
         2. ``_check_entity`` — raises 404 if already soft-deleted.
         3. Authorize ``Action.DELETE`` on the current entity state.
-        4. Set ``deleted_at = now(UTC)`` via ``dataclasses.replace`` and save.
+        4. Set ``deleted_at = now(UTC)`` via ``domain_replace`` and save.
 
         Args:
             pk:  Primary key of the entity to soft-delete.
@@ -235,9 +237,11 @@ class SoftDeleteService(
             - Soft-deleting an already soft-deleted entity → 404 (from
               ``_check_entity``).  Idempotency requires explicit ``restore()``
               first.
-            - The ORM row is updated (not deleted) — ``_raw_orm`` must be
-              preserved via ``dataclasses.replace()``.
-            - ``dataclasses.replace`` requires ``_soft_delete_field`` to have
+            - The ORM row is updated (not deleted) — ``_raw_orm`` and ``pk``
+              must be preserved; ``domain_replace()`` handles this correctly
+              on Python ≤ 3.12 where ``dataclasses.replace()`` would reset
+              ``init=False`` fields to ``None``.
+            - ``domain_replace`` requires ``_soft_delete_field`` to have
               ``init=True`` on the domain model (see ``SoftDeleteMixin``).
 
         Thread safety:  ⚠️ Singleton service — each call opens its own UoW.
