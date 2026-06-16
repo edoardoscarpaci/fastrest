@@ -53,7 +53,7 @@ Async safety:   ✅ No I/O during registration; providers are called lazily.
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 # ── Module-level imports for DI type resolution ───────────────────────────────
 # These must live at module scope because ``from __future__ import annotations``
@@ -79,12 +79,8 @@ from varco_core.job.serializer import DefaultTaskSerializer, TaskSerializer
 from varco_core.event.base import AbstractEventBus
 from varco_core.event.producer import AbstractEventProducer, BusEventProducer
 
+from varco_fastapi.middleware.profiling import ProfilingSettings
 from providify import Configuration, Provider, Singleton
-
-if TYPE_CHECKING:
-    from varco_fastapi.middleware.profiling import (
-        ProfilingSettings,
-    )
 
 
 # ── Singleton stamps for varco_core classes (no providify dep there) ──────────
