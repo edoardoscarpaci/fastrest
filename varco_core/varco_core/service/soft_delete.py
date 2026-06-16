@@ -199,7 +199,8 @@ class SoftDeleteService(
         """
         # Always reset — guarantees new entities start active regardless of
         # constructor defaults or mixin ordering in the MRO.
-        # domain_replace preserves init=False fields (pk, _raw_orm) on Python ≤ 3.12.
+        # domain_replace preserves init=False fields (pk, _raw_orm) on Python ≤ 3.12,
+        # ensuring the repository issues an UPDATE (not INSERT).
         active: D = domain_replace(entity, **{self._soft_delete_field: None})
         return super()._prepare_for_create(active, ctx)
 
