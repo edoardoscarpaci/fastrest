@@ -1,0 +1,151 @@
+"""
+app.py
+======
+Application factory for the NATS JetStream notification-hub example.
+
+``create_app(nats_url)`` returns a FastAPI application wired with:
+
+- ``NatsEventBus``          — JetStream bus (at-least-once delivery)
+- ``BusEventProducer``      — publishes events without exposing the bus
+- ``OrderConsumer``         — listens to ``OrderPlacedEvent`` on ``"orders"``
+- ``build_router``          — HTTP endpoints for orders + notifications
+
+Lifecycle
+---------
+``NatsEventBus`` requires ``start()``/``stop()`` around the ASGI lifecycle.
+In production the ``lifespan`` context manager handles this automatically.
+
+In tests, ``httpx.ASGITransport`` does NOT trigger the FastAPI lifespan, so
+``create_app`` accepts a pre-started ``bus`` argument — the test fixture owns
+the lifecycle and passes the live bus in directly.  This avoids the need for
+any lifespan workaround in test code.
+
+DESIGN: accept pre-built bus for test isolation
+    ✅ Eliminates the ASGITransport-lifespan problem (see FINDINGS F06).
+    ✅ ``create_app(nats_url)`` is the simple production path.
+    ✅ Tests pass a live bus; production just passes the URL.
+    ❌ Not DI-wired — intentional for a focused event-bus example.
+
+Usage::
+
+    from app import create_app
+    app = create_app("nats://localhost:4222")
+    # uvicorn app:app
+
+Thread safety:  ❌  Single event loop.
+Async safety:   ✅  Lifespan context manages bus start/stop.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
+
+from fastapi import FastAPI
+
+from varco_core.event.producer import BusEventProducer
+
+from varco_nats import NatsEventBus
+from varco_nats.config import NatsEventBusSettings
+
+from consumer import OrderConsumer
+from router import build_router
+
+if TYPE_CHECKING:
+    from varco_core.event import AbstractEventBus
+
+
+def create_app(
+    nats_url: str,
+    *,
+    bus: AbstractEventBus | None = None,
+) -> FastAPI:
+    """
+    Create and return a configured FastAPI application.
+
+    When ``bus`` is ``None`` (production), a new ``NatsEventBus`` is
+    constructed from ``nats_url`` and started/stopped inside the ASGI
+    ``lifespan``.  When ``bus`` is provided (tests), the lifespan does NOT
+    touch it — the caller owns the lifecycle.
+
+    Args:
+        nats_url: NATS connection URL (e.g. ``"nats://localhost:4222"``).
+                  Only used when ``bus`` is ``None``.
+        bus:      Pre-started ``AbstractEventBus``.  When provided, the
+                  lifespan skips ``start()``/``stop()``.  Pass this from
+                  test fixtures to avoid relying on the ASGI lifespan.
+
+    Returns:
+        A ``FastAPI`` instance ready to serve requests.
+
+    DESIGN: optional pre-built bus argument
+        ``ASGITransport`` used in tests does NOT trigger FastAPI lifespan,
+        so the bus would never be started if we created it inside lifespan
+        only.  Accepting a pre-started bus lets tests manage the lifecycle
+        themselves (mirrors the Redis example's F06 pattern).
+
+    Edge cases:
+        - If ``bus`` is ``None`` and NATS is unreachable, ``bus.start()``
+          raises ``ConnectionError`` during the ASGI lifespan — FastAPI
+          propagates this as a startup error.
+        - The ``OrderConsumer`` calls ``_setup()`` (i.e. ``register_to()``)
+          immediately after construction so subscriptions are active before
+          the first request is served.
+        - JetStream stream creation (``auto_create_stream=True``) happens
+          inside ``bus.start()`` — the stream must not exist yet or must
+          already match the configured subjects.
+    """
+    # Build the bus from the URL only when not given a pre-built one.
+    # _manage tracks whether THIS factory owns the lifecycle.
+    _manage = bus is None
+    if _manage:
+        # Unique durable_name per example instance to avoid conflicts with
+        # other example runs on the same NATS server.
+        config = NatsEventBusSettings(
+            servers=nats_url,
+            stream_name="varco-events",
+            durable_name="example-consumer",
+            subject_prefix="varco",
+        )
+        _bus = NatsEventBus(config=config)
+    else:
+        _bus = bus  # type: ignore[assignment]
+
+    # Producer wraps the bus — router handlers call _produce(), never bus.publish().
+    producer = BusEventProducer(bus=_bus)
+
+    # Consumer registers its @listen methods immediately.
+    # _setup() calls register_to(bus) which installs subscriptions on the bus.
+    # NatsEventBus records the subscriptions and creates JetStream consumers
+    # inside start() — registering before start() is the correct order.
+    consumer = OrderConsumer(bus=_bus)
+    consumer._setup()  # explicit call — no DI container here
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+        """Start and stop the bus only when this factory created it."""
+        if _manage:
+            await _bus.start()
+        try:
+            yield
+        finally:
+            if _manage:
+                await _bus.stop()
+
+    app = FastAPI(
+        title="Notification Hub — NATS JetStream",
+        description=(
+            "Demonstrates varco_nats eventing: NatsEventBus (JetStream, "
+            "at-least-once) with EventConsumer + @listen, and AbstractEventProducer "
+            "as the publish interface for HTTP handlers."
+        ),
+        version="1.0.0",
+        lifespan=lifespan,
+    )
+
+    app.include_router(build_router(producer, consumer))
+    return app
+
+
+__all__ = ["create_app"]
