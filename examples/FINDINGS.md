@@ -538,3 +538,164 @@ app = create_app(db_url=db_url)
 async with app.router.lifespan_context(app):
     ...  # alice's policy is already loaded
 ```
+
+---
+
+## 03-observability-metrics
+
+### F18 — OTel global `MeterProvider` cannot be replaced once set; patch the internal getter in tests
+
+**Example**: `03-observability-metrics`
+
+`opentelemetry.metrics.set_meter_provider()` is a one-way door: the SDK silently ignores a
+second `set_meter_provider()` call if a non-default provider is already registered.  This means
+tests that call `create_app()` multiple times (each of which calls `set_meter_provider()`) will
+share the first provider's metric readers across all test instances, making assertion isolation
+impossible.
+
+**Fix**: In tests, patch at `opentelemetry.metrics._internal.get_meter_provider` (the internal
+getter used by `get_meter()`) rather than calling `set_meter_provider()`.  This lets each test
+inject an `InMemoryMetricReader`-backed provider without fighting the one-shot global:
+
+```python
+from unittest import mock
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+
+reader = InMemoryMetricReader()
+provider = MeterProvider(metric_readers=[reader])
+with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
+    # MetricsMiddleware now records into `reader`
+    resp = await client.get("/v1/posts")
+    metrics = reader.get_metrics_data()
+```
+
+**Severity**: Non-breaking — the global provider works correctly in production (only set once at
+startup).  This pattern is only needed in tests that want to assert on recorded metric values.
+
+---
+
+## 05-jwt-authority-rotation
+
+### F19 — `MultiKeyAuthority.retire()` raises `ValueError` if the target `kid` is still the active signing key
+
+**Example**: `05-jwt-authority-rotation`
+
+`MultiKeyAuthority.retire(kid)` refuses to retire the current signing key — it would leave the
+authority with no signer for new tokens.  Calling `retire("svc:A")` before rotating to a new
+key raises `ValueError: cannot retire the active signing key`.
+
+**Rule**: always `rotate()` to the new key first, then `retire()` the old one:
+
+```python
+multi.rotate(new_authority)   # svc:B becomes active signer
+multi.retire("svc:A")         # safe — svc:B is now signing
+```
+
+**Severity**: Non-breaking (correct design — enforces the invariant that there is always an active
+signer).  The `ValueError` message is clear.  Document the required ordering in any key-rotation
+runbook.
+
+---
+
+## 10-beanie-mongo
+
+### F20 — `BeanieRepositoryProvider.init()` must be called before the ASGI app receives requests; `ASGITransport` skips lifespan
+
+**Example**: `10-beanie-mongo`
+
+`BeanieRepositoryProvider.init()` calls `init_beanie()` which registers all `Document` classes
+with the Motor client globally.  In production this runs in the FastAPI `startup` hook.  When
+using `httpx.AsyncClient(transport=ASGITransport(app))`, the startup hook is never fired, so
+`init_beanie()` is never called and every query raises `CollectionWasNotInitialized`.
+
+**Fix**: Build and initialize the provider explicitly in the test fixture before creating the
+`AsyncClient`, then pass the pre-initialized provider to `create_app()` so it skips the startup
+hook:
+
+```python
+provider = BeanieRepositoryProvider(settings=BeanieSettings(...))
+await provider.init()                         # calls init_beanie() once
+app = create_app(mongo_url, provider=provider)  # startup hook is no-op
+async with httpx.AsyncClient(transport=ASGITransport(app=app), ...) as client:
+    ...
+```
+
+**Rule**: any `create_app()` that uses a Beanie (or other async-init) backend must accept an
+optional pre-initialized backend argument so test fixtures can manage the lifecycle without
+triggering lifespan.  This is the same pattern as F17 (Redis cache) and F06 (event bus).
+
+---
+
+## 13-layered-cache-memcached — no new findings
+
+`LayeredCache(l1, l2)` starts/stops all layers automatically via `start()`/`stop()`.
+`NoOpCache` is the correct injection for unit tests that should not hit Memcached.
+No API friction beyond what is already documented in F17.
+
+---
+
+## 14-kafka-order-events
+
+### F21 — `KafkaEventBus` must be fully started before `register_to()` is called; pre-started bus pattern applies
+
+**Example**: `14-kafka-order-events`
+
+`KafkaEventBus.start()` connects to the broker and creates topics.  Calling
+`consumer.register_to(bus)` before `bus.start()` stores the subscription in
+`_subscribed_channels`, which is fine for `RedisEventBus` (it catches up on connect) but
+`KafkaEventBus` requires the producer and consumer group to be initialized first.
+
+**Fix**: the pre-started bus pattern (`create_app(bus=pre_started_bus)`) remains the correct
+approach for `ASGITransport` test isolation, but the fixture must call `await bus.start()` before
+passing it to `create_app()`, and `create_app()` must call `consumer._setup()` / `register_to()`
+**after** passing the started bus in.  Starting the bus first, then registering consumers, is the
+safe, deterministic order for Kafka.
+
+---
+
+## 15-nats-jetstream-events
+
+### F22 — NATS `durable_name` must be unique per test fixture; reusing a name with a different subject filter raises `BadRequest`
+
+**Example**: `15-nats-jetstream-events`
+
+NATS JetStream durable consumers are server-side objects identified by `(stream_name, durable_name)`.
+If two test fixtures (or two test runs) create a consumer with the same `durable_name` but a
+different subject filter or starting position, the server rejects the second create with
+`400 Bad Request: consumer already exists`.
+
+**Fix**: generate a unique `durable_name` per fixture call using a short UUID suffix:
+
+```python
+from uuid import uuid4
+durable = f"test-{uuid4().hex[:8]}"
+settings = NatsEventBusSettings(..., durable_name=durable)
+```
+
+**Rule**: treat `durable_name` like a Redis key prefix — always unique per test run to avoid
+cross-fixture consumer conflicts on the shared NATS server.
+
+---
+
+## 17-transactional-outbox
+
+### F23 — `InMemoryEventBus` must be imported from `varco_core.event.memory`, not `varco_core.event.bus.memory`
+
+**Example**: `17-transactional-outbox`
+
+`from varco_core.event.bus.memory import InMemoryEventBus` raises `ModuleNotFoundError`.
+The correct import path is:
+
+```python
+from varco_core.event.memory import InMemoryEventBus
+```
+
+The public re-export in `varco_core.event` also works:
+
+```python
+from varco_core.event import InMemoryEventBus
+```
+
+**Severity**: Breaking (import error at startup).  The `varco_core.event.bus` sub-package does
+not exist; `memory.py` is a direct child of `varco_core/event/`.
