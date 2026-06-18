@@ -34,8 +34,7 @@ from __future__ import annotations
 
 from providify import PostConstruct
 
-from varco_core.event import AbstractEventBus
-from varco_core.event.consumer import EventConsumer, listen
+from varco_core.event import AbstractEventBus, EventConsumer, listen
 
 from events import OrderCreatedEvent
 

@@ -21,3 +21,8 @@ asyncio_default_test_loop_scope     = "session"
 markers = [
     "integration: requires Docker (testcontainers) — skipped by default",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning:httpx",
+    "ignore::DeprecationWarning:starlette",
+    "ignore::DeprecationWarning:pydantic",
+]

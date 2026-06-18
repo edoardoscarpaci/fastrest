@@ -63,3 +63,9 @@ testpaths    = ["tests"]
 markers      = [
     "integration: real Redis instance required (disabled by default — use -m integration)",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning:httpx",
+    "ignore::DeprecationWarning:jwt",
+    "ignore::DeprecationWarning:starlette",
+    "ignore::DeprecationWarning:pydantic",
+]

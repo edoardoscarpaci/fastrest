@@ -339,3 +339,71 @@ async def test_cache_backend_multiple_warmers_all_run() -> None:
 
     async with cache:
         assert ran == ["first", "second", "third"]
+
+
+# ── Guard: add_warmer() after start raises RuntimeError ───────────────────────
+
+
+async def test_add_warmer_after_start_raises() -> None:
+    """
+    Calling add_warmer() AFTER the backend is started (inside async with) must
+    raise RuntimeError immediately.
+
+    Without this guard the call would silently succeed but the warmer would
+    never run — the warmer list has already been consumed by _run_warmers().
+    """
+    from varco_core.cache.memory import InMemoryCache
+
+    class NopWarmer(CacheWarmer):
+        async def warm(self, cache: object) -> None:
+            pass  # no-op — we only care about the registration guard
+
+    cache = InMemoryCache()
+
+    async with cache:
+        # Backend is now started — adding a warmer here must be rejected.
+        with pytest.raises(RuntimeError, match="already been started"):
+            cache.add_warmer(NopWarmer())
+
+
+async def test_add_warmer_before_start_is_allowed() -> None:
+    """
+    Calling add_warmer() BEFORE starting the backend must succeed normally.
+
+    This is the happy path — warmers registered before async with run on entry.
+    """
+    from varco_core.cache.memory import InMemoryCache
+
+    ran: list[str] = []
+
+    class FlagWarmer(CacheWarmer):
+        async def warm(self, cache: object) -> None:
+            ran.append("warmed")
+
+    cache = InMemoryCache()
+    # Must not raise — backend is not started yet.
+    cache.add_warmer(FlagWarmer())
+
+    async with cache:
+        assert ran == ["warmed"]
+
+
+async def test_add_warmer_allowed_again_after_stop() -> None:
+    """
+    After exiting async with (stop), the started flag is reset and
+    add_warmer() must be accepted again for a subsequent lifecycle.
+    """
+    from varco_core.cache.memory import InMemoryCache
+
+    class NopWarmer(CacheWarmer):
+        async def warm(self, cache: object) -> None:
+            pass
+
+    cache = InMemoryCache()
+    async with cache:
+        # Started — reject.
+        with pytest.raises(RuntimeError):
+            cache.add_warmer(NopWarmer())
+
+    # Stopped — must be allowed again for the next lifecycle.
+    cache.add_warmer(NopWarmer())  # should not raise

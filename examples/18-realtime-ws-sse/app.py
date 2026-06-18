@@ -41,7 +41,7 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI
 
-from varco_core.event.memory import InMemoryEventBus
+from varco_core.event import InMemoryEventBus
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
 

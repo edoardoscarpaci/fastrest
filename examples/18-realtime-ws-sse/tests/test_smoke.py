@@ -44,7 +44,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import pytest
 from starlette.testclient import TestClient
 
-from varco_core.event.memory import InMemoryEventBus
+from varco_core.event import InMemoryEventBus
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
 

@@ -50,9 +50,12 @@ import logging
 
 from providify import Inject, Singleton
 
-from varco_core.event.base import AbstractEventBus
-from varco_core.event.consumer import EventConsumer, listen
-from varco_core.event.dlq import InMemoryDeadLetterQueue
+from varco_core.event import (
+    AbstractEventBus,
+    EventConsumer,
+    InMemoryDeadLetterQueue,
+    listen,
+)
 from varco_core.resilience.retry import RetryPolicy
 
 from example.events import PostCreatedEvent, PostDeletedEvent

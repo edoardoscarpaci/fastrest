@@ -66,3 +66,9 @@ testpaths    = ["tests"]
 markers      = [
     "integration: real Kafka broker required (disabled by default — use -m integration)",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning:httpx",
+    "ignore::DeprecationWarning:jwt",
+    "ignore::DeprecationWarning:starlette",
+    "ignore::DeprecationWarning:pydantic",
+]

@@ -35,7 +35,7 @@ from providify import Inject, InjectMeta, Singleton
 
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth.base import AbstractAuthorizer
-from varco_core.event.producer import AbstractEventProducer
+from varco_core.event import AbstractEventProducer
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import AsyncService, IUoWProvider
 from varco_core.uow import AsyncUnitOfWork

@@ -586,6 +586,11 @@ class SkillAdapter:
         try:
             await self._job_runner.enqueue(job, coro)  # type: ignore[union-attr]
         except Exception as exc:  # noqa: BLE001
+            # Close the coroutine to avoid an unawaited-coroutine ResourceWarning.
+            # The runner normally owns cleanup, but if it raises before reaching
+            # coro.close() we must do it here so Python's GC doesn't emit the
+            # warning (and so -W error runs don't fail).
+            coro.close()
             _logger.error(
                 "SkillAdapter: failed to enqueue async task %s: %s",
                 task_id,

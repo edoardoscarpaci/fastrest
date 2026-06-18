@@ -15,7 +15,7 @@ DESIGN: Event subclass over a plain dict
 
 from __future__ import annotations
 
-from varco_core.event.base import Event
+from varco_core.event import Event
 
 
 class ScoreUpdatedEvent(Event):

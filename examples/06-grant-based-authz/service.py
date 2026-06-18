@@ -57,7 +57,7 @@ from varco_core.auth.base import (
     AuthContext,
 )
 from varco_core.auth.helpers import GrantBasedAuthorizer
-from varco_core.event.producer import AbstractEventProducer
+from varco_core.event import AbstractEventProducer
 from varco_core.exception.service import ServiceNotFoundError
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import AsyncService, IUoWProvider

@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from varco_core.event.base import Event
+from varco_core.event import Event
 
 
 class PostCreatedEvent(Event):

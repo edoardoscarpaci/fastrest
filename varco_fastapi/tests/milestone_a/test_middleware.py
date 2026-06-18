@@ -4,12 +4,15 @@ Tests for varco_fastapi middleware stack.
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from varco_core.auth.base import AuthContext
 from varco_core.exception.service import ServiceNotFoundError
+from varco_core.exception.query import OperationNotSupported
 from varco_fastapi.auth.server_auth import AnonymousAuth, ApiKeyAuth
 from varco_fastapi.middleware.cors import CORSConfig, install_cors
 from varco_fastapi.middleware.error import ErrorMiddleware
@@ -78,6 +81,106 @@ async def test_error_middleware_includes_detail_in_debug_mode():
     assert resp.status_code == 500
     body = resp.json()
     assert "specific error message" in body.get("detail", "")
+
+
+async def test_error_middleware_maps_timeout_error_to_504():
+    """ErrorMiddleware maps asyncio.TimeoutError to HTTP 504 with GATEWAY_TIMEOUT code."""
+    app = _make_app_with_error_middleware()
+
+    @app.get("/timeout")
+    async def timeout_route():
+        # Simulates a downstream await that exceeded its deadline (e.g. @timeout decorator)
+        raise asyncio.TimeoutError
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/timeout")
+
+    assert resp.status_code == 504
+    body = resp.json()
+    assert body["code"] == "GATEWAY_TIMEOUT"
+    assert "timed out" in body["message"].lower()
+
+
+async def test_error_middleware_unwraps_exception_group_with_http_exception():
+    """ErrorMiddleware unwraps BaseExceptionGroup containing an HTTPException.
+
+    Starlette's BaseHTTPMiddleware wraps exceptions from call_next() in a
+    BaseExceptionGroup under anyio on Python 3.11+. An HTTPException(401) raised
+    inside another middleware arrives as BaseExceptionGroup("...", [HTTPException(401)])
+    which must NOT fall through to the generic 500 handler.
+    """
+    from fastapi import HTTPException
+
+    app = _make_app_with_error_middleware()
+
+    @app.get("/auth-wrapped")
+    async def auth_wrapped_route():
+        # Simulate what happens when inner middleware raises HTTPException that
+        # anyio wraps into a BaseExceptionGroup before it reaches this middleware.
+        raise BaseExceptionGroup(
+            "unhandled request errors",
+            [HTTPException(status_code=401, detail="Unauthorized")],
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/auth-wrapped")
+
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["detail"] == "Unauthorized"
+
+
+async def test_error_middleware_unwraps_exception_group_with_service_exception():
+    """ErrorMiddleware unwraps BaseExceptionGroup containing a ServiceException.
+
+    Regression: a BaseExceptionGroup wrapping a ServiceNotFoundError must return
+    404, not 500. Verifies that the group-unwrap path delegates to
+    _service_error_response correctly.
+    """
+    from varco_core.exception.service import ServiceNotFoundError
+
+    app = _make_app_with_error_middleware()
+
+    @app.get("/wrapped-service-error")
+    async def wrapped_service_error_route():
+        raise BaseExceptionGroup(
+            "unhandled request errors",
+            [ServiceNotFoundError(entity_id="xyz", entity_cls=object)],
+        )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/wrapped-service-error")
+
+    assert resp.status_code == 404
+    body = resp.json()
+    # Service error responses always include a stable code string
+    assert "code" in body
+    assert "message" in body
+
+
+async def test_error_middleware_maps_query_exception_to_400():
+    """ErrorMiddleware maps QueryException to HTTP 400 Bad Request."""
+    app = _make_app_with_error_middleware()
+
+    @app.get("/bad-query")
+    async def bad_query():
+        raise OperationNotSupported("nested traversal not supported")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/bad-query")
+
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["code"] == "QUERY_ERROR"
+    assert "nested traversal" in body["message"]
 
 
 # ── RequestContextMiddleware ────────────────────────────────────────────────────

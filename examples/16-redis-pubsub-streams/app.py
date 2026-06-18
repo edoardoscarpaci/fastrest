@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
-from varco_core.event.producer import BusEventProducer
+from varco_core.event import BusEventProducer
 
 from varco_redis import RedisEventBus, RedisEventBusSettings
 

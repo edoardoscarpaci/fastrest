@@ -557,7 +557,7 @@ DESIGN:
   ✅ SSE stop: _STOP_SENTINEL in queue — stream() generator terminates without polling
   ❌ WebSocket: no per-client queue — slow send_text blocks the broadcast coroutine
   ❌ SSE: memory grows with (clients × queue depth) — cap with max_queue_size
-  ❌ varco_ws has no DI module — wire manually in application startup
+  ✅ varco_ws ships a DI module — ``bootstrap()`` scans the package; ``bind_websocket_adapter()`` / ``bind_sse_adapter()`` register per-channel singletons
 ```
 
 ---
@@ -838,24 +838,21 @@ filtered_query = transformer.transform(base_query, params, User)
 
 - **WebSocket adapter**: `WebSocketEventBus` wraps any `AbstractEventBus`; calls `websocket.send_text(str)` — compatible with FastAPI, Starlette, aiohttp
 - **SSE adapter**: `SSEEventBus` delivers events as `data: {...}\n\n` strings; integrate with `StreamingResponse` in any ASGI framework
-- **No DI module**: wire manually in application startup / lifespan handlers
+- **DI module** (`varco_ws.di`): `bootstrap()` scans the package, discovering both adapters as `@Singleton`s; `bind_websocket_adapter()` / `bind_sse_adapter()` register per-channel singletons
 - **No broker dependency**: both adapters subscribe to an existing bus instance; the push layer is fully decoupled from transport
 
   ```python
-  # FastAPI wiring pattern for varco_ws
-  from varco_ws.websocket import WebSocketEventBus
+  # DI wiring pattern for varco_ws (preferred)
+  from varco_ws.di import bootstrap, bind_websocket_adapter, bind_sse_adapter
+  from myapp.events import OrderEvent
 
-  ws_bus = WebSocketEventBus(bus, event_type=OrderEvent, channel="orders")
+  bootstrap(container)                                             # scans varco_ws
+  bind_websocket_adapter(container, event_type=OrderEvent, channel="orders")
+  bind_sse_adapter(container, event_type=OrderEvent, channel="orders")
 
-  @app.on_event("startup")
-  async def startup():
-      await ws_bus.start()
-
-  @app.websocket("/ws/orders")
-  async def orders_ws(websocket: WebSocket):
-      await websocket.accept()
-      async with ws_bus.connect(websocket):
-          await asyncio.sleep(3600)  # keep alive until client disconnects
+  # Start/stop in the FastAPI lifespan handler (create_varco_app does this automatically)
+  orders_ws  = container.get(WebSocketEventBus)
+  orders_sse = container.get(SSEEventBus)
   ```
 
   > **Note**: `WebSocketEventBus` and `SSEEventBus` are **push adapters**, not
