@@ -54,7 +54,10 @@ from typing import Any, ClassVar, Generic, get_args, get_origin
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 
+from lark import LarkError
+
 from varco_core.auth.base import AuthContext
+from varco_core.exception import ServiceValidationError
 from varco_core.query import QueryParams, QueryParser, SortField, SortOrder
 
 from varco_fastapi.router.introspection import introspect_routes
@@ -193,8 +196,8 @@ class HttpQueryParams:
         - ``sort=None`` → empty sort list (database default order)
         - ``limit > max_limit`` → clamped to ``max_limit``
         - ``limit=0`` → valid (returns empty page); use ``None`` for "all results"
-        - Malformed ``q`` string → ``QueryParser`` raises; caught by ``ErrorMiddleware``
-          and mapped to HTTP 400.
+        - Malformed ``q`` string → ``to_query_params()`` raises ``ServiceValidationError``;
+          caught by ``ErrorMiddleware`` and mapped to HTTP 422.
     """
 
     q: str | None = None
@@ -220,18 +223,27 @@ class HttpQueryParams:
             ``QueryParams`` ready for ``service.list()`` or ``repo.find_by_query()``.
 
         Raises:
-            lark.UnexpectedToken: Syntax error in ``self.q`` filter string.
-                                  Propagates up to ``ErrorMiddleware`` → HTTP 400.
-            OperationNotFound:    Unknown operator in ``self.q`` filter string.
+            ServiceValidationError: Syntax error in ``self.q`` filter string
+                                    (wraps any ``lark.LarkError``).  Maps to HTTP 422
+                                    via ``ErrorMiddleware``.
+            OperationNotFound:      Unknown operator in ``self.q`` filter string.
 
         Edge cases:
             - ``q=None`` → node is ``None`` (no filter applied)
+            - ``q=""`` → passed to ``QueryParser`` which returns ``None`` (empty expression)
             - ``sort=None`` → empty list (database default order preserved)
             - ``limit`` is clamped: ``min(self.limit or default_limit, max_limit)``
             - ``offset`` defaults to 0 when ``None``
         """
-        # Parse filter expression into AST — None means "no WHERE clause"
-        node = QueryParser().parse(self.q) if self.q is not None else None
+        # Parse filter expression into AST — None means "no WHERE clause".
+        # Wrap any Lark parse error as ServiceValidationError so ErrorMiddleware
+        # maps it to HTTP 422 instead of leaking a 500 Internal Server Error.
+        # LarkError is the common base for UnexpectedCharacters, UnexpectedEOF,
+        # and UnexpectedToken — catching it covers all grammar-level parse failures.
+        try:
+            node = QueryParser().parse(self.q) if self.q is not None else None
+        except LarkError as exc:
+            raise ServiceValidationError(f"Invalid filter expression: {exc}") from exc
 
         # Parse sort string — empty list means "no ORDER BY"
         sort = _parse_sort_string(self.sort) if self.sort is not None else []

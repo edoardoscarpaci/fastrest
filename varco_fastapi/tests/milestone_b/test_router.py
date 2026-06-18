@@ -167,6 +167,54 @@ def test_http_query_params_offset_explicit():
     assert qp.offset == 40
 
 
+# ── HttpQueryParams.to_query_params — parse error handling ───────────────────
+
+
+def test_http_query_params_single_quoted_string_raises_service_validation_error():
+    """Single-quoted filter strings are not valid grammar — must raise ServiceValidationError (→ HTTP 422).
+
+    Lark's grammar only accepts ESCAPED_STRING (double-quoted).  A single-quoted
+    value like ``name = 'Alice'`` triggers an UnexpectedCharacters error.  We wrap
+    it as ServiceValidationError so ErrorMiddleware maps it to 422, not 500.
+    """
+    from varco_core.exception import ServiceValidationError
+
+    params = HttpQueryParams(q="name = 'Alice'")
+    with pytest.raises(ServiceValidationError) as exc_info:
+        params.to_query_params()
+    # Message must be specific enough for the API consumer to understand what broke
+    assert "Invalid filter expression" in str(exc_info.value)
+
+
+def test_http_query_params_empty_string_raises_service_validation_error():
+    """q='' is not None so it is passed to QueryParser, which raises UnexpectedToken.
+
+    Edge case: the guard ``if self.q is not None`` means an empty string is still
+    forwarded to QueryParser.  An empty expression is invalid grammar, so the parser
+    raises — and we must convert it to ServiceValidationError (→ HTTP 422), not let
+    a raw LarkError reach the middleware as a 500.
+    """
+    from varco_core.exception import ServiceValidationError
+
+    params = HttpQueryParams(q="")
+    with pytest.raises(ServiceValidationError) as exc_info:
+        params.to_query_params()
+    assert "Invalid filter expression" in str(exc_info.value)
+
+
+def test_http_query_params_valid_double_quoted_filter_still_works():
+    """Double-quoted string literals in filter expressions parse without error.
+
+    Regression guard: ensure the try/except block doesn't accidentally swallow
+    valid parses or change the return type for the happy path.
+    """
+
+    params = HttpQueryParams(q='status = "active"')
+    # Must NOT raise
+    qp = params.to_query_params()
+    assert qp.node is not None
+
+
 # ── AsyncModeParams ───────────────────────────────────────────────────────────
 
 
