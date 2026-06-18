@@ -50,3 +50,9 @@ testpaths    = ["tests"]
 markers      = [
     "integration: requires external services (Docker); skipped by default — use -m integration to run",
 ]
+filterwarnings = [
+    "ignore::DeprecationWarning:httpx",
+    "ignore::DeprecationWarning:jwt",
+    "ignore::DeprecationWarning:starlette",
+    "ignore::DeprecationWarning:pydantic",
+]
