@@ -47,3 +47,6 @@ packages = ["varco_ws"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+markers      = [
+    "integration: requires external services (Docker); skipped by default — use -m integration to run",
+]
