@@ -199,6 +199,11 @@ class TestEvent:
         b = OrderPlacedEvent(order_id="x")
         assert a.event_id != b.event_id
 
+    def test_domain_event_is_alias_for_event(self) -> None:
+        from varco_core.event import DomainEvent, Event
+
+        assert DomainEvent is Event
+
 
 # ── Subscription ───────────────────────────────────────────────────────────────
 

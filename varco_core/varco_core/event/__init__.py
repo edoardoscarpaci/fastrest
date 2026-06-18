@@ -105,6 +105,9 @@ from varco_core.event.middleware import (
     TracingEventMiddleware,
 )
 
+# Alias for DDD practitioners; Event is the canonical name
+DomainEvent = Event
+
 __all__ = [
     # ── Channel constants ───────────────────────────────────────────────────
     "CHANNEL_ALL",
@@ -114,6 +117,7 @@ __all__ = [
     "ChannelConfig",
     "ErrorPolicy",
     "Event",
+    "DomainEvent",
     "EventMiddleware",
     "Subscription",
     # ── Dispatch mode ───────────────────────────────────────────────────────
