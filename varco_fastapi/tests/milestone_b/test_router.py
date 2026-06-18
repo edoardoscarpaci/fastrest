@@ -182,8 +182,9 @@ def test_http_query_params_single_quoted_string_raises_service_validation_error(
     params = HttpQueryParams(q="name = 'Alice'")
     with pytest.raises(ServiceValidationError) as exc_info:
         params.to_query_params()
-    # Message must be specific enough for the API consumer to understand what broke
-    assert "Invalid filter expression" in str(exc_info.value)
+    # Single-quoted values produce a specific guidance message pointing to double-quotes
+    assert "double-quotes" in str(exc_info.value)
+    assert "Filter syntax error" in str(exc_info.value)
 
 
 def test_http_query_params_empty_string_raises_service_validation_error():
@@ -199,7 +200,10 @@ def test_http_query_params_empty_string_raises_service_validation_error():
     params = HttpQueryParams(q="")
     with pytest.raises(ServiceValidationError) as exc_info:
         params.to_query_params()
-    assert "Invalid filter expression" in str(exc_info.value)
+    # Any parse error must produce a ServiceValidationError (never a raw LarkError → 500)
+    assert "Filter syntax error" in str(
+        exc_info.value
+    ) or "Invalid filter expression" in str(exc_info.value)
 
 
 def test_http_query_params_valid_double_quoted_filter_still_works():

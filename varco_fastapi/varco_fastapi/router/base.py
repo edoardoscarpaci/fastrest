@@ -110,6 +110,45 @@ def _parse_sort_string(sort_str: str) -> list[SortField]:
     return fields
 
 
+# ── Filter parse error helper ──────────────────────────────────────────────────
+
+
+def _format_parse_error(exc: Exception) -> str:
+    """Translate a raw LarkError into a developer-friendly message.
+
+    Lark's default error text is terse and cryptic for API consumers.  This
+    helper rewrites the most common mistakes into actionable guidance while
+    preserving the raw detail in the trailing ``Details:`` suffix.
+
+    Args:
+        exc: The exception raised by the Lark parser (typically
+             ``UnexpectedCharacters``, ``UnexpectedEOF``, or
+             ``UnexpectedToken``).
+
+    Returns:
+        A human-readable error string suitable for a ``ServiceValidationError``
+        message that maps to HTTP 422.
+
+    Edge cases:
+        - Unknown error shapes fall back to the generic
+          ``"Invalid filter expression: ..."`` message.
+        - The raw Lark message is always appended after ``Details:`` so
+          developers can still diagnose novel grammar failures.
+
+    Thread safety:  ✅ Pure function — no shared state.
+    Async safety:   ✅ Synchronous; safe to call from async contexts.
+    """
+    msg = str(exc)
+    if "'" in msg and ("No terminal matches" in msg or "Unexpected" in msg):
+        return (
+            "Filter syntax error: use double-quotes for string values "
+            f"(e.g. name = \"Alice\", not name = 'Alice'). Details: {msg}"
+        )
+    if "UnexpectedEOF" in type(exc).__name__ or "Unexpected end" in msg:
+        return f"Filter syntax error: incomplete expression. Details: {msg}"
+    return f"Invalid filter expression: {msg}"
+
+
 # ── AsyncModeParams ────────────────────────────────────────────────────────────
 
 
@@ -243,7 +282,7 @@ class HttpQueryParams:
         try:
             node = QueryParser().parse(self.q) if self.q is not None else None
         except LarkError as exc:
-            raise ServiceValidationError(f"Invalid filter expression: {exc}") from exc
+            raise ServiceValidationError(_format_parse_error(exc)) from exc
 
         # Parse sort string — empty list means "no ORDER BY"
         sort = _parse_sort_string(self.sort) if self.sort is not None else []
