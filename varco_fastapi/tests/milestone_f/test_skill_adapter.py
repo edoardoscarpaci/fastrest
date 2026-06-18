@@ -520,7 +520,7 @@ def test_mount_bad_json_returns_400():
     client = TestClient(app, raise_server_exceptions=False)
     resp = client.post(
         "/tasks/send",
-        data="not json",
+        content=b"not json",
         headers={"Content-Type": "application/json"},
     )
     assert resp.status_code == 400
