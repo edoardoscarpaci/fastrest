@@ -238,14 +238,33 @@ class CacheBackend(abc.ABC):
         Args:
             warmer: The ``CacheWarmer`` to register.
 
+        Raises:
+            RuntimeError: If called after the backend has already been started
+                via ``__aenter__`` (i.e. inside an ``async with`` block).  This
+                guard prevents a silent no-op — the warmer would appear registered
+                but would never run for the current lifecycle.
+
         Edge cases:
             - Adding the same warmer instance twice causes it to run twice.
-            - Warmers added after ``start()`` will NOT run for the current
-              lifecycle — they run on the next ``start()``.
+            - Warmers added after ``start()`` / ``__aenter__`` raise
+              ``RuntimeError`` — register all warmers before entering
+              ``async with cache:``.
 
         Thread safety:  ⚠️ Not thread-safe — call from a single coroutine
                             before starting the backend.
         """
+        # Guard: registering a warmer after start() is a silent no-op for the
+        # current lifecycle (the warmer list was already consumed by _run_warmers).
+        # Raise immediately so the bug is surfaced at the call site rather than
+        # silently ignored — a cold cache that was expected to be warm is hard
+        # to diagnose in production.
+        if getattr(self, "_backend_started", False):
+            raise RuntimeError(
+                f"{type(self).__name__}.add_warmer() called after the backend "
+                "has already been started. "
+                "Register all warmers before entering 'async with cache:' "
+                "or before calling start()."
+            )
         if not hasattr(self, "_warmers"):
             # Lazy initialisation — see DESIGN note above.
             object.__setattr__(self, "_warmers", [])
@@ -285,11 +304,20 @@ class CacheBackend(abc.ABC):
 
     async def __aenter__(self) -> CacheBackend:
         await self.start()
+        # Mark the backend as started BEFORE running warmers.  This flag is
+        # checked by add_warmer() to reject late registrations — once _run_warmers
+        # has consumed the list any new warmer added would silently never run.
+        # object.__setattr__ is used in case subclasses set __slots__ or override
+        # __setattr__ (e.g. frozen dataclass mixins).
+        object.__setattr__(self, "_backend_started", True)
         # Run warmers AFTER start() — the backend is fully operational at this point.
         await self._run_warmers()
         return self
 
     async def __aexit__(self, *_: Any) -> None:
+        # Reset the started flag before stop() so that a subsequent add_warmer()
+        # call (before the next __aenter__) is allowed — supports restart scenarios.
+        object.__setattr__(self, "_backend_started", False)
         await self.stop()
 
     # ── Cache operations ───────────────────────────────────────────────────────

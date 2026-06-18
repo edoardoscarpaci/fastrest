@@ -94,6 +94,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import warnings
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -671,10 +672,13 @@ class EventConsumer:
     Async safety:   ✅ Handlers are invoked by the bus — may be async or sync.
 
     Edge cases:
-        - If the same consumer is registered to the same bus twice, all
-          ``@listen`` methods will be subscribed twice — events are
-          dispatched to handlers once per subscription.  Avoid double
-          registration or cancel the first set of subscriptions first.
+        - If the same consumer is registered to the same bus twice,
+          ``register_to`` emits a ``RuntimeWarning`` and returns an empty
+          list — no duplicate subscriptions are created.  To re-register
+          (e.g. after a restart), call ``stop()`` first to cancel the
+          existing subscriptions.
+        - Registering to different bus instances accumulates subscriptions
+          across both — useful for fan-out but uncommon.
         - ``register_to`` walks the MRO via ``inspect.getmembers`` — methods
           defined on parent classes are discovered automatically.
         - Methods without ``__listen_entries__`` are silently skipped.
@@ -711,8 +715,13 @@ class EventConsumer:
             - Returns an empty list if no ``@listen`` methods are found.
             - Does NOT deduplicate — stacked ``@listen`` entries on the same
               method each produce their own ``Subscription`` handle.
-            - Calling ``register_to`` twice appends to ``_subscriptions`` —
-              avoid double-registration or cancel the first set first.
+            - Calling ``register_to`` twice on the **same bus** emits a
+              ``RuntimeWarning`` and returns an empty list — no duplicate
+              subscriptions are created.  Cancel the first set via
+              ``stop()`` if you need to re-register.
+            - Calling ``register_to`` on **different buses** is allowed and
+              accumulates subscriptions in ``_subscriptions`` — useful for
+              fan-out scenarios where the same consumer listens to two buses.
 
         Thread safety:  ✅ Called once at setup — not during concurrent dispatch.
         Async safety:   ✅ ``bus.subscribe`` is synchronous — safe to call
@@ -728,6 +737,45 @@ class EventConsumer:
                 sub.cancel()
             # — or just call consumer.stop() if using the lifecycle API.
         """
+        # ── Double-registration guard ─────────────────────────────────────────
+        # Calling register_to(bus) twice on the SAME bus creates duplicate
+        # subscriptions — every event is then delivered twice to each handler.
+        # This is almost always a bug (e.g. @PostConstruct + start() both called,
+        # or register_to() called in __init__ AND in @PostConstruct).
+        #
+        # We warn instead of raising because:
+        #   ✅ The call IS recoverable — the extra subscriptions are redundant
+        #      but they do not corrupt state (they just cause double delivery).
+        #   ✅ Existing code that relies on double-registration (rare but valid
+        #      for fan-out) is not broken.
+        #   ❌ Silent double-delivery is very hard to diagnose — the warning
+        #      surfaces the bug immediately at the call site.
+        #
+        # DESIGN: id(bus) instead of `bus is bus` comparison
+        #   Using the object identity (id()) as the set key avoids importing
+        #   or calling any bus methods at guard time — the guard is zero-cost
+        #   for the common (non-duplicate) path.
+        if not hasattr(self, "_registered_buses"):
+            # Lazy initialisation — same pattern as _warmers in CacheBackend.
+            # EventConsumer has no __init__ of its own; an __init__ would force
+            # all subclasses to call super().__init__() which is fragile in
+            # multiple-inheritance chains.
+            object.__setattr__(self, "_registered_buses", set())
+        bus_id = id(bus)
+        if bus_id in self._registered_buses:  # type: ignore[attr-defined]
+            warnings.warn(
+                f"{type(self).__name__}.register_to() called twice on the same "
+                "bus instance. "
+                "This creates duplicate subscriptions — each event will be "
+                "delivered twice to every @listen handler. "
+                "Use one registration path only: either @PostConstruct or "
+                "start(), but not both.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return []
+        self._registered_buses.add(bus_id)  # type: ignore[attr-defined]
+
         subscriptions: list[Subscription] = []
 
         # inspect.getmembers walks the full MRO — discovers methods from
@@ -911,8 +959,14 @@ class EventConsumer:
         # if start() was never called, there is nothing to cancel.
         for sub in getattr(self, "_subscriptions", []):
             sub.cancel()
-        # Reset to empty so a subsequent start() starts fresh.
+        # Reset both the subscriptions list and the registered-buses set so
+        # a subsequent start() / register_to() can register to the same bus
+        # again without triggering the double-registration warning.
         self._subscriptions = []
+        # Clear the bus-id set — after stop() all subscriptions are gone so
+        # the "same bus" guard must allow re-registration on the next start().
+        if hasattr(self, "_registered_buses"):
+            self._registered_buses.clear()  # type: ignore[attr-defined]
 
     def __repr__(self) -> str:
         # Count @listen entries across all methods for a useful repr

@@ -773,6 +773,114 @@ class TestEventConsumerAndListen:
         assert "MyConsumer" in r
         assert "listen_entries=1" in r
 
+    async def test_double_register_to_same_bus_emits_warning(self) -> None:
+        """
+        Calling register_to(bus) twice on the same bus must emit a
+        RuntimeWarning — not raise — and must NOT create duplicate
+        subscriptions.
+
+        Without this guard every event is delivered twice to each handler,
+        which is an extremely hard-to-diagnose bug.
+        """
+        import warnings
+
+        bus = InMemoryEventBus()
+
+        class MyConsumer(EventConsumer):
+            def __init__(self) -> None:
+                self.received: list[Event] = []
+
+            @listen(OrderPlacedEvent)
+            async def on_placed(self, event: OrderPlacedEvent) -> None:
+                self.received.append(event)
+
+        consumer = MyConsumer()
+        consumer.register_to(bus)  # first registration — fine
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            consumer.register_to(bus)  # second registration — must warn, not crash
+            assert len(caught) == 1
+            w = caught[0]
+            assert issubclass(w.category, RuntimeWarning)
+            assert (
+                "twice" in str(w.message).lower()
+                or "duplicate" in str(w.message).lower()
+            )
+
+        # Only one subscription was created — event delivered once, not twice.
+        await bus.publish(OrderPlacedEvent(order_id="1"))
+        assert len(consumer.received) == 1
+
+    async def test_register_to_different_buses_is_allowed(self) -> None:
+        """
+        Registering the same consumer to two DIFFERENT bus instances must
+        succeed without any warning — this is a valid fan-out pattern.
+        """
+        import warnings
+
+        bus_a = InMemoryEventBus()
+        bus_b = InMemoryEventBus()
+
+        class MyConsumer(EventConsumer):
+            def __init__(self) -> None:
+                self.received: list[Event] = []
+
+            @listen(OrderPlacedEvent)
+            async def on_placed(self, event: OrderPlacedEvent) -> None:
+                self.received.append(event)
+
+        consumer = MyConsumer()
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            consumer.register_to(bus_a)
+            consumer.register_to(bus_b)
+            # No warning — different buses
+            runtime_warnings = [
+                w for w in caught if issubclass(w.category, RuntimeWarning)
+            ]
+            assert runtime_warnings == []
+
+        # Both buses deliver the event — consumer receives it from each.
+        await bus_a.publish(OrderPlacedEvent(order_id="1"))
+        await bus_b.publish(OrderPlacedEvent(order_id="2"))
+        assert len(consumer.received) == 2
+
+    async def test_register_to_allowed_again_after_stop(self) -> None:
+        """
+        After stop() resets the registered-buses set, register_to(same_bus)
+        must succeed without a warning — supports restart scenarios.
+        """
+        import warnings
+
+        bus = InMemoryEventBus()
+
+        class MyConsumer(EventConsumer):
+            def __init__(self) -> None:
+                self.received: list[Event] = []
+
+            @listen(OrderPlacedEvent)
+            async def on_placed(self, event: OrderPlacedEvent) -> None:
+                self.received.append(event)
+
+        consumer = MyConsumer()
+        consumer.register_to(bus)
+
+        # Simulate a lifecycle stop/start cycle.
+        await consumer.stop()
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            consumer.register_to(bus)  # must be allowed after stop
+            runtime_warnings = [
+                w for w in caught if issubclass(w.category, RuntimeWarning)
+            ]
+            assert runtime_warnings == [], "No warning expected after stop()"
+
+        await bus.publish(OrderPlacedEvent(order_id="restart"))
+        assert len(consumer.received) == 1
+
 
 # ── AbstractEventProducer ─────────────────────────────────────────────────────
 
