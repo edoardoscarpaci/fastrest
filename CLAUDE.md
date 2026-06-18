@@ -653,7 +653,7 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 - Integration tests require a real broker via Docker and are tagged `@pytest.mark.integration`. They are skipped by default; run with `-m integration`.
 - `InMemoryEventBus` is the standard bus for unit tests. Use `bus.drain()` after publishes when `DispatchMode.BACKGROUND` is active.
 - `InMemoryDeadLetterQueue` is the standard DLQ for unit tests.
-- Two pre-existing test failures exist and are unrelated to any current work: `test_cache.py::TestTTLStrategy::test_cache_evicts_expired_on_read` (timing flake) and `test_event.py::TestJsonEventSerializer::test_serialize_produces_bytes` (API mismatch).
+- If a timing-sensitive test becomes flaky, increase its sleep margin rather than marking it xfail.
 
 ---
 
