@@ -269,7 +269,7 @@ class HttpQueryParams:
 
         Edge cases:
             - ``q=None`` → node is ``None`` (no filter applied)
-            - ``q=""`` → passed to ``QueryParser`` which returns ``None`` (empty expression)
+            - ``q=""`` → raises ``ServiceValidationError`` (empty expression is invalid grammar)
             - ``sort=None`` → empty list (database default order preserved)
             - ``limit`` is clamped: ``min(self.limit or default_limit, max_limit)``
             - ``offset`` defaults to 0 when ``None``

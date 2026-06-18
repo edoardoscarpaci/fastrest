@@ -165,6 +165,14 @@ class ErrorMiddleware(BaseHTTPMiddleware):
                     )
                 if isinstance(inner, ServiceException):
                     return self._service_error_response(inner)
+                if isinstance(inner, QueryException):
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "code": "QUERY_ERROR",
+                            "message": f"Invalid query: {inner}",
+                        },
+                    )
             # No recognised inner exception — treat the group itself as a 500
             return self._internal_error_response(eg)
         except HTTPException as exc:
