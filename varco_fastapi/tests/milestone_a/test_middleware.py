@@ -12,6 +12,7 @@ from httpx import ASGITransport, AsyncClient
 
 from varco_core.auth.base import AuthContext
 from varco_core.exception.service import ServiceNotFoundError
+from varco_core.exception.query import OperationNotSupported
 from varco_fastapi.auth.server_auth import AnonymousAuth, ApiKeyAuth
 from varco_fastapi.middleware.cors import CORSConfig, install_cors
 from varco_fastapi.middleware.error import ErrorMiddleware
@@ -161,6 +162,25 @@ async def test_error_middleware_unwraps_exception_group_with_service_exception()
     # Service error responses always include a stable code string
     assert "code" in body
     assert "message" in body
+
+
+async def test_error_middleware_maps_query_exception_to_400():
+    """ErrorMiddleware maps QueryException to HTTP 400 Bad Request."""
+    app = _make_app_with_error_middleware()
+
+    @app.get("/bad-query")
+    async def bad_query():
+        raise OperationNotSupported("nested traversal not supported")
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        resp = await client.get("/bad-query")
+
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["code"] == "QUERY_ERROR"
+    assert "nested traversal" in body["message"]
 
 
 # ── RequestContextMiddleware ────────────────────────────────────────────────────

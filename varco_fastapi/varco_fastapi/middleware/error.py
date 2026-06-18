@@ -16,6 +16,7 @@ Exception → HTTP status mapping::
     pydantic.ValidationError  → 422 Unprocessable Entity (request body)
     asyncio.TimeoutError      → 504 Gateway Timeout
     HTTPException             → correct status code as JSON (not re-raised)
+    QueryException            → 400 Bad Request
     BaseExceptionGroup        → unwrapped; inner exception dispatched as above
     Exception                 → 500 Internal Server Error
 
@@ -51,6 +52,7 @@ from varco_core.exception.service import (
     ServiceNotFoundError,
     ServiceValidationError,
 )
+from varco_core.exception.query import QueryException
 from varco_core.exception.http import error_message_for
 from varco_core.tracing import current_correlation_id
 
@@ -203,6 +205,14 @@ class ErrorMiddleware(BaseHTTPMiddleware):
             )
         except ServiceException as exc:
             return self._service_error_response(exc)
+        except QueryException as exc:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "code": "QUERY_ERROR",
+                    "message": f"Invalid query: {exc}",
+                },
+            )
         except Exception as exc:  # noqa: BLE001
             return self._internal_error_response(exc)
 
