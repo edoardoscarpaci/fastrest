@@ -68,7 +68,7 @@ from fastapi import FastAPI
 from providify import DIContainer
 from sqlalchemy.orm import DeclarativeBase
 
-from varco_core.event.base import AbstractEventBus
+from varco_core.event import AbstractEventBus
 from varco_core.job.base import AbstractJobRunner
 from varco_fastapi.lifespan import VarcoLifespan
 from varco_fastapi.middleware import (

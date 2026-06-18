@@ -65,7 +65,7 @@ from typing import Annotated
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth.base import AbstractAuthorizer
 from varco_core.cache.mixin import CacheServiceMixin
-from varco_core.event.producer import AbstractEventProducer
+from varco_core.event import AbstractEventProducer
 from varco_core.service.base import AsyncService, IUoWProvider
 from providify import InjectMeta
 

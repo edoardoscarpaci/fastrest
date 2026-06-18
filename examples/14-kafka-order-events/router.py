@@ -25,7 +25,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from varco_core.event.producer import AbstractEventProducer
+from varco_core.event import AbstractEventProducer
 
 from consumer import OrderConsumer
 from events import OrderPlacedEvent

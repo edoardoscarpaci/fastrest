@@ -32,8 +32,7 @@ import pytest
 from varco_core.auth.authorizer import BaseAuthorizer
 from varco_core.auth.base import AuthContext
 from varco_core.cache.memory import InMemoryCache
-from varco_core.event.memory import InMemoryEventBus
-from varco_core.event.producer import BusEventProducer
+from varco_core.event import BusEventProducer, InMemoryEventBus
 from varco_core.query.params import QueryParams
 
 from example.assembler import PostAssembler

@@ -41,7 +41,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from varco_core.event.base import AbstractEventBus
+from varco_core.event import AbstractEventBus
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
 

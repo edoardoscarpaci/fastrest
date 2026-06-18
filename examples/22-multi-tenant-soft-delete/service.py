@@ -71,7 +71,7 @@ from providify import Inject, InjectMeta, Singleton
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AuthContext
 from varco_core.auth.base import AbstractAuthorizer
-from varco_core.event.producer import AbstractEventProducer
+from varco_core.event import AbstractEventProducer
 from varco_core.exception.service import ServiceValidationError
 from varco_core.query.builder import QueryBuilder
 from varco_core.query.params import QueryParams

@@ -58,7 +58,7 @@ from providify import DIContainer, Provider
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from varco_core.event.memory import InMemoryEventBus
+from varco_core.event import InMemoryEventBus
 from varco_core.service.base import IUoWProvider
 from varco_core.service.outbox import OutboxRelay
 from varco_fastapi.di import VarcoFastAPIModule

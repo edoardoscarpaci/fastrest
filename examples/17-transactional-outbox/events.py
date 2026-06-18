@@ -23,7 +23,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
-from varco_core.event.base import DomainEvent
+from varco_core.event import DomainEvent
 
 
 @dataclass(frozen=True)
