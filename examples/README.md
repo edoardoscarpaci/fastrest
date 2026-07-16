@@ -42,6 +42,7 @@ Every example runs with `uv run` or `docker compose up` and includes a smoke tes
 | 20 | [distributed-rate-limit](20-distributed-rate-limit/) | RedisRateLimiter (multi-pod) vs InMemoryRateLimiter, @rate_limit | redis |
 | 21 | [async-job-runner](21-async-job-runner/) | job module, enqueue async jobs, 202 Accepted + job_id, poll status | none |
 | 22 | [multi-tenant-soft-delete](22-multi-tenant-soft-delete/) | TenantAwareService + SoftDeleteService + ValidatorServiceMixin via MRO | postgres |
+| 23 | [composite-all-in-one](23-composite-all-in-one/) | create_composite_app — combine multiple services into one deployment; per-service isolation, aggregate health, build_service scoped env | none |
 
 ## Conventions
 

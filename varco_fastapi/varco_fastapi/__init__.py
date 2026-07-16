@@ -206,6 +206,14 @@ from varco_fastapi.di import VarcoFastAPIModule, bind_clients
 # ── App factory ───────────────────────────────────────────────────────────────
 from varco_fastapi.app import create_varco_app
 
+# ── Composite / all-in-one deployment ─────────────────────────────────────────
+from varco_fastapi.composite import (
+    CompositeLifespan,
+    ServiceMount,
+    build_service,
+    create_composite_app,
+)
+
 # ── Validation ────────────────────────────────────────────────────────────────
 from varco_fastapi.validation import (
     ConfigurationError,
@@ -326,6 +334,11 @@ __all__ = [
     "bind_clients",
     # App factory
     "create_varco_app",
+    # ── Composite / all-in-one deployment ──
+    "CompositeLifespan",
+    "ServiceMount",
+    "build_service",
+    "create_composite_app",
     # Validation
     "ConfigurationError",
     "validate_router_class",

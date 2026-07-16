@@ -250,6 +250,54 @@ app = create_varco_app(routers=[ReportRouter])
 
 ---
 
+## Composite / all-in-one deployment
+
+Combine several independently-built services into a **single deployable process**
+without changing any of them. Each service keeps its own `DIContainer`, database,
+environment, middleware, and `/docs` — they are mounted side by side under path
+prefixes.
+
+```python
+from varco_fastapi import create_composite_app, ServiceMount
+
+from orders_service.app import app as orders_app      # its own create_varco_app()
+from billing_service.app import app as billing_app     # its own container + DB
+
+composite = create_composite_app([
+    ServiceMount("/orders", orders_app),
+    ServiceMount("/billing", billing_app),
+])
+# uvicorn composite:composite
+#   /orders/...   → orders service (own docs at /orders/docs)
+#   /billing/...  → billing service (own docs at /billing/docs)
+#   /health       → aggregate health across both services (503 if any is down)
+#   /             → landing page listing each service
+```
+
+`create_composite_app` installs a `CompositeLifespan` that drives **each sub-app's
+own lifespan** — Starlette does not propagate lifespan into mounted apps, so this is
+what actually starts each service's DB pool / event bus / outbox relay. Startup is
+fail-fast (one broken service aborts the whole process); shutdown is LIFO.
+
+All services share one `os.environ`. Runtime isolation is automatic; the only hazard
+is build-time env-name collisions. Either namespace env vars per service
+(`ORDERS_DB_URL`, `BILLING_DB_URL`) or use `build_service` for a scoped overlay:
+
+```python
+from varco_fastapi import build_service
+
+orders = build_service("/orders", create_orders_app,
+                        env={"DATABASE_URL": "postgresql+asyncpg://.../orders"})
+billing = build_service("/billing", create_billing_app,
+                        env={"DATABASE_URL": "postgresql+asyncpg://.../billing"})
+composite = create_composite_app([orders, billing])
+```
+
+See `technical_docs/features/composite-deployment.md` and
+`examples/23-composite-all-in-one/` for the full reference.
+
+---
+
 ## Related packages
 
 | Package | Description |

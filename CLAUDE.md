@@ -526,6 +526,46 @@ app = create_varco_app(routers=[ReportRouter])
 - If `ctx` is declared in the handler, `_auth` must be set (or it will not be populated).
 - For truly public endpoints (no auth needed), use `requires=allow_anonymous()` or omit `requires=` altogether and don't declare `ctx`.
 
+#### Scenario: Combine multiple services into one all-in-one deployment
+
+Use `create_composite_app` (`varco_fastapi.composite`) to run several **already-built**
+varco services in a single ASGI process. Each service keeps its own container, database,
+environment, middleware, and `/docs` — they are mounted as ASGI sub-apps under prefixes.
+
+```python
+from varco_fastapi import create_composite_app, ServiceMount
+
+from orders_service.app import app as orders_app      # its own create_varco_app()
+from billing_service.app import app as billing_app     # its own container + DB + env
+
+composite = create_composite_app([
+    ServiceMount("/orders", orders_app),
+    ServiceMount("/billing", billing_app),
+])
+# uvicorn composite:composite
+```
+
+**Key facts**:
+- Mounting is purely additive — existing service code is untouched. Each sub-app serves
+  its own `{prefix}/docs` + `{prefix}/openapi.json`; there is no merged OpenAPI schema.
+- `create_composite_app` installs a `CompositeLifespan` that drives **each sub-app's own
+  lifespan**. This is required: Starlette's `Router.lifespan` does NOT descend into
+  mounted sub-apps, so without it every service's DB pool / `AbstractEventBus` /
+  `OutboxRelay` would silently never start.
+- Startup is **fail-fast** — one service failing to start aborts the whole process
+  (no half-broken deployment). Shutdown is LIFO.
+- `aggregate_health=True` (default) exposes a root `GET /health` that probes each
+  service's own health in-process (via `httpx.ASGITransport`) and returns 503 if any is
+  unhealthy — one readiness signal for the whole deployment.
+- **Env isolation**: all services share one `os.environ`. Runtime isolation is automatic
+  (each app holds its own container/engine objects). The only hazard is *build-time*
+  env-name collision — two services reading bare `os.environ["DATABASE_URL"]` see the
+  same value. Fix by namespacing env vars per service, or use
+  `build_service(prefix, factory, env={...})` which overlays a scoped environment only
+  while that one service is built, then restores it.
+- No composite-level middleware by default — each sub-app owns its full middleware stack
+  and runs it exactly as standalone (avoids double-processing, e.g. tracing wrapped twice).
+
 #### Scenario: Profile a slow operation
 
 ```python
@@ -683,6 +723,8 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Sync Casbin adapter with AsyncEnforcer** | `RuntimeError: Invalid parameters for enforcer` | `AsyncEnforcer` requires an `AsyncAdapter` | Use `casbin.persist.adapters.asyncio.*` (the factory in `varco_casbin.adapter` already does) |
 | **Profiling left always-on** | 20–100% overhead in production | `cProfile`/`tracemalloc` are expensive deterministic tools | Default is off (`VARCO_PROFILING_ENABLED=false`); activate only to diagnose a hotspot |
 | **Two profiling sessions concurrent** | Contaminated reports (each session records the other's frames) | `cProfile`/`tracemalloc` are process-global | The middleware serialises with a `Lock`; for manual use, never profile two operations simultaneously |
+| **Naive `app.mount()` in a composite** | Mounted services answer requests with dead DB pools / no event bus | Starlette's `Router.lifespan` never descends into mounted sub-apps | Use `create_composite_app` — its `CompositeLifespan` drives each sub-app's own lifespan |
+| **Two composite services share a bare env name** | Both read the same `DATABASE_URL`; second service silently uses the first's config | One process = one `os.environ`; env is read at build time | Namespace env vars per service, or build each with `build_service(prefix, factory, env={...})` |
 | **`cProfile` across `await` on a busy loop** | Report includes frames from other coroutines | `cProfile` captures the whole event loop thread | Use a sampling backend (e.g. pyinstrument) for concurrent async code; cProfile is best for CPU-bound or isolated coroutines |
 | **tracemalloc state not restored** | App's own tracemalloc usage broken after a profiling session | Session left tracemalloc on when it found it off (or vice versa) | `TracemallocMemoryBackend.collect()` always restores the prior tracing state; if writing a custom memory backend, do the same |
 
