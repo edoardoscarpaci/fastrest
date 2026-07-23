@@ -528,6 +528,41 @@ app = create_varco_app(routers=[ReportRouter])
 - For truly public endpoints (no auth needed), use `requires=allow_anonymous()` or omit `requires=` altogether and don't declare `ctx`.
 - **Custom `@route` handlers get full FastAPI parameter injection** — declare `Query(...)`, `Body(...)` (Pydantic models), `Depends(...)`, `Request`/`Response`/`BackgroundTasks`, and **type-coerced** path params, exactly like a hand-written FastAPI endpoint; the return annotation drives the OpenAPI response model. `build_router()` synthesizes a wrapper whose `__signature__` mirrors the method so FastAPI parses everything natively (see `_make_custom_handler` / `_synthesize_custom_signature` in `router/base.py`). `ctx`/`auth`/`context` and the `RouteGuard`/async-offload behavior are unchanged. **Exception:** on an `async_capable` route with a job runner wired, `response_model` inference is suppressed (the route may return a `JobAcceptedResponse` when `?with_async=true`).
 
+#### Scenario: Expose custom service methods on a typed CRUD router
+
+`VarcoCRUDRouter` (and the `CRUDRouter`/`ReadOnlyRouter`/`WriteRouter`/`NoDeleteRouter`
+presets) accept an optional, defaulted 6th type parameter `S` — the concrete
+`AsyncService` subclass. Add it as the 6th type arg to get `self._service` typed
+`S | None` and the `self.service` property typed non-Optional `S`, with zero
+per-subclass boilerplate (no cast, no hand-rolled `@property` override):
+
+```python
+from varco_fastapi.router.presets import CRUDRouter
+from varco_fastapi.router.endpoint import route
+
+class OrderService(AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
+    async def cancel_order(self, order_id: UUID) -> None: ...
+
+class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
+    _prefix = "/orders"
+
+    @route("POST", "/{order_id}/cancel")
+    async def cancel(self, order_id: UUID) -> None:
+        # self.service is typed OrderService (not the erased AsyncService base) —
+        # .cancel_order is visible to the type checker with no cast.
+        await self.service.cancel_order(order_id)
+```
+
+- 5-arg subscription (`CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]`) still
+  works unchanged — `S` defaults to `AsyncService[Any, ...]` via PEP 696
+  (`typing_extensions.TypeVar`, since `requires-python = ">=3.12"` predates the native syntax).
+- `self.service` raises `RuntimeError` if `_service` was never injected/set — prefer it over
+  `self._service` at call sites that invoke custom methods, so you don't repeat an
+  `is None` guard. The 501-Not-Implemented CRUD fallback path is unaffected — it still reads
+  `getattr(self, "_service", None)` directly, not the property.
+- Fallback for anyone staying on 5 type args: declare a subclass `@property` that casts, e.g.
+  `@property\n    def service(self) -> OrderService:\n        return cast(OrderService, self._service)`.
+
 #### Scenario: Combine multiple services into one all-in-one deployment
 
 Use `create_composite_app` (`varco_fastapi.composite`) to run several **already-built**
@@ -729,6 +764,7 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Two composite services share a bare env name** | Both read the same `DATABASE_URL`; second service silently uses the first's config | One process = one `os.environ`; env is read at build time | Namespace env vars per service, or build each with `build_service(prefix, factory, env={...})` |
 | **`cProfile` across `await` on a busy loop** | Report includes frames from other coroutines | `cProfile` captures the whole event loop thread | Use a sampling backend (e.g. pyinstrument) for concurrent async code; cProfile is best for CPU-bound or isolated coroutines |
 | **tracemalloc state not restored** | App's own tracemalloc usage broken after a profiling session | Session left tracemalloc on when it found it off (or vice versa) | `TracemallocMemoryBackend.collect()` always restores the prior tracing state; if writing a custom memory backend, do the same |
+| **Custom service method unknown on `self._service`** | Type checker reports `.compile`/`.custom_method()` etc. as unknown attributes | Router declared without the 6th `S` type arg — `self._service` is only typed as the erased `AsyncService[Any, ...]` base | Subscript `CRUDRouter[..., ConcreteService]` (or `VarcoCRUDRouter[..., ConcreteService]`) and use `self.service`/`self._service`, both narrowed to `ConcreteService` |
 
 ---
 

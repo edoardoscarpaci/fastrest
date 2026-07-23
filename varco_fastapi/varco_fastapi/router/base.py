@@ -375,6 +375,10 @@ def _resolve_type_args(router_cls: type) -> tuple[type, ...] | None:
         - No VarcoRouter base → returns None (all models will be Any)
         - VarcoRouter used without type args → returns None
         - Type args are TypeVars (unresolved generics) → returns None
+        - ``VarcoCRUDRouter[D, PK, C, R, U, S]`` (Plan 001's 6th ``S`` TypeVar,
+          the concrete service type) → the trailing ``S`` arg is dropped; CRUD
+          model resolution (task payload (de)serialization, PK coercion, etc.)
+          always receives exactly the 5 model args ``(D, PK, C, R, U)``.
     """
     for base in getattr(router_cls, "__orig_bases__", ()):
         origin = get_origin(base)
@@ -394,6 +398,16 @@ def _resolve_type_args(router_cls: type) -> tuple[type, ...] | None:
 
         resolved = tuple(a for a in args if not isinstance(a, TypingTypeVar))
         if len(resolved) == len(args):
+            if len(args) == 6:
+                # VarcoCRUDRouter (and the CRUD presets) carry an optional 6th
+                # `S` type arg — the concrete service type (Plan 001). It is a
+                # static-narrowing seam only; it must never leak into CRUD
+                # model resolution, so drop it here rather than at every
+                # call site.
+                from varco_fastapi.router.crud import VarcoCRUDRouter
+
+                if issubclass(origin, VarcoCRUDRouter):
+                    return args[:5]
             return args
     return None
 

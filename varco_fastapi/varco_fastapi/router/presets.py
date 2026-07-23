@@ -28,6 +28,16 @@ Usage::
 
     app.include_router(OrderRouter().build_router())
 
+Add the concrete service as an optional 6th type arg to type ``self.service`` /
+``self._service`` as the concrete class (not the erased ``AsyncService`` base)::
+
+    class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
+        _prefix = "/orders"
+
+        @route("POST", "/{id}/cancel")
+        async def cancel(self, id: UUID) -> None:
+            await self.service.cancel_order(id)  # typed OrderService
+
 For WebSocket or SSE, compose with the opt-in mixins separately::
 
     from varco_fastapi.router.mixins import SSEMixin
@@ -48,7 +58,9 @@ Async safety:   ✅ No I/O at class-definition time.
 
 from __future__ import annotations
 
-from typing import TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar as _TypingTypeVar
+
+from typing_extensions import TypeVar
 
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.crud import VarcoCRUDRouter
@@ -61,12 +73,29 @@ from varco_fastapi.router.mixins import (
     UpdateMixin,
 )
 
+if TYPE_CHECKING:
+    from typing import Any
+
+    from varco_core.service import AsyncService
+
 # Generic type parameters — mirrors VarcoRouter[D, PK, C, R, U]
-D = TypeVar("D")
-PK = TypeVar("PK")
-C = TypeVar("C")
-R = TypeVar("R")
-U = TypeVar("U")
+D = _TypingTypeVar("D")
+PK = _TypingTypeVar("PK")
+C = _TypingTypeVar("C")
+R = _TypingTypeVar("R")
+U = _TypingTypeVar("U")
+
+# 6th type parameter (Plan 001) — the concrete AsyncService subclass. Threaded
+# through every CRUD preset below so 6-arg subscription (e.g.
+# `CRUDRouter[Order, UUID, C, R, U, OrderService]`) is exposed to end users,
+# not just to `VarcoCRUDRouter` directly. Defaulted via PEP 696
+# (`typing_extensions.TypeVar`) so existing 5-arg preset subscription keeps
+# working unchanged. Must remain the LAST type parameter on every preset base.
+S = TypeVar(
+    "S",
+    bound="AsyncService[Any, Any, Any, Any, Any]",
+    default="AsyncService[Any, Any, Any, Any, Any]",
+)
 
 
 # ── AllRouteMixin ─────────────────────────────────────────────────────────────
@@ -112,7 +141,8 @@ class AllRouteMixin(
 
 class CRUDRouter(
     AllRouteMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],
+    VarcoCRUDRouter[D, PK, C, R, U, S],
+    Generic[D, PK, C, R, U, S],
 ):
     """
     Pre-composed router with all six HTTP CRUD endpoints.
@@ -137,6 +167,15 @@ class CRUDRouter(
         _list_max_limit = 200
         _delete_include_in_schema = False  # hide DELETE from OpenAPI
 
+    Optional 6th type arg — concrete service type (Plan 001)::
+
+        class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
+            _prefix = "/orders"
+
+            @route("POST", "/{id}/cancel")
+            async def cancel(self, id: UUID) -> None:
+                await self.service.cancel_order(id)  # typed OrderService, not the erased base
+
     Thread safety:  ✅ ClassVars are read-only after class definition.
     Async safety:   ✅ build_router() is synchronous.
     """
@@ -148,7 +187,8 @@ class CRUDRouter(
 class ReadOnlyRouter(
     ListMixin,
     ReadMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],
+    VarcoCRUDRouter[D, PK, C, R, U, S],
+    Generic[D, PK, C, R, U, S],
 ):
     """
     Pre-composed router with read-only access (GET / + GET /{id}).
@@ -173,7 +213,8 @@ class WriteRouter(
     UpdateMixin,
     PatchMixin,
     DeleteMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],
+    VarcoCRUDRouter[D, PK, C, R, U, S],
+    Generic[D, PK, C, R, U, S],
 ):
     """
     Pre-composed router with write-only access (POST, PUT, PATCH, DELETE).
@@ -201,7 +242,8 @@ class NoDeleteRouter(
     ReadMixin,
     UpdateMixin,
     PatchMixin,
-    VarcoCRUDRouter[D, PK, C, R, U],
+    VarcoCRUDRouter[D, PK, C, R, U, S],
+    Generic[D, PK, C, R, U, S],
 ):
     """
     Pre-composed router with all CRUD endpoints except DELETE.

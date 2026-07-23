@@ -68,7 +68,9 @@ Async safety:   ✅ ``build_router()`` is synchronous; closures are async-safe.
 from __future__ import annotations
 
 import logging
-from typing import Any, ClassVar
+from typing import Any, Generic
+
+from typing_extensions import TypeVar
 
 from varco_core.job import AbstractJobRunner
 from varco_core.job.serializer import DEFAULT_SERIALIZER, TaskSerializer
@@ -87,6 +89,21 @@ if TYPE_CHECKING:
     from varco_core.job.task import TaskRegistry
     from varco_core.service import AsyncService
     from varco_fastapi import AbstractServerAuth
+
+# 6th type parameter (Plan 001) — the concrete AsyncService subclass, e.g.
+# `RuleService`. Defaulted via PEP 696 (`typing_extensions.TypeVar`, since
+# `requires-python = ">=3.12"` predates the native 3.13 syntax) so 5-arg
+# subscription (`VarcoCRUDRouter[D, PK, C, R, U]`, all existing routers)
+# keeps resolving `S` to the erased `AsyncService[Any, ...]` unchanged.
+# `bound=`/`default=` are string forward-refs — `AsyncService` is only
+# imported under TYPE_CHECKING above, so no runtime import is required.
+# Must remain the LAST type parameter wherever it appears (see class header
+# and the CRUD presets in `presets.py`).
+S = TypeVar(
+    "S",
+    bound="AsyncService[Any, Any, Any, Any, Any]",
+    default="AsyncService[Any, Any, Any, Any, Any]",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,19 +139,24 @@ def _coerce_pk(pk_type: type, value: Any) -> Any:
     return pk_type(value)
 
 
-class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
+class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
     """
     Service-backed CRUD router with task-based async recovery.
 
     Extends ``VarcoRouter`` with service injection, CRUD handler dispatch,
     and named-task auto-registration for recoverable async mode.
 
-    Type parameters (mirrors ``AsyncService[D, PK, C, R, U]``):
+    Type parameters (mirrors ``AsyncService[D, PK, C, R, U]``, plus the
+    optional 6th ``S``):
         D:   ``DomainModel`` subclass
         PK:  Primary key type (e.g. ``UUID``, ``int``)
         C:   Create DTO
         R:   Read DTO
         U:   Update / Patch DTO
+        S:   Concrete ``AsyncService`` subclass (Plan 001, optional, defaulted
+             to ``AsyncService[Any, Any, Any, Any, Any]``).  Subscript it to
+             get a correctly-typed ``self._service`` / ``self.service`` with
+             zero per-subclass boilerplate — see ``DESIGN`` below.
 
     ClassVars (declarative, set at class-definition time):
         _prefix:    URL prefix for all routes (e.g. ``"/orders"``).
@@ -142,8 +164,15 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
         _version:   API version prefix (e.g. ``"v2"``).
         _auth:      ``AbstractServerAuth`` instance for all routes.  Can also be
                     overridden per-instance via ``__init__(auth=...)``.
-        _service:   ``AsyncService`` instance — set as a ClassVar in tests;
-                    normally injected per-instance by DI via ``__init__``.
+
+    Instance attribute:
+        _service:   ``S | None`` — the ``AsyncService`` instance, normally
+                    injected per-instance by DI via ``__init__``, or set as a
+                    plain class-level attribute in tests (e.g.
+                    ``_service = MockService()``, resolved via MRO at
+                    ``getattr`` time — unaffected by this being an instance
+                    annotation rather than a ``ClassVar``, see ``DESIGN``).
+                    Prefer the ``service`` property for a non-Optional read.
 
     __init__ params (injected by DI or passed directly):
         job_runner:      ``AbstractJobRunner`` for ``?with_async=true`` offload.
@@ -168,6 +197,31 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
         router = container.get(OrderRouter)
         app.include_router(router.build_router())
 
+    Typed concrete service (6th ``S`` type arg)::
+
+        class OrderRouter(VarcoCRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
+            _prefix = "/orders"
+
+            @route("POST", "/{id}/cancel")
+            async def cancel(self, id: UUID) -> None:
+                # self.service is typed OrderService (not the erased AsyncService base)
+                await self.service.cancel_order(id)
+
+    DESIGN: 6th `S` TypeVar for the concrete service type (Plan 001)
+        ✅ Zero per-subclass boilerplate — `self._service` / `self.service` are
+           correctly narrowed to the concrete service class without a cast or
+           a hand-rolled `@property` override on every router.
+        ✅ Fixes a pre-existing defect: `_service` used to be declared
+           `ClassVar[AsyncService[D, PK, C, R, U] | None]`, which is illegal
+           (`ClassVar` cannot contain TypeVars) and, being `ClassVar`, was
+           invariant — a subclass could not narrow it without an LSP error.
+        ✅ `S` is defaulted via PEP 696 (`typing_extensions.TypeVar`), so
+           existing 5-arg subscription is unaffected — `S` silently resolves
+           to `AsyncService[Any, ...]`.
+        ❌ Adds a 6th type parameter and a `typing_extensions` dependency.
+        ❌ `S` must remain the LAST type parameter everywhere it is threaded
+           (this class and each CRUD preset in `presets.py`).
+
     Thread safety:  ✅ Instance attributes set once at construction.
     Async safety:   ✅ build_router() is synchronous; handlers are async-safe.
 
@@ -175,18 +229,27 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
         - ``_task_registry`` not resolvable → tasks not registered; recovery unavailable.
           Async mode still works via the bare coroutine fallback (non-recoverable).
         - ``_service`` is ``None`` (not injected) → CRUD handlers log a warning and
-          return 501 Not Implemented via ``_make_noop_handler``.
+          return 501 Not Implemented via ``_make_noop_handler``.  This path reads
+          ``getattr(self, "_service", None)`` directly, NOT the ``service``
+          property, so it is unaffected by the property's ``RuntimeError``.
+        - ``self.service`` accessed while ``_service`` is ``None`` → raises
+          ``RuntimeError`` (ergonomic, non-Optional accessor — see the
+          ``service`` property below).
         - Renaming the router class breaks in-flight job recovery — jobs submitted
           under the old class name will not find a registered task on restart.
     """
 
-    # ── ClassVar configuration ────────────────────────────────────────────────
+    # ── Instance attribute (Plan 001: was an illegal `ClassVar[TypeVar-parametrized]`) ──
 
     # Injected service — set via Inject[] in __init__ by providify, or as a
-    # ClassVar directly in tests (e.g. _service = MockService()).  The ClassVar
-    # annotation without a default value acts as a documentation-only type hint;
-    # the actual value is always an instance attribute after construction.
-    _service: ClassVar[AsyncService[D, PK, C, R, U] | None]
+    # plain class-level attribute directly in tests (e.g.
+    # _service = MockService()), resolved via MRO at getattr() time exactly
+    # as before.  This is now an instance-level annotation (NOT ClassVar):
+    # `ClassVar` cannot legally contain a TypeVar, and being invariant it
+    # blocked subclasses from narrowing the type.  Typed `S | None` so a
+    # `VarcoCRUDRouter[..., ConcreteService]` subscription narrows this to
+    # `ConcreteService | None` with zero per-subclass boilerplate.
+    _service: S | None
 
     def __init__(
         self,
@@ -252,6 +315,39 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U]):
             self._task_registry = task_registry
         if task_serializer is not None:
             self._task_serializer = task_serializer
+
+    @property
+    def service(self) -> S:
+        """
+        Non-Optional accessor for the concrete, DI-injected (or class-level
+        test) service — narrowed to ``S`` at subclass sites that subscript the
+        6th type arg (e.g. ``CRUDRouter[..., OrderService]``).
+
+        Prefer this over ``self._service`` at call sites that need to invoke
+        custom service methods — it avoids repeating an ``is None`` guard /
+        ``| None`` handling at every call site.
+
+        Returns:
+            The concrete service instance (typed ``S``).
+
+        Raises:
+            RuntimeError: ``_service`` was never injected via DI nor set as a
+                class-level test attribute.  The 501-Not-Implemented CRUD
+                fallback path is unaffected — it reads
+                ``getattr(self, "_service", None)`` directly, not this property.
+
+        Edge cases:
+            - ``_service`` set at class level (test idiom, no DI) → resolved
+              via MRO through ``getattr``, same as ``self._service``.
+        """
+        svc = getattr(self, "_service", None)
+        if svc is None:
+            raise RuntimeError(
+                f"{type(self).__name__}.service: no service is set — inject "
+                f"one via __init__(service=...) (DI) or assign `_service` at "
+                f"class definition time (test idiom)."
+            )
+        return svc  # type: ignore[return-value]  # narrowed by S at subclass sites
 
     def build_router(self) -> Any:
         """

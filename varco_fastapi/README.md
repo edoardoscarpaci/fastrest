@@ -205,6 +205,70 @@ All field names below assume a prefix of `MY_SVC_` — replace it with your own.
 
 ---
 
+## CRUD routers
+
+`VarcoCRUDRouter[D, PK, C, R, U]` (and the pre-composed `CRUDRouter` / `ReadOnlyRouter` /
+`WriteRouter` / `NoDeleteRouter` presets in `varco_fastapi.router.presets`) is the
+service-backed router base — it injects an `AsyncService`, dispatches the standard CRUD
+actions, and auto-registers named tasks for `?with_async=true` recovery.
+
+```python
+from varco_fastapi.router.presets import CRUDRouter
+
+class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
+    _prefix = "/orders"
+    _service = container.get(OrderService)  # AsyncService[Order, UUID, C, R, U]
+    _auth = container.get(JwtBearerAuth)
+```
+
+### Typed concrete service (6th `S` type arg)
+
+Add the concrete `AsyncService` subclass as an optional 6th type argument to get
+`self._service` typed `ConcreteService | None` and the `self.service` accessor typed
+non-Optional `ConcreteService` — custom service methods beyond the CRUD surface are then
+visible to the type checker with zero per-subclass boilerplate (no cast, no hand-rolled
+`@property` override):
+
+```python
+from varco_fastapi.router.endpoint import route
+
+class OrderService(AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
+    async def cancel_order(self, order_id: UUID) -> None: ...
+
+class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
+    _prefix = "/orders"
+
+    @route("POST", "/{order_id}/cancel")
+    async def cancel(self, order_id: UUID) -> None:
+        # self.service is typed OrderService — .cancel_order is visible with no cast.
+        await self.service.cancel_order(order_id)
+```
+
+- 5-arg subscription (`CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]`) keeps
+  working unchanged — `S` is defaulted via PEP 696 (`typing_extensions.TypeVar`, since
+  `requires-python = ">=3.12"` predates the native 3.13 syntax) and resolves to
+  `AsyncService[Any, ...]`.
+- `self.service` raises `RuntimeError` if `_service` was never injected/set — prefer it over
+  `self._service` at call sites that invoke custom methods, so you don't repeat an
+  `is None` guard. The 501-Not-Implemented CRUD fallback path is unaffected — it still reads
+  `_service` directly, not this property.
+- **Fallback idiom for anyone staying on 5 type args** — declare a subclass `@property`
+  that casts:
+
+  ```python
+  from typing import cast
+
+  class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
+      _prefix = "/orders"
+      _service = container.get(OrderService)
+
+      @property
+      def order_service(self) -> OrderService:
+          return cast(OrderService, self._service)
+  ```
+
+---
+
 ## Service-free (generic) REST servers
 
 Use `GenericRouter` when the server has no `AsyncService` or repository — for example a

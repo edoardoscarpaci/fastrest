@@ -866,6 +866,15 @@ filtered_query = transformer.transform(base_query, params, User)
 - **Service-free routers**: `GenericRouter` (alias for `VarcoRouter` with no type args) is the
   entry point for data-processing, proxy, or computed-endpoint servers with no `AsyncService`
   or repository.  All cross-cutting features (middleware, telemetry, auth) apply unchanged.
+- **`VarcoCRUDRouter[D, PK, C, R, U, S]`** (`varco_fastapi.router.crud`) — service-backed CRUD
+  router with task-based async recovery; `CRUDRouter`/`ReadOnlyRouter`/`WriteRouter`/
+  `NoDeleteRouter` (`varco_fastapi.router.presets`) are pre-composed subclasses threading the
+  same 6 type params. `S` is an optional, PEP-696-defaulted 6th type parameter (the concrete
+  `AsyncService` subclass, via `typing_extensions.TypeVar`) that types `self._service` as
+  `S | None` and the `self.service` property as non-Optional `S` — subscript it
+  (`CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]`) to expose
+  custom service methods (e.g. `self.service.cancel_order(...)`) with zero per-subclass
+  boilerplate. 5-arg subscription still works — `S` defaults to `AsyncService[Any, ...]`.
 - **Route-level authorization**: `RouteGuard` (`varco_fastapi.auth.guard`) is a declarative,
   immutable predicate attached to any `@route` via `requires=`.  Constructor helpers:
   `require_scopes`, `require_roles`, `require_grant`, `require_predicate`, `allow_anonymous`.
