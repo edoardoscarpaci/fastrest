@@ -248,6 +248,44 @@ app = create_varco_app(routers=[ReportRouter])
 | `require_predicate(fn)` | Custom sync/async callable returning bool |
 | `allow_anonymous()` | Anonymous callers pass through (public endpoints) |
 
+### Custom `@route` handlers — full FastAPI parameters
+
+A custom `@route` method may declare **any parameter a normal FastAPI endpoint can**,
+and FastAPI parses, validates, coerces and injects it — `Query(...)`, `Body(...)`
+(Pydantic models), `Depends(...)`, `Request`/`Response`/`BackgroundTasks`, and
+**type-coerced** path params. The return annotation drives the OpenAPI response model.
+`ctx`/`auth`/`context` still receive the router's `AuthContext`, and any `RouteGuard`
+still runs before the handler.
+
+```python
+from fastapi import Body, Depends, Query, Request
+from pydantic import BaseModel
+
+from varco_core.auth.base import AuthContext
+
+class SummaryFilter(BaseModel):
+    since: str | None = None
+
+class ReportRouter(GenericRouter):
+    _prefix = "/reports"
+    _auth = JwtBearerAuth(...)
+
+    @route("POST", "/{report_id}/summary", requires=require_scopes("reports:read"))
+    async def summary(
+        self,
+        report_id: int,                       # typed path param — coerced to int
+        ctx: AuthContext,                     # injected from _auth
+        window: int = Query(30, ge=1, le=365),  # validated query param (422 on bad input)
+        filters: SummaryFilter = Body(...),   # Pydantic request body
+        repo: Repo = Depends(get_repo),       # arbitrary FastAPI dependency
+        request: Request = None,              # raw request if you want it
+    ) -> SummaryResponse:                     # → OpenAPI response model
+        ...
+```
+
+Under the hood `build_router()` synthesizes a wrapper whose `__signature__` mirrors the
+method, so FastAPI drives all parsing natively — no manual request handling needed.
+
 ---
 
 ## Composite / all-in-one deployment

@@ -46,10 +46,11 @@ Async safety:   ✅ ``build_router()`` is synchronous; closures are async-safe.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from abc import ABC
 from dataclasses import dataclass
-from typing import Any, ClassVar, Generic, get_args, get_origin
+from typing import Any, ClassVar, Final, Generic, get_args, get_origin, get_type_hints
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
@@ -690,12 +691,37 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
         response_description = extra.get("response_description", "Successful Response")
         include_in_schema = extra.get("include_in_schema", True)
 
-        # For list routes, response_model is set via handler.__annotations__["return"]
-        # (wrapped in PagedReadDTO[R] by _make_list_handler). Do not pass the raw R
-        # type here or FastAPI will try to validate PagedReadDTO against R directly.
-        explicit_response_model = (
-            None if route.crud_action == "list" else route.response_model
+        # Response-model handling differs between CRUD and custom routes:
+        #   - CRUD routes declare the model explicitly (the R type).  "list" is set
+        #     via handler.__annotations__["return"] (wrapped in PagedReadDTO[R]), so
+        #     we pass None here — passing raw R would make FastAPI validate the paged
+        #     wrapper against R directly.
+        #   - Custom @route handlers let FastAPI INFER the model from the synthesized
+        #     return annotation.  We must NOT pass an explicit None: FastAPI only
+        #     infers when the argument is its Default() sentinel, never for a literal
+        #     None (which means "no response model").
+        # A custom route can actually offload only when async_capable AND a job
+        # runner is wired — async_capable=True is the @route default, so it alone
+        # doesn't mean the route ever returns a JobAcceptedResponse.
+        can_offload = (
+            route.async_capable and getattr(self, "_job_runner", None) is not None
         )
+
+        route_kwargs: dict[str, Any] = {}
+        if route.is_crud:
+            route_kwargs["response_model"] = (
+                None if route.crud_action == "list" else route.response_model
+            )
+        elif can_offload:
+            # Offloadable custom routes may return EITHER the handler's own return
+            # type OR a JobAcceptedResponse (when ?with_async=true).  Suppress
+            # response_model inference so the polymorphic offload response is not
+            # validated against the inline return type.
+            route_kwargs["response_model"] = None
+        elif route.response_model is not None:
+            route_kwargs["response_model"] = route.response_model
+        # else: plain custom route → FastAPI infers the model from the return type.
+
         api_router.add_api_route(
             path=route.path,
             endpoint=handler,
@@ -703,7 +729,6 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
             status_code=route.status_code,
             summary=route.summary,
             description=route.description,
-            response_model=explicit_response_model,
             tags=list(route.tags) if route.tags else None,
             deprecated=route.deprecated,
             responses=responses,
@@ -711,6 +736,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
             operation_id=operation_id,
             response_description=response_description,
             include_in_schema=include_in_schema,
+            **route_kwargs,
         )
 
     def _make_http_handler(
@@ -1144,6 +1170,202 @@ _CRUD_HANDLER_FACTORIES: dict[str, Any] = {
 # ── Custom @route handler factory ─────────────────────────────────────────────
 
 
+# Parameter names on a ``@route`` handler that receive the request's
+# ``AuthContext`` — kept for backward compatibility with the historical
+# "ctx/auth/context is magically injected" contract.
+_AUTH_PARAM_NAMES: Final[tuple[str, ...]] = ("ctx", "auth", "context")
+
+# Names of the framework-only parameters we synthesize onto the FastAPI-visible
+# signature when the handler itself does not declare them.  They are stripped
+# from the kwargs before the user's method is invoked.  Leading dunders keep
+# them clear of realistic user parameter names; they are plain dict keys /
+# ``Parameter`` names, so Python name-mangling does not apply.
+_HIDDEN_AUTH_PARAM: Final[str] = "__varco_auth"
+_HIDDEN_REQUEST_PARAM: Final[str] = "__varco_request"
+
+
+@dataclass(frozen=True)
+class _CustomHandlerSig:
+    """
+    Synthesized FastAPI-visible signature for a custom ``@route`` handler.
+
+    Attributes:
+        signature:     The ``inspect.Signature`` FastAPI introspects — mirrors the
+                       user's method params (minus ``self``) so FastAPI parses
+                       ``Query``/``Body``/``Depends``/``Request``/path params natively.
+        auth_kwarg:    Key in the resolved kwargs carrying the ``AuthContext`` (used
+                       for the ``RouteGuard`` and the offload snapshot); ``None`` when
+                       the router has no ``_auth``.
+        request_kwarg: Key carrying the ``Request`` (used to read the ``?with_async``
+                       offload flag); ``None`` when no request is available.
+        hidden_kwargs: Keys we injected ourselves — stripped before the user's method
+                       is called so they never leak into the handler signature.
+    """
+
+    signature: inspect.Signature
+    auth_kwarg: str | None
+    request_kwarg: str | None
+    hidden_kwargs: frozenset[str]
+
+
+def _resolve_handler_hints(method_fn: Any) -> dict[str, Any]:
+    """
+    Resolve a handler's annotations to runtime objects.
+
+    Every router file uses ``from __future__ import annotations``, so a handler's
+    raw annotations are **strings**.  FastAPI needs real objects (Pydantic models,
+    ``int``, ``Request`` …) and evaluates string annotations against the *endpoint
+    callable's* ``__globals__`` — which for our synthesized wrapper is this module,
+    not the user's.  We therefore resolve here, against the user method's own
+    module, and hand FastAPI real objects.
+
+    Args:
+        method_fn: The unbound router method decorated with ``@route``.
+
+    Returns:
+        A ``name -> type`` map (including the ``"return"`` key).  Names whose
+        annotation cannot be resolved are omitted so the caller falls back to ``Any``.
+
+    Edge cases:
+        - A handler with no annotations                → empty-ish map, all fall back to ``Any``.
+        - An annotation referencing a ``TYPE_CHECKING``-only import → resolution
+          raises; we log at debug and return ``{}`` (that param degrades to ``Any``).
+    """
+    try:
+        # include_extras keeps ``Annotated[int, Query()]`` metadata intact for FastAPI.
+        return get_type_hints(method_fn, include_extras=True)
+    except Exception as exc:  # noqa: BLE001
+        # DESIGN: broad catch on purpose — a single unresolvable annotation must not
+        # abort building the whole router.  The offending param simply degrades to
+        # ``Any`` (FastAPI treats it as an optional query param) rather than crashing.
+        logger.debug(
+            "Could not resolve type hints for %r (%s); params degrade to Any",
+            getattr(method_fn, "__qualname__", method_fn),
+            exc,
+        )
+        return {}
+
+
+def _synthesize_custom_signature(
+    method_fn: Any,
+    server_auth: Any,
+    *,
+    can_offload: bool,
+) -> _CustomHandlerSig:
+    """
+    Build the FastAPI-visible signature for a custom ``@route`` handler.
+
+    The synthesized signature mirrors the user's method parameters (minus ``self``)
+    so FastAPI's dependency resolver parses, validates and coerces everything —
+    ``Query``/``Body``/``Depends``/``Request``/``Response`` and type-coerced path
+    params — exactly as it would for a hand-written endpoint.  Two framework-only
+    parameters are added when needed:
+
+    - an ``AuthContext = Depends(server_auth)`` param, so the ``RouteGuard`` and the
+      async-offload snapshot always have the request's auth even when the handler
+      does not declare ``ctx``/``auth``/``context``;
+    - a ``Request`` param, so the wrapper can still read ``?with_async`` when the
+      route can offload and the handler did not ask for a ``Request`` itself.
+
+    Args:
+        method_fn:   The unbound router method decorated with ``@route``.
+        server_auth: The router's auth strategy, or ``None``.
+        can_offload: Whether this route supports background offload (needs a Request).
+
+    Returns:
+        A ``_CustomHandlerSig`` describing the signature and how to route kwargs.
+
+    Edge cases:
+        - Handler declares ``ctx`` but ``server_auth is None`` → the param is dropped
+          entirely (preserves the historical no-inject behavior; the route still
+          builds, matching the pre-existing contract).
+        - Handler declares its own ``Request`` param → reused for offload; no hidden
+          Request is added, and it flows through to the handler.
+        - Multiple auth-named params → only the first receives the ``AuthContext``.
+    """
+    P = inspect.Parameter
+    raw_sig = inspect.signature(method_fn)
+    hints = _resolve_handler_hints(method_fn)
+    # Shared Depends object — same pattern the CRUD factories use for auth.
+    auth_dep = Depends(server_auth) if server_auth is not None else None
+
+    params: list[inspect.Parameter] = []
+    auth_kwarg: str | None = None
+    request_kwarg: str | None = None
+    hidden: set[str] = set()
+
+    for name, p in raw_sig.parameters.items():
+        if name == "self":
+            continue
+
+        annotation = hints.get(name, p.annotation)
+        if annotation is P.empty:
+            annotation = Any
+
+        # Auth-named param → fed from the router's _auth via Depends(server_auth),
+        # keeping the historical ctx/auth/context injection contract.
+        if name in _AUTH_PARAM_NAMES and auth_kwarg is None:
+            if auth_dep is not None:
+                auth_kwarg = (
+                    name  # flows through to the user's method under its own name
+                )
+                params.append(
+                    P(
+                        name,
+                        kind=P.KEYWORD_ONLY,
+                        default=auth_dep,
+                        annotation=AuthContext,
+                    )
+                )
+            # server_auth is None → drop it (preserves prior no-inject behavior).
+            continue
+
+        # Note a user-declared Request so we can read the offload flag from it.
+        if annotation is Request and request_kwarg is None:
+            request_kwarg = name
+
+        # Pass-through: keep the user's default (Query()/Body()/Depends()/…) and type
+        # so FastAPI resolves them natively.  All KEYWORD_ONLY — sidesteps the
+        # "non-default before default" ordering rule and lets us call purely by kwargs.
+        default = p.default if p.default is not P.empty else P.empty
+        params.append(
+            P(name, kind=P.KEYWORD_ONLY, default=default, annotation=annotation)
+        )
+
+    # Router has _auth but the handler didn't declare ctx/auth/context — still resolve
+    # the AuthContext (hidden) for the RouteGuard and the offload snapshot.
+    if auth_dep is not None and auth_kwarg is None:
+        auth_kwarg = _HIDDEN_AUTH_PARAM
+        hidden.add(_HIDDEN_AUTH_PARAM)
+        params.append(
+            P(
+                _HIDDEN_AUTH_PARAM,
+                kind=P.KEYWORD_ONLY,
+                default=auth_dep,
+                annotation=AuthContext,
+            )
+        )
+
+    # Offload needs a Request to read ?with_async / ?callback_url.  Add a hidden one
+    # only when the route can offload and the handler didn't already ask for a Request.
+    if can_offload and request_kwarg is None:
+        request_kwarg = _HIDDEN_REQUEST_PARAM
+        hidden.add(_HIDDEN_REQUEST_PARAM)
+        params.append(
+            P(
+                _HIDDEN_REQUEST_PARAM,
+                kind=P.KEYWORD_ONLY,
+                default=P.empty,
+                annotation=Request,
+            )
+        )
+
+    # Return annotation drives FastAPI's response_model / OpenAPI schema.
+    ret = hints.get("return", raw_sig.return_annotation)
+    signature = inspect.Signature(params, return_annotation=ret)
+    return _CustomHandlerSig(signature, auth_kwarg, request_kwarg, frozenset(hidden))
+
+
 def _make_custom_handler(
     *,
     router_instance: VarcoRouter,
@@ -1155,10 +1377,15 @@ def _make_custom_handler(
     """
     Create an endpoint closure for a method decorated with ``@route``.
 
-    The method is expected to accept ``(self, ctx: AuthContext, **path_params)``
-    or any subset thereof.  The closure injects auth and, when
-    ``route.async_capable=True`` and ``?with_async=true`` is present, offloads
-    the call to the job runner instead of executing it inline.
+    The handler may declare any parameters a normal FastAPI endpoint can —
+    ``Query(...)``, ``Body(...)`` (Pydantic models), ``Depends(...)``, ``Request``,
+    ``Response``, ``BackgroundTasks`` and **type-coerced** path params.  The wrapper
+    synthesizes a matching ``__signature__`` (see :func:`_synthesize_custom_signature`)
+    so FastAPI's own dependency resolver parses and injects them.  On top of that it
+    preserves varco's contract: ``ctx``/``auth``/``context`` receive the router's
+    ``AuthContext``, any ``RouteGuard`` runs before the body, and when
+    ``route.async_capable`` and ``?with_async=true`` the call is offloaded to the job
+    runner.
 
     Args:
         router_instance: The ``VarcoRouter`` instance (captures ``self``).
@@ -1168,116 +1395,78 @@ def _make_custom_handler(
         job_runner:      Job runner for async offload, or ``None``.
 
     Returns:
-        An async callable suitable for ``APIRouter.add_api_route()``.
+        An async callable (with an overridden ``__signature__``) suitable for
+        ``APIRouter.add_api_route()``.
 
-    DESIGN: read with_async from request.query_params directly (not Depends())
-        ✅ Avoids registering an internal Depends() that leaks into OpenAPI schema.
-        ✅ One step toward removing FastAPI DI from framework internals — the
-           application should control its own DI (providify) not the framework.
-        ❌ Does not benefit from FastAPI's Query() validation (accepts any truthy
-           string — "true", "1", "yes") — acceptable for an internal flag.
+    DESIGN: synthesize the handler signature from the user's method
+        ✅ Full FastAPI parity — Query/Body/Depends/Request + typed path params work.
+        ✅ Reuses FastAPI's validation and OpenAPI schema generation for free.
+        ✅ Backward compatible — ctx injection, guards and offload are unchanged.
+        ❌ Requires resolving string annotations against the user's module and
+           overriding ``__signature__`` — a little reflection machinery.
 
     Edge cases:
         - Method is not async → TypeError raised at call time, not build time.
         - ``route.async_capable=False`` → ``?with_async=true`` is silently ignored.
         - ``job_runner=None`` → async mode unavailable; falls back to inline execution.
         - ``with_async=true`` but job store raises → HTTP 500 propagated by ErrorMiddleware.
+        - Handler declares ``ctx`` but router has no ``_auth`` → param dropped; calling
+          the route raises (missing arg) exactly as before — set ``_auth`` to fix.
     """
-    import inspect
-
-    auth_dep = Depends(server_auth) if server_auth is not None else None
-    sig = inspect.signature(method_fn)
-    param_names = set(sig.parameters.keys()) - {"self"}
-
     # Whether this route can be offloaded — checked once at build time.
     # job_runner may be None even when async_capable=True (misconfigured app).
     can_offload = route.async_capable and job_runner is not None
-
-    # DESIGN: no **kwargs in handler signature — FastAPI doesn't understand them
-    #   ✅ FastAPI only injects declared parameters (path, query, body, Depends)
-    #   ❌ Path param names/types must match the method's expectations; type is Any
     guard = route.requires
 
-    if auth_dep is not None:
+    spec = _synthesize_custom_signature(method_fn, server_auth, can_offload=can_offload)
+    auth_kwarg = spec.auth_kwarg
+    request_kwarg = spec.request_kwarg
+    hidden = spec.hidden_kwargs
 
-        async def custom_handler(
-            request: Request,
-            auth: AuthContext = auth_dep,
-        ) -> Any:
-            # Route-level authorization — checked before handler runs.
-            if guard is not None:
-                await guard.check(auth)
+    async def custom_handler(**kwargs: Any) -> Any:
+        # FastAPI passes every resolved param by keyword (all synthesized params are
+        # KEYWORD_ONLY), so **kwargs captures the full, validated, coerced argument set.
+        auth = kwargs.get(auth_kwarg) if auth_kwarg is not None else None
 
-            # Read with_async from query string directly — avoids internal Depends()
-            with_async = (
-                request.query_params.get("with_async", "false").lower() == "true"
-                if can_offload
-                else False
+        # Route-level authorization — checked before the handler body runs.
+        if guard is not None:
+            await guard.check(auth)
+
+        request = kwargs.get(request_kwarg) if request_kwarg is not None else None
+        with_async = (
+            can_offload
+            and request is not None
+            and request.query_params.get("with_async", "false").lower() == "true"
+        )
+
+        # Args for the user's method: everything FastAPI resolved minus the
+        # framework-only params we injected for auth/offload.
+        call_kwargs = {k: v for k, v in kwargs.items() if k not in hidden}
+
+        if with_async:
+            callback_url = request.query_params.get("callback_url")
+            # _submit_job calls coro_fn() with no args, so close over the captured
+            # kwargs in a parameterless coroutine.
+            captured = dict(call_kwargs)
+
+            async def _bound_call() -> Any:
+                return await method_fn(router_instance, **captured)
+
+            return await _submit_job(
+                router_instance,
+                job_runner,
+                auth,
+                _bound_call,
+                callback_url=callback_url,
             )
 
-            # Build call kwargs now — these come from this request context and
-            # must be captured before the coroutine is handed to the job runner.
-            call_kwargs: dict[str, Any] = {}
-            for _name in ("ctx", "auth", "context"):
-                if _name in param_names:
-                    call_kwargs[_name] = auth
-            for _name in route.path_params:
-                if _name in request.path_params:
-                    call_kwargs[_name] = request.path_params[_name]
-
-            if with_async:
-                callback_url = request.query_params.get("callback_url")
-                # Capture call_kwargs in a zero-arg coroutine function.
-                # _submit_job calls coro_fn(*args) with no args, so coro_fn
-                # must be a parameterless callable that closes over call_kwargs.
-                captured = dict(call_kwargs)
-
-                async def _bound_call_with_auth() -> Any:
-                    return await method_fn(router_instance, **captured)
-
-                return await _submit_job(
-                    router_instance,
-                    job_runner,
-                    auth,
-                    _bound_call_with_auth,
-                    callback_url=callback_url,
-                )
-
-            # Synchronous path — execute inline
-            return await method_fn(router_instance, **call_kwargs)
-
-    else:
-
-        async def custom_handler(request: Request) -> Any:  # type: ignore[misc]
-            with_async = (
-                request.query_params.get("with_async", "false").lower() == "true"
-                if can_offload
-                else False
-            )
-
-            call_kwargs = {}
-            for _name in route.path_params:
-                if _name in request.path_params:
-                    call_kwargs[_name] = request.path_params[_name]
-
-            if with_async:
-                callback_url = request.query_params.get("callback_url")
-                captured = dict(call_kwargs)
-
-                async def _bound_call_no_auth() -> Any:
-                    return await method_fn(router_instance, **captured)
-
-                return await _submit_job(
-                    router_instance,
-                    job_runner,
-                    None,
-                    _bound_call_no_auth,
-                    callback_url=callback_url,
-                )
-
-            return await method_fn(router_instance, **call_kwargs)
+        # Synchronous path — execute inline.
+        return await method_fn(router_instance, **call_kwargs)
 
     custom_handler.__name__ = route.name
+    custom_handler.__doc__ = getattr(method_fn, "__doc__", None)
+    # FastAPI introspects THIS synthesized signature to build its dependency model.
+    custom_handler.__signature__ = spec.signature  # type: ignore[attr-defined]
     return custom_handler
 
 

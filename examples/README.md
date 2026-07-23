@@ -5,7 +5,7 @@
 | Package | Examples |
 |---|---|
 | `varco_core` | 00, 01, 02, 04, 05, 06, 07, 08, 09, 11, 12, 14, 15, 16, 17, 19, 21, 22 |
-| `varco_fastapi` | 01, 02, 03, 04, 07 |
+| `varco_fastapi` | 01, 02, 03, 04, 07, 23, 24 |
 | `varco_kafka` | 15, 16 |
 | `varco_redis` | 17, 19 |
 | `varco_sa` | 00, 01, 02, 04, 05, 06, 09, 11, 12, 14 |
@@ -43,6 +43,7 @@ Every example runs with `uv run` or `docker compose up` and includes a smoke tes
 | 21 | [async-job-runner](21-async-job-runner/) | job module, enqueue async jobs, 202 Accepted + job_id, poll status | none |
 | 22 | [multi-tenant-soft-delete](22-multi-tenant-soft-delete/) | TenantAwareService + SoftDeleteService + ValidatorServiceMixin via MRO | postgres |
 | 23 | [composite-all-in-one](23-composite-all-in-one/) | create_composite_app — combine multiple services into one deployment; per-service isolation, aggregate health, build_service scoped env | none |
+| 24 | [custom-route-params](24-custom-route-params/) | Full FastAPI parameter injection on custom `@route` handlers — Query/Body/Depends/Request + typed path params, with ctx + RouteGuard | none |
 
 ## Conventions
 

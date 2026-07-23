@@ -135,8 +135,10 @@ ReportRouter().build_router()
   │         └─ crud_action = route.crud_action            → None
   │         └─ (no CRUD dispatch — falls through)
   │         └─ _make_custom_handler(router_instance, method_fn, route, server_auth, job_runner)
-  │              └─ builds async closure `custom_handler`
-  │              └─ closure captures: router_instance, method_fn, route.requires, auth_dep
+  │              └─ synthesizes a __signature__ mirroring the handler's own params
+  │                 (Query/Body/Depends/Request + typed path params) — see
+  │                 technical_docs/features/custom-routes.md
+  │              └─ closure captures: router_instance, method_fn, route.requires, auth
   │    └─ api_router.add_api_route("/summary", custom_handler, methods=["GET"])
   │
   └─ returns APIRouter
@@ -158,16 +160,22 @@ def _mount_router(app, router_cls, container):
 ```
 ASGI stack (Starlette routing)
   └─ FastAPI matched route: custom_handler at /reports/summary
-       └─ FastAPI resolves Depends(server_auth) → auth: AuthContext
-            └─ custom_handler(request, auth=<AuthContext>)
+       └─ FastAPI resolves the handler's synthesized signature:
+            ctx ← Depends(server_auth) → AuthContext
+            (any Query/Body/Depends/typed path params would resolve here too)
+            └─ custom_handler(**resolved)
+                 ├─ auth = resolved["ctx"]
                  ├─ await route.requires.check(auth)    # RouteGuard.check
                  │    └─ check scopes, roles, grant, predicate
                  │    └─ raises ServiceAuthorizationError → 403 on failure
-                 ├─ call_kwargs = {"ctx": auth}         # param_names inspection
-                 └─ await method_fn(router_instance, **call_kwargs)
+                 └─ await method_fn(router_instance, ctx=auth)
                       └─ ReportRouter.get_summary(self, ctx=auth)
                            └─ return {"total": compute_total()}
 ```
+
+The wrapper is registered with a `__signature__` that mirrors the handler's own
+parameters, so FastAPI parses `Query`/`Body`/`Depends`/`Request` and type-coerces
+path params natively.  See [custom-routes.md](custom-routes.md) for the full mechanics.
 
 ---
 
@@ -239,9 +247,11 @@ server_auth = getattr(self, "_auth", None)
 When not `None`, a `Depends(server_auth)` is added to the handler signature, and FastAPI
 calls `server_auth(request) → AuthContext` for every request.
 
-**If `_auth` is not set**: no auth dependency is injected, `auth_dep is None`, and the
-no-auth branch of `_make_custom_handler` is used.  In this branch, `ctx` is never
-populated — handlers must NOT declare a `ctx` parameter.
+**If `_auth` is not set**: no auth dependency is injected.  A handler that declares
+`ctx`/`auth`/`context` has that parameter **dropped** from the synthesized signature,
+so it is never populated and calling the route raises a missing-argument error.
+Handlers on an auth-less router must not declare a `ctx` parameter (all other FastAPI
+params — `Query`/`Body`/`Depends`/`Request` — still work).
 
 ---
 
@@ -255,17 +265,11 @@ subclass.
 
 ### Allow `ctx` in handlers without `_auth`
 
-Currently the no-auth branch in `_make_custom_handler` (`base.py`) does not populate
-`ctx`.  To pass `None` as `ctx` when no auth is configured:
-
-```python
-# base.py, no-auth branch of _make_custom_handler
-for _name in ("ctx", "auth", "context"):
-    if _name in param_names:
-        call_kwargs[_name] = None   # add this line
-```
-
-Be aware this changes existing behaviour for all no-auth `@route` handlers.
+`_synthesize_custom_signature` (`base.py`) **drops** the `ctx`/`auth`/`context` param
+when the router has no `_auth`.  To instead pass `None`, keep the param in the
+synthesized signature with a `None` default and let it flow through (or add it to
+`hidden_kwargs` and inject `None` in the wrapper).  Be aware this changes behaviour for
+all auth-less `@route` handlers.  See [custom-routes.md](custom-routes.md).
 
 ### Support CRUD presets on a service-free router
 

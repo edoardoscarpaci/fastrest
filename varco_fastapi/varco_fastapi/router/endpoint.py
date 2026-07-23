@@ -166,6 +166,22 @@ def route(
     Stores a ``_RouteEntry`` on ``func.__route_entry__`` at class-definition time.
     The route is materialized by ``build_router()`` / ``introspect_routes()``.
 
+    Handler parameters — full FastAPI parity:
+        The decorated method may declare any parameters a normal FastAPI endpoint
+        can, and FastAPI parses, validates and injects them:
+
+        - ``Query(...)`` / ``Body(...)`` (including Pydantic models) — parsed &
+          validated (422 on bad input);
+        - ``Depends(...)`` — any FastAPI dependency is resolved;
+        - ``Request`` / ``Response`` / ``BackgroundTasks`` — injected by annotation;
+        - path params (``/{item_id}``) — **type-coerced** to their annotation;
+        - ``ctx`` / ``auth`` / ``context`` — receives the router's ``AuthContext``
+          (requires ``_auth`` on the router);
+        - the return annotation drives the OpenAPI response model.
+
+        Under the hood ``build_router()`` synthesizes a wrapper whose ``__signature__``
+        mirrors this method, so FastAPI drives everything natively.
+
     Args:
         method:            HTTP method (e.g. ``"GET"``, ``"POST"``).
         path:              URL path relative to the router prefix
@@ -214,12 +230,22 @@ def route(
 
         class OrderRouter(VarcoRouter[...]):
             @route("GET", "/{order_id}/summary", summary="Order summary")
-            async def get_summary(self, order_id: UUID, ctx: AuthContext) -> OrderSummary:
+            async def get_summary(
+                self,
+                order_id: UUID,                       # typed path param — coerced
+                ctx: AuthContext,                     # injected from _auth
+                window: int = Query(30, ge=1),        # validated query param
+                filters: OrderFilter = Body(...),     # Pydantic request body
+                svc: Repo = Depends(get_repo),        # arbitrary FastAPI dependency
+            ) -> OrderSummary:
                 return await self._service.get_summary(order_id, ctx)
 
     Edge cases:
-        - The decorated method receives both path parameters (positional, from
-          FastAPI URL pattern matching) and an injected ``AuthContext`` argument.
+        - Path params are type-coerced to their annotation (e.g. ``int`` → int,
+          422 on a non-matching segment) — no longer raw strings.
+        - A handler declaring ``ctx``/``auth``/``context`` requires the router to
+          set ``_auth``; otherwise the param is dropped and calling the route
+          raises (missing argument).
         - ``rate_limiter`` must be a SHARED instance per use case — creating one
           per router subclass is fine; creating one per request is not.
         - Applying ``@route`` to a non-async function will be caught by

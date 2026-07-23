@@ -337,8 +337,9 @@ enable_policy_authorizer(container)      # OPT-IN: binds PolicyEngineAuthorizer 
 - `CasbinSettings` (pydantic `BaseSettings`) is registered via a `@Provider` in `bootstrap`, NOT
   `@Singleton` — providify cannot inject pydantic's `**values` constructor.
 - The REST admin API is `build_policy_router(engine, server_auth=..., admin_role="admin")` (requires
-  the `varco-casbin[fastapi]` extra) — a FastAPI `APIRouter`, not a `VarcoRouter`, because policy
-  mutations carry JSON bodies and `@route` custom handlers inject only `ctx` + path params.
+  the `varco-casbin[fastapi]` extra) — a plain FastAPI `APIRouter` rather than a `VarcoRouter`
+  (a standalone admin surface with its own JSON-body handlers; it predates `@route`'s full
+  FastAPI-parameter support and there is no need to migrate it).
 - Persisted dynamic CRUD needs `adapter="sqlalchemy"` (the `varco-casbin[sqlalchemy]` extra); the
   default `memory` adapter is non-durable.
 
@@ -525,6 +526,7 @@ app = create_varco_app(routers=[ReportRouter])
 - Guard is checked **before** the handler runs; denial raises `ServiceAuthorizationError` → HTTP 403.
 - If `ctx` is declared in the handler, `_auth` must be set (or it will not be populated).
 - For truly public endpoints (no auth needed), use `requires=allow_anonymous()` or omit `requires=` altogether and don't declare `ctx`.
+- **Custom `@route` handlers get full FastAPI parameter injection** — declare `Query(...)`, `Body(...)` (Pydantic models), `Depends(...)`, `Request`/`Response`/`BackgroundTasks`, and **type-coerced** path params, exactly like a hand-written FastAPI endpoint; the return annotation drives the OpenAPI response model. `build_router()` synthesizes a wrapper whose `__signature__` mirrors the method so FastAPI parses everything natively (see `_make_custom_handler` / `_synthesize_custom_signature` in `router/base.py`). `ctx`/`auth`/`context` and the `RouteGuard`/async-offload behavior are unchanged. **Exception:** on an `async_capable` route with a job runner wired, `response_model` inference is suppressed (the route may return a `JobAcceptedResponse` when `?with_async=true`).
 
 #### Scenario: Combine multiple services into one all-in-one deployment
 
