@@ -631,3 +631,66 @@ class TestFullRoundTrip:
         assert util.is_system() is True
         assert util.is_type("system") is True
         assert util.has_auth_ctx() is False
+
+
+# ── Phase 4: leeway / clock skew (Plan 002, step 32) ────────────────────────────
+# New imports are local to each test so this file still collects successfully
+# even before varco_core.jwt.config / leeway support exists.
+
+
+class TestJwtLeeway:
+    def test_expired_token_parses_with_sufficient_leeway(self):
+        signed = (
+            JwtBuilder()
+            .subject("usr_1")
+            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .encode(_SECRET)
+        )
+        # 30s leeway covers a token that expired only 10s ago.
+        token = JwtParser.parse(signed, _SECRET, leeway=30)
+        assert token.sub == "usr_1"
+
+    def test_expired_token_without_leeway_raises(self):
+        import jwt as _pyjwt
+
+        signed = (
+            JwtBuilder()
+            .subject("usr_1")
+            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .encode(_SECRET)
+        )
+        with pytest.raises(_pyjwt.ExpiredSignatureError):
+            JwtParser.parse(signed, _SECRET, leeway=0)
+
+    def test_leeway_picked_up_from_env_when_omitted(self, monkeypatch):
+        monkeypatch.setenv("VARCO_JWT_LEEWAY_SECONDS", "30")
+        signed = (
+            JwtBuilder()
+            .subject("usr_1")
+            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .encode(_SECRET)
+        )
+        # No explicit leeway= kwarg — must read VARCO_JWT_LEEWAY_SECONDS.
+        token = JwtParser.parse(signed, _SECRET)
+        assert token.sub == "usr_1"
+
+    def test_is_expired_with_leeway(self):
+        tok = (
+            JwtBuilder()
+            .subject("usr_1")
+            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .build()
+        )
+        util = JwtUtil(tok)
+        assert util.is_expired() is True
+        assert util.is_expired(leeway=30) is False
+
+    def test_nbf_in_future_accepted_with_leeway(self):
+        signed = (
+            JwtBuilder()
+            .subject("usr_1")
+            .not_before(datetime.now(timezone.utc) + timedelta(seconds=10))
+            .encode(_SECRET)
+        )
+        token = JwtParser.parse(signed, _SECRET, leeway=30)
+        assert token.sub == "usr_1"

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 # PyJWT — the only external dependency for this module.
 # Aliased to avoid shadowing the local `jwt` package name.
@@ -28,6 +28,9 @@ import jwt as _jwt
 
 from varco_core.auth import AuthContext
 from varco_core.jwt.model import JsonWebToken, _RESERVED_CLAIM_KEYS
+
+if TYPE_CHECKING:
+    from varco_core.jwt.profile import TokenProfile
 
 
 class JwtBuilder:
@@ -221,6 +224,53 @@ class JwtBuilder:
         """
         # uuid4 provides ~122 bits of randomness — collision probability negligible
         self._jti = str(uuid.uuid4())
+        return self
+
+    # ── Token profile setter (Plan 002 §B) ────────────────────────────────────
+
+    def as_profile(self, profile: "TokenProfile") -> Self:
+        """
+        Configure this token to match ``profile``: sets ``iss`` (the first
+        of ``profile.issuers``, alphabetically, for determinism),
+        ``token_type``, and ``aud`` (all of ``profile.audiences`` when more
+        than one is declared).
+
+        Does NOT inject ``implied_roles``/``implied_scopes`` — those are
+        derived at *parse* time (``resolve_token_profile()``), not baked
+        into the signed token, so a profile's implied grants always reflect
+        the registry active at verification time.
+
+        Args:
+            profile: The ``TokenProfile`` this token should match.
+
+        Returns:
+            This builder for chaining.
+
+        Edge cases:
+            - ``profile.issuers`` empty → ``iss`` is left unset (the profile
+              matches any issuer, so there is nothing deterministic to set).
+            - ``profile.audiences`` empty → ``aud`` is left unset.
+            - ``profile.token_type`` ``None`` → ``token_type`` is left unset.
+
+        Example::
+
+            token = (
+                JwtBuilder()
+                .subject("svc_1")
+                .as_profile(internal_profile)
+                .encode(secret)
+            )
+        """
+        if profile.issuers:
+            self._iss = sorted(profile.issuers)[0]
+        if profile.token_type is not None:
+            self._token_type = profile.token_type
+        if profile.audiences:
+            self._aud = (
+                sorted(profile.audiences)[0]
+                if len(profile.audiences) == 1
+                else frozenset(profile.audiences)
+            )
         return self
 
     # ── Custom claim setters ──────────────────────────────────────────────────

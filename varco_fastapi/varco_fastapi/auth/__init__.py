@@ -18,6 +18,7 @@ Route-level authorization guards (service-free routers):
     ``require_roles``         — guard requiring role name(s)
     ``require_grant``         — guard requiring ctx.can(action, resource_key)
     ``require_predicate``     — guard backed by an arbitrary callable
+    ``require_token_profile`` — guard requiring a resolved JWT token profile
     ``allow_anonymous``       — guard that passes anonymous callers through
 
 Client-side (outbound requests):
@@ -56,6 +57,7 @@ from varco_fastapi.auth.guard import (
     require_predicate,
     require_roles,
     require_scopes,
+    require_token_profile,
 )
 from varco_fastapi.auth.trust_store import TrustStore
 
@@ -74,6 +76,7 @@ __all__ = [
     "require_roles",
     "require_grant",
     "require_predicate",
+    "require_token_profile",
     "allow_anonymous",
     # Client-side
     "AbstractClientAuth",

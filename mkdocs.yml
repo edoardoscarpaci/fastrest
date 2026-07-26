@@ -64,7 +64,14 @@ plugins:
 markdown_extensions:
   - admonition
   - pymdownx.details
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      # DESIGN: custom_fences over a bare pymdownx.superfences block.
+      #   ✅ mkdocs-material renders ```mermaid fences as live diagrams client-side.
+      #   ❌ Without this, a mermaid fence is just an inert code block.
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
@@ -79,4 +86,6 @@ nav:
       - Generic Router: features/generic-router.md
       - Casbin Authorization: features/casbin-authorization.md
       - OPA Backend (Design): features/opa-design.md
+      - JWT Claim Transformer: features/jwt-claim-transformer.md
+      - Token Profiles: features/token-profiles.md
   - API Reference: reference/

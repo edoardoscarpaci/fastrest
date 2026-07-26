@@ -20,7 +20,7 @@ Async safety:   ✅ No async operations; safe to call inside async contexts.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # PyJWT — aliased to avoid shadowing the local `jwt` package name
 import jwt as _jwt
@@ -31,6 +31,17 @@ from varco_core.jwt.model import (
     _RESERVED_CLAIM_KEYS,
     _from_utc_timestamp,
 )
+from varco_core.jwt.transform.protocol import ClaimTransformer
+from varco_core.jwt.transform.runtime import resolve_claim_transformer
+from varco_core.jwt.transform.shape import ValueShape, normalize
+
+if TYPE_CHECKING:
+    # TYPE_CHECKING-only — avoids importing varco_core.jwt.profile at module
+    # load time (profile.py imports JsonWebToken from this package's sibling
+    # model.py; no cycle exists today, but keeping the profile import local
+    # to the one function that needs it documents the intentional layering:
+    # parser.py is the lower layer, profile.py builds on top of it).
+    from varco_core.jwt.profile import TokenProfileRegistry
 
 
 class JwtParser:
@@ -54,45 +65,67 @@ class JwtParser:
         algorithms: list[str] | None = None,
         audience: str | list[str] | None = None,
         options: dict[str, Any] | None = None,
+        transformer: ClaimTransformer | None = None,
+        profiles: "TokenProfileRegistry | None" = None,
+        leeway: float | None = None,
     ) -> JsonWebToken:
         """
         Decode and verify a JWT string, returning a ``JsonWebToken``.
 
         Args:
-            token:      Raw JWT string (``header.payload.signature``).
-            secret:     Verification key.  Pass ``None`` only when
-                        ``options={"verify_signature": False}`` — unverified
-                        inspection is for debugging only, never production.
-            algorithms: Accepted algorithms.  Defaults to ``["HS256"]``.
-                        Always specify explicitly in production — accepting
-                        any algorithm is a known JWT attack vector.
-            audience:   Expected ``aud`` value(s).  ``None`` skips audience
-                        verification (safe only for internal tokens that don't
-                        carry an ``aud`` claim).
-            options:    Raw PyJWT ``decode_options`` dict.  Use with caution
-                        (e.g. ``{"verify_exp": False}`` disables expiry checks).
+            token:       Raw JWT string (``header.payload.signature``).
+            secret:      Verification key.  Pass ``None`` only when
+                         ``options={"verify_signature": False}`` — unverified
+                         inspection is for debugging only, never production.
+            algorithms:  Accepted algorithms.  Defaults to ``["HS256"]``.
+                         Always specify explicitly in production — accepting
+                         any algorithm is a known JWT attack vector.
+            audience:    Expected ``aud`` value(s).  ``None`` skips audience
+                         verification (safe only for internal tokens that don't
+                         carry an ``aud`` claim).
+            options:     Raw PyJWT ``decode_options`` dict.  Use with caution
+                         (e.g. ``{"verify_exp": False}`` disables expiry checks).
+            transformer: Explicit ``ClaimTransformer`` — always wins over the
+                         process-global registry (``resolve_claim_transformer``,
+                         Plan 002 §A).  ``None`` (default) resolves it from
+                         ``VARCO_JWT_TRANSFORM*``/``VARCO_JWT_TRANSFORM__<LABEL>__*``
+                         env vars (or ``IDENTITY`` when none are set).
+            profiles:    Explicit ``TokenProfileRegistry`` — always wins over
+                         the process-global profile registry (Plan 002 §B).
+                         ``None`` (default) resolves it from
+                         ``VARCO_JWT_PROFILE__<NAME>__*`` env vars.
+            leeway:      Clock-skew leeway in seconds for ``exp``/``nbf``
+                         checks.  ``None`` (default) reads
+                         ``VARCO_JWT_LEEWAY_SECONDS`` (default ``0.0`` — no
+                         leeway, today's behaviour).
 
         Returns:
             ``JsonWebToken`` with all claims populated.  ``auth_ctx`` is set
-            when ``roles``, ``scopes``, or ``grants`` claims are present.
+            when ``roles``, ``scopes``, ``grants``, ``tenant_id``, or
+            ``actor`` (canonical, post-transform) are present, or when a
+            matched ``TokenProfile`` declares implied roles/scopes.
 
         Raises:
-            jwt.ExpiredSignatureError:  Token has passed its ``exp`` time.
+            jwt.ExpiredSignatureError:  Token has passed its ``exp`` time
+                                        (beyond any configured ``leeway``).
             jwt.InvalidSignatureError:  Signature does not match ``secret``.
             jwt.DecodeError:            Token is malformed or not a valid JWT.
             jwt.InvalidAudienceError:   ``aud`` claim doesn't match ``audience``.
-            ValueError:                 An action string in ``grants`` is not a
-                                        valid ``Action`` member — indicates a
-                                        token from an untrusted or misconfigured
-                                        issuer.
+            ClaimTransformError:        A ``required=True`` claim-mapping rule
+                                        found no value, a shape violation
+                                        occurred under ``strict=True``, or the
+                                        ``grants`` claim is malformed (missing
+                                        ``resource``/``actions``).
 
         Edge cases:
-            - ``auth_ctx.user_id`` is populated from ``sub`` when auth claims
-              are present.  If only ``sub`` is set and no auth claims exist,
-              ``auth_ctx`` is ``None`` — ``sub`` is still on ``token.sub``.
-            - ``auth_ctx.metadata`` is always empty — JWT claims map to typed
-              fields, not the metadata bag.
-            - Unknown non-standard claims go into ``extra_claims``.
+            - ``auth_ctx.user_id`` is populated from ``sub`` (or a mapped
+              ``user_id`` canonical source) when auth claims are present.
+              If only ``sub`` is set and nothing else materialises an
+              ``AuthContext``, ``auth_ctx`` is ``None`` — ``sub`` is still on
+              ``token.sub``.
+            - Unknown non-standard claims go into ``extra_claims`` (built
+              from the *raw*, pre-transform dict — foreign claim names like
+              ``sofy-roles`` remain visible for audit/debug).
 
         Example::
 
@@ -104,7 +137,16 @@ class JwtParser:
             # Default HS256; always pass algorithms explicitly in production
             algorithms = ["HS256"]
 
-        decode_kwargs: dict[str, Any] = {"algorithms": algorithms}
+        if leeway is None:
+            # Local import — avoids a hard import-time dependency between
+            # parser.py (imported very early, by authority/registry.py too)
+            # and config.py's pydantic-settings machinery for callers that
+            # never need leeway at all.
+            from varco_core.jwt.config import JwtVerificationSettings
+
+            leeway = JwtVerificationSettings.from_env().leeway_seconds
+
+        decode_kwargs: dict[str, Any] = {"algorithms": algorithms, "leeway": leeway}
         if audience is not None:
             decode_kwargs["audience"] = audience
         if options is not None:
@@ -118,10 +160,16 @@ class JwtParser:
             **decode_kwargs,
         )
 
-        return cls._from_raw_claims(raw)
+        return cls._from_raw_claims(raw, transformer=transformer, profiles=profiles)
 
     @classmethod
-    def parse_unverified(cls, token: str) -> JsonWebToken:
+    def parse_unverified(
+        cls,
+        token: str,
+        *,
+        transformer: ClaimTransformer | None = None,
+        profiles: "TokenProfileRegistry | None" = None,
+    ) -> JsonWebToken:
         """
         Decode a JWT string WITHOUT verifying the signature.
 
@@ -129,11 +177,18 @@ class JwtParser:
         produced by this method in a security-sensitive context.
 
         Args:
-            token: Raw JWT string.
+            token:       Raw JWT string.
+            transformer: Explicit ``ClaimTransformer`` override — see
+                         ``parse()``.
+            profiles:    Explicit ``TokenProfileRegistry`` override — see
+                         ``parse()``.
 
         Returns:
             ``JsonWebToken`` with claims extracted from the payload section.
-            Signature is NOT checked — any token passes.
+            Signature is NOT checked — any token passes.  The same claim
+            transformer / token-profile pipeline as ``parse()`` runs, so
+            gateway-fronted callers (``PassthroughAuth``) benefit from it
+            without duplicating parsing logic.
 
         Raises:
             jwt.DecodeError: Token is not a well-formed three-segment JWT.
@@ -163,28 +218,58 @@ class JwtParser:
                 "PS512",
             ],
         )
-        return cls._from_raw_claims(raw)
+        return cls._from_raw_claims(raw, transformer=transformer, profiles=profiles)
 
     @classmethod
-    def _from_raw_claims(cls, raw: dict[str, Any]) -> JsonWebToken:
+    def _from_raw_claims(
+        cls,
+        raw: dict[str, Any],
+        *,
+        transformer: ClaimTransformer | None = None,
+        profiles: "TokenProfileRegistry | None" = None,
+    ) -> JsonWebToken:
         """
         Construct a ``JsonWebToken`` from a raw decoded claims dict.
 
-        Internal helper shared by ``parse()`` and ``parse_unverified()``.
+        Internal helper shared by ``parse()``, ``parse_unverified()`` **and**
+        ``TrustedIssuerRegistry.verify()`` — the single funnel that makes
+        claim transformation and token-profile resolution work identically
+        across every JWT entry point (Plan 002 design: "one insertion point,
+        two seams covered").
 
         Args:
-            raw: Claims dict as returned by ``jwt.decode()``.
+            raw:         Claims dict as returned by ``jwt.decode()``.
+            transformer: Explicit ``ClaimTransformer`` override — see
+                         ``parse()``.  ``None`` resolves via
+                         ``resolve_claim_transformer(raw.get("iss"))``.
+            profiles:    Explicit ``TokenProfileRegistry`` override.  ``None``
+                         resolves via the process-global profile registry.
 
         Returns:
-            Fully populated ``JsonWebToken``.
+            Fully populated ``JsonWebToken``, profile-augmented.
 
         Edge cases:
             - Missing standard claims → ``None`` fields.
             - ``aud`` as a list → ``frozenset[str]``.
-            - Unknown claims → ``extra_claims`` dict.
+            - Unknown claims → ``extra_claims`` dict (built from ``raw``,
+              i.e. BEFORE transformation — foreign claim names stay visible).
         """
+        tf: ClaimTransformer = (
+            transformer
+            if transformer is not None
+            else resolve_claim_transformer(raw.get("iss"))
+        )
+        # Non-destructive: IDENTITY returns `raw` itself (no copy — the
+        # zero-config hot path); MappingClaimTransformer returns a new dict
+        # with canonical keys added/overwritten on top of every original key.
+        canonical: dict[str, Any] = dict(tf.transform(raw))
+
         # PyJWT decodes exp / iat / nbf as integer Unix timestamps;
         # convert to tz-aware datetimes for ergonomic Python comparisons.
+        # exp/iat/nbf/aud/jti/iss are NOT remappable (decision D-2) — read
+        # from `raw` directly (identical to reading from `canonical`, since
+        # no rule ever touches these keys, but `raw` makes that invariant
+        # explicit at the call site).
         exp = _from_utc_timestamp(raw["exp"]) if "exp" in raw else None
         iat = _from_utc_timestamp(raw["iat"]) if "iat" in raw else None
         nbf = _from_utc_timestamp(raw["nbf"]) if "nbf" in raw else None
@@ -198,13 +283,16 @@ class JwtParser:
         elif isinstance(raw_aud, str):
             aud = raw_aud
 
-        # Reconstruct AuthContext only when auth-specific custom claims exist
-        auth_ctx = cls._build_auth_ctx(raw)
+        # Reconstruct AuthContext from the (possibly transformed) canonical
+        # claims — this is where foreign claim names actually take effect.
+        auth_ctx = cls._build_auth_ctx(canonical)
 
-        # Everything not in the known standard-claim set goes into extra_claims
+        # extra_claims is built from RAW (pre-transform) — foreign claim
+        # names (e.g. "sofy-roles") stay visible for audit/debug even though
+        # they were also consumed into a canonical field above.
         extra_claims = {k: v for k, v in raw.items() if k not in _RESERVED_CLAIM_KEYS}
 
-        return JsonWebToken(
+        token = JsonWebToken(
             sub=raw.get("sub"),
             iss=raw.get("iss"),
             aud=aud,
@@ -212,45 +300,76 @@ class JwtParser:
             iat=iat,
             nbf=nbf,
             jti=raw.get("jti"),
-            token_type=raw.get("token_type"),
+            # token_type IS a canonical remap target (Keycloak "typ",
+            # Cognito "token_use", …) — read from canonical, not raw.
+            token_type=canonical.get("token_type"),
             auth_ctx=auth_ctx,
             extra_claims=extra_claims,
         )
 
-    @classmethod
-    def _build_auth_ctx(cls, raw: dict[str, Any]) -> AuthContext | None:
-        """
-        Reconstruct an ``AuthContext`` from raw JWT claims.
+        # Local import — varco_core.jwt.profile depends on this module
+        # (JsonWebToken) and JwtBuilder; importing it at module level here
+        # would create a cycle. resolve_token_profile() is a no-op passthrough
+        # when no profiles are registered anywhere (env or explicit).
+        from varco_core.jwt.profile import resolve_token_profile
 
-        Returns ``None`` when no auth-specific claims (``roles``, ``scopes``,
-        ``grants``) are present — ``sub`` alone does not create an
-        ``AuthContext``, since it is already available as ``token.sub``.
+        return resolve_token_profile(token, registry=profiles)
+
+    @classmethod
+    def _build_auth_ctx(cls, canonical: dict[str, Any]) -> AuthContext | None:
+        """
+        Reconstruct an ``AuthContext`` from (post-transform) canonical claims.
+
+        Returns ``None`` when none of the auth-specific canonical claims
+        (``roles``, ``scopes``, ``grants``, ``tenant_id``, ``actor``) are
+        present — ``sub`` alone does not create an ``AuthContext``, since it
+        is already available as ``token.sub``.
 
         Args:
-            raw: Raw decoded claims dict.
+            canonical: The (possibly transformed) claims dict — already run
+                       through the resolved ``ClaimTransformer``.
 
         Returns:
-            ``AuthContext`` when ``roles``, ``scopes``, or ``grants`` claims
-            are present; ``None`` otherwise.
+            ``AuthContext`` when any auth-specific canonical claim is
+            present; ``None`` otherwise.
 
         Raises:
+            ClaimTransformError: The ``grants`` claim is structurally
+                invalid (not a list, or an entry missing ``resource``/
+                ``actions``) — replaces the previous bare ``KeyError``.
             ValueError: An action string in ``grants[*].actions`` is not a
                         member of ``Action`` — indicates an untrusted issuer
                         or schema mismatch.
 
         Edge cases:
-            - ``sub`` is used as ``auth_ctx.user_id`` when auth claims exist.
-            - Empty ``roles`` / ``scopes`` / ``grants`` in the token → empty
-              frozenset / tuple in the resulting ``AuthContext``.
-            - ``metadata`` is always empty — JWT claims map to typed fields.
+            - ``sub`` (or a mapped ``user_id`` canonical source) is used as
+              ``auth_ctx.user_id`` when an ``AuthContext`` is materialised.
+            - Empty ``roles``/``scopes``/``grants`` in the token → empty
+              frozenset/tuple in the resulting ``AuthContext``.
+            - ⚠️ Widened trigger vs. pre-Plan-002 behaviour: a token
+              carrying only ``tenant_id``/``actor`` (no roles/scopes/grants)
+              now also materialises an ``AuthContext`` — see the plan's
+              Edge cases table and Risks section.
         """
-        roles_raw: list[str] = raw.get("roles", [])
-        scopes_raw: list[str] = raw.get("scopes", [])
-        grants_raw: list[dict[str, Any]] = raw.get("grants", [])
+        roles_raw: list[str] = canonical.get("roles", [])
+        scopes_raw: list[str] = canonical.get("scopes", [])
 
-        # Only materialise an AuthContext when at least one auth-specific claim
-        # is present.  sub alone is not sufficient — it lives on token.sub.
-        if not roles_raw and not scopes_raw and not grants_raw:
+        # ValueShape.GRANTS validates structure and gives an actionable
+        # error naming the offending index — replaces the old bare KeyError.
+        grants_raw: list[dict[str, Any]] = normalize(
+            canonical.get("grants", []), ValueShape.GRANTS, target="grants"
+        )
+
+        tenant_id = canonical.get("tenant_id")
+        actor = canonical.get("actor")
+
+        if (
+            not roles_raw
+            and not scopes_raw
+            and not grants_raw
+            and tenant_id is None
+            and actor is None
+        ):
             return None
 
         # Action() constructor raises ValueError for unknown action strings —
@@ -263,9 +382,16 @@ class JwtParser:
             for g in grants_raw
         )
 
+        metadata: dict[str, Any] = {}
+        if tenant_id is not None:
+            metadata["tenant_id"] = tenant_id
+        if actor is not None:
+            metadata["actor"] = actor
+
         return AuthContext(
-            user_id=raw.get("sub"),
+            user_id=canonical.get("user_id", canonical.get("sub")),
             roles=frozenset(roles_raw),
             scopes=frozenset(scopes_raw),
             grants=grants,
+            metadata=metadata,
         )

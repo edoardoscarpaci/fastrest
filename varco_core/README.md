@@ -132,11 +132,101 @@ params = QueryParser().parse('published == true AND pk > 10', limit=20)
 ### JWT — build and verify tokens
 
 ```python
+from datetime import timedelta
 from varco_core import JwtBuilder, JwtParser
 
-token = JwtBuilder(secret="s3cr3t").subject("user-42").expires_in(3600).build()
-payload = JwtParser(secret="s3cr3t").parse(token)
+token = (
+    JwtBuilder()
+    .subject("user-42")
+    .expires_in(timedelta(hours=1))
+    .encode("s3cr3t")
+)
+tok = JwtParser.parse(token, "s3cr3t", algorithms=["HS256"])
 ```
+
+### JWT claim transformation — consume foreign-shaped tokens
+
+Real-world issuers (Keycloak, Cognito, Auth0, a bespoke internal claim) rarely name
+their roles/scopes/tenant claims the way varco expects. The claim-transformation
+layer (`varco_core.jwt.transform`) maps a foreign claim shape onto the canonical
+names `JwtParser` builds `AuthContext` from — `roles`, `scopes`, `grants`,
+`tenant_id`, `actor`, `token_type` — **without any application code change**:
+`JwtParser.parse()`, `TrustedIssuerRegistry.verify()`, and `JwtBearerAuth` /
+`PassthroughAuth` (in `varco-fastapi`) all pick it up for free, because they share
+one funnel (`JwtParser._from_raw_claims`).
+
+Two ways to configure it — pick whichever fits your deployment:
+
+#### 1. Code-configured (`ClaimMapping`)
+
+```python
+from varco_core.jwt.transform import (
+    CanonicalClaim, ClaimMapping, ClaimPath, ClaimRule,
+    MappingClaimTransformer, ValueShape,
+)
+
+# Map a Keycloak-shaped token: realm_access.roles -> roles, with a "ROLE_" prefix strip
+mapping = ClaimMapping(
+    rules=(
+        ClaimRule(
+            target=CanonicalClaim.ROLES,
+            sources=(ClaimPath.parse("realm_access.roles"), ClaimPath.parse("roles")),
+            strip_prefix="ROLE_",
+        ),
+    ),
+)
+
+token = JwtParser.parse(raw, secret, transformer=MappingClaimTransformer(mapping))
+token.auth_ctx.roles  # -> frozenset({"editor", ...})  (ROLE_ prefix stripped)
+```
+
+#### 2. Environment-variable quick start (no code change)
+
+```bash
+export VARCO_JWT_TRANSFORM_ROLES_FIELD="sofy-roles,realm_access.roles"
+export VARCO_JWT_TRANSFORM_SCOPES_FIELD="scope"          # space-delimited OAuth2 scope
+export VARCO_JWT_TRANSFORM_TENANT_FIELD="org.id"
+export VARCO_JWT_TRANSFORM_ROLES_STRIP_PREFIX="ROLE_"
+```
+
+With those set, **no code changes** are needed — `JwtParser.parse()` resolves the
+transformer lazily from the environment on first use:
+
+```python
+from varco_core.jwt import JwtParser
+
+token = JwtParser.parse(raw_token, secret)
+token.auth_ctx.roles                     # populated from "sofy-roles"/"realm_access.roles"
+token.auth_ctx.metadata["tenant_id"]      # populated from "org.id"
+token.extra_claims["sofy-roles"]          # still visible — non-destructive transform
+```
+
+Per-issuer overrides (`VARCO_JWT_TRANSFORM__<LABEL>__*`), the full env-var table, a
+pipeline diagram, and Keycloak/Cognito/Auth0 recipes live in
+`technical_docs/features/jwt-claim-transformer.md`. Named token profiles (the
+`SYSTEM_ISSUER` replacement — `system`, `internal`, `partner`, …) live in
+`technical_docs/features/token-profiles.md`.
+
+### JWKS caching — refresh knobs
+
+`TrustedIssuerRegistry` caches each issuer's keyset in memory. Two env vars tune
+when it refreshes:
+
+```bash
+export VARCO_JWKS_MIN_REFRESH_SECONDS=10   # rate limit between kid-miss refreshes (default)
+export VARCO_JWKS_TTL_SECONDS=300          # proactively reload once the cache is this old (default: 0 = disabled)
+```
+
+By default (`VARCO_JWKS_TTL_SECONDS=0`), the registry only refreshes reactively — on
+a `kid` cache miss, rate-limited by `VARCO_JWKS_MIN_REFRESH_SECONDS`. Setting
+`VARCO_JWKS_TTL_SECONDS` makes `get_key()` proactively reload all sources once the
+cached keyset exceeds that age, even without a miss.
+
+⚠️ **There is no background refresher task.** Both knobs only affect refresh timing
+*inside* `get_key()` calls — a registry that receives no traffic never refreshes on
+its own. A real background-refresh task (with its own start/stop lifecycle) is
+deliberately deferred; see `technical_docs/features/jwt-claim-transformer.md` for the
+rationale.
 
 ### Cache — in-memory with TTL
 

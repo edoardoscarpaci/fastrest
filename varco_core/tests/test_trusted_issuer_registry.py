@@ -578,3 +578,77 @@ class TestFromContainerLoadAll:
 
         # No entries — all_jwks() returns an empty JsonWebKeySet, not None.
         assert registry.all_jwks().keys == ()
+
+
+# ── Phase 5: JWKS refresh knobs (Plan 002, step 38) ─────────────────────────────
+# ``min_refresh_interval`` / ``ttl_seconds`` ctor args and proactive TTL reload
+# in ``get_key()`` do not exist yet — these tests are RED until Phase 5 lands.
+
+
+class _CountingSource:
+    """Fake IssuerSource whose refresh() just counts invocations."""
+
+    def __init__(self) -> None:
+        self.refresh_calls = 0
+
+    async def load(self) -> JsonWebKeySet:
+        self.refresh_calls += 1
+        return JsonWebKeySet(keys=())
+
+    async def refresh(self) -> JsonWebKeySet:
+        self.refresh_calls += 1
+        return JsonWebKeySet(keys=())
+
+
+class TestJwksRefreshKnobs:
+    async def test_min_refresh_interval_ctor_arg_accepted(self) -> None:
+        registry = TrustedIssuerRegistry(min_refresh_interval=0.05)
+        source = _CountingSource()
+        registry.register("LABEL", "iss", source)
+
+        # First miss triggers a refresh.
+        await registry.get_key("missing-kid")
+        assert source.refresh_calls == 1
+
+        # Immediate second miss is rate-limited — no second refresh.
+        await registry.get_key("missing-kid")
+        assert source.refresh_calls == 1
+
+    async def test_kid_miss_outside_min_refresh_interval_refreshes_again(self) -> None:
+        import asyncio
+
+        registry = TrustedIssuerRegistry(min_refresh_interval=0.01)
+        source = _CountingSource()
+        registry.register("LABEL", "iss", source)
+
+        await registry.get_key("missing-kid")
+        assert source.refresh_calls == 1
+
+        await asyncio.sleep(0.05)
+        await registry.get_key("missing-kid")
+        assert source.refresh_calls == 2
+
+    async def test_ttl_seconds_zero_disables_proactive_reload(self) -> None:
+        # Default behaviour — no proactive reload regardless of cache age.
+        registry = TrustedIssuerRegistry(ttl_seconds=0.0)
+        source = _CountingSource()
+        registry.register("LABEL", "iss", source)
+        await registry.load_all()
+        assert source.refresh_calls == 1
+
+        # A hit against the (empty but loaded) cache must not trigger a reload.
+        await registry.get_key("some-kid")
+        assert source.refresh_calls == 1
+
+    async def test_ttl_seconds_triggers_proactive_reload_once_stale(self) -> None:
+        import asyncio
+
+        registry = TrustedIssuerRegistry(ttl_seconds=0.01, min_refresh_interval=0.0)
+        source = _CountingSource()
+        registry.register("LABEL", "iss", source)
+        await registry.load_all()
+        assert source.refresh_calls == 1
+
+        await asyncio.sleep(0.05)
+        await registry.get_key("some-kid")
+        assert source.refresh_calls == 2

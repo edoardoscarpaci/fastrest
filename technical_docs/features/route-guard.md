@@ -35,6 +35,7 @@ class RouteGuard:
     grant: tuple[Action, str] | None                                 # ctx.can(action, key)
     require_all: bool = True                                         # AND vs OR for scopes/roles
     allow_anonymous: bool = False                                    # bypass for public endpoints
+    token_profiles: tuple[str, ...] = ()                             # JWT token profile any-of match
     predicate: Callable[[AuthContext], bool | Awaitable[bool]] | None  # custom callable
 ```
 
@@ -52,6 +53,7 @@ but different predicates compare as equal — be aware when using guards as dict
 | `require_scopes(*s, all=True)` | `RouteGuard(scopes=s, require_all=all)` |
 | `require_roles(*r, all=True)` | `RouteGuard(roles=r, require_all=all)` |
 | `require_grant(action, key)` | `RouteGuard(grant=(action, key))` |
+| `require_token_profile(*names)` | `RouteGuard(token_profiles=names)` |
 | `require_predicate(fn)` | `RouteGuard(predicate=fn)` |
 | `allow_anonymous()` | `RouteGuard(allow_anonymous=True)` |
 
@@ -70,6 +72,13 @@ but different predicates compare as equal — be aware when using guards as dict
 4. **Role check** (skipped if `self.roles` is empty):
    - Same AND/OR logic via `ctx.has_role(r)`.
    - Fail → raise with message naming the missing roles.
+4.5. **Token profile check** (skipped if `self.token_profiles` is empty; Plan 002 §B):
+   - Any-of match against `ctx.metadata.get("token_profile")` — the key populated by
+     `varco_core.jwt.profile.resolve_token_profile()` when a `TokenProfile` matched
+     during JWT parsing (see `technical_docs/features/token-profiles.md`).
+   - Fail → raise with message naming the required profile(s) and the actual value
+     (including `None` when no profile matched at all, or auth didn't go through the
+     JWT layer).
 5. **Grant check** (skipped if `self.grant is None`):
    - `ctx.can(action, resource_key)` — checks wildcard `"*"` then exact key.
    - Fail → raise with message naming action + key.

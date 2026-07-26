@@ -115,6 +115,7 @@ def create_varco_app(
     strict_validation: bool = False,
     openapi_url: str = "/openapi.json",
     docs_url: str = "/docs",
+    configure_jwt: bool = True,
 ) -> Any:
     """
     Create a fully configured FastAPI application for a varco service.
@@ -185,6 +186,16 @@ def create_varco_app(
                                     which raises for unresolved ``Any`` type args too.
         openapi_url:                FastAPI OpenAPI schema URL.
         docs_url:                   FastAPI Swagger UI URL.
+        configure_jwt:              When ``True`` (default), calls
+                                    ``configure_jwt_from_env()`` once before
+                                    routers are built so the process-global
+                                    claim-transform/token-profile registries
+                                    (``varco_core.jwt``) match what
+                                    ``VarcoFastAPIModule``'s DI providers hand
+                                    out.  Set ``False`` to opt out and manage
+                                    the registries yourself (e.g. via
+                                    ``configure_claim_transforms()`` with a
+                                    hand-built registry).
 
     Returns:
         A fully configured ``fastapi.FastAPI`` instance.
@@ -216,6 +227,17 @@ def create_varco_app(
     from varco_fastapi.middleware.cors import CORSConfig, install_cors  # noqa: PLC0415
     from varco_fastapi.middleware.error import ErrorMiddleware  # noqa: PLC0415
     from varco_fastapi.middleware.tracing import TracingMiddleware  # noqa: PLC0415
+
+    # ── Step 0: Configure JWT claim-transform / token-profile globals ────────
+    # Runs before routers are built so any router-level auth wiring already
+    # sees the correct process-global registries (varco_core.jwt.transform /
+    # varco_core.jwt.profile).
+    if configure_jwt:
+        from varco_core.jwt.transform.runtime import (
+            configure_jwt_from_env,
+        )  # noqa: PLC0415
+
+        configure_jwt_from_env()
 
     # ── Step 1: Validate DI container ─────────────────────────────────────────
     if validate and container is not None:

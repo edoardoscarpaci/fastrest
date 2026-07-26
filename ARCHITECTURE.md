@@ -271,6 +271,56 @@ KeySource (ABC)
   └── OidcDiscovery(issuer_url)
 ```
 
+#### `varco_core.jwt.transform` — claim transformation (Plan 002)
+
+Consumes foreign-shaped JWTs (Keycloak, Cognito, Auth0, a bespoke claim, …) by
+mapping their claims onto the canonical set `JwtParser` reads —
+`technical_docs/features/jwt-claim-transformer.md` is the full reference.
+
+```
+varco_core/jwt/
+├── model.py       — JsonWebToken, _RESERVED_CLAIM_KEYS
+├── builder.py     — JwtBuilder (+ as_profile())
+├── parser.py       — JwtParser._from_raw_claims — the single funnel (SEAM 1 + SEAM 2)
+├── util.py        — JwtUtil (+ matches_profile/profile_name/assert_profile)
+├── exceptions.py  — JwtException, ClaimTransformError, TokenProfileError
+├── config.py      — JwtVerificationSettings (VARCO_JWT_LEEWAY_SECONDS / VARCO_JWT_AUDIENCE)
+├── profile.py     — TokenProfile, TokenProfileRegistry, resolve_token_profile()
+└── transform/
+    ├── path.py     — ClaimPath, MISSING, read_claim()
+    ├── shape.py    — ValueShape, normalize()
+    ├── mapping.py  — CanonicalClaim, ClaimRule, ClaimMapping
+    ├── protocol.py — ClaimTransformer (Protocol), IdentityClaimTransformer, IDENTITY
+    ├── mapper.py   — MappingClaimTransformer
+    ├── registry.py — ClaimTransformerRegistry (per-issuer lookup)
+    ├── config.py   — JwtTransformSettings (env) + JwtTransformConfig (global + per-issuer)
+    └── runtime.py  — resolve/configure/reset process-global registry
+```
+
+**Type hierarchies**:
+
+```
+ClaimTransformer (Protocol, runtime_checkable)
+  ├── IdentityClaimTransformer  (IDENTITY singleton — no-op, no copy)
+  └── MappingClaimTransformer   (wraps a ClaimMapping — code- or env-configured)
+
+TokenProfile (frozen dataclass)                — issuers/token_type/audiences/required_claims + implied_roles/scopes
+TokenProfileRegistry                            — register/get/resolve (first-match)/matches/from_env()
+```
+
+**Pipeline** — one insertion point (`JwtParser._from_raw_claims`) covers every entry
+point, because `TrustedIssuerRegistry.verify()` and `JwtBearerAuth`/`PassthroughAuth`
+(varco_fastapi) all delegate to it:
+
+```
+raw JWT → PyJWT decode → raw claims
+   → resolve_claim_transformer(iss) or explicit transformer=
+   → transformer.transform(raw) → canonical claims
+   → _build_auth_ctx(canonical) → AuthContext (roles/scopes/grants/tenant_id/actor)
+   → resolve_token_profile(token) → merge implied_roles/scopes, tag metadata["token_profile"]
+   → JsonWebToken
+```
+
 ### Authorization — policy engine (varco_core.auth.policy)
 
 ```
@@ -877,8 +927,11 @@ filtered_query = transformer.transform(base_query, params, User)
   boilerplate. 5-arg subscription still works — `S` defaults to `AsyncService[Any, ...]`.
 - **Route-level authorization**: `RouteGuard` (`varco_fastapi.auth.guard`) is a declarative,
   immutable predicate attached to any `@route` via `requires=`.  Constructor helpers:
-  `require_scopes`, `require_roles`, `require_grant`, `require_predicate`, `allow_anonymous`.
-  Evaluated against `AuthContext` before the handler runs; denial → HTTP 403.
+  `require_scopes`, `require_roles`, `require_grant`, `require_token_profile`,
+  `require_predicate`, `allow_anonymous`. `require_token_profile(*names)` checks
+  `ctx.metadata["token_profile"]` (populated by `varco_core.jwt.profile.resolve_token_profile()` —
+  see `technical_docs/features/token-profiles.md`) between the role check and the
+  grant check.  Evaluated against `AuthContext` before the handler runs; denial → HTTP 403.
 - **Auth middleware**: `AuthMiddleware` validates JWT bearer tokens using `TrustedIssuerRegistry`.
 - **Lifecycle auto-discovery**: `create_varco_app` calls `_collect_lifecycle_components()` which
   discovers `AbstractEventBus`, `AbstractDistributedLock`, `CacheBackend`, and — if `varco_ws`

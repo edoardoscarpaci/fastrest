@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, Request, status
 
@@ -119,6 +119,19 @@ class JwtBearerAuth(AbstractServerAuth):
                             If ``False``, missing tokens return anonymous auth.
         anonymous_context:  ``AuthContext`` to return when ``required=False`` and
                             no token is present.  Defaults to ``AuthContext()``.
+        audience:           Expected ``aud`` claim value(s), threaded into
+                            ``registry.verify(audience=...)`` (Plan 002 C-2).
+                            ``None`` (default) reads ``VARCO_JWT_AUDIENCE``; if
+                            that is also unset, audience is NOT enforced — a
+                            **single** warning is logged at construction time
+                            (opt-in hardening, decision D-17; matches
+                            historical "no aud check in the HTTP path"
+                            behaviour so existing deployments are not broken
+                            by silently start-401ing).
+        leeway:             Clock-skew leeway in seconds, threaded into
+                            ``registry.verify(leeway=...)`` (Plan 002 C-1).
+                            ``None`` (default) reads ``VARCO_JWT_LEEWAY_SECONDS``
+                            (default ``0.0`` — no leeway, today's behaviour).
 
     DESIGN: delegates to TrustedIssuerRegistry (not JwtAuthority)
         ✅ Supports multiple issuers — gateway, service-to-service, etc.
@@ -141,10 +154,28 @@ class JwtBearerAuth(AbstractServerAuth):
         *,
         required: bool = True,
         anonymous_context: AuthContext | None = None,
+        audience: str | list[str] | None = None,
+        leeway: float | None = None,
     ) -> None:
+        from varco_core.jwt.config import JwtVerificationSettings
+
+        settings = JwtVerificationSettings.from_env()
+
         self._registry = registry
         self._required = required
         self._anonymous = anonymous_context or _ANONYMOUS
+        self._audience = audience if audience is not None else settings.audience
+        self._leeway = leeway if leeway is not None else settings.leeway_seconds
+
+        if self._audience is None:
+            # Opt-in hardening (D-17) — warn once per JwtBearerAuth instance
+            # (typically once per process, at startup) rather than staying
+            # silent about an unenforced aud claim.
+            _logger.warning(
+                "JwtBearerAuth: audience is not enforced (aud claim is never "
+                "checked). Set audience=... or VARCO_JWT_AUDIENCE to harden "
+                "against tokens minted for a different service."
+            )
 
     async def __call__(self, request: Request) -> AuthContext:
         """
@@ -156,7 +187,9 @@ class JwtBearerAuth(AbstractServerAuth):
             ``required=False`` and no token is present.
 
         Raises:
-            HTTPException 401: Token missing (when required), expired, or invalid.
+            HTTPException 401: Token missing (when required), expired,
+                invalid, or (when ``audience`` is configured) minted for a
+                different ``aud``.
         """
         authorization = request.headers.get("Authorization", "")
         if not authorization.startswith("Bearer "):
@@ -176,8 +209,22 @@ class JwtBearerAuth(AbstractServerAuth):
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Build verify() kwargs conditionally — omit "audience"/"leeway"
+        # entirely when they are at their "not configured" defaults so a
+        # zero-config JwtBearerAuth calls registry.verify(raw_token) with no
+        # extra kwargs, byte-identical to pre-Plan-002 behaviour (this is
+        # asserted by test_jwt_bearer_auth_calls_registry_verify's exact-args
+        # mock assertion). Functionally equivalent either way — verify()'s
+        # own defaults (audience=None, leeway resolved from env) are the same
+        # values — this is purely about not changing the observed call shape.
+        verify_kwargs: dict[str, Any] = {}
+        if self._audience is not None:
+            verify_kwargs["audience"] = self._audience
+        if self._leeway:
+            verify_kwargs["leeway"] = self._leeway
+
         try:
-            jwt = await self._registry.verify(raw_token)
+            jwt = await self._registry.verify(raw_token, **verify_kwargs)
         except Exception as exc:
             _logger.debug("JwtBearerAuth: token verification failed: %s", exc)
             raise HTTPException(
@@ -310,11 +357,21 @@ class PassthroughAuth(AbstractServerAuth):
             anonymous if no token is present.
 
         Raises:
-            HTTPException 401: When ``required=True`` and no token present.
-        """
-        import base64
-        import json
+            HTTPException 401: When ``required=True`` and no token present,
+                or the token is not well-formed enough to decode at all.
 
+        Edge cases:
+            - Delegates to ``JwtParser.parse_unverified()`` (Plan 002 step 35)
+              instead of hand-rolling base64/JSON decoding — this is the ONE
+              varco_fastapi call site that previously duplicated claim→
+              ``AuthContext`` parsing outside ``JwtParser``, so it now
+              benefits from the claim-transform pipeline (env-driven or
+              explicit) for free, exactly like ``JwtBearerAuth``.
+            - ``token.extra_claims`` (raw, non-reserved claims) is merged
+              into the resulting ``AuthContext.metadata`` — preserving the
+              pre-refactor behaviour where every non-standard claim landed
+              in ``metadata``.
+        """
         authorization = request.headers.get("Authorization", "")
         if not authorization.startswith("Bearer "):
             if self._required:
@@ -326,52 +383,22 @@ class PassthroughAuth(AbstractServerAuth):
 
         raw_token = authorization.removeprefix("Bearer ").strip()
 
+        from dataclasses import replace
+
+        from varco_core.jwt import JwtParser
+
         try:
-            # JWT format: header.payload.signature — we only read the payload
-            parts = raw_token.split(".")
-            if len(parts) < 2:
-                raise ValueError("Not a valid JWT (expected at least header.payload)")
-            # Add padding for base64 decoding
-            payload_b64 = parts[1] + "==" * (4 - len(parts[1]) % 4 or 4)
-            claims: dict = json.loads(base64.urlsafe_b64decode(payload_b64))
+            token = JwtParser.parse_unverified(raw_token)
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=f"Could not decode token claims: {exc}",
             ) from exc
 
-        from varco_core.auth.base import Action, ResourceGrant
-
-        grants = tuple(
-            ResourceGrant(
-                resource=g["resource"],
-                actions=frozenset(Action(a) for a in g.get("actions", [])),
-            )
-            for g in claims.get("grants", [])
-        )
-        return AuthContext(
-            user_id=claims.get("sub"),
-            roles=frozenset(claims.get("roles", [])),
-            scopes=frozenset(claims.get("scopes", [])),
-            grants=grants,
-            metadata={
-                k: v
-                for k, v in claims.items()
-                if k
-                not in {
-                    "sub",
-                    "roles",
-                    "scopes",
-                    "grants",
-                    "exp",
-                    "iat",
-                    "nbf",
-                    "iss",
-                    "jti",
-                    "aud",
-                }
-            },
-        )
+        ctx = token.auth_ctx or AuthContext(user_id=token.sub)
+        if token.extra_claims:
+            ctx = replace(ctx, metadata={**ctx.metadata, **token.extra_claims})
+        return ctx
 
 
 # ── AnonymousAuth ─────────────────────────────────────────────────────────────

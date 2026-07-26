@@ -174,6 +174,34 @@ were unset) is restored after each build, even if the factory raises.
 > config read lazily *after* the app is returned will see the restored environment.
 > `build_service` mutates `os.environ`, so it is startup-only and not thread-safe.
 
+### JWT claim-transform / token-profile registries are process-global too
+
+`varco_core.jwt.transform.runtime` and `varco_core.jwt.profile` each hold **one**
+process-global registry (`resolve_claim_transformer()` / `resolve_token_profile()`),
+lazily built from `os.environ` on first use and shared by every mounted service in a
+composite process — the same "one process, one `os.environ`" hazard as above, but for
+runtime JWT parsing rather than build-time engine config.
+
+If two composite services genuinely need **different global claim mappings** (e.g.
+one expects canonical claim names, the other needs `VARCO_JWT_TRANSFORM_ROLES_FIELD`
+pointed at a foreign claim), a single flat `VARCO_JWT_TRANSFORM_*` config cannot
+express both — the last service to call `configure_jwt_from_env()` (or the first lazy
+resolution) wins for the whole process.
+
+**Supported pattern**: key by the token's `iss` claim instead of relying on differing
+globals — per-issuer overrides (`VARCO_JWT_TRANSFORM__<LABEL>__*` /
+`VARCO_JWT_PROFILE__<NAME>__*`) are looked up by `iss`, not by which mounted service is
+handling the request, so both services can share one process-wide configuration that
+still discriminates correctly per token issuer. See
+`technical_docs/features/jwt-claim-transformer.md` for the full per-issuer precedence
+rules.
+
+`create_varco_app(configure_jwt=False)` lets an individual service opt out of the
+automatic `configure_jwt_from_env()` call at startup if it needs to manage the
+registries itself (e.g. build them once, explicitly, before mounting all services) —
+but there is still only one process-global registry underneath; opting out changes
+*when* it gets configured, not whether it is shared.
+
 ---
 
 ## Public API

@@ -180,7 +180,86 @@ breaking changes between alpha versions while the API stabilises.
 
 ## [Unreleased]
 
-_Changes planned for the next release will appear here._
+### varco-core
+
+#### Added
+- **JWT claim transformation** (`varco_core.jwt.transform`) — consume foreign-shaped
+  JWTs (Keycloak, Cognito, Auth0, a bespoke claim, …) without any application code
+  change. `ClaimMapping` / `ClaimRule` / `ClaimPath` (code-configured) and
+  `JwtTransformSettings` / `JwtTransformConfig` (env-driven, `VARCO_JWT_TRANSFORM_*`
+  + per-issuer `VARCO_JWT_TRANSFORM__<LABEL>__*`) both resolve through the
+  `ClaimTransformer` Protocol; `JwtParser.parse()`, `TrustedIssuerRegistry.verify()`,
+  and `varco-fastapi`'s `JwtBearerAuth`/`PassthroughAuth` all pick it up for free
+  through one shared funnel. Zero-config behaviour is unchanged (`IDENTITY`
+  transformer, no copy). See `technical_docs/features/jwt-claim-transformer.md`.
+- **Named token profiles** (`varco_core.jwt.profile`) — `TokenProfile` /
+  `TokenProfileRegistry` recognise multiple kinds of special/internal tokens
+  (`system`, `internal`, `partner`, `service-mesh`, …) by issuer/token_type/audience/
+  required claims, env-configured via `VARCO_JWT_PROFILE__<NAME>__*`, and can grant
+  `implied_roles`/`implied_scopes`. `JwtUtil.matches_profile()` /
+  `.profile_name()` / `.assert_profile()`; `JwtBuilder.as_profile()`. See
+  `technical_docs/features/token-profiles.md`.
+- **JWT verification hardening** — `VARCO_JWT_LEEWAY_SECONDS` (clock-skew leeway for
+  `exp`/`nbf`, default `0.0`) and `VARCO_JWT_AUDIENCE` (expected `aud`, default
+  `None` = not enforced) via `varco_core.jwt.config.JwtVerificationSettings`,
+  threaded through `JwtParser.parse()`, `TrustedIssuerRegistry.verify()`, and
+  `JwtBearerAuth`.
+- **JWKS caching knobs** — `TrustedIssuerRegistry(min_refresh_interval=...,
+  ttl_seconds=...)` (env: `VARCO_JWKS_MIN_REFRESH_SECONDS` default `10.0`,
+  `VARCO_JWKS_TTL_SECONDS` default `0.0` = disabled) allow a proactive, age-based
+  keyset reload in addition to the existing reactive kid-miss refresh. A background
+  refresher task remains out of scope (needs its own lifespan wiring) — deferred.
+- **`ValueShape.GRANTS`** validation gives an actionable `ClaimTransformError` naming
+  the offending list index and missing key for a malformed `grants` claim, replacing
+  a previously bare `KeyError`.
+
+#### Changed
+- ⚠️ **Widened `AuthContext` materialisation on JWT parse.** A token carrying only
+  `tenant_id`/`actor` claims (no `roles`/`scopes`/`grants`), or matching a
+  `TokenProfile` with `implied_roles`/`implied_scopes`, now materialises a non-`None`
+  `auth_ctx` where it previously stayed `None`. Canonical tokens with none of
+  `roles`/`scopes`/`grants`/`tenant_id`/`actor` and no matching profile still yield
+  `auth_ctx is None`. Code doing `if token.auth_ctx is None: treat as machine token`
+  should account for this.
+- `JsonWebToken.to_claims()` now emits `tenant_id`/`act` claims when present in
+  `auth_ctx.metadata["tenant_id"]`/`["actor"]`, so varco-minted tokens round-trip
+  tenant/actor through re-parsing. `_RESERVED_CLAIM_KEYS` was **not** extended to
+  include `tenant_id`/`act`/`user_id`/`actor` (a deviation from the original plan —
+  the executable test suite requires `JwtBuilder().claim("tenant_id", ...)` /
+  `.claim("act", ...)` to keep succeeding); `JwtBuilder.claim()` behaviour for these
+  keys is unchanged.
+- `JwtUtil.is_system()` now prefers a registered `"system"` `TokenProfile` when one
+  exists, falling back to the historical `SYSTEM_ISSUER` `ClassVar` comparison
+  otherwise. `SYSTEM_ISSUER` is documentation-deprecated in favour of
+  `VARCO_JWT_PROFILE__SYSTEM__ISS` — it keeps working with no removal scheduled and
+  no runtime `DeprecationWarning`.
+
+### varco-fastapi
+
+#### Changed
+- ⚠️ **Error response bodies now include a `detail` field when present.**
+  `add_exception_handlers()` and `ErrorMiddleware` both stopped silently dropping
+  `ErrorMessage.detail` — a 403 from a denied `RouteGuard` (missing scope/role/token
+  profile/grant) now surfaces its actionable message in the JSON body under
+  `"detail"`, not just `"message"`. Clients parsing only `{"code", "message"}` are
+  unaffected; clients that assert the *absence* of a `"detail"` key should update.
+- **`PassthroughAuth` refactored** onto `JwtParser.parse_unverified()` instead of
+  hand-rolled claim parsing — it now benefits from the claim-transformer pipeline
+  (env-driven or explicit) like every other JWT entry point. A regression test pins
+  the resulting `AuthContext` for a canonical token to the pre-refactor behaviour.
+
+#### Added
+- **`JwtBearerAuth(audience=..., leeway=...)`** — opt-in audience enforcement and
+  configurable clock-skew leeway, both falling back to `VARCO_JWT_AUDIENCE` /
+  `VARCO_JWT_LEEWAY_SECONDS` when omitted. Logs one warning at construction when
+  audience is left unenforced.
+- **`RouteGuard.token_profiles` / `require_token_profile(*names)`** — gate a
+  `@route` on the JWT's resolved token profile (`ctx.metadata["token_profile"]`),
+  checked between the role check and the grant check.
+- **`create_varco_app(configure_jwt=True)`** — calls
+  `configure_jwt_from_env()` once at startup so the process-global claim-transform
+  and token-profile registries match what `VarcoFastAPIModule`'s DI providers hand
+  out. Set `configure_jwt=False` to manage the registries yourself.
 
 ---
 

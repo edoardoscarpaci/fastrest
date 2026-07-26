@@ -296,6 +296,66 @@ payload = await registry.verify(raw_token)
 
 Key sources (`varco_core.authority.sources`): `PemFile`, `PemFolder`, `JwksUrl`, `OidcDiscovery`. `TrustedIssuerRegistry.from_env()` reads issuer config from environment variables.
 
+**JWKS caching knobs**: `TrustedIssuerRegistry(min_refresh_interval=..., ttl_seconds=...)`
+(env: `VARCO_JWKS_MIN_REFRESH_SECONDS` default `10.0`, `VARCO_JWKS_TTL_SECONDS` default `0.0` =
+disabled) tune when the in-memory keyset cache refreshes. `ttl_seconds` makes `get_key()`
+proactively reload once the cache is stale, without waiting for a `kid` miss. ⚠️ **There is no
+background refresher task** — a registry that never receives a `verify()` call never refreshes
+on its own regardless of these knobs; a real background-refresh task is deliberately deferred
+(needs its own lifespan start/stop wiring).
+
+#### Claim transformation + token profiles (varco_core.jwt.transform / varco_core.jwt.profile)
+
+Real-world issuers (Keycloak, Cognito, Auth0, a bespoke internal claim) rarely name their
+roles/scopes/tenant claims the way varco expects. `varco_core.jwt.transform` maps a foreign
+claim shape onto the canonical names `JwtParser` builds `AuthContext` from — **with zero
+application code changes**, because `JwtParser._from_raw_claims` is the single funnel both
+`JwtParser.parse()` and `TrustedIssuerRegistry.verify()` (and therefore `varco_fastapi`'s
+`JwtBearerAuth`/`PassthroughAuth`) go through:
+
+```bash
+export VARCO_JWT_TRANSFORM_ROLES_FIELD="sofy-roles,realm_access.roles"
+export VARCO_JWT_TRANSFORM_SCOPES_FIELD="scope"          # space-delimited OAuth2 scope
+export VARCO_JWT_TRANSFORM_TENANT_FIELD="org.id"
+```
+
+`varco_core.jwt.profile.TokenProfile` / `TokenProfileRegistry` replace the single
+`JwtUtil.SYSTEM_ISSUER` class variable with **named, composable profiles** (`system`,
+`internal`, `partner`, `service-mesh`, …), matched on issuer/token_type/audience/required
+claims and optionally granting `implied_roles`/`implied_scopes`:
+
+```bash
+export VARCO_JWT_PROFILE__INTERNAL__ISS="mesh-signer"
+export VARCO_JWT_PROFILE__INTERNAL__TOKEN_TYPE="system"
+export VARCO_JWT_PROFILE__INTERNAL__ROLES="internal"     # implied_roles
+```
+
+```python
+from varco_fastapi.auth.guard import require_token_profile
+
+@route("GET", "/internal", requires=require_token_profile("internal"))
+async def internal_only(self, ctx: AuthContext) -> dict: ...
+```
+
+`JwtUtil.SYSTEM_ISSUER` and `is_system()` **keep working** — no removal scheduled, no runtime
+`DeprecationWarning`. `is_system()` prefers a registered `"system"` profile when one exists;
+otherwise falls back to the live `SYSTEM_ISSUER` `ClassVar` comparison (documentation-only
+deprecation). See `technical_docs/features/jwt-claim-transformer.md` and
+`technical_docs/features/token-profiles.md` for the full env-var reference, per-issuer
+precedence, and IdP recipes (Keycloak/Cognito/Auth0).
+
+**`VARCO_JWT_*` env-var reference** (verification hardening — `varco_core.jwt.config.JwtVerificationSettings`):
+
+| Env var | Default | Effect |
+|---|---|---|
+| `VARCO_JWT_LEEWAY_SECONDS` | `0.0` | clock-skew leeway for `exp`/`nbf` checks — fixes intermittent cross-host 401s |
+| `VARCO_JWT_AUDIENCE` | `None` | this service's expected `aud` — `None` = **not enforced** (opt-in hardening); `JwtBearerAuth` logs one warning at construction when unset |
+| `VARCO_JWT_TRANSFORM_*` | — | claim-transform mapping (global) — see the claim-transformer feature doc |
+| `VARCO_JWT_TRANSFORM__<LABEL>__*` | — | per-issuer claim-transform override, keyed by `iss` |
+| `VARCO_JWT_PROFILE__<NAME>__*` | — | named token profile declaration |
+| `VARCO_JWKS_MIN_REFRESH_SECONDS` | `10.0` | rate limit between kid-miss JWKS refreshes |
+| `VARCO_JWKS_TTL_SECONDS` | `0.0` | proactive JWKS reload age threshold (`0` = disabled) |
+
 ### Authorization — policy engine (varco_core.auth.policy + varco_casbin)
 
 Two layers of authorization coexist:
@@ -709,6 +769,66 @@ async def charge(self):
     return await self._breaker.protect(self._call_payment_api)()
 ```
 
+#### Scenario: Consume a foreign-shaped JWT (Keycloak/Cognito)
+
+An IdP-minted token rarely uses varco's canonical claim names. Set env vars — **no code
+changes** — and every JWT entry point (`JwtParser.parse()`, `TrustedIssuerRegistry.verify()`,
+`JwtBearerAuth`, `PassthroughAuth`) picks up the mapping for free:
+
+```bash
+# Keycloak: roles live under realm_access.roles, Spring-style "ROLE_" prefix
+export VARCO_JWT_TRANSFORM_ROLES_FIELD="realm_access.roles"
+export VARCO_JWT_TRANSFORM_ROLES_STRIP_PREFIX="ROLE_"
+export VARCO_JWT_TRANSFORM_TOKEN_TYPE_FIELD="typ"
+
+# Cognito: groups + token_use instead of roles/token_type
+export VARCO_JWT_TRANSFORM_ROLES_FIELD="cognito:groups"
+export VARCO_JWT_TRANSFORM_TOKEN_TYPE_FIELD="token_use"
+```
+
+```python
+from varco_core.jwt import JwtParser
+
+token = JwtParser.parse(raw_token, secret)   # unchanged call site
+token.auth_ctx.roles                         # populated from the foreign claim
+token.extra_claims["realm_access"]            # original claim still visible (non-destructive)
+```
+
+For per-issuer overrides (mixed fleets, gateway forwarding tokens from several IdPs), a code
+escape hatch (`ClaimMapping` / a custom `ClaimTransformer`), and the full env-var table, see
+`technical_docs/features/jwt-claim-transformer.md`.
+
+#### Scenario: Gate a route on a named token profile (replacing `SYSTEM_ISSUER`)
+
+Instead of a single `JwtUtil.SYSTEM_ISSUER` value, declare one or more named profiles and
+gate routes on the resolved profile:
+
+```bash
+export VARCO_JWT_PROFILE__INTERNAL__ISS="mesh-signer"
+export VARCO_JWT_PROFILE__INTERNAL__TOKEN_TYPE="system"
+export VARCO_JWT_PROFILE__INTERNAL__ROLES="internal"
+```
+
+```python
+from varco_fastapi.router.presets import GenericRouter
+from varco_fastapi.router.endpoint import route
+from varco_fastapi.auth import JwtBearerAuth
+from varco_fastapi.auth.guard import require_token_profile
+
+class MeshRouter(GenericRouter):
+    _prefix = "/mesh"
+    _auth = JwtBearerAuth(registry)
+
+    @route("GET", "/internal-only", requires=require_token_profile("internal"))
+    async def internal_only(self, ctx) -> dict:
+        return {"ok": True}
+```
+
+A bare `sub`+`iss` service-mesh token with no roles/scopes/grants still gets a fully
+authorized `AuthContext` when it matches a profile declaring `implied_roles`/`implied_scopes`
+(⚠️ intentional materialisation — see `technical_docs/features/token-profiles.md`).
+`JwtUtil.SYSTEM_ISSUER`/`is_system()` keep working unchanged for callers not ready to migrate.
+
 ---
 
 ## Coding Standards
@@ -765,6 +885,10 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **`cProfile` across `await` on a busy loop** | Report includes frames from other coroutines | `cProfile` captures the whole event loop thread | Use a sampling backend (e.g. pyinstrument) for concurrent async code; cProfile is best for CPU-bound or isolated coroutines |
 | **tracemalloc state not restored** | App's own tracemalloc usage broken after a profiling session | Session left tracemalloc on when it found it off (or vice versa) | `TracemallocMemoryBackend.collect()` always restores the prior tracing state; if writing a custom memory backend, do the same |
 | **Custom service method unknown on `self._service`** | Type checker reports `.compile`/`.custom_method()` etc. as unknown attributes | Router declared without the 6th `S` type arg — `self._service` is only typed as the erased `AsyncService[Any, ...]` base | Subscript `CRUDRouter[..., ConcreteService]` (or `VarcoCRUDRouter[..., ConcreteService]`) and use `self.service`/`self._service`, both narrowed to `ConcreteService` |
+| **Roles empty although the JWT has them** | `AuthContext.roles` is empty for a valid, correctly-signed token | The claim is named `sofy-roles`/`realm_access.roles`, not `roles` — the default mapping never looked there | Set `VARCO_JWT_TRANSFORM_ROLES_FIELD` (see `technical_docs/features/jwt-claim-transformer.md`) |
+| **`is_system()` false for my internal token** | A token minted by your own internal issuer is not recognised as "system" | Only one static `SYSTEM_ISSUER` was configured, and this token's issuer doesn't match it | Define `VARCO_JWT_PROFILE__SYSTEM__ISS` (or any named `TokenProfile`) instead — see `technical_docs/features/token-profiles.md` |
+| **Token from another service accepted** | A JWT minted for a different service (different `aud`) verifies successfully here | `aud` was never enforced — `JwtBearerAuth`/`TrustedIssuerRegistry.verify()` default to `audience=None` | Set `VARCO_JWT_AUDIENCE` (or `JwtBearerAuth(audience=...)`) to opt in to audience enforcement |
+| **Intermittent 401 across hosts** | Same token, same secret, fails verification only on some hosts/some requests | Clock skew between hosts — `exp`/`nbf` checked with zero tolerance by default | Set `VARCO_JWT_LEEWAY_SECONDS=30` (or `leeway=` on `parse()`/`verify()`) |
 
 ---
 
@@ -794,6 +918,12 @@ Am I adding a new capability?
 │
 ├─ Authentication/JWT feature?
 │  └─ → varco_core.authority (protocol) + varco_core.authority.sources (key sources)
+│
+├─ JWT claim shape (foreign IdP roles/scopes/tenant naming)?
+│  └─ → varco_core.jwt.transform (ClaimMapping / ClaimTransformer) — env-driven or code-configured
+│
+├─ Named internal/system token recognition (replacing SYSTEM_ISSUER)?
+│  └─ → varco_core.jwt.profile (TokenProfile / TokenProfileRegistry) + varco_fastapi's require_token_profile
 │
 ├─ Service layer feature (mixin, hook, outbox)?
 │  └─ → varco_core.service (ABC + mixin) + varco_sa/beanie (repository impl)

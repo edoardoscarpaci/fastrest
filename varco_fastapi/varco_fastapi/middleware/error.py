@@ -233,6 +233,11 @@ class ErrorMiddleware(BaseHTTPMiddleware):
                 "code": msg.code,
                 "message": msg.message,
             }
+            # See the matching comment in varco_fastapi/exceptions.py
+            # (_make_error_response) — msg.detail carries str(exc) and was
+            # being silently dropped; RouteGuard denial messages need it.
+            if msg.detail:
+                body["detail"] = msg.detail
         except Exception:  # noqa: BLE001
             # Fallback if error_message_for fails (e.g. unmapped exception type)
             status_code = _FALLBACK_STATUS.get(type(exc), 500)

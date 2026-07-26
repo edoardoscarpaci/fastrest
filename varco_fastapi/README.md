@@ -309,6 +309,7 @@ app = create_varco_app(routers=[ReportRouter])
 | `require_scopes(*s, all=True)` | All (or any) OAuth scopes must be present |
 | `require_roles(*r, all=True)` | All (or any) named roles must be present |
 | `require_grant(action, key)` | `ctx.can(action, resource_key)` must be True |
+| `require_token_profile(*names)` | Resolved JWT token profile must be one of `names` |
 | `require_predicate(fn)` | Custom sync/async callable returning bool |
 | `allow_anonymous()` | Anonymous callers pass through (public endpoints) |
 
@@ -349,6 +350,59 @@ class ReportRouter(GenericRouter):
 
 Under the hood `build_router()` synthesizes a wrapper whose `__signature__` mirrors the
 method, so FastAPI drives all parsing natively — no manual request handling needed.
+
+---
+
+## JWT authentication — foreign claim shapes, token profiles, hardening
+
+`JwtBearerAuth` verifies a Bearer JWT via `TrustedIssuerRegistry` and builds an
+`AuthContext` from it. As of the claim-transformer + token-profile layer
+(`varco_core.jwt`), this happens automatically even when the token was minted by a
+third-party IdP with a different claim shape (Keycloak's `realm_access.roles`,
+Cognito's `token_use`, a bespoke `sofy-roles` claim, …) — see
+`technical_docs/features/jwt-claim-transformer.md` for the full env-var reference and
+per-issuer recipes.
+
+```python
+from varco_fastapi.auth import JwtBearerAuth
+
+# Hardened: enforce this service's audience + tolerate 30s of clock skew.
+# Both also read from VARCO_JWT_AUDIENCE / VARCO_JWT_LEEWAY_SECONDS when omitted.
+auth = JwtBearerAuth(registry, audience="orders-api", leeway=30.0)
+```
+
+`audience=None` (the default) does **not** enforce `aud` — `JwtBearerAuth` logs one
+warning at construction time when this is the case. Set an explicit `audience=` (or
+`VARCO_JWT_AUDIENCE`) to reject tokens minted for a different service.
+
+### Named token profiles — replacing `SYSTEM_ISSUER`
+
+A deployment can recognise more than one kind of trusted internal/system token
+(`system`, `internal`, `partner`, `service-mesh`, …) via env-declared
+`TokenProfile`s, and gate a route on the resolved profile with
+`require_token_profile()`:
+
+```python
+from varco_fastapi.router.presets import GenericRouter
+from varco_fastapi.router.endpoint import route
+from varco_fastapi.auth import JwtBearerAuth
+from varco_fastapi.auth.guard import require_token_profile
+
+# VARCO_JWT_PROFILE__INTERNAL__ISS=mesh-signer
+# VARCO_JWT_PROFILE__INTERNAL__TOKEN_TYPE=system
+# VARCO_JWT_PROFILE__INTERNAL__ROLES=internal
+
+class MeshRouter(GenericRouter):
+    _prefix = "/mesh"
+    _auth = JwtBearerAuth(registry)
+
+    @route("GET", "/internal-only", requires=require_token_profile("internal"))
+    async def internal_only(self, ctx) -> dict:
+        return {"ok": True}
+```
+
+See `technical_docs/features/token-profiles.md` for the full env var reference,
+precedence rules, and the `SYSTEM_ISSUER` deprecation note.
 
 ---
 

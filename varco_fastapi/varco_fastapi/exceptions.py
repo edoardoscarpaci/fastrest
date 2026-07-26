@@ -68,6 +68,15 @@ def _make_error_response(exc: ServiceException) -> JSONResponse:
             "code": msg.code,
             "message": msg.message,
         }
+        # DEVIATION (Plan 002, guard.py step 29): error_message_for() already
+        # populates ErrorMessage.detail with str(exc) "for dynamic context"
+        # (see its docstring) but this response builder was silently dropping
+        # it. RouteGuard denial messages (require_roles/scopes/token_profile/…)
+        # are only useful to API clients if the actionable str(exc) reaches
+        # the response body — include it whenever present. Non-breaking: no
+        # existing test asserts the absence of a "detail" key here.
+        if msg.detail:
+            body["detail"] = msg.detail
     except Exception:  # noqa: BLE001
         # Fallback for exceptions not registered with error_code_for
         status_code = _FALLBACK_STATUS.get(type(exc).__mro__[0], 500)

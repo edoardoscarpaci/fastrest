@@ -82,6 +82,11 @@ from varco_core.event.producer import AbstractEventProducer, BusEventProducer
 from varco_fastapi.middleware.profiling import ProfilingSettings
 from providify import Configuration, Provider, Singleton
 
+# JWT claim-transform config types (Plan 002 Phase 2 step 20) — module-level
+# import for the same get_type_hints() reason documented above.
+from varco_core.jwt.transform.config import JwtTransformConfig, JwtTransformSettings
+from varco_core.jwt.transform.registry import ClaimTransformerRegistry
+
 
 # ── Singleton stamps for varco_core classes (no providify dep there) ──────────
 # varco_core must stay providify-free — apply scope decorators here, once, at
@@ -183,12 +188,14 @@ class VarcoFastAPIModule:
     No explicit ``container.install(VarcoFastAPIModule)`` call is required.
 
     Registers (all overrideable via ``container.bind()`` before scanning):
-        - ``TrustStore``       — from ``VARCO_TRUST_STORE_DIR`` env vars
-        - ``CORSConfig``       — from ``VARCO_CORS_ORIGINS`` env var
-        - ``ClientProfile``    — from ``VARCO_CLIENT_TIMEOUT`` env vars
-        - ``TaskRegistry``     — shared singleton across all routers
-        - ``RequestContext``   — per-request ContextVar (non-singleton)
-        - ``JwtContext``       — per-request JWT ContextVar (non-singleton)
+        - ``TrustStore``               — from ``VARCO_TRUST_STORE_DIR`` env vars
+        - ``CORSConfig``               — from ``VARCO_CORS_ORIGINS`` env var
+        - ``ClientProfile``            — from ``VARCO_CLIENT_TIMEOUT`` env vars
+        - ``JwtTransformSettings``     — from ``VARCO_JWT_TRANSFORM_*`` env vars
+        - ``ClaimTransformerRegistry`` — from ``JwtTransformConfig.from_env()``
+        - ``TaskRegistry``             — shared singleton across all routers
+        - ``RequestContext``           — per-request ContextVar (non-singleton)
+        - ``JwtContext``               — per-request JWT ContextVar (non-singleton)
 
     Thread safety:  ✅ Module instance is created once at install() time.
     Async safety:   ✅ All providers are synchronous.
@@ -237,6 +244,43 @@ class VarcoFastAPIModule:
         )  # noqa: PLC0415
 
         return ProfilingSettings()
+
+    @Provider(singleton=True)
+    def jwt_transform_settings(self) -> JwtTransformSettings:
+        """
+        Flat ``VARCO_JWT_TRANSFORM_*`` claim-transform settings, loaded from
+        the environment (Plan 002 Phase 2).
+
+        ⚠️ ``@Provider``, never ``@Singleton`` — pydantic ``BaseSettings``
+        takes ``**values`` in its constructor; providify cannot resolve that
+        as an injectable signature (see ``feedback_di_defaults`` /
+        ``varco_casbin/di.py`` for the established precedent).
+
+        Returns:
+            A ``JwtTransformSettings`` instance built via ``.from_env()``.
+        """
+        return JwtTransformSettings.from_env()
+
+    @Provider(singleton=True)
+    def claim_transformer_registry(self) -> ClaimTransformerRegistry:
+        """
+        The fully parsed claim-transformer registry (global mapping + every
+        per-issuer override), built from the environment.
+
+        This is a pure provider — it does NOT install itself as the
+        process-global registry ``JwtParser`` reads from
+        (``varco_core.jwt.transform.runtime``).  ``create_varco_app()``
+        calls ``configure_jwt_from_env()`` separately at startup so the
+        DI-resolved object and the process-global registry stay in sync
+        without this provider having a side effect on construction (pure
+        providers are easier to test in isolation and safe to resolve more
+        than once).
+
+        Returns:
+            A ``ClaimTransformerRegistry`` built via
+            ``JwtTransformConfig.from_env().to_registry()``.
+        """
+        return JwtTransformConfig.from_env().to_registry()
 
     @Provider(singleton=True)
     def task_registry(self) -> TaskRegistry:

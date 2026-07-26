@@ -42,6 +42,7 @@ Async safety:   ✅ Safe — asyncio.Lock serialises concurrent verify() calls.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -142,7 +143,14 @@ class TrustedIssuerRegistry:
             raise PermissionError("unexpected issuer")
     """
 
-    __slots__ = ("_entries", "_lock", "_last_refresh", "_min_refresh_interval")
+    __slots__ = (
+        "_entries",
+        "_lock",
+        "_last_refresh",
+        "_min_refresh_interval",
+        "_ttl_seconds",
+        "_loaded_at",
+    )
 
     # ── DI injection handles ───────────────────────────────────────────────────
     #
@@ -165,7 +173,26 @@ class TrustedIssuerRegistry:
     _multi_key_handle: ClassVar[Instance[MultiKeyAuthority]]
     _jwt_handle: ClassVar[Instance[JwtAuthority]]
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        min_refresh_interval: float | None = None,
+        ttl_seconds: float | None = None,
+    ) -> None:
+        """
+        Args:
+            min_refresh_interval: Rate limit (seconds) between kid-not-found
+                triggered global refreshes.  ``None`` (default) reads
+                ``VARCO_JWKS_MIN_REFRESH_SECONDS`` (default ``10.0`` —
+                identical to pre-Plan-002 behaviour, which hardcoded ``10.0``).
+            ttl_seconds: Proactive reload age threshold (Plan 002 C-4).  When
+                the cached keyset's age exceeds this many seconds,
+                ``get_key()`` refreshes all sources BEFORE searching, instead
+                of waiting for a kid-miss.  ``None`` (default) reads
+                ``VARCO_JWKS_TTL_SECONDS`` (default ``0.0`` — disabled,
+                identical to pre-Plan-002 behaviour: only kid-miss triggers
+                a refresh).
+        """
         # label → TrustedIssuerEntry
         self._entries: dict[str, TrustedIssuerEntry] = {}
 
@@ -174,7 +201,22 @@ class TrustedIssuerRegistry:
 
         # Rate-limit for kid-not-found global refresh
         self._last_refresh: float = 0.0
-        self._min_refresh_interval: float = 10.0
+        self._min_refresh_interval: float = (
+            min_refresh_interval
+            if min_refresh_interval is not None
+            else float(os.environ.get("VARCO_JWKS_MIN_REFRESH_SECONDS", "10.0"))
+        )
+
+        # Plan 002 C-4 — proactive age-based reload knobs (0.0 = disabled).
+        self._ttl_seconds: float = (
+            ttl_seconds
+            if ttl_seconds is not None
+            else float(os.environ.get("VARCO_JWKS_TTL_SECONDS", "0.0"))
+        )
+        # Monotonic timestamp of the last successful full load/refresh.
+        # 0.0 sentinel = "never loaded" — _should_proactively_reload() never
+        # fires from the initial (unloaded) state.
+        self._loaded_at: float = 0.0
 
     def _get_lock(self) -> asyncio.Lock:
         """
@@ -331,6 +373,14 @@ class TrustedIssuerRegistry:
                 + "\nResolve the above issues and retry load_all()."
             )
 
+        # A full load_all() counts as "freshly loaded" for BOTH the TTL age
+        # check (Plan 002 C-4) and the kid-miss rate limit — otherwise an
+        # immediate get_key() miss right after startup would trigger a
+        # redundant second refresh (the sources were just fetched).
+        now = time.monotonic()
+        self._loaded_at = now
+        self._last_refresh = now
+
     async def load(self, label: str) -> None:
         """
         Load (or reload) the keyset for a single registered issuer.
@@ -360,16 +410,20 @@ class TrustedIssuerRegistry:
         """
         Find a ``JsonWebKey`` with the given ``kid`` across all loaded keysets.
 
-        First searches the in-memory cached keysets.  On a miss, triggers a
-        rate-limited refresh of all sources (kid-not-found = key rotation
-        signal from a remote issuer) and searches again.
+        First checks whether the cached keysets have aged past
+        ``ttl_seconds`` (Plan 002 C-4) and, if so, proactively refreshes all
+        sources BEFORE searching at all.  Otherwise (the pre-Plan-002
+        behaviour, ``ttl_seconds=0`` default): searches the in-memory cached
+        keysets; on a miss, triggers a rate-limited reactive refresh of all
+        sources (kid-not-found = key rotation signal from a remote issuer)
+        and searches again.
 
         Args:
             kid: Key ID to look up.
 
         Returns:
             The first matching ``JsonWebKey``, or ``None`` if not found after
-            refresh.
+            any refresh performed.
 
         Edge cases:
             - If the global refresh rate limit blocks the re-fetch, returns
@@ -377,12 +431,26 @@ class TrustedIssuerRegistry:
               "key not found right now".
             - The same kid may theoretically appear in multiple issuers'
               keysets — the first match wins (first registered issuer).
+            - A proactive TTL-triggered reload does NOT also run the
+              reactive kid-miss refresh afterward — the cache was just
+              refreshed, so falling through would double-fetch every
+              remote source on every call once the cache goes stale.
         """
+        if self._should_proactively_reload():
+            async with self._get_lock():
+                # Re-check inside the lock — another task may have already
+                # refreshed while we were waiting to acquire it.
+                if self._should_proactively_reload():
+                    await self._refresh_all_sources()
+            # Search once, after the proactive refresh, and stop here —
+            # do not fall through to the reactive miss-path below (it would
+            # immediately re-trigger another refresh; see the docstring).
+            return self._search_caches(kid)
+
         # First pass — search all loaded caches
-        for entry in self._entries.values():
-            key = entry.find_key(kid)
-            if key is not None:
-                return key
+        key = self._search_caches(kid)
+        if key is not None:
+            return key
 
         # Miss — check rate limit before hitting the network
         now = time.monotonic()
@@ -394,32 +462,57 @@ class TrustedIssuerRegistry:
         # requests from all firing refresh() simultaneously on the same miss.
         async with self._get_lock():
             # Re-check inside lock — another task may have refreshed already
-            for entry in self._entries.values():
-                key = entry.find_key(kid)
-                if key is not None:
-                    return key
+            key = self._search_caches(kid)
+            if key is not None:
+                return key
 
-            self._last_refresh = time.monotonic()
-
-            # Refresh all sources concurrently — failures are tolerated
-            results = await asyncio.gather(
-                *(entry.source.refresh() for entry in self._entries.values()),
-                return_exceptions=True,
-            )
-
-            for entry, result in zip(self._entries.values(), results):
-                if not isinstance(result, BaseException):
-                    entry._keyset = result
-                # Silently skip failed refreshes — stale cache is better than
-                # a hard error during token verification.
+            await self._refresh_all_sources()
 
         # Second pass — search updated caches
+        return self._search_caches(kid)
+
+    def _search_caches(self, kid: str) -> JsonWebKey | None:
+        """Search every registered entry's cached keyset for ``kid``."""
         for entry in self._entries.values():
             key = entry.find_key(kid)
             if key is not None:
                 return key
-
         return None
+
+    def _should_proactively_reload(self) -> bool:
+        """
+        Return ``True`` iff a TTL-based proactive reload is due.
+
+        ``ttl_seconds <= 0`` (the default) always returns ``False`` — the
+        pre-Plan-002 behaviour (reactive-only refresh on kid-miss).
+        ``_loaded_at == 0.0`` (never loaded at all) also returns ``False`` —
+        there is nothing to consider "stale" yet; the reactive kid-miss path
+        handles the very first load.
+        """
+        if self._ttl_seconds <= 0 or self._loaded_at <= 0.0:
+            return False
+        return (time.monotonic() - self._loaded_at) >= self._ttl_seconds
+
+    async def _refresh_all_sources(self) -> None:
+        """
+        Refresh every registered source concurrently, tolerating individual
+        failures (stale cache is better than a hard error during token
+        verification), and stamp ``_last_refresh``/``_loaded_at``.
+        """
+        results = await asyncio.gather(
+            *(entry.source.refresh() for entry in self._entries.values()),
+            return_exceptions=True,
+        )
+
+        for entry, result in zip(self._entries.values(), results):
+            if not isinstance(result, BaseException):
+                entry._keyset = result
+            # Silently skip failed refreshes — stale cache is better than
+            # a hard error during token verification.
+
+        now = time.monotonic()
+        self._last_refresh = now
+        self._loaded_at = now
 
     # ── Verification ──────────────────────────────────────────────────────────
 
@@ -428,6 +521,7 @@ class TrustedIssuerRegistry:
         token_str: str,
         *,
         audience: str | list[str] | None = None,
+        leeway: float | None = None,
     ) -> JsonWebToken:
         """
         Verify a JWT string against all registered issuers' public keys.
@@ -442,6 +536,10 @@ class TrustedIssuerRegistry:
         Args:
             token_str: Raw JWT string.
             audience:  Expected ``aud`` value(s).  ``None`` skips audience check.
+            leeway:    Clock-skew leeway in seconds for ``exp``/``nbf`` checks
+                       (Plan 002 C-1).  ``None`` (default) reads
+                       ``VARCO_JWT_LEEWAY_SECONDS`` (default ``0.0`` — no
+                       leeway, today's behaviour).
 
         Returns:
             ``JsonWebToken`` with all claims populated.
@@ -504,9 +602,25 @@ class TrustedIssuerRegistry:
                 f"The key may be malformed or use an unsupported algorithm."
             ) from e
 
-        decode_kwargs: dict[str, Any] = {"algorithms": [pyjwk.algorithm_name]}
+        if leeway is None:
+            from varco_core.jwt.config import JwtVerificationSettings
+
+            leeway = JwtVerificationSettings.from_env().leeway_seconds
+
+        decode_kwargs: dict[str, Any] = {
+            "algorithms": [pyjwk.algorithm_name],
+            "leeway": leeway,
+        }
         if audience is not None:
             decode_kwargs["audience"] = audience
+        else:
+            # PyJWT defaults verify_aud=True: a token that happens to carry
+            # an "aud" claim would raise InvalidAudienceError even though no
+            # expected audience was ever configured. D-17 ("audience=None
+            # means NOT enforced") requires explicitly disabling aud
+            # verification in this case — otherwise "not enforced" would
+            # only be true for tokens that happen to omit "aud" entirely.
+            decode_kwargs["options"] = {"verify_aud": False}
 
         # Delegate to PyJWT for the actual signature + claims verification.
         # Any jwt.exceptions.* propagates unchanged — callers may catch them.

@@ -159,8 +159,15 @@ async def test_jwt_bearer_auth_raises_on_verification_failure():
 
 async def test_passthrough_auth_decodes_claims_without_verification():
     """PassthroughAuth decodes JWT payload claims without signature check."""
-    import base64
-    import json
+    # NOTE (Plan 002 step 35 refactor): PassthroughAuth now delegates to
+    # JwtParser.parse_unverified(), which requires a syntactically valid JWT
+    # (PyJWT parses the header segment even with verify_signature=False).
+    # The original fixture used a bogus literal "header" segment that only
+    # worked with the old hand-rolled base64/JSON parsing this test exists to
+    # protect the *contract* of, not that implementation detail — encode a
+    # real (arbitrarily-keyed, since the signature is never checked) token
+    # instead.
+    import jwt as _pyjwt
 
     payload = {
         "sub": "usr_2",
@@ -168,10 +175,9 @@ async def test_passthrough_auth_decodes_claims_without_verification():
         "scopes": ["write:posts"],
         "grants": [],
     }
-    encoded = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    fake_token = _pyjwt.encode(
+        payload, "unused-secret-passthrough-does-not-verify", algorithm="HS256"
     )
-    fake_token = f"header.{encoded}.signature"
 
     auth = PassthroughAuth()
     req = _make_request(headers={"Authorization": f"Bearer {fake_token}"})
@@ -262,3 +268,170 @@ async def test_websocket_auth_extracts_from_protocol_header():
     req = _make_request(headers={"Sec-WebSocket-Protocol": "bearer.ws.protocol.token"})
     ctx = await auth(req)
     assert ctx.user_id == "ws_proto_user"
+
+
+# ── Phase 2/4: env claim-transform + audience enforcement + PassthroughAuth
+#    refactor (Plan 002, steps 22, 34, 36) ─────────────────────────────────────
+#
+# These tests sign real RSA-backed tokens via JwtAuthority + verify them
+# through a real TrustedIssuerRegistry, proving JwtBearerAuth needs zero
+# extra code to benefit from the claim transformer (SEAM 2 already routes
+# through JwtParser._from_raw_claims via registry.verify()).
+#
+# New imports (JwtAuthority, TrustedIssuerRegistry, VARCO_JWT_TRANSFORM_*,
+# VARCO_JWT_AUDIENCE) are local to each test — the symbols do not exist yet
+# (Phase 2/4 red), so this keeps the rest of the file collectible.
+
+
+def _build_rsa_registry_and_authority():
+    """Generate a throwaway RSA key, wrap it in a JwtAuthority + registry."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from varco_core.authority import JwtAuthority
+    from varco_core.authority.registry import TrustedIssuerRegistry
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    authority = JwtAuthority.from_pem(
+        pem, kid="test-kid", issuer="kc-issuer", algorithm="RS256"
+    )
+    registry = TrustedIssuerRegistry()
+    registry.register_authority(authority)
+    return authority, registry
+
+
+class TestJwtBearerAuthEnvClaimTransform:
+    async def test_jwt_bearer_applies_env_claim_transform(self, monkeypatch):
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM_ROLES_FIELD", "realm_access.roles")
+        authority, registry = _build_rsa_registry_and_authority()
+        await registry.load_all()
+
+        builder = (
+            authority.token()
+            .subject("usr_1")
+            .claim("realm_access", {"roles": ["editor"]})
+        )
+        raw_token = authority.sign(builder)
+
+        auth = JwtBearerAuth(registry)
+        req = _make_request(headers={"Authorization": f"Bearer {raw_token}"})
+        ctx = await auth(req)
+
+        assert ctx.roles == frozenset({"editor"})
+
+
+class TestJwtBearerAuthAudience:
+    async def test_audience_mismatch_raises_401(self):
+        authority, registry = _build_rsa_registry_and_authority()
+        await registry.load_all()
+
+        builder = authority.token().subject("usr_1").audience("billing")
+        raw_token = authority.sign(builder)
+
+        auth = JwtBearerAuth(registry, audience="orders")
+        req = _make_request(headers={"Authorization": f"Bearer {raw_token}"})
+        with pytest.raises(HTTPException) as exc_info:
+            await auth(req)
+        assert exc_info.value.status_code == 401
+
+    async def test_audience_match_accepted(self):
+        authority, registry = _build_rsa_registry_and_authority()
+        await registry.load_all()
+
+        builder = authority.token().subject("usr_1").audience("orders")
+        raw_token = authority.sign(builder)
+
+        auth = JwtBearerAuth(registry, audience="orders")
+        req = _make_request(headers={"Authorization": f"Bearer {raw_token}"})
+        ctx = await auth(req)
+        assert ctx.user_id == "usr_1"
+
+    async def test_audience_none_does_not_enforce_either_way(self):
+        authority, registry = _build_rsa_registry_and_authority()
+        await registry.load_all()
+
+        builder_billing = authority.token().subject("usr_1").audience("billing")
+        raw_billing = authority.sign(builder_billing)
+
+        auth = JwtBearerAuth(registry, audience=None)
+        req = _make_request(headers={"Authorization": f"Bearer {raw_billing}"})
+        ctx = await auth(req)
+        assert ctx.user_id == "usr_1"
+
+    async def test_varco_jwt_audience_env_used_when_kwarg_omitted(self, monkeypatch):
+        # A matching audience must be ACCEPTED when sourced purely from
+        # VARCO_JWT_AUDIENCE (no audience= kwarg) — proves the env default is
+        # actually threaded into registry.verify(), not just "some 401 or
+        # other" (PyJWT already 401s on a bare aud claim with no audience=
+        # configured at all, so an accept-path assertion is the meaningful
+        # regression check here).
+        monkeypatch.setenv("VARCO_JWT_AUDIENCE", "orders")
+        authority, registry = _build_rsa_registry_and_authority()
+        await registry.load_all()
+
+        builder = authority.token().subject("usr_1").audience("orders")
+        raw_token = authority.sign(builder)
+
+        auth = JwtBearerAuth(registry)  # no audience= kwarg
+        req = _make_request(headers={"Authorization": f"Bearer {raw_token}"})
+        ctx = await auth(req)
+        assert ctx.user_id == "usr_1"
+
+
+class TestPassthroughAuthRefactorRegression:
+    async def test_passthrough_auth_canonical_token_golden_value(self):
+        """
+        Regression (plan step 36): a canonical token must produce the exact
+        same AuthContext before and after the JwtParser.parse_unverified()
+        refactor.
+        """
+        from varco_core.auth import AuthContext
+        from varco_core.jwt import JwtBuilder
+
+        signed = (
+            JwtBuilder()
+            .subject("usr_1")
+            .with_auth_ctx(
+                AuthContext(
+                    user_id="usr_1",
+                    roles=frozenset({"editor"}),
+                    scopes=frozenset({"write:posts"}),
+                )
+            )
+            .claim("custom_meta", "hello")
+            .encode("unused-secret-passthrough-does-not-verify")
+        )
+        auth = PassthroughAuth(required=True)
+        req = _make_request(headers={"Authorization": f"Bearer {signed}"})
+        ctx = await auth(req)
+
+        assert ctx.user_id == "usr_1"
+        assert ctx.roles == frozenset({"editor"})
+        assert ctx.scopes == frozenset({"write:posts"})
+        assert ctx.metadata.get("custom_meta") == "hello"
+
+    async def test_passthrough_auth_applies_claim_transform_for_foreign_roles(
+        self, monkeypatch
+    ):
+        """PassthroughAuth refactor must route through the same claim
+        transformer as JwtBearerAuth/JwtParser.parse() (plan step 36)."""
+        from varco_core.jwt import JwtBuilder
+
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM_ROLES_FIELD", "sofy-roles")
+
+        signed = (
+            JwtBuilder()
+            .subject("usr_1")
+            .claim("sofy-roles", ["editor"])
+            .encode("unused-secret-passthrough-does-not-verify")
+        )
+        auth = PassthroughAuth(required=True)
+        req = _make_request(headers={"Authorization": f"Bearer {signed}"})
+        ctx = await auth(req)
+
+        assert ctx.roles == frozenset({"editor"})

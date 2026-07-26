@@ -25,6 +25,25 @@ from varco_core.auth import AuthContext
 # The full set of claim names that varco manages explicitly.
 # JwtBuilder.claim() blocks writes to these; JwtParser._from_raw_claims() uses
 # this set to separate known standard claims from unknown extra_claims.
+#
+# DEVIATION FROM PLAN 002 (§B / step 12): the plan's recommendation was to
+# also reserve "tenant_id" and "act" so JwtBuilder.claim() blocks them like
+# "roles"/"scopes"/"grants". This was NOT implemented: the RED test suite
+# written for this plan (test_jwt_profiles.py::test_required_claims_present,
+# test_jwt_transform.py::test_actor_canonical_lands_in_metadata) calls
+# ``JwtBuilder().claim("tenant_id", ...)`` / ``.claim("act", ...)`` and
+# expects it to SUCCEED, and pre-existing (already-passing) tests in
+# test_jwt.py do the same. Reserving either key would regress both suites.
+# The tests are the executable spec here and win over the plan's written
+# recommendation (which was presumably superseded once the test suite was
+# authored) — see the implementation report for this conflict.
+#
+# Consequence: "tenant_id" and "act" stay ordinary custom claims. A raw
+# "tenant_id"/"act" claim set via JwtBuilder.claim() is NOT filtered out of
+# extra_claims by the parser — it is intentionally visible there (same
+# non-destructive behaviour as any other foreign/custom claim name) in
+# addition to being picked up by the default canonical fallback sources for
+# CanonicalClaim.TENANT_ID / CanonicalClaim.ACTOR when present.
 _RESERVED_CLAIM_KEYS: Final[frozenset[str]] = frozenset(
     {
         "sub",
@@ -250,6 +269,13 @@ class JsonWebToken:
                     }
                     for g in ctx.grants
                 ]
+            # tenant_id / actor round-trip (Plan 002 §B step 12) — emitted
+            # only when present in metadata, keeping tokens compact for the
+            # (much more common) case where neither is set.
+            if "tenant_id" in ctx.metadata:
+                claims["tenant_id"] = ctx.metadata["tenant_id"]
+            if "actor" in ctx.metadata:
+                claims["act"] = ctx.metadata["actor"]
 
         # Extra claims merged last — callers must ensure no key conflicts with
         # the standard claims above (JwtBuilder.claim() blocks reserved keys).

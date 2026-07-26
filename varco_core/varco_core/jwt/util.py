@@ -13,11 +13,14 @@ Async safety:   ✅ Pure — no I/O, no shared mutable state.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import ClassVar, Final
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, ClassVar, Final
 
 from varco_core.auth import AuthContext
 from varco_core.jwt.model import JsonWebToken
+
+if TYPE_CHECKING:
+    from varco_core.jwt.profile import TokenProfileRegistry
 
 
 # ── System issuer constant ────────────────────────────────────────────────────
@@ -107,42 +110,73 @@ class JwtUtil:
         """
         Return ``True`` if this is an internal system (service-to-service) token.
 
-        Compares the token's ``iss`` claim against ``JwtUtil.SYSTEM_ISSUER``.
-        System tokens typically carry elevated or unconditional trust — always
-        verify the issuer before granting system-level access.
+        .. deprecated::
+            Prefer a named ``system`` profile
+            (``VARCO_JWT_PROFILE__SYSTEM__ISS=...`` or a code-registered
+            ``TokenProfile(name="system", ...)``) over overriding the
+            ``SYSTEM_ISSUER`` class variable — profiles compose with
+            ``token_type``/``aud``/``required_claims`` and are named, so a
+            deployment can recognise more than one kind of trusted token.
+            ``SYSTEM_ISSUER`` keeps working indefinitely (no removal
+            scheduled) — this is documentation-only guidance (Plan 002 D-11).
+
+        Resolution order (Plan 002 §B — keeps the pre-existing
+        ``monkeypatch.setattr(JwtUtil, "SYSTEM_ISSUER", ...)`` test green
+        unchanged):
+            1. If a profile named ``"system"`` is registered (env var
+               ``VARCO_JWT_PROFILE__SYSTEM__*`` or an explicit
+               ``configure_token_profiles()`` registry) → delegate to
+               ``registry.matches("system", token)``.
+            2. Otherwise → compare ``token.iss`` against the *live*
+               ``JwtUtil.SYSTEM_ISSUER`` ``ClassVar`` (never snapshotted),
+               so a class-level monkeypatch still takes effect.
 
         Returns:
-            ``True`` iff ``token.iss == JwtUtil.SYSTEM_ISSUER``.
+            ``True`` iff either resolution step above matches.
 
         Edge cases:
-            - Returns ``False`` when ``token.iss`` is ``None``.
-            - Override ``JwtUtil.SYSTEM_ISSUER`` at startup to customise what
-              counts as a system issuer in your deployment.
+            - Returns ``False`` when ``token.iss`` is ``None`` and no
+              ``"system"`` profile is registered.
+            - A registered ``"system"`` profile always takes precedence over
+              ``SYSTEM_ISSUER`` — even if ``SYSTEM_ISSUER`` was also
+              monkeypatched to a matching value, the profile decides.
         """
+        from varco_core.jwt.profile import _resolve_global_registry
+
+        registry = _resolve_global_registry()
+        if "system" in registry.names():
+            return registry.matches("system", self._token)
         return self._token.iss == self.SYSTEM_ISSUER
 
     # ── Temporal checks ───────────────────────────────────────────────────────
 
-    def is_expired(self) -> bool:
+    def is_expired(self, *, leeway: float = 0.0) -> bool:
         """
         Return ``True`` if the token is past its expiration time.
 
         Uses the current UTC time for comparison.
 
+        Args:
+            leeway: Clock-skew leeway in seconds (Plan 002 C-1) — the token
+                    is only considered expired once ``now >= exp + leeway``.
+                    Defaults to ``0.0`` — identical to pre-Plan-002 behaviour.
+
         Returns:
-            ``True`` if ``exp`` is set and in the past; ``False`` if ``exp``
-            is ``None`` (no expiry) or still in the future.
+            ``True`` if ``exp`` is set and (past ``leeway`` seconds) in the
+            past; ``False`` if ``exp`` is ``None`` (no expiry) or still
+            within the leeway window.
 
         Edge cases:
             - A token with no ``exp`` claim is treated as non-expiring —
               returns ``False``.  Apply your own policy for such tokens.
-            - Exact equality (``now == exp``) is treated as expired — the
-              token is invalid at the expiry instant, not after it.
+            - Exact equality (``now == exp + leeway``) is treated as
+              expired — the token is invalid at the (leeway-adjusted)
+              expiry instant, not after it.
         """
         if self._token.exp is None:
             # No expiry claim — treat as non-expiring; caller must decide policy
             return False
-        return datetime.now(timezone.utc) >= self._token.exp
+        return datetime.now(timezone.utc) >= self._token.exp + timedelta(seconds=leeway)
 
     def is_valid_now(self) -> bool:
         """
@@ -285,6 +319,76 @@ class JwtUtil:
             return aud in self._token.aud
         # Single-string audience — exact match
         return self._token.aud == aud
+
+    # ── Token profile helpers (Plan 002 §B) ───────────────────────────────────
+
+    def matches_profile(
+        self, name: str, *, registry: "TokenProfileRegistry | None" = None
+    ) -> bool:
+        """
+        Return ``True`` iff the wrapped token matches the named profile.
+
+        Args:
+            name:     Registered profile name.
+            registry: Explicit ``TokenProfileRegistry`` — always wins over
+                      the process-global registry.  ``None`` resolves the
+                      global registry (``VARCO_JWT_PROFILE__*`` env vars).
+
+        Returns:
+            ``True`` iff ``registry.matches(name, token)``.
+
+        Raises:
+            TokenProfileError: ``name`` is not registered.
+        """
+        reg = registry if registry is not None else self._global_profile_registry()
+        return reg.matches(name, self._token)
+
+    def profile_name(
+        self, *, registry: "TokenProfileRegistry | None" = None
+    ) -> str | None:
+        """
+        Return the name of the first profile that matches the wrapped
+        token, or ``None`` if no registered profile matches.
+
+        Args:
+            registry: Explicit ``TokenProfileRegistry`` override — see
+                      ``matches_profile()``.
+
+        Returns:
+            The resolved profile's name, or ``None``.
+        """
+        reg = registry if registry is not None else self._global_profile_registry()
+        resolved = reg.resolve(self._token)
+        return resolved.name if resolved is not None else None
+
+    def assert_profile(
+        self, name: str, *, registry: "TokenProfileRegistry | None" = None
+    ) -> None:
+        """
+        Assert that the wrapped token matches the named profile.
+
+        Args:
+            name:     Registered profile name.
+            registry: Explicit ``TokenProfileRegistry`` override — see
+                      ``matches_profile()``.
+
+        Raises:
+            TokenProfileError: The token does not match ``name`` (or
+                ``name`` is not registered at all).
+        """
+        from varco_core.jwt.profile import TokenProfileError
+
+        if not self.matches_profile(name, registry=registry):
+            raise TokenProfileError(
+                f"Token does not match required profile {name!r} "
+                f"(sub={self._token.sub!r}, iss={self._token.iss!r})."
+            )
+
+    @staticmethod
+    def _global_profile_registry() -> "TokenProfileRegistry":
+        from varco_core.jwt.profile import _resolve_global_registry
+
+        return _resolve_global_registry()
 
     def __repr__(self) -> str:
         return (

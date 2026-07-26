@@ -78,6 +78,11 @@ class RouteGuard:
         ``(action, resource_key)`` pair checked via ``ctx.can(action, key)``.
         Only one grant check is supported per guard; compose guards via
         ``predicate`` if more complex logic is needed.
+    token_profiles:
+        Named JWT token profile(s) (Plan 002 §B) that must include the
+        request's resolved profile — any-of match against
+        ``ctx.metadata["token_profile"]``.  Build with
+        ``require_token_profile(*names)``.
     require_all:
         When ``True`` (default), ALL declared scopes/roles must match (AND).
         When ``False``, ANY one declared scope or role suffices (OR).
@@ -98,6 +103,8 @@ class RouteGuard:
     1. If ``allow_anonymous`` and ``ctx.is_anonymous()`` → allow immediately.
     2. Check ``scopes`` (AND/OR per ``require_all``).
     3. Check ``roles`` (AND/OR per ``require_all``).
+    3.5. Check ``token_profiles`` (any-of against
+         ``ctx.metadata["token_profile"]`` — Plan 002 §B).
     4. Check ``grant`` via ``ctx.can(action, key)``.
     5. Call ``predicate(ctx)`` — must return truthy or raise.
 
@@ -120,6 +127,12 @@ class RouteGuard:
     grant: tuple[object, str] | None = None
     require_all: bool = True
     allow_anonymous: bool = False
+    # Token profile names (Plan 002 §B) — checked via
+    # ctx.metadata.get("token_profile") between the role check (step 3) and
+    # the grant check (step 4). Any-of match, same style as scopes/roles.
+    # A dataclass FIELD (not a require_predicate closure) keeps RouteGuard
+    # hashable/comparable/introspectable — see decision D-13.
+    token_profiles: tuple[str, ...] = field(default_factory=tuple)
     predicate: Callable[[AuthContext], bool | Awaitable[bool]] | None = field(
         default=None,
         # Exclude from hash/eq — callables are not reliably comparable
@@ -182,6 +195,21 @@ class RouteGuard:
             if not ok:
                 raise ServiceAuthorizationError(
                     f"Missing required role(s): {', '.join(self.roles)!r}",
+                    str,
+                )
+
+        # 3.5. Token profile check (Plan 002 §B) — any-of match against
+        # ctx.metadata.get("token_profile"), the key populated by
+        # varco_core.jwt.profile.resolve_token_profile() when a
+        # TokenProfile matched during JWT parsing.
+        if self.token_profiles:
+            from varco_core.jwt.profile import PROFILE_METADATA_KEY
+
+            actual_profile = ctx.metadata.get(PROFILE_METADATA_KEY)
+            if actual_profile not in self.token_profiles:
+                raise ServiceAuthorizationError(
+                    f"Token profile {'/'.join(self.token_profiles)!r} "
+                    f"required; token profile is {actual_profile!r}",
                     str,
                 )
 
@@ -298,6 +326,34 @@ def require_predicate(
         async def sensitive_op(self, ctx: AuthContext) -> None: ...
     """
     return RouteGuard(predicate=fn)
+
+
+def require_token_profile(*names: str) -> RouteGuard:
+    """
+    Guard that requires the request's resolved JWT token profile
+    (``AuthContext.metadata["token_profile"]``, populated by
+    ``varco_core.jwt.profile.resolve_token_profile()`` during JWT parsing)
+    to be one of ``names``.
+
+    Args:
+        *names: Acceptable profile name(s) — any-of match.
+
+    Returns:
+        Frozen ``RouteGuard`` checking ``token_profiles``.
+
+    Edge cases:
+        - An anonymous caller (no ``ctx.metadata`` at all, or
+          ``allow_anonymous=False`` by default) is denied by the earlier
+          anonymous check (step 1b) before the profile check even runs.
+        - A context with no ``"token_profile"`` key at all denies with an
+          actionable message naming the required profile(s) and ``None``.
+
+    Example::
+
+        @route("GET", "/internal", requires=require_token_profile("internal"))
+        async def internal_only(self, ctx: AuthContext) -> dict: ...
+    """
+    return RouteGuard(token_profiles=tuple(names))
 
 
 def allow_anonymous() -> RouteGuard:
