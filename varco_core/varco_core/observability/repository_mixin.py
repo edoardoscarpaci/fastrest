@@ -93,9 +93,8 @@ from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 
 from varco_core.model import DomainModel
-from varco_core.observability.span import SpanConfig
+from varco_core.observability.span import SpanConfig, build_span_attributes
 from varco_core.repository import AsyncRepository
-from varco_core.tracing import current_correlation_id
 
 if TYPE_CHECKING:
     from varco_core.query.params import QueryParams
@@ -207,17 +206,14 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
         span_name = f"{type(self).__name__}.stream_by_query"
 
         tracer = trace.get_tracer(cfg.tracer_name)
+        merged_attrs = build_span_attributes(cfg.attributes)
         # Disable SDK auto-handling — we apply SpanConfig flags ourselves.
         with tracer.start_as_current_span(
-            span_name, record_exception=False, set_status_on_exception=False
+            span_name,
+            record_exception=False,
+            set_status_on_exception=False,
+            attributes=merged_attrs,
         ) as current_span:
-            for k, v in cfg.attributes.items():
-                current_span.set_attribute(k, v)
-
-            cid = current_correlation_id()
-            if cid is not None:
-                current_span.set_attribute("correlation_id", cid)
-
             try:
                 async for entity in super().stream_by_query(params):  # type: ignore[safe-super]
                     yield entity
@@ -254,17 +250,14 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
         span_name = f"{type(self).__name__}.{operation}"
 
         tracer = trace.get_tracer(cfg.tracer_name)
+        merged_attrs = build_span_attributes(cfg.attributes)
         # Disable SDK auto-handling — we apply SpanConfig flags ourselves.
         with tracer.start_as_current_span(
-            span_name, record_exception=False, set_status_on_exception=False
+            span_name,
+            record_exception=False,
+            set_status_on_exception=False,
+            attributes=merged_attrs,
         ) as current_span:
-            for k, v in cfg.attributes.items():
-                current_span.set_attribute(k, v)
-
-            cid = current_correlation_id()
-            if cid is not None:
-                current_span.set_attribute("correlation_id", cid)
-
             try:
                 return await coro_fn(*args)
             except Exception as exc:

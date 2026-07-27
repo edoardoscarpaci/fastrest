@@ -10,13 +10,20 @@ Complete technical map of all packages, modules, classes, and design patterns. U
 varco_core/              — Domain model, service layer, event system, resilience, DI contracts
   ├── event/             — AbstractEventBus, AbstractEventProducer, EventConsumer, @listen
   ├── service/           — AsyncService[D, PK, C, R, U], mixins (validator, tenant, soft-delete)
-  │   └── saga.py        — SagaOrchestrator, SagaStep, SagaState, AbstractSagaRepository
+  │   ├── saga.py        — SagaOrchestrator, SagaStep, SagaState, AbstractSagaRepository
+  │   └── audit.py       — AuditEntry, AuditRepository (ABC), AuditLogMixin, AuditConsumer
   ├── cache/             — AsyncCache protocol, CacheBackend ABC, invalidation strategies
   │   └── warming.py     — CacheWarmer ABC, QueryCacheWarmer, SnapshotCacheWarmer, CompositeWarmer
   ├── query/             — QueryParser → AST → QueryTransformer → backend applicator
   │   └── aggregation.py — AggregationFunc, AggregationExpression, AggregationQuery, SA applicator
   ├── resilience/        — @timeout, @retry, @circuit_breaker decorators
   ├── profiling/         — @profile, profiled(), ProfileSession, pluggable CPU/memory backends
+  ├── observability/     — @span/@counter/@histogram, TracingServiceMixin/TracingRepositoryMixin,
+  │   │                    Metric/register_gauge, OtelConfig/OtelConfiguration
+  │   ├── params.py      — ParamCaptureConfig, CapturePlan/build_capture_plan, sanitize_value —
+  │   │                    automatic @span parameter capture (param.<name> attributes)
+  │   └── attributes.py  — GlobalAttributes registry, wrap_instrument()/wrap_gauge_callback() —
+  │                        process-wide attrs stamped on every span + metric measurement
   ├── lock.py            — AbstractDistributedLock, InMemoryLock, LockHandle
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
@@ -67,6 +74,8 @@ varco_sa/                — SQLAlchemy async ORM backend
   ├── advisory_lock.py   — SAAdvisoryLock (PostgreSQL pg_try_advisory_lock / pg_advisory_unlock)
   ├── schema_guard.py    — SchemaGuard, SchemaDrift, SchemaDriftReport
   ├── encryption_store.py — SAEncryptionKeyStore (varco_encryption_keys table)
+  ├── audit.py           — SAAuditRepository (AuditEntryModel; table: varco_audit_log;
+  │                        Postgres ON CONFLICT DO NOTHING on entry_id, plain INSERT elsewhere)
   ├── health.py          — SAHealthCheck (SELECT 1 probe)
   ├── di.py              — SAModule (@Configuration)
   └── (auto-generated)   — ORM models created from DomainModel subclasses at import time
@@ -77,6 +86,8 @@ varco_beanie/            — Beanie/MongoDB async ODM backend
   ├── inbox.py           — BeanieInboxRepository (InboxDocument, dedup via unique index)
   ├── job_store.py       — BeanieJobStore (JobDocument; at-most-once jobs collection: varco_jobs)
   ├── saga.py            — BeanieSagaRepository (SagaDocument, varco_sagas collection)
+  ├── audit.py           — BeanieAuditRepository (AuditDocument; collection: varco_audit_log;
+  │                        plain insert() — no conflict handling, raises DuplicateKeyError)
   ├── query/aggregation.py — BeanieAggregationApplicator (MongoDB aggregation pipeline)
   ├── index_guard.py     — BeanieIndexGuard, IndexDrift, IndexDriftReport
   ├── health.py          — BeanieHealthCheck (server_info() probe)
@@ -164,6 +175,7 @@ Mixins (MRO-composable):
   ├── SoftDeleteService             — filters deleted entities by default
   ├── CacheServiceMixin             — caches read/list results
   ├── BulkServiceMixin              — adds create_many(dtos) + delete_many(pks); single UoW per batch
+  ├── AuditLogMixin                 — emits AuditEvent on _after_create/_after_update/_after_delete
   └── EventConsumer                 — listens to events, composes via register_to()
 
 Rule: _async_check_entity runs after _check_entity in get(), update(), delete(), and BulkServiceMixin.delete_many()
@@ -400,6 +412,32 @@ OutboxRelay (background task)
   ├── poll loop: get_pending() → publish() → delete()
   └── Rule: only place allowed to call AbstractEventBus directly (besides register_to)
   └── Contract: push() to DLQ must never raise — logs errors and swallows
+```
+
+### Audit Trail (varco_core.service.audit)
+
+```
+AuditEntry (frozen dataclass) — the persisted record
+  ├── entry_id: UUID, entity_type: str, entity_id: str, action: "create"|"update"|"delete"
+  ├── actor_id: str | None, diff: dict, occurred_at: datetime
+  └── correlation_id: str | None, tenant_id: str | None
+
+AuditRepository (ABC)
+  ├── save(entry: AuditEntry) → None
+  └── list_for_entity(entity_type, entity_id, *, limit=100) → list[AuditEntry]
+  ├── SAAuditRepository (varco_sa)     — Postgres ON CONFLICT DO NOTHING on entry_id (idempotent);
+  │                                      plain INSERT on other dialects (IntegrityError on dup)
+  └── BeanieAuditRepository (varco_beanie) — plain insert() always; DuplicateKeyError on dup
+
+AuditLogMixin (service mixin, MRO — compose LEFT of AsyncService)
+  ├── overrides _after_create / _after_update / _after_delete
+  └── emits AuditEvent via self._producer._produce(event, channel="varco.audit")
+
+AuditConsumer (EventConsumer)
+  └── @listen(AuditEvent, channel="varco.audit") → AuditRepository.save()
+  └── Rule: ships with no retry_policy/dlq — subclass + re-declare @listen for resilience
+  └── Rule: eventually consistent (post-commit event) — route through the outbox for
+            "must not lose an audit record" guarantees
 ```
 
 ### Distributed Locking

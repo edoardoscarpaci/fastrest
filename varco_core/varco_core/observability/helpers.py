@@ -88,13 +88,15 @@ Async safety:   ✅ The context manager is a regular ``contextlib.contextmanager
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Any, Generator, Mapping
 
 from opentelemetry import metrics as otel_metrics
 from opentelemetry import trace
 from opentelemetry.trace import Span, StatusCode
 
-from varco_core.tracing import current_correlation_id
+from varco_core.observability.attributes import wrap_instrument
+from varco_core.observability.params import render_captured_params
+from varco_core.observability.span import build_span_attributes
 
 # Reuse the lazy instrument cache from metrics.py — same key format.
 from varco_core.observability.metrics import _instrument_cache
@@ -111,6 +113,7 @@ def create_span(
     attributes: dict[str, str] | None = None,
     record_exception: bool = True,
     set_status_on_error: bool = True,
+    params: Mapping[str, Any] | None = None,
 ) -> Generator[Span, None, None]:
     """
     Context manager that opens a named OTel span for the duration of its block.
@@ -138,6 +141,13 @@ def create_span(
             Optional dict of static string attributes added at span creation
             time.  Dynamic attributes should be set on the yielded span via
             ``span.set_attribute(key, value)`` inside the ``with`` block.
+        params:
+            Optional ``{name: raw_value}`` mapping (Plan 004) rendered
+            through the same redact/sanitize/truncate pipeline as decorator
+            parameter capture (``varco_core.observability.params``) and
+            added as ``param.<name>`` attributes.  Also merges the
+            process-wide global attribute registry
+            (``varco_core.observability.attributes``), same as ``@span``.
         record_exception:
             When ``True`` (default), exceptions that propagate out of the
             ``with`` block are recorded on the span via
@@ -183,16 +193,11 @@ def create_span(
                 s.set_attribute("carrier", label)   # dynamic — known only after await
     """
     tracer = trace.get_tracer(tracer_name)
-    with tracer.start_as_current_span(name, record_exception=False) as span:
-        # Set static attributes supplied at call time.
-        for k, v in (attributes or {}).items():
-            span.set_attribute(k, v)
-
-        # Bridge correlation ID → span attribute.
-        cid = current_correlation_id()
-        if cid is not None:
-            span.set_attribute("correlation_id", cid)
-
+    captured_params = render_captured_params(params) if params else None
+    merged_attrs = build_span_attributes(attributes, captured_params)
+    with tracer.start_as_current_span(
+        name, record_exception=False, attributes=merged_attrs
+    ) as span:
         try:
             yield span
         except Exception as exc:
@@ -260,10 +265,12 @@ def create_counter(
     instrument = _instrument_cache.get(key)
     if instrument is None:
         meter = otel_metrics.get_meter(meter_name)
-        instrument = meter.create_counter(
-            name=name,
-            description=description,
-            unit=unit,
+        instrument = wrap_instrument(
+            meter.create_counter(
+                name=name,
+                description=description,
+                unit=unit,
+            )
         )
         _instrument_cache[key] = instrument
     return instrument
@@ -323,10 +330,12 @@ def create_histogram(
     instrument = _instrument_cache.get(key)
     if instrument is None:
         meter = otel_metrics.get_meter(meter_name)
-        instrument = meter.create_histogram(
-            name=name,
-            description=description,
-            unit=unit,
+        instrument = wrap_instrument(
+            meter.create_histogram(
+                name=name,
+                description=description,
+                unit=unit,
+            )
         )
         _instrument_cache[key] = instrument
     return instrument

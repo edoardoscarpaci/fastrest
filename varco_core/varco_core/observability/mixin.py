@@ -78,9 +78,8 @@ from opentelemetry.trace import StatusCode
 
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
 from varco_core.model import DomainModel
-from varco_core.observability.span import SpanConfig
+from varco_core.observability.span import SpanConfig, build_span_attributes
 from varco_core.service.base import AsyncService, _ANON_CTX
-from varco_core.tracing import current_correlation_id
 
 if TYPE_CHECKING:
     from varco_core.auth import AuthContext
@@ -185,21 +184,15 @@ class TracingServiceMixin(AsyncService[D, PK, C, R, U], ABC, Generic[D, PK, C, R
         span_name = f"{type(self).__name__}.{operation}"
 
         tracer = trace.get_tracer(cfg.tracer_name)
+        # Merge global attributes (Plan 004) + static SpanConfig attributes +
+        # correlation ID via the shared helper — same merge order as @span.
+        merged_attrs = build_span_attributes(cfg.attributes)
         # Disable SDK auto-recording so SpanConfig flags fully control behaviour.
         with tracer.start_as_current_span(
             span_name,
             record_exception=False,
+            attributes=merged_attrs,
         ) as current_span:
-            # Stamp static attributes from SpanConfig.
-            for k, v in cfg.attributes.items():
-                current_span.set_attribute(k, v)
-
-            # Bridge correlation ID → span attribute so traces and log lines
-            # can be joined in the observability backend.
-            cid = current_correlation_id()
-            if cid is not None:
-                current_span.set_attribute("correlation_id", cid)
-
             try:
                 return await coro_fn(*args)
             except Exception as exc:

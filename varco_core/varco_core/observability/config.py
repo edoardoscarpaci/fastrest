@@ -50,6 +50,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from varco_core.observability.params import ParamCaptureConfig
+
 
 # ── OtelConfig ────────────────────────────────────────────────────────────────
 
@@ -121,6 +123,48 @@ class OtelConfig:
 
             In autoscaling clusters this is the primary way to distinguish
             metrics from different replicas of the same service.
+        capture_params:
+            Process-wide override for automatic ``@span`` parameter capture
+            (Plan 004).  ``None`` (default) defers to
+            ``VARCO_OTEL_CAPTURE_PARAMS`` / the built-in default (``True``).
+            Set ``False`` to disable capture for the whole process without
+            touching every ``@span`` call site.
+        param_capture:
+            Full structural override (``ParamCaptureConfig``) applied as the
+            process-wide default for parameter capture — prefix, redaction
+            patterns, value rendering mode, limits, etc.  ``None`` (default)
+            uses ``ParamCaptureConfig()``'s own defaults.
+        global_attributes:
+            Static key/value pairs seeded into the process-wide global
+            attribute registry (``varco_core.observability.attributes``) at
+            bootstrap.  Applied via ``set_global_attributes()`` *after*
+            ``VARCO_OTEL_GLOBAL_ATTRS*`` env vars are loaded, so explicit
+            config here wins over ambient env on key collision.
+
+            Read the Resource-vs-registry decision table in
+            ``varco_core.observability.attributes``'s module docstring
+            before reaching for this field: static process identity
+            (pod name, deployment environment) belongs in
+            ``extra_resource_attrs`` above, not here — putting it here makes
+            it a **label on every metric series**, multiplying cardinality.
+            Use this field for values that must be filterable/groupable as a
+            metric label, or that are not known at bootstrap.
+        global_attributes_on_spans:
+            Whether the global attribute registry is applied to spans.
+            Default ``True``.  Runtime equivalent:
+            ``configure_global_attributes(apply_to_spans=...)`` /
+            ``VARCO_OTEL_GLOBAL_ATTRS_SPANS``.
+        global_attributes_on_metrics:
+            Whether the global attribute registry is applied to metric
+            measurements.  Default ``True``.  See the cardinality warning
+            above — this is the field to flip if a global attribute causes
+            metric-series explosion.
+        promote_global_attrs_to_resource:
+            When ``True``, ``OtelConfiguration`` also merges the *static*
+            part of the global attribute registry into the OTel ``Resource``
+            at bootstrap (in addition to applying it per-span/per-metric, if
+            those toggles are also on).  Default ``False`` — two independent
+            knobs, no silent double-labelling.
 
     Edge cases:
         - ``service_name`` empty string → accepted but will look odd in most
@@ -185,6 +229,23 @@ class OtelConfig:
     # Pod/node identity and any other infrastructure attributes the OTel SDK
     # cannot discover automatically from the environment.
     extra_resource_attrs: dict[str, str] = field(default_factory=dict)
+
+    # ── Plan 004 — parameter capture + global attributes (all defaulted,
+    # backwards compatible) ──────────────────────────────────────────────────
+
+    # None → inherit VARCO_OTEL_CAPTURE_PARAMS / the built-in default (True).
+    capture_params: bool | None = None
+    param_capture: ParamCaptureConfig | None = None
+
+    # Seeded into the global attribute registry at bootstrap — see the
+    # Resource-vs-registry guidance above before using this for static
+    # process identity (prefer extra_resource_attrs for that).
+    global_attributes: dict[str, str] = field(default_factory=dict)
+    global_attributes_on_spans: bool = True
+    global_attributes_on_metrics: bool = True
+
+    # Two independent knobs by design — see attributes.py's module docstring.
+    promote_global_attrs_to_resource: bool = False
 
 
 __all__ = ["OtelConfig"]

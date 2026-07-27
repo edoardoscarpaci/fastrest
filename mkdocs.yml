@@ -88,4 +88,6 @@ nav:
       - OPA Backend (Design): features/opa-design.md
       - JWT Claim Transformer: features/jwt-claim-transformer.md
       - Token Profiles: features/token-profiles.md
+      - OTel Auto-Attributes: features/observability-attributes.md
+      - Database Auditing: features/database-auditing.md
   - API Reference: reference/

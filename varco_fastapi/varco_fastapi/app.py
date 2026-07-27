@@ -75,7 +75,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping
 
 from varco_fastapi.validation import validate_container_bindings, validate_router_class
 
@@ -116,6 +116,8 @@ def create_varco_app(
     openapi_url: str = "/openapi.json",
     docs_url: str = "/docs",
     configure_jwt: bool = True,
+    global_attributes: Mapping[str, str] | None = None,
+    capture_params: bool | None = None,
 ) -> Any:
     """
     Create a fully configured FastAPI application for a varco service.
@@ -196,6 +198,25 @@ def create_varco_app(
                                     the registries yourself (e.g. via
                                     ``configure_claim_transforms()`` with a
                                     hand-built registry).
+        global_attributes:           Plan 004 passthrough — ``None`` (default,
+                                    no behaviour change) or a mapping merged
+                                    into ``varco_core.observability.attributes``'s
+                                    process-wide global attribute registry via
+                                    ``set_global_attributes()`` before the
+                                    middleware stack is built.  Every span and
+                                    metric measurement in the process picks
+                                    these up automatically — see the
+                                    Resource-vs-registry guidance in
+                                    ``varco_core.observability.attributes``'s
+                                    module docstring before using this for
+                                    static process identity.
+        capture_params:              Plan 004 passthrough — ``None`` (default,
+                                    no behaviour change) or an explicit
+                                    ``True``/``False`` forwarded to
+                                    ``varco_core.observability.params.set_capture_enabled()``
+                                    before the middleware stack is built,
+                                    toggling automatic ``@span`` parameter
+                                    capture process-wide.
 
     Returns:
         A fully configured ``fastapi.FastAPI`` instance.
@@ -238,6 +259,19 @@ def create_varco_app(
         )  # noqa: PLC0415
 
         configure_jwt_from_env()
+
+    # ── Step 0.5: Plan 004 observability passthrough ──────────────────────────
+    # Both default to None (no behaviour change) — called before the
+    # middleware stack is built so TracingMiddleware/@span/@counter/@histogram
+    # all see the final state on the very first request.
+    if global_attributes is not None:
+        from varco_core.observability import set_global_attributes  # noqa: PLC0415
+
+        set_global_attributes(global_attributes)
+    if capture_params is not None:
+        from varco_core.observability import set_capture_enabled  # noqa: PLC0415
+
+        set_capture_enabled(capture_params)
 
     # ── Step 1: Validate DI container ─────────────────────────────────────────
     if validate and container is not None:

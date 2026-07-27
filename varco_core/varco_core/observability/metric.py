@@ -98,6 +98,8 @@ from typing import TypeAlias
 
 from opentelemetry import metrics as otel_metrics
 
+from varco_core.observability.attributes import wrap_gauge_callback, wrap_instrument
+
 # Reuse the shared lazy-cache from metrics.py — same key format (meter_name, name).
 # This guarantees that Metric("orders.created") and create_counter("orders.created")
 # with the same meter_name return the same OTel instrument object.
@@ -303,7 +305,11 @@ class Metric:
         instrument = _instrument_cache.get(key)
         if instrument is None:
             meter = otel_metrics.get_meter(self._meter_name)
-            instrument = self._create_instrument(meter)
+            # Plan 004 (B): wrap once at creation — shares _instrument_cache
+            # with create_counter()/create_histogram(), so a Metric and an
+            # imperative helper targeting the same (meter_name, name) get the
+            # same wrapped instrument.
+            instrument = wrap_instrument(self._create_instrument(meter))
             _instrument_cache[key] = instrument
         return instrument
 
@@ -454,9 +460,12 @@ def register_gauge(
         value = callback()
         return [Observation(value, attributes=attrs)]
 
+    # Plan 004 (B): merge the process-wide global attribute registry into
+    # every yielded Observation — the same choke-point wrapping as push-based
+    # instruments, adapted to the pull-based gauge callback shape.
     meter.create_observable_gauge(
         name=name,
-        callbacks=[_otel_callback],
+        callbacks=[wrap_gauge_callback(_otel_callback)],
         description=description,
         unit=unit,
     )

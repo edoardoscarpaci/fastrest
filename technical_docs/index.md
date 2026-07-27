@@ -26,6 +26,14 @@ varco_fastapi     — FastAPI integration (routers, auth, generic REST server)
   exceptions. Use this as the authoritative API surface — you should never need to
   open the source to understand an API.
 
+## Notable guides
+
+- [OTel automatic parameter capture & global attributes](features/observability-attributes.md)
+  — how `@span` records call arguments as span attributes, and how the process-wide
+  global attribute registry labels every span and metric.
+- [Database auditing](features/database-auditing.md) — wiring `AuditLogMixin` +
+  `AuditConsumer` to an append-only audit trail in `varco_sa` / `varco_beanie`.
+
 ## Building the docs
 
 ```bash

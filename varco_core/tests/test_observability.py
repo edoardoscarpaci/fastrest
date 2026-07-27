@@ -126,6 +126,42 @@ def metric_reader():
     _instrument_cache.clear()
 
 
+# ── Global-state hygiene (Plan 004 — mandatory autouse reset) ──────────────
+
+
+@pytest.fixture(autouse=True)
+def _reset_observability_globals():
+    """
+    Reset the process-wide param-capture defaults and global-attribute
+    registry around every test in this file.
+
+    Both ``varco_core.observability.params`` and
+    ``varco_core.observability.attributes`` hold process-global mutable
+    state (Plan 004). Without this reset, a test that flips the capture
+    kill switch or registers a global attribute would leak into every other
+    test in this file (and, for the attribute registry, into other span/
+    metric assertions that don't expect extra attributes).
+    """
+
+    def _reset() -> None:
+        try:
+            from varco_core.observability.params import reset_param_capture_state
+
+            reset_param_capture_state()
+        except ImportError:
+            pass
+        try:
+            from varco_core.observability.attributes import clear_global_attributes
+
+            clear_global_attributes()
+        except ImportError:
+            pass
+
+    _reset()
+    yield
+    _reset()
+
+
 # ── SpanConfig ────────────────────────────────────────────────────────────────
 
 
@@ -1323,6 +1359,499 @@ class TestRegisterGauge:
         point = next(m for m in metrics if m.name == "test.gauge.dynamic")
         # callback was called at least once → counter_box[0] >= 1
         assert point.data.data_points[0].value >= 1
+
+
+# ── Plan 004 (A) — automatic parameter capture on @span ─────────────────────
+
+
+class TestSpanParamCapture:
+    """
+    Step 7: bare ``@span`` auto-captures decorated-function arguments as
+    ``param.<name>`` span attributes.  These tests must FAIL until
+    ``varco_core.observability.params`` exists and ``span.py`` is wired to it
+    (Plan 004, phase 3).
+    """
+
+    async def test_bare_span_captures_positional_and_default_args(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        @span
+        async def f(a, b=2):
+            pass
+
+        await f(1)
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("param.a") == 1
+        # b was NOT passed by the caller — defaults are not applied (plan design)
+        assert "param.b" not in spans[0].attributes
+
+    async def test_method_call_does_not_capture_self(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        class Svc:
+            @span
+            async def do(self, x):
+                pass
+
+        await Svc().do(5)
+
+        spans = span_exporter.get_finished_spans()
+        assert "param.self" not in spans[0].attributes
+        assert spans[0].attributes.get("param.x") == 5
+
+    async def test_capture_params_false_on_span_config_disables_capture(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        @span(SpanConfig(capture_params=False))
+        async def f(a):
+            pass
+
+        await f(1)
+
+        spans = span_exporter.get_finished_spans()
+        assert not any(k.startswith("param.") for k in spans[0].attributes)
+
+    async def test_set_capture_enabled_false_disables_globally(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.params import set_capture_enabled
+
+        set_capture_enabled(False)
+
+        @span
+        async def f(a):
+            pass
+
+        await f(1)
+
+        spans = span_exporter.get_finished_spans()
+        assert not any(k.startswith("param.") for k in spans[0].attributes)
+
+    async def test_password_kwarg_is_redacted(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        @span
+        async def login(username, password):
+            pass
+
+        await login("bob", password="hunter2")
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("param.password") == "[REDACTED]"
+
+    async def test_global_attribute_appears_on_span(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        @span
+        async def f() -> None:
+            pass
+
+        await f()
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("pod") == "p1"
+
+    async def test_configure_global_attributes_apply_to_spans_false_removes_it(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.attributes import (
+            configure_global_attributes,
+            set_global_attributes,
+        )
+
+        set_global_attributes(pod="p1")
+        configure_global_attributes(apply_to_spans=False)
+
+        @span
+        async def f() -> None:
+            pass
+
+        await f()
+
+        spans = span_exporter.get_finished_spans()
+        assert "pod" not in spans[0].attributes
+
+    async def test_span_config_attributes_wins_over_same_named_global_attr(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(env="global-env")
+
+        @span(SpanConfig(attributes={"env": "explicit-env"}))
+        async def f() -> None:
+            pass
+
+        await f()
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("env") == "explicit-env"
+
+    async def test_correlation_id_still_present_regression(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        """Regression: adding param-capture/global-attr merge must not shadow correlation_id."""
+
+        @span
+        async def f() -> None:
+            pass
+
+        async with correlation_context("still-here"):
+            await f()
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("correlation_id") == "still-here"
+
+
+class TestTracingMixinParamCapture:
+    """Step 10 (test half): TracingServiceMixin/TracingRepositoryMixin spans
+    also get params + global attributes routed through the shared merge
+    helper."""
+
+    async def test_service_mixin_span_gets_global_attribute(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+        from varco_core.service.base import AsyncService
+
+        set_global_attributes(pod="p1")
+
+        class _StubService(TracingServiceMixin, AsyncService):  # type: ignore[type-arg]
+            _tracing_config = SpanConfig()
+
+            def __init__(self) -> None:
+                pass
+
+            def _get_repo(self, uow: Any) -> Any:
+                return MagicMock()
+
+        svc = _StubService()
+
+        async def _noop(*a: Any, **kw: Any) -> Any:
+            return None
+
+        await svc._run_in_span("create", _noop)
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("pod") == "p1"
+
+    async def test_repository_mixin_span_gets_global_attribute(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+        from varco_core.repository import AsyncRepository
+
+        set_global_attributes(pod="p1")
+
+        class _StubBackend(AsyncRepository):  # type: ignore[type-arg]
+            async def find_by_id(self, pk: Any) -> Any:
+                return None
+
+            async def find_all(self) -> list:
+                return []
+
+            async def save(self, entity: Any) -> Any:
+                return entity
+
+            async def delete(self, entity: Any) -> None:
+                pass
+
+            async def find_by_query(self, params: Any) -> list:
+                return []
+
+            async def count(self, params: Any = None) -> int:
+                return 0
+
+            async def exists(self, pk: Any) -> bool:
+                return False
+
+            async def save_many(self, entities: Any) -> list:
+                return []
+
+            async def delete_many(self, entities: Any) -> None:
+                pass
+
+            async def update_many_by_query(self, params: Any, update: Any) -> int:
+                return 0
+
+            async def stream_by_query(self, params: Any):  # type: ignore[override]
+                return
+                yield
+
+        class _TracedRepo(TracingRepositoryMixin, _StubBackend):  # type: ignore[type-arg]
+            _tracing_config = SpanConfig()
+
+        repo = _TracedRepo()
+
+        async def _noop(*a: Any, **kw: Any) -> Any:
+            return None
+
+        await repo._run_in_span("save", _noop)
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("pod") == "p1"
+
+
+# ── Plan 004 (B) — global attributes on metrics ──────────────────────────────
+
+
+class TestGlobalAttributesOnMetrics:
+    """Step 11: global attrs land on counters/histograms/Metric/gauges."""
+
+    def test_counter_decorator_gets_global_attribute(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        @counter(CounterConfig(name="test.ga.counter"))
+        def my_fn() -> None:
+            pass
+
+        my_fn()
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(m for m in metrics if m.name == "test.ga.counter")
+        assert point.data.data_points[0].attributes.get("pod") == "p1"
+
+    def test_histogram_decorator_gets_global_attribute(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        @histogram(HistogramConfig(name="test.ga.histogram"))
+        def my_fn() -> None:
+            pass
+
+        my_fn()
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(m for m in metrics if m.name == "test.ga.histogram")
+        assert point.data.data_points[0].attributes.get("pod") == "p1"
+
+    def test_metric_add_gets_global_attribute(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        m = Metric("test.ga.metric.counter", kind="counter")
+        m.add(1)
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.ga.metric.counter")
+        assert point.data.data_points[0].attributes.get("pod") == "p1"
+
+    def test_metric_sub_gets_global_attribute(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        m = Metric("test.ga.metric.updown", kind="updown_counter")
+        m.sub(1)
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.ga.metric.updown")
+        assert point.data.data_points[0].attributes.get("pod") == "p1"
+
+    def test_metric_record_gets_global_attribute(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        m = Metric("test.ga.metric.hist", kind="histogram")
+        m.record(1.0)
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.ga.metric.hist")
+        assert point.data.data_points[0].attributes.get("pod") == "p1"
+
+    def test_register_gauge_observation_gets_global_attribute(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(pod="p1")
+
+        register_gauge("test.ga.gauge", callback=lambda: 42)
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(m for m in metrics if m.name == "test.ga.gauge")
+        assert point.data.data_points[0].attributes.get("pod") == "p1"
+
+    def test_caller_attribute_wins_on_conflict(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+
+        set_global_attributes(tenant="global-tenant")
+
+        m = Metric("test.ga.conflict", kind="counter")
+        m.add(1, tenant="caller-tenant")
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.ga.conflict")
+        assert point.data.data_points[0].attributes.get("tenant") == "caller-tenant"
+
+    def test_configure_apply_to_metrics_false_removes_global_attrs(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.attributes import (
+            configure_global_attributes,
+            set_global_attributes,
+        )
+
+        set_global_attributes(pod="p1")
+        configure_global_attributes(apply_to_metrics=False)
+
+        m = Metric("test.ga.disabled", kind="counter")
+        m.add(1)
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.ga.disabled")
+        assert "pod" not in point.data.data_points[0].attributes
+
+    def test_late_registered_global_attribute_still_appears(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        """Attributes registered AFTER the instrument was first created still appear."""
+        from varco_core.observability.attributes import set_global_attributes
+
+        m = Metric("test.ga.late", kind="counter")
+        m.add(1)  # instrument created + cached here, no global attrs yet
+
+        set_global_attributes(pod="late-pod")
+        m.add(1)  # second measurement — registry mutated after creation
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.ga.late")
+        # Each distinct attribute set is its own data point, and the SDK keeps them in
+        # insertion order — so the pre-registration measurement is always data_points[0].
+        # The contract under test is that the LATER measurement picked the attribute up.
+        assert any(
+            dp.attributes.get("pod") == "late-pod" for dp in point.data.data_points
+        )
+
+
+# ── Plan 004 (Phase 5) — config, DI, import-surface ──────────────────────────
+
+
+class TestOtelConfigNewFields:
+    """Step 15: OtelConfig gains capture/global-attr fields with documented defaults."""
+
+    def test_new_fields_have_documented_defaults(self) -> None:
+        cfg = OtelConfig(service_name="svc")
+        assert cfg.capture_params is None
+        assert cfg.param_capture is None
+        assert cfg.global_attributes == {}
+        assert cfg.global_attributes_on_spans is True
+        assert cfg.global_attributes_on_metrics is True
+        assert cfg.promote_global_attrs_to_resource is False
+
+    def test_capture_params_false_disables_process_wide(self) -> None:
+        from varco_core.observability.params import capture_enabled
+        from varco_core.observability.di import _apply_observability_config
+
+        cfg = OtelConfig(service_name="svc", capture_params=False)
+        _apply_observability_config(cfg)
+
+        assert capture_enabled() is False
+
+
+class TestOtelConfigurationGlobalAttrsBootstrap:
+    def test_config_global_attributes_appear_on_span(
+        self, span_exporter: InMemorySpanExporter
+    ) -> None:
+        from varco_core.observability.di import _apply_observability_config
+
+        cfg = OtelConfig(service_name="svc", global_attributes={"k8s.pod.name": "p"})
+        _apply_observability_config(cfg)
+
+        @span
+        async def f() -> None:
+            pass
+
+        import asyncio
+
+        asyncio.get_event_loop().run_until_complete(f())
+
+        spans = span_exporter.get_finished_spans()
+        assert spans[0].attributes.get("k8s.pod.name") == "p"
+
+    def test_config_global_attributes_appear_on_counter(
+        self, metric_reader: InMemoryMetricReader
+    ) -> None:
+        from varco_core.observability.di import _apply_observability_config
+
+        cfg = OtelConfig(service_name="svc", global_attributes={"k8s.pod.name": "p"})
+        _apply_observability_config(cfg)
+
+        m = Metric("test.di.ga.counter", kind="counter")
+        m.add(1)
+
+        data = metric_reader.get_metrics_data()
+        metrics = data.resource_metrics[0].scope_metrics[0].metrics
+        point = next(mm for mm in metrics if mm.name == "test.di.ga.counter")
+        assert point.data.data_points[0].attributes.get("k8s.pod.name") == "p"
+
+    def test_promote_global_attrs_to_resource_puts_it_on_exported_resource(
+        self,
+    ) -> None:
+        from varco_core.observability.attributes import set_global_attributes
+        from varco_core.observability.di import _build_resource
+
+        set_global_attributes(**{"k8s.pod.name": "p"})
+        cfg = OtelConfig(
+            service_name="svc",
+            promote_global_attrs_to_resource=True,
+        )
+        resource = _build_resource(cfg)
+        assert resource.attributes["k8s.pod.name"] == "p"
+
+
+class TestObservabilityPublicImportSurface:
+    """Step 19: assert every new name is importable from varco_core.observability."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "ParamCaptureConfig",
+            "set_capture_enabled",
+            "set_param_capture_defaults",
+            "GlobalAttributes",
+            "set_global_attributes",
+            "register_global_attribute_provider",
+            "current_global_attributes",
+            "clear_global_attributes",
+            "configure_global_attributes",
+        ],
+    )
+    def test_name_importable_from_observability_package(self, name: str) -> None:
+        import varco_core.observability as obs
+
+        assert hasattr(obs, name), f"{name} not exported from varco_core.observability"
 
 
 # ── TracingEventMiddleware ─────────────────────────────────────────────────────

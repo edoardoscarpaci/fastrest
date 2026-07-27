@@ -2461,6 +2461,82 @@ container = DIContainer()
 container.install(OtelConfiguration, config=config)
 ```
 
+### Automatic parameter capture
+
+Every `@span` (bare or configured) records its decorated function's call arguments
+as `param.<name>` span attributes by default — redacted (name-based, e.g.
+`password`/`token`/`secret`), truncated, and scalar-only (opaque objects render as
+`"<TypeName>"`, never their contents):
+
+```python
+from varco_core.observability import span
+
+@span
+async def place_order(order_id: UUID, password: str = "") -> Order: ...
+
+# span attributes: param.order_id="<uuid>", param.password="[REDACTED]"
+```
+
+Per-decorator or process-wide kill switches:
+
+```python
+from varco_core.observability import set_capture_enabled, SpanConfig, span
+
+@span(SpanConfig(capture_params=False))     # off for this function only
+async def charge_card(card_token: str) -> None: ...
+
+set_capture_enabled(False)                  # off process-wide (or VARCO_OTEL_CAPTURE_PARAMS=false)
+```
+
+`TracingServiceMixin`/`TracingRepositoryMixin` spans do **not** auto-capture
+`pk`/`dto`/`params` — only `@span`-decorated functions and
+`create_span(..., params=...)` do. See
+[the full guide](technical_docs/features/observability-attributes.md) for the PII
+guidance before enabling this in production.
+
+### Global attributes
+
+A process-wide registry stamps entries on **every** span AND **every** metric
+measurement (counter / up-down counter / histogram / observable gauge):
+
+```python
+from varco_core.observability import set_global_attributes, register_global_attribute_provider
+
+set_global_attributes(**{"deployment.colour": "blue"})
+
+register_global_attribute_provider(
+    lambda: {"k8s.pod.name": os.environ.get("POD_NAME", "unknown")},
+    name="pod-identity",
+    cache_ttl=None,   # evaluate once — never poll/do I/O in a provider
+)
+```
+
+> ⚠️ **Cardinality warning**: a global attribute becomes a label on **every metric
+> series**. Static process identity (pod name, deployment environment) belongs in
+> `OtelConfig.extra_resource_attrs` (free, no series multiplication) — reach for
+> the registry only for values not known at bootstrap or that you must `group by`
+> as a metric label. See the
+> [full decision table](technical_docs/features/observability-attributes.md).
+
+`VARCO_OTEL_*` env vars (no code required):
+
+| Env var | Default | Effect |
+|---|---|---|
+| `VARCO_OTEL_CAPTURE_PARAMS` | `true` | Process-wide `@span` parameter-capture kill switch. |
+| `VARCO_OTEL_CAPTURE_PARAMS_EXCLUDE` | *(empty)* | Comma-separated parameter names always excluded from capture. |
+| `VARCO_OTEL_GLOBAL_ATTRS` | *(empty)* | Literal `key=value` pairs, comma-separated. |
+| `VARCO_OTEL_GLOBAL_ATTR_ENV` | *(empty)* | `key=ENV_VAR_NAME` pairs — value read lazily from another env var (Kubernetes Downward API friendly). |
+| `VARCO_OTEL_GLOBAL_ATTRS_SPANS` | `true` | Apply the registry to spans. |
+| `VARCO_OTEL_GLOBAL_ATTRS_METRICS` | `true` | Apply the registry to metrics — the runtime rollback for a cardinality incident. |
+
+### Auditing
+
+`varco_core.service.audit` provides an event-driven, append-only audit trail
+(`AuditLogMixin` + `AuditConsumer` + `AuditRepository`) for `varco_sa` and
+`varco_beanie`. See the
+[Database Auditing guide](technical_docs/features/database-auditing.md) for
+wiring, the Alembic/Beanie setup, and the per-backend idempotency behaviour.
+
 ---
 
 ## Health Checks

@@ -97,7 +97,19 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from providify import Configuration, Inject, Provider
 
+from varco_core.observability.attributes import (
+    GlobalAttributes,
+    configure_global_attributes,
+    current_global_attributes,
+    global_attributes,
+    load_global_attributes_from_env,
+    set_global_attributes,
+)
 from varco_core.observability.config import OtelConfig
+from varco_core.observability.params import (
+    set_capture_enabled,
+    set_param_capture_defaults,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -166,7 +178,28 @@ class OtelConfiguration:
         return OtelConfig(service_name="varco")
 
     @Provider(singleton=True)
-    def tracer_provider(self, config: Inject[OtelConfig]) -> TracerProvider:
+    def observability_attributes(self, config: Inject[OtelConfig]) -> GlobalAttributes:
+        """
+        Seed the process-wide global attribute registry and parameter-capture
+        defaults from ``config`` (Plan 004).
+
+        ``tracer_provider`` and ``meter_provider`` both ``Inject`` this
+        provider so DI resolution ordering is deterministic — the registry
+        and capture defaults are always seeded before either provider is
+        built, regardless of which one providify resolves first.
+
+        Delegates to the module-level ``_apply_observability_config`` — the
+        same synchronous entry point usable directly by no-DI callers/tests.
+
+        Returns:
+            The process-wide ``GlobalAttributes`` singleton.
+        """
+        return _apply_observability_config(config)
+
+    @Provider(singleton=True)
+    def tracer_provider(
+        self, config: Inject[OtelConfig], _attrs: Inject[GlobalAttributes]
+    ) -> TracerProvider:
         """
         Build, configure, and globally register the OTel ``TracerProvider``.
 
@@ -180,6 +213,11 @@ class OtelConfiguration:
 
         Args:
             config: The injectable ``OtelConfig`` resolved from the container.
+            _attrs: Unused directly — ``Inject[GlobalAttributes]`` forces
+                providify to resolve ``observability_attributes`` (which
+                seeds the global attribute registry + capture defaults)
+                before this provider runs, so ``promote_global_attrs_to_resource``
+                sees a fully-seeded registry.
 
         Returns:
             A started ``TracerProvider`` registered as the OTel global.
@@ -231,7 +269,9 @@ class OtelConfiguration:
         return provider
 
     @Provider(singleton=True)
-    def meter_provider(self, config: Inject[OtelConfig]) -> MeterProvider:
+    def meter_provider(
+        self, config: Inject[OtelConfig], _attrs: Inject[GlobalAttributes]
+    ) -> MeterProvider:
         """
         Build, configure, and globally register the OTel ``MeterProvider``.
 
@@ -355,6 +395,47 @@ class OtelConfiguration:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
+def _apply_observability_config(config: OtelConfig) -> GlobalAttributes:
+    """
+    Apply the Plan 004 observability config to process-wide state.
+
+    This is the shared, synchronous, DI-independent implementation behind
+    ``OtelConfiguration.observability_attributes`` — a seam usable directly
+    by no-DI callers and tests that want the same bootstrap behaviour
+    without building a full container.
+
+    Order (per Plan 004 — later steps win on key collision):
+        1. ``load_global_attributes_from_env()`` — ambient
+           ``VARCO_OTEL_GLOBAL_ATTRS*`` env vars first.
+        2. ``set_global_attributes(config.global_attributes)`` — explicit
+           config wins over ambient env.
+        3. ``configure_global_attributes(apply_to_spans=..., apply_to_metrics=...)``
+           from ``config.global_attributes_on_spans`` / ``_on_metrics``.
+        4. Seed ``set_capture_enabled()`` / ``set_param_capture_defaults()``
+           from ``config.capture_params`` / ``config.param_capture`` — only
+           when explicitly set (``None`` leaves the process default/env-driven
+           value untouched).
+
+    Args:
+        config: The ``OtelConfig`` to apply.
+
+    Returns:
+        The process-wide ``GlobalAttributes`` singleton.
+    """
+    load_global_attributes_from_env()
+    if config.global_attributes:
+        set_global_attributes(config.global_attributes)
+    configure_global_attributes(
+        apply_to_spans=config.global_attributes_on_spans,
+        apply_to_metrics=config.global_attributes_on_metrics,
+    )
+    if config.capture_params is not None:
+        set_capture_enabled(config.capture_params)
+    if config.param_capture is not None:
+        set_param_capture_defaults(config.param_capture)
+    return global_attributes()
+
+
 def _build_resource(config: OtelConfig) -> Resource:
     """
     Build an OTel ``Resource`` from ``config``.
@@ -376,6 +457,12 @@ def _build_resource(config: OtelConfig) -> Resource:
     # Merge extra attrs last so callers can override service.name / service.version
     # if they need to (unusual but allowed).
     attrs.update(config.extra_resource_attrs)
+
+    # Plan 004 (B): opt-in promotion of the *global attribute registry*
+    # (varco_core.observability.attributes) into the Resource — two
+    # independent knobs, no silent double-labelling by default.
+    if config.promote_global_attrs_to_resource:
+        attrs.update(current_global_attributes())
 
     # Resource.create() merges with OTEL_RESOURCE_ATTRIBUTES env var and
     # SDK-detected attributes (process.pid, telemetry.sdk.*, etc.).

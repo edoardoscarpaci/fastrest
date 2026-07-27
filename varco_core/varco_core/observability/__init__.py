@@ -28,10 +28,46 @@ Config + DI::
         otlp_endpoint="http://otel-collector:4317",
     )
     container.install(OtelConfiguration, config=config)
+
+Plan 004 — automatic parameter capture + global attributes
+------------------------------------------------------------
+Every ``@span`` (and ``TracingServiceMixin``/``TracingRepositoryMixin``/
+``create_span``) automatically records the decorated function's arguments as
+``param.<name>`` span attributes, with redaction, truncation, and a global +
+per-decorator kill switch (``varco_core.observability.params``).
+
+A process-wide **global attribute registry**
+(``varco_core.observability.attributes``) stamps entries on every span AND
+every metric measurement — static values, env-var-sourced values (
+``VARCO_OTEL_GLOBAL_ATTRS`` / ``VARCO_OTEL_GLOBAL_ATTR_ENV``), and callable
+providers for values not known at bootstrap::
+
+    from varco_core.observability import (
+        ParamCaptureConfig,
+        set_capture_enabled,
+        set_global_attributes,
+        register_global_attribute_provider,
+        current_global_attributes,
+        configure_global_attributes,
+    )
+
+    set_global_attributes(**{"k8s.pod.name": "orders-7d9"})  # labels every span + metric
+
+See ``varco_core.observability.attributes``'s module docstring for the
+Resource-attributes-vs-global-attribute-registry decision — static process
+identity belongs in ``OtelConfig.extra_resource_attrs``, not the registry.
 """
 
 from __future__ import annotations
 
+from varco_core.observability.attributes import (
+    GlobalAttributes,
+    clear_global_attributes,
+    configure_global_attributes,
+    current_global_attributes,
+    register_global_attribute_provider,
+    set_global_attributes,
+)
 from varco_core.observability.config import OtelConfig
 from varco_core.observability.di import OtelConfiguration
 from varco_core.observability.helpers import (
@@ -47,6 +83,11 @@ from varco_core.observability.metrics import (
 )
 from varco_core.observability.metric import Metric, MetricKind, register_gauge
 from varco_core.observability.mixin import TracingServiceMixin
+from varco_core.observability.params import (
+    ParamCaptureConfig,
+    set_capture_enabled,
+    set_param_capture_defaults,
+)
 from varco_core.observability.repository_mixin import TracingRepositoryMixin
 from varco_core.observability.span import SpanConfig, span
 
@@ -76,4 +117,15 @@ __all__ = [
     "Metric",
     "MetricKind",
     "register_gauge",
+    # Plan 004 (A) — automatic parameter capture
+    "ParamCaptureConfig",
+    "set_capture_enabled",
+    "set_param_capture_defaults",
+    # Plan 004 (B) — global attribute registry
+    "GlobalAttributes",
+    "set_global_attributes",
+    "register_global_attribute_provider",
+    "current_global_attributes",
+    "clear_global_attributes",
+    "configure_global_attributes",
 ]

@@ -75,6 +75,8 @@ from typing import Any, TypeVar
 
 from opentelemetry import metrics as otel_metrics
 
+from varco_core.observability.attributes import wrap_instrument
+
 _F = TypeVar("_F", bound=Callable[..., Any])
 
 # ── Lazy instrument cache ──────────────────────────────────────────────────────
@@ -321,10 +323,14 @@ def _get_counter(cfg: CounterConfig) -> Any:
     instrument = _instrument_cache.get(key)
     if instrument is None:
         meter = otel_metrics.get_meter(cfg.meter_name)
-        instrument = meter.create_counter(
-            name=cfg.name,
-            description=cfg.description,
-            unit=cfg.unit,
+        # Plan 004 (B): wrap at the creation choke point so every measurement
+        # picks up the process-wide global attribute registry.
+        instrument = wrap_instrument(
+            meter.create_counter(
+                name=cfg.name,
+                description=cfg.description,
+                unit=cfg.unit,
+            )
         )
         # Last-writer-wins under concurrent first calls — both objects are
         # valid; the cache avoids repeated meter.create_counter() calls.
@@ -348,10 +354,12 @@ def _get_histogram(cfg: HistogramConfig) -> Any:
     instrument = _instrument_cache.get(key)
     if instrument is None:
         meter = otel_metrics.get_meter(cfg.meter_name)
-        instrument = meter.create_histogram(
-            name=cfg.name,
-            description=cfg.description,
-            unit=cfg.unit,
+        instrument = wrap_instrument(
+            meter.create_histogram(
+                name=cfg.name,
+                description=cfg.description,
+                unit=cfg.unit,
+            )
         )
         _instrument_cache[key] = instrument
     return instrument

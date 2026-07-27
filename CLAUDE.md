@@ -165,6 +165,35 @@ async def on_order(self, event: OrderPlacedEvent) -> None: ...
 
 The `SAConfig` object (engine + declarative base + entity classes) is the single injectable configuration object — it doubles as the DI settings object, avoiding a parallel `SASettings` class.
 
+### Observability (varco_core.observability)
+
+`@span`/`@counter`/`@histogram` decorators, `TracingServiceMixin`/`TracingRepositoryMixin`,
+`Metric`/`register_gauge`, and `OtelConfig`/`OtelConfiguration` provide OpenTelemetry tracing
+and metrics. Two modules add automatic instrumentation on top, both opt-out rather than opt-in:
+
+- **`varco_core.observability.params`** — every `@span` (and `create_span(..., params=...)`)
+  automatically records the decorated function's call arguments as `param.<name>` span
+  attributes: name-based redaction (`password`/`token`/`secret`/…), truncation, and
+  scalar-only rendering by default (`ParamCaptureConfig(value_mode="scalars")`). Kill switches:
+  `SpanConfig(capture_params=False)` per-decorator, `VARCO_OTEL_CAPTURE_PARAMS=false` /
+  `set_capture_enabled(False)` process-wide. ⚠️ **`TracingServiceMixin`/`TracingRepositoryMixin`
+  do NOT auto-capture `pk`/`dto`/`params`** — only `@span`-decorated functions and
+  `create_span(..., params=...)` get automatic parameter capture; CRUD spans only carry global
+  attributes + `SpanConfig.attributes` + `correlation_id`.
+- **`varco_core.observability.attributes`** — a process-wide `GlobalAttributes` registry
+  (`set_global_attributes()` / `register_global_attribute_provider()`) stamped on **every**
+  span AND **every** metric measurement via a single instrument-creation choke point
+  (`wrap_instrument()`). Env-var bootstrap: `VARCO_OTEL_GLOBAL_ATTRS` /
+  `VARCO_OTEL_GLOBAL_ATTR_ENV` / `VARCO_OTEL_GLOBAL_ATTRS_SPANS` / `VARCO_OTEL_GLOBAL_ATTRS_METRICS`.
+
+**Rule — Resource attribute vs. global attribute registry**: static process identity
+(`k8s.pod.name`, `deployment.environment`, a Helm release) belongs in
+`OtelConfig.extra_resource_attrs` (free — exported once per batch, never multiplies metric
+series). The global attribute registry is for values not known at bootstrap or that must be
+filterable/`group by`-able as a metric **label** — every key in the registry becomes a label on
+every metric series it touches. See `technical_docs/features/observability-attributes.md` for
+the full decision table, the PII section, and the Kubernetes Downward-API recipe.
+
 ### Profiling (varco_core.profiling)
 
 Diagnostic CPU + memory profiler. Complements the aggregate OTel observability layer
@@ -273,6 +302,45 @@ async with uow:
 ```
 
 `OutboxRepository` is an ABC; `varco_sa` and `varco_beanie` each ship a concrete implementation. `OutboxRelay` is the only place allowed to call `AbstractEventBus` directly (besides `EventConsumer.register_to()`).
+
+### Database auditing (varco_core.service.audit)
+
+An append-only audit trail for `create`/`update`/`delete` mutations, event-driven like the
+outbox pattern above but persisted by a dedicated consumer rather than a relay:
+`AuditLogMixin` (service mixin, composes to the LEFT of `AsyncService`) emits an `AuditEvent`
+on the `"varco.audit"` channel via the service's existing `AbstractEventProducer` —
+`AuditConsumer` subscribes and persists each event as an `AuditEntry` via an injected
+`AuditRepository` (`SAAuditRepository` in `varco_sa`, `BeanieAuditRepository` in `varco_beanie`).
+
+```python
+class OrderService(
+    AuditLogMixin,                                              # ← left of AsyncService
+    AsyncService[Order, UUID, CreateOrderDTO, OrderReadDTO, UpdateOrderDTO],
+):
+    def _get_repo(self, uow): return uow.orders
+    def _get_audit_actor(self, ctx): return ctx.sub            # override — base returns None
+
+# Wire the consumer from @PostConstruct, same rule as any other EventConsumer
+class AuditWiring:
+    def __init__(self, bus: Inject[AbstractEventBus], audit_repo: Inject[SAAuditRepository]):
+        self._bus = bus
+        self._consumer = AuditConsumer(audit_repo=audit_repo)
+
+    @PostConstruct
+    def _setup(self) -> None:
+        self._consumer.register_to(self._bus)
+```
+
+**Idempotency is backend-specific** — `SAAuditRepository.save` uses Postgres
+`INSERT ... ON CONFLICT (entry_id) DO NOTHING` (idempotent on redelivery, falling back to a
+plain `IntegrityError`-raising insert on non-Postgres dialects); `BeanieAuditRepository.save`
+is a plain `doc.insert()` with no conflict handling — a duplicate `entry_id` raises
+`DuplicateKeyError`. `AuditConsumer.on_audit_event` ships with no `retry_policy`/`dlq` —
+subclass and re-declare the `@listen`-decorated method if you need resilience. For a
+"must not lose an audit record" guarantee, route the `AuditEvent` through the transactional
+outbox instead of a direct `_produce()` call. See
+`technical_docs/features/database-auditing.md` for the full wiring guide (Alembic/Beanie
+setup, `list_for_entity()`, consistency trade-offs).
 
 ### Authority / JWT system (varco_core.authority)
 
@@ -889,6 +957,15 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **`is_system()` false for my internal token** | A token minted by your own internal issuer is not recognised as "system" | Only one static `SYSTEM_ISSUER` was configured, and this token's issuer doesn't match it | Define `VARCO_JWT_PROFILE__SYSTEM__ISS` (or any named `TokenProfile`) instead — see `technical_docs/features/token-profiles.md` |
 | **Token from another service accepted** | A JWT minted for a different service (different `aud`) verifies successfully here | `aud` was never enforced — `JwtBearerAuth`/`TrustedIssuerRegistry.verify()` default to `audience=None` | Set `VARCO_JWT_AUDIENCE` (or `JwtBearerAuth(audience=...)`) to opt in to audience enforcement |
 | **Intermittent 401 across hosts** | Same token, same secret, fails verification only on some hosts/some requests | Clock skew between hosts — `exp`/`nbf` checked with zero tolerance by default | Set `VARCO_JWT_LEEWAY_SECONDS=30` (or `leeway=` on `parse()`/`verify()`) |
+| Secret in a span attribute | A password/token value visible in the trace UI | Param capture is on and the param name isn't in the redact list | Add it to `VARCO_OTEL_CAPTURE_PARAMS_EXCLUDE`/`redact_patterns`, or `capture_params=False` on that `@span` |
+| Metric series explosion after adding a global attribute | Prometheus TSDB churn / OOM after a deploy | `k8s.pod.name` was added as a *per-measurement* attribute, so every pod creates its own series for every metric | Put static process identity in `OtelConfig.extra_resource_attrs` (Resource), not in the global attribute registry |
+| Global attribute never appears | Registry set, spans/metrics unlabelled | `configure_global_attributes(apply_to_spans/metrics=False)` or the corresponding env var is `false` | Check `VARCO_OTEL_GLOBAL_ATTRS_SPANS` / `_METRICS` |
+| Provider called on every measurement | Latency regression on the hot path | Provider registered with `cache_ttl=0.0` | Use the default `cache_ttl=None` (evaluate once) for immutable values |
+| `isinstance(create_counter(...), Counter)` is False | Type check fails after upgrade | The instrument is wrapped in `GlobalAttrInstrument` | Use duck typing, or `.unwrap()`, or `apply_to_metrics=False` |
+| Audit entries never written | Service emits, DB table stays empty | `AuditConsumer.register_to(bus)` never called | Call it from a `@PostConstruct` method |
+| `relation "varco_audit_log" does not exist` | Consumer raises on first audit event | `audit_metadata` not in the Alembic `target_metadata` | Add `from varco_sa.audit import audit_metadata` to `env.py` |
+| `CollectionWasNotInitialized` on audit save | Beanie raises when the consumer persists | `AuditDocument` missing from `init_beanie(document_models=...)` | Register it at startup |
+| Audit record lost on broker outage | Domain write committed, no audit row | Audit is emitted post-commit as a plain event | Emit the `AuditEvent` through the transactional outbox |
 
 ---
 

@@ -61,13 +61,24 @@ from __future__ import annotations
 import asyncio
 import functools
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, TypeVar, overload
 
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 
+from varco_core.observability.attributes import (
+    apply_to_spans,
+    current_global_attributes,
+)
+from varco_core.observability.params import (
+    CapturePlan,
+    ParamCaptureConfig,
+    build_capture_plan,
+    capture_enabled,
+    param_capture_defaults,
+)
 from varco_core.tracing import current_correlation_id
 
 _logger = logging.getLogger(__name__)
@@ -107,6 +118,16 @@ class SpanConfig:
             When ``True`` (default), sets the span status to ``ERROR`` if an
             exception propagates.  Only meaningful when ``record_exception``
             is also ``True``.
+        capture_params:
+            Quick per-decorator toggle for automatic parameter capture
+            (Plan 004).  ``None`` (default) defers to ``param_capture.enabled``
+            if set, else the process-wide ``capture_enabled()`` /
+            ``VARCO_OTEL_CAPTURE_PARAMS`` default.  ``True``/``False`` here
+            always wins — the most specific setting in the precedence chain.
+        param_capture:
+            Full structural override (``ParamCaptureConfig``) — prefix,
+            redaction patterns, value rendering mode, limits, etc.  ``None``
+            (default) uses the process-wide ``param_capture_defaults()``.
 
     Edge cases:
         - ``name=None`` with a lambda → ``__qualname__`` is ``"<lambda>"`` which
@@ -133,6 +154,11 @@ class SpanConfig:
     # Always record exceptions — silent failures are hard to debug in prod.
     record_exception: bool = True
     set_status_on_error: bool = True
+
+    # Plan 004 (A) — automatic parameter capture precedence, most specific
+    # first: capture_params > param_capture.enabled > process default.
+    capture_params: bool | None = None
+    param_capture: ParamCaptureConfig | None = None
 
 
 # ── @span decorator ───────────────────────────────────────────────────────────
@@ -218,6 +244,70 @@ def span(  # type: ignore[misc]
     return decorator
 
 
+# ── Shared attribute merge helper (Plan 004) ────────────────────────────────
+
+
+def build_span_attributes(
+    static_attributes: Mapping[str, Any] | None = None,
+    captured_params: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """
+    Merge global attributes, captured parameters, static attributes, and the
+    correlation ID into a single dict ready to pass as
+    ``start_as_current_span(..., attributes=...)``.
+
+    Shared by ``span.py``, ``helpers.create_span``, ``mixin.py``,
+    ``repository_mixin.py``, and (cross-package) ``varco_fastapi``'s tracing
+    middleware — a single merge implementation for every span-creation call
+    site in the codebase.
+
+    Merge order (later wins), per Plan 004:
+        ``global_attrs → captured params → static_attributes → correlation_id``
+
+    Rationale: explicit per-decorator config beats process-wide defaults;
+    ``correlation_id`` is a framework invariant and must never be shadowed.
+
+    DESIGN: attributes passed at span *creation* rather than set after start
+        ✅ Attributes present at span start participate in the sampling
+           decision (a sampler can drop/keep on ``param.tenant_id``);
+           post-start ``set_attribute`` is invisible to the sampler.
+        ✅ One SDK call instead of N.
+        ❌ Behaviour change: attributes exist from ``t=0`` instead of shortly
+           after.  Tests assert on the *finished* span's attributes, so this
+           is unobservable to callers.
+
+    Args:
+        static_attributes: ``SpanConfig.attributes`` (or equivalent) — wins
+            over global attributes and captured params.
+        captured_params: Already-rendered ``param.<name>`` attributes (see
+            ``varco_core.observability.params``) — wins over global
+            attributes, loses to ``static_attributes``.
+
+    Returns:
+        A plain dict, safe to pass directly as ``attributes=``.
+    """
+    merged: dict[str, Any] = {}
+    if apply_to_spans():
+        merged.update(current_global_attributes())
+    if captured_params:
+        merged.update(captured_params)
+    if static_attributes:
+        merged.update(static_attributes)
+    cid = current_correlation_id()
+    if cid is not None:
+        merged["correlation_id"] = cid
+    return merged
+
+
+def _resolve_capture_enabled(cfg: SpanConfig) -> bool:
+    """Precedence: cfg.capture_params > cfg.param_capture.enabled > process default."""
+    if cfg.capture_params is not None:
+        return cfg.capture_params
+    if cfg.param_capture is not None and cfg.param_capture.enabled is not None:
+        return cfg.param_capture.enabled
+    return capture_enabled()
+
+
 # ── Internal wrapper builder ───────────────────────────────────────────────────
 
 
@@ -238,27 +328,46 @@ def _make_wrapper(func: _F, cfg: SpanConfig) -> _F:
     # Span name: explicit > function qualname
     span_name = cfg.name or func.__qualname__
 
+    # Plan 004 (A) — memoised on first call, not at decoration time: the
+    # process-wide param_capture_defaults() is not loaded yet when decorators
+    # run at import time.  See params.py module docstring for the full
+    # rationale.  A plain mutable list cell (not a nonlocal bool) so both
+    # wrapper closures below can share it without a `nonlocal` per-branch.
+    _plan_cell: list[CapturePlan | None] = [None]
+
+    def _get_plan() -> CapturePlan:
+        plan = _plan_cell[0]
+        if plan is None:
+            effective_cfg = (
+                cfg.param_capture
+                if cfg.param_capture is not None
+                else param_capture_defaults()
+            )
+            plan = build_capture_plan(func, effective_cfg)
+            _plan_cell[0] = plan
+        return plan
+
+    def _capture(
+        args: tuple[Any, ...], kwargs: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        if not _resolve_capture_enabled(cfg):
+            return None
+        return _get_plan().extract(args, kwargs)
+
     if asyncio.iscoroutinefunction(func):
 
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = trace.get_tracer(cfg.tracer_name)
+            captured_params = _capture(args, kwargs)
+            merged_attrs = build_span_attributes(cfg.attributes, captured_params)
             # Use record_exception=False so the SDK does NOT auto-record on
             # exception — we handle this ourselves based on SpanConfig flags.
             with tracer.start_as_current_span(
                 span_name,
                 record_exception=False,
+                attributes=merged_attrs,
             ) as current:
-                # Set static attributes declared in SpanConfig.
-                for k, v in cfg.attributes.items():
-                    current.set_attribute(k, v)
-
-                # Bridge: stamp the active correlation ID onto the span so
-                # traces can be joined with structured log lines in the backend.
-                cid = current_correlation_id()
-                if cid is not None:
-                    current.set_attribute("correlation_id", cid)
-
                 try:
                     return await func(*args, **kwargs)
                 except Exception as exc:
@@ -274,17 +383,13 @@ def _make_wrapper(func: _F, cfg: SpanConfig) -> _F:
     @functools.wraps(func)
     def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
         tracer = trace.get_tracer(cfg.tracer_name)
+        captured_params = _capture(args, kwargs)
+        merged_attrs = build_span_attributes(cfg.attributes, captured_params)
         with tracer.start_as_current_span(
             span_name,
             record_exception=False,
+            attributes=merged_attrs,
         ) as current:
-            for k, v in cfg.attributes.items():
-                current.set_attribute(k, v)
-
-            cid = current_correlation_id()
-            if cid is not None:
-                current.set_attribute("correlation_id", cid)
-
             try:
                 return func(*args, **kwargs)
             except Exception as exc:
@@ -297,4 +402,4 @@ def _make_wrapper(func: _F, cfg: SpanConfig) -> _F:
     return sync_wrapper  # type: ignore[return-value]
 
 
-__all__ = ["SpanConfig", "span"]
+__all__ = ["SpanConfig", "span", "build_span_attributes"]

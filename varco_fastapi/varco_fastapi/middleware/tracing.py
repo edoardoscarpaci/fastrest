@@ -31,6 +31,7 @@ Async safety:   ✅ ``dispatch`` is ``async def``.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -138,11 +139,26 @@ class TracingMiddleware(BaseHTTPMiddleware):
         carrier = dict(request.headers)
         context = extract(carrier)
 
+        # Plan 004 (B) — the server span also carries process-wide global
+        # attributes, via the same registry every @span/@counter/@histogram
+        # reads (varco_core.observability.attributes).  Applied at span
+        # creation time (not via a later set_attribute loop) so a sampler
+        # can key on them, same as the varco_core span-creation call sites.
+        from varco_core.observability.attributes import (  # noqa: PLC0415
+            apply_to_spans,
+            current_global_attributes,
+        )
+
+        span_attributes: dict[str, Any] = (
+            dict(current_global_attributes()) if apply_to_spans() else {}
+        )
+
         span_name = f"{request.method} {request.url.path}"
         with tracer.start_as_current_span(
             span_name,
             context=context,
             kind=otel_trace.SpanKind.SERVER,
+            attributes=span_attributes,
         ) as span:
             # Standard HTTP semantic conventions
             span.set_attribute("http.method", request.method)
