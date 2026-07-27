@@ -43,11 +43,15 @@ Redis Streams (at-least-once)::
 
 Overriding the default settings::
 
+    # ⚠️ @Provider-decorated module-level function: provide() rejects bare
+    #    lambdas and takes no second "interface" argument (the return
+    #    annotation is the interface).
+    @Provider(singleton=True)
+    def redis_settings() -> RedisEventBusSettings:
+        return RedisEventBusSettings(url=os.environ["REDIS_URL"])
+
     container = DIContainer()
-    container.provide(
-        lambda: RedisEventBusSettings(url=os.environ["REDIS_URL"]),
-        RedisEventBusSettings,
-    )
+    container.provide(redis_settings)          # before scan() — order matters
     container.scan("varco_redis", recursive=True)
 """
 
@@ -94,11 +98,12 @@ def bootstrap(
         from varco_redis.config import RedisEventBusSettings
         from providify import DIContainer
 
+        @Provider(singleton=True)
+        def redis_settings() -> RedisEventBusSettings:
+            return RedisEventBusSettings(url=os.environ["REDIS_URL"])
+
         container = DIContainer()
-        container.provide(
-            lambda: RedisEventBusSettings(url=os.environ["REDIS_URL"]),
-            RedisEventBusSettings,
-        )
+        container.provide(redis_settings)      # before bootstrap() — order matters
         bootstrap(container)
 
     Args:

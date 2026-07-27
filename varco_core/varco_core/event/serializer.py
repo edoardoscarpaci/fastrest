@@ -3,14 +3,31 @@ varco_core.event.serializer
 ============================
 Serialization contract and JSON implementation for ``Event`` objects.
 
-The ``EventSerializer`` type alias and ``JsonEventSerializer`` class define
-how events are encoded to bytes (for Kafka/Redis transport) and decoded back.
+``Serializer[Event]`` (from ``varco_core.serialization``) is the contract that
+defines how events are encoded to bytes for Kafka/Redis/NATS transport and
+decoded back.  Bus backends annotate their ``serializer`` constructor parameter
+with that interface, so any implementation can be plugged in via DI.
 
-``EventSerializer`` is a type alias for ``Serializer[Event]`` from
-``varco_core.serialization``.  Any object satisfying the ``Serializer[Event]``
-Protocol can be plugged into an event bus backend.
+``JsonEventSerializer`` is the default implementation.  It subclasses
+``Serializer[Event]`` explicitly (rather than relying on structural Protocol
+satisfaction) so providify registers it under the interface, and carries
+``@Singleton(priority=-sys.maxsize - 1)`` — the lowest possible priority, so it
+is available out of the box but loses to any application-supplied serializer::
 
-``JsonEventSerializer`` is the default implementation.  It produces a flat
+    @Provider(singleton=True)
+    def my_serializer() -> Serializer[Event]:
+        return MyCompactSerializer()
+
+    container.provide(my_serializer)      # wins over JsonEventSerializer
+
+⚠️ There is deliberately **no** ``EventSerializer`` type alias.  It previously
+existed as a quoted forward reference (``EventSerializer: TypeAlias =
+"Serializer[Event]"``), which bound the *string* to the module-level name at
+runtime and made every ``EventSerializer | None`` annotation unevaluatable —
+silently disabling DI for the parameter on all three bus backends.  Annotate
+with ``Serializer[Event]`` directly.
+
+The default implementation produces a flat
 JSON object with an extra ``"__event_type__"`` key injected at the top level
 to identify the event class during deserialization.
 
@@ -66,28 +83,39 @@ Async safety:   ✅ No I/O — pure CPU-bound serialization.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, TypeAlias
+import sys
+from typing import Any
+
+from providify.decorator import Singleton
 
 from varco_core.serialization import Serializer
 
-if TYPE_CHECKING:
-    # Only needed for type annotations — avoids loading base.py symbols at
-    # import time if this module is loaded in isolation.
-    from varco_core.event.base import Event
-
-
-# ── EventSerializer TypeAlias ─────────────────────────────────────────────────
-
-# A type alias, not a new class — any ``Serializer[Event]`` implementation
-# satisfies this alias.  Use it as the type annotation for bus constructor
-# parameters so callers can plug in any compliant serializer.
-EventSerializer: TypeAlias = "Serializer[Event]"
-
+# DESIGN: ``Event`` is imported at RUNTIME, not under ``TYPE_CHECKING``.
+#
+# ``Serializer[Event]`` is used as a DI binding interface and appears in bus
+# constructor annotations as ``Serializer[Event] | None``.  Both uses require
+# ``Event`` to be a real type object at runtime: a ``TYPE_CHECKING``-only import
+# forces the reference to be quoted, and a quoted name evaluates to a ``str``,
+# making ``… | None`` a TypeError that silently disables injection.
+#
+#   ✅ ``get_type_hints()`` (and therefore providify's binding validation) can
+#      resolve every annotation mentioning ``Serializer[Event]``.
+#   ✅ No import cycle: ``varco_core.event.base`` does not import this module.
+#   ❌ Importing this module now also loads ``base.py`` — acceptable, since all
+#      three bus backends already import ``base.py`` at module scope anyway.
+from varco_core.event.base import Event
 
 # ── JsonEventSerializer ────────────────────────────────────────────────────────
 
 
-class JsonEventSerializer:
+# DESIGN: minimum priority so this default always loses to an app-supplied
+# serializer registered at the default priority.
+#   ✅ Works out of the box — no wiring needed for the common case.
+#   ✅ Fully overridable — `container.provide(my_serializer)` wins, in any order.
+#   ❌ Registers a binding even in apps that never use the event system (cheap:
+#      the instance is only constructed on first resolution).
+@Singleton(priority=-sys.maxsize - 1)
+class JsonEventSerializer(Serializer[Event]):
     """
     Serialize and deserialize ``Event`` objects to/from UTF-8 JSON bytes.
 
@@ -96,8 +124,9 @@ class JsonEventSerializer:
     type name is embedded in the JSON as ``"__event_type__"`` so the class can
     be looked up without the caller providing a ``type_hint``.
 
-    This class satisfies the ``EventSerializer`` (i.e. ``Serializer[Event]``)
-    structural Protocol.  The ``type_hint`` parameter of ``deserialize`` is
+    This class implements the ``Serializer[Event]`` Protocol, subclassing it
+    explicitly so DI can bind it under that interface.  The ``type_hint``
+    parameter of ``deserialize`` is
     accepted for API compatibility but ignored — the event type is always
     derived from the embedded ``"__event_type__"`` key.
 
@@ -122,7 +151,7 @@ class JsonEventSerializer:
     # Must not clash with any Pydantic field name on Event subclasses.
     TYPE_KEY: str = "__event_type__"
 
-    def serialize(self, event: Event) -> bytes:
+    def serialize(self, value: Event) -> bytes:
         """
         Serialize ``event`` to UTF-8 JSON bytes.
 
@@ -146,8 +175,8 @@ class JsonEventSerializer:
         # mode="json" ensures datetime/UUID fields are JSON-serializable
         # without a custom default encoder.
         payload: dict[str, Any] = {
-            self.TYPE_KEY: event.event_type_name(),
-            **event.model_dump(mode="json"),
+            self.TYPE_KEY: value.event_type_name(),
+            **value.model_dump(mode="json"),
         }
         return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
@@ -229,6 +258,5 @@ class JsonEventSerializer:
 
 
 __all__ = [
-    "EventSerializer",
     "JsonEventSerializer",
 ]

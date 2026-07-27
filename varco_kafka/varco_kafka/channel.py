@@ -60,7 +60,7 @@ from aiokafka.errors import TopicAlreadyExistsError
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 
-from providify import Inject, PostConstruct, PreDestroy, Singleton
+from providify import Inject, PostConstruct, PreDestroy, Provider, Singleton
 
 from varco_core.config import VarcoSettings
 from varco_core.event.base import ChannelConfig
@@ -72,7 +72,6 @@ _logger = logging.getLogger(__name__)
 # ── KafkaChannelManagerSettings ───────────────────────────────────────────────
 
 
-@Singleton(priority=-sys.maxsize)
 class KafkaChannelManagerSettings(VarcoSettings):
     """
     Configuration for ``KafkaChannelManager``.
@@ -127,6 +126,34 @@ class KafkaChannelManagerSettings(VarcoSettings):
             Full topic name with prefix applied.
         """
         return f"{self.topic_prefix}{channel}"
+
+
+@Provider(singleton=True, priority=-sys.maxsize)
+def kafka_channel_manager_settings() -> KafkaChannelManagerSettings:
+    """
+    Default ``KafkaChannelManagerSettings`` binding, discovered by
+    ``container.scan("varco_kafka", recursive=True)``.
+
+    DESIGN: ``@Provider`` factory instead of ``@Singleton`` on the class
+        A pydantic ``BaseSettings`` declares ``__init__(self, **values: Any)``.
+        providify resolves a ``ClassBinding`` by injecting the constructor
+        signature, so a class-level ``@Singleton`` made every resolution fail
+        with ``LookupError: Cannot resolve 'values: typing.Any'`` — which also
+        broke ``KafkaChannelManager`` (it injects these settings).  A factory
+        has no injectable parameters, so the container just calls it.
+        ✅ ``container.get(KafkaChannelManagerSettings)`` works after a plain scan.
+        ✅ Same precedent as ``varco_casbin/di.py`` and ``varco_fastapi/di.py``.
+        ❌ Settings are no longer discoverable by class decoration alone — this
+           module must stay importable by the scanner (it always is).
+
+    ``priority=-sys.maxsize`` keeps this the lowest-priority binding, so any
+    application-supplied provider wins without needing an explicit priority.
+
+    Returns:
+        ``KafkaChannelManagerSettings`` populated from ``VARCO_KAFKA_ADMIN_*``
+        environment variables (pydantic reads them at construction).
+    """
+    return KafkaChannelManagerSettings()
 
 
 # ── KafkaChannelManager ───────────────────────────────────────────────────────

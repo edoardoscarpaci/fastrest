@@ -755,6 +755,54 @@ user_service: AsyncService[User, UUID, ...] = container.resolve(UserService)
 event_bus: AbstractEventBus = container.resolve(AbstractEventBus)
 ```
 
+**Corrected DI call shapes** (documented incorrectly in several places before this
+was traced to a real bug — see below):
+- `install()` / `ainstall()` take **only** the module class, never a `config=`
+  kwarg — `container.install(OtelConfiguration, config=OtelConfig(...))` has
+  never worked.
+- `provide()` takes exactly **one** argument: a module-level, `@Provider`-decorated
+  factory function. `container.provide(lambda: X())` and
+  `container.provide(fn, SomeInterface)` both raise
+  `ProviderBindingNotDecoratedError` / `TypeError` — there is no "pass the
+  interface as a second argument" call shape.
+- Equal-priority bindings for the same interface resolve to the **first one
+  registered**, not the last (`DIContainer._get_best_candidate` does
+  `max(candidates, key=lambda b: b.priority)`, and Python's `max()` keeps the
+  first element on a tie). An override `provide()` call must run *before*
+  `install()`/`scan()`, or it must declare a higher `priority=` explicitly.
+
+⚠️ **The quoted-`@Provider`-return-annotation landmine.** A `@Provider` (or
+`@Configuration` provider method) whose return annotation is a *string* —
+either written as `-> "Foo"` or produced by a `from __future__ import
+annotations` file combined with a `TYPE_CHECKING`-only import of `Foo` — does
+not fail at registration. Providify's binding constructor falls back to
+`eval(fn.__annotations__["return"], fn.__globals__)`, and for a quoted
+annotation that eval yields the plain **string** `'Foo'`, which gets silently
+registered as the binding *interface*. The container does not reject a
+str-interface binding either: `DIContainer._build_localns()` only fails later,
+when it does `binding.interface.__name__` on it (`AttributeError`) — and that
+`AttributeError` is caught by `_collect_kwargs_sync()`'s
+`except Exception: hints = {}`, which resolves **every** `Inject[...]`
+parameter for **every** provider/constructor in that container as empty from
+then on. The failure surfaces nowhere near the real defect: it looks like an
+unrelated provider is missing a required constructor argument
+(`TypeError: some_fn() missing 1 required positional argument: 'x'`). This is
+exactly what happened to `VarcoFastAPIModule.profiling_settings` (fixed by
+dropping the quotes and importing `ProfilingSettings` at module scope — see
+`CHANGELOG.md`'s `[Unreleased]` → `varco-fastapi` → Fixed entry).
+
+Diagnostic — run this against any container that exhibits a baffling
+"missing N required positional arguments" error to find the poisoned binding
+directly, rather than guessing:
+
+```python
+print([b for b in container._bindings if isinstance(b.interface, str)])
+```
+
+Guarded against regressing via `varco_fastapi/tests/test_di_binding_health.py`
+(scans every varco package's `@Provider` callables for a quoted or otherwise
+unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
+
 ---
 
 ## File Organization
@@ -976,7 +1024,10 @@ filtered_query = transformer.transform(base_query, params, User)
   is installed and registered — `WebSocketEventBus` and `SSEEventBus` from the DI container.
   All discovered components are started/stopped as part of the app lifespan.
 - **Typed HTTP clients**: `AsyncVarcoClient` / `SyncVarcoClient` with retry, circuit breaker, and JWT injection.
-- **DI wiring**: `VarcoFastAPIModule` + `bind_clients()`.
+- **DI wiring**: `VarcoFastAPIModule` + `bind_clients()`. ⚠️ `bind_clients()` is
+  currently known-broken (raises `ClassBindingNotDecoratedError` — the internal
+  factory it builds is never `@Provider`-decorated); see the `bind_clients()`
+  docstring in `varco_fastapi/varco_fastapi/di.py` for the full failure chain.
 
 #### HTTP Metrics — `MetricsMiddleware` + `MetricsRouter`
 

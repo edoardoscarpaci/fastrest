@@ -23,11 +23,19 @@ Service mixin::
 
 Config + DI::
 
-    config = OtelConfig(
-        service_name="orders-svc",
-        otlp_endpoint="http://otel-collector:4317",
-    )
-    container.install(OtelConfiguration, config=config)
+    from providify import Provider
+
+    # Module-level, @Provider-decorated — install() takes no config= kwarg and
+    # provide() rejects bare lambdas.  Register it BEFORE install().
+    @Provider(singleton=True)
+    def otel_config() -> OtelConfig:
+        return OtelConfig(
+            service_name="orders-svc",
+            otlp_endpoint="http://otel-collector:4317",
+        )
+
+    container.provide(otel_config)
+    container.install(OtelConfiguration)
 
 Plan 004 — automatic parameter capture + global attributes
 ------------------------------------------------------------

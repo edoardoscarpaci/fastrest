@@ -83,7 +83,8 @@ from varco_core.event.base import (
     Subscription,
     _SubscriptionEntry,
 )
-from varco_core.event.serializer import EventSerializer, JsonEventSerializer
+from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_redis.config import RedisEventBusSettings
 
@@ -138,7 +139,9 @@ class RedisEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[EventSerializer | None, InjectMeta(optional=True)] = None,
+        serializer: Annotated[
+            Serializer[Event] | None, InjectMeta(optional=True)
+        ] = None,
     ) -> None:
         """
         Args:
@@ -164,7 +167,7 @@ class RedisEventBus(AbstractEventBus):
             )
 
         # Use provided serializer or fall back to JSON.
-        self._serializer: EventSerializer = serializer or JsonEventSerializer()
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         self._subscriptions: list[_SubscriptionEntry] = []
 

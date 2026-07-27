@@ -39,11 +39,15 @@ Overriding settings before bootstrap::
     from varco_memcached.cache import MemcachedCacheSettings
     from varco_memcached.di import async_bootstrap
 
+    # ⚠️ @Provider-decorated module-level function: provide() rejects bare
+    #    lambdas and takes no second "interface" argument (the return
+    #    annotation is the interface).
+    @Provider(singleton=True)
+    def memcached_settings() -> MemcachedCacheSettings:
+        return MemcachedCacheSettings(host="memcached.internal", port=11211)
+
     container = DIContainer()
-    container.provide(
-        lambda: MemcachedCacheSettings(host="memcached.internal", port=11211),
-        MemcachedCacheSettings,
-    )
+    container.provide(memcached_settings)   # before bootstrap — order matters
     await async_bootstrap(container)
 
 📚 Docs

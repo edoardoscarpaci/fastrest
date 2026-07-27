@@ -99,14 +99,11 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Sequence
+from typing import Sequence
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event
 from varco_core.event.serializer import JsonEventSerializer
-
-if TYPE_CHECKING:
-    from varco_core.event.serializer import EventSerializer
 
 _logger = logging.getLogger(__name__)
 
@@ -154,7 +151,7 @@ class OutboxEntry:
 
     Edge cases:
         - ``payload`` is opaque bytes — the relay does not inspect the contents.
-          Only the ``EventSerializer.deserialize()`` call in the relay
+          Only the ``JsonEventSerializer.deserialize()`` call in the relay
           reconstructs the typed ``Event`` instance for bus dispatch.
         - Two entries for the same event (e.g. duplicate saves) will both be
           relayed — idempotency must be enforced by the event handler, not here.
@@ -190,7 +187,7 @@ class OutboxEntry:
         event: Event,
         *,
         channel: str = CHANNEL_DEFAULT,
-        serializer: EventSerializer | None = None,
+        serializer: JsonEventSerializer | None = None,
     ) -> OutboxEntry:
         """
         Construct an ``OutboxEntry`` from a domain ``Event``.
@@ -414,7 +411,7 @@ class OutboxRelay:
         *,
         outbox: OutboxRepository,
         bus: AbstractEventBus,
-        serializer: EventSerializer | None = None,
+        serializer: JsonEventSerializer | None = None,
         poll_interval: float = _DEFAULT_POLL_INTERVAL,
         batch_size: int = _DEFAULT_BATCH_SIZE,
     ) -> None:
@@ -450,7 +447,7 @@ class OutboxRelay:
         self._bus = bus
         # Use provided serializer or fall back to JSON (matches the default
         # in OutboxEntry.from_event so round-trip is consistent).
-        self._serializer: EventSerializer = serializer or JsonEventSerializer()
+        self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
         self._poll_interval = poll_interval
         self._batch_size = batch_size
 

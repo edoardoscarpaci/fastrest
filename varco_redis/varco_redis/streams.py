@@ -96,7 +96,7 @@ from varco_core.event.base import (
     _SubscriptionEntry,
 )
 from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
-from varco_core.event.serializer import EventSerializer, JsonEventSerializer
+from varco_core.event.serializer import JsonEventSerializer
 
 from varco_redis.config import RedisEventBusSettings
 
@@ -205,7 +205,9 @@ class RedisStreamEventBus(AbstractEventBus):
         dlq: AbstractDeadLetterQueue | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[EventSerializer | None, InjectMeta(optional=True)] = None,
+        serializer: Annotated[
+            JsonEventSerializer | None, InjectMeta(optional=True)
+        ] = None,
     ) -> None:
         """
         Args:
@@ -247,7 +249,7 @@ class RedisStreamEventBus(AbstractEventBus):
             self._middleware = (
                 list(middleware.get_all()) if middleware.resolvable() else []
             )
-        self._serializer: EventSerializer = serializer or JsonEventSerializer()
+        self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
 
         self._subscriptions: list[_SubscriptionEntry] = []
 

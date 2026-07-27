@@ -463,10 +463,16 @@ class RedisCacheConfiguration:
 
     Overriding settings::
 
-        container.provide(
-            lambda: RedisCacheSettings(url=os.environ["REDIS_URL"], key_prefix="myapp:"),
-            RedisCacheSettings,
-        )
+        # @Provider-decorated module-level function — provide() rejects bare
+        # lambdas and takes no second "interface" argument.  Register it
+        # BEFORE ainstall(): equal-priority bindings resolve first-registered.
+        @Provider(singleton=True)
+        def redis_cache_settings() -> RedisCacheSettings:
+            return RedisCacheSettings(
+                url=os.environ["REDIS_URL"], key_prefix="myapp:"
+            )
+
+        container.provide(redis_cache_settings)
         await container.ainstall(RedisCacheConfiguration)
     """
 
@@ -645,15 +651,19 @@ class RedisLayeredCacheConfiguration:
 
     Overriding settings::
 
-        container.provide(
-            lambda: LayeredCacheSettings(
+        # @Provider-decorated module-level function — provide() rejects bare
+        # lambdas and takes no second "interface" argument.  Register it
+        # BEFORE ainstall(): equal-priority bindings resolve first-registered.
+        @Provider(singleton=True)
+        def layered_cache_settings() -> LayeredCacheSettings:
+            return LayeredCacheSettings(
                 url=os.environ["REDIS_URL"],
                 key_prefix="myapp:",
                 l1_max_size=1000,
                 l1_default_ttl=60.0,
-            ),
-            LayeredCacheSettings,
-        )
+            )
+
+        container.provide(layered_cache_settings)
         await container.ainstall(RedisLayeredCacheConfiguration)
     """
 

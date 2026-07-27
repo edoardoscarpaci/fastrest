@@ -532,13 +532,17 @@ class MemcachedCacheConfiguration:
 
     Overriding settings::
 
-        container.provide(
-            lambda: MemcachedCacheSettings(
+        # @Provider-decorated module-level function — provide() rejects bare
+        # lambdas and takes no second "interface" argument.  Register it
+        # BEFORE ainstall(): equal-priority bindings resolve first-registered.
+        @Provider(singleton=True)
+        def memcached_cache_settings() -> MemcachedCacheSettings:
+            return MemcachedCacheSettings(
                 host=os.environ["MEMCACHED_HOST"],
                 key_prefix="myapp:",
-            ),
-            MemcachedCacheSettings,
-        )
+            )
+
+        container.provide(memcached_cache_settings)
         await container.ainstall(MemcachedCacheConfiguration)
     """
 

@@ -86,7 +86,8 @@ from varco_core.event.base import (
     Subscription,
     _SubscriptionEntry,
 )
-from varco_core.event.serializer import EventSerializer, JsonEventSerializer
+from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_kafka.config import KafkaDeliverySemantics, KafkaEventBusSettings
 
@@ -166,7 +167,9 @@ class KafkaEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[EventSerializer | None, InjectMeta(optional=True)] = None,
+        serializer: Annotated[
+            Serializer[Event] | None, InjectMeta(optional=True)
+        ] = None,
     ) -> None:
         """
         Args:
@@ -194,7 +197,7 @@ class KafkaEventBus(AbstractEventBus):
         # Use the provided serializer or fall back to JSON.
         # Stored as an instance so it is pluggable and stateful serializers
         # (e.g. ones that cache TypeAdapters) work correctly.
-        self._serializer: EventSerializer = serializer or JsonEventSerializer()
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         # Local subscription list — same model as InMemoryEventBus.
         # Handler dispatch happens in-process after a message arrives from Kafka.

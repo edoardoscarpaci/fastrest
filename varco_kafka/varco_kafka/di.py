@@ -3,10 +3,16 @@ varco_kafka.di
 ==============
 Providify DI integration for ``varco_kafka``.
 
-All singletons (``KafkaEventBus``, ``KafkaHealthCheck``, ``KafkaChannelManager``,
-``KafkaEventBusSettings``, ``KafkaChannelManagerSettings``) carry ``@Singleton``
-on their class definitions and are discovered automatically by
-``container.scan("varco_kafka", recursive=True)``.
+All singletons (``KafkaEventBus``, ``KafkaHealthCheck``, ``KafkaChannelManager``)
+carry ``@Singleton`` on their class definitions and are discovered automatically
+by ``container.scan("varco_kafka", recursive=True)``.
+
+Settings classes are the exception: pydantic ``BaseSettings`` declares
+``__init__(self, **values)``, which providify cannot constructor-inject
+(``LookupError: Cannot resolve 'values: typing.Any'``).  They are therefore
+registered by lowest-priority ``@Provider`` factories — ``kafka_channel_manager_settings``
+in ``varco_kafka.channel`` and ``KafkaDLQConfiguration.kafka_dlq_settings`` in
+``varco_kafka.dlq`` — which the same ``scan()`` discovers.
 
 No ``@Configuration`` class or ``ainstall()`` call is required.
 
@@ -29,14 +35,18 @@ Or manually::
 
 Overriding the default settings::
 
-    container = DIContainer()
-    container.provide(
-        lambda: KafkaEventBusSettings(
+    # ⚠️ @Provider-decorated module-level function: provide() rejects bare
+    #    lambdas and takes no second "interface" argument (the return
+    #    annotation is the interface).
+    @Provider(singleton=True)
+    def kafka_settings() -> KafkaEventBusSettings:
+        return KafkaEventBusSettings(
             bootstrap_servers=os.environ["KAFKA_BROKERS"],
             group_id=os.environ["SERVICE_NAME"],
-        ),
-        KafkaEventBusSettings,
-    )
+        )
+
+    container = DIContainer()
+    container.provide(kafka_settings)          # before scan() — order matters
     container.scan("varco_kafka", recursive=True)
 """
 
@@ -54,13 +64,14 @@ def bootstrap(
     """
     Bootstrap ``varco_kafka`` into a ``DIContainer``.
 
-    Calls ``container.scan("varco_kafka", recursive=True)`` to discover all
-    ``@Singleton``-annotated classes — ``KafkaEventBusSettings``,
-    ``KafkaEventBus``, ``KafkaHealthCheck``, ``KafkaChannelManagerSettings``,
-    and ``KafkaChannelManager``.
+    Calls ``container.scan("varco_kafka", recursive=True)`` to discover the
+    ``@Singleton``-annotated classes (``KafkaEventBus``, ``KafkaHealthCheck``,
+    ``KafkaChannelManager``) plus the ``@Provider`` factories that register
+    ``KafkaEventBusSettings`` and ``KafkaChannelManagerSettings``.
 
-    No ``ainstall()`` call is required — settings are self-registering via
-    ``@Singleton`` on the Pydantic ``BaseSettings`` subclasses.
+    No ``ainstall()`` call is required.  Settings come from ``@Provider``
+    factories rather than class-level ``@Singleton`` — a pydantic
+    ``BaseSettings`` cannot be constructor-injected.
 
     Call this **once** at application startup, before resolving any singletons::
 
@@ -75,15 +86,17 @@ def bootstrap(
         from varco_kafka.config import KafkaEventBusSettings
         from providify import DIContainer
 
-        container = DIContainer()
-        # Register a higher-priority provider — wins over the @Singleton default.
-        container.provide(
-            lambda: KafkaEventBusSettings(
+        # Registered before bootstrap() so it wins over the package default;
+        # add priority=... instead if you must register afterwards.
+        @Provider(singleton=True)
+        def kafka_settings() -> KafkaEventBusSettings:
+            return KafkaEventBusSettings(
                 bootstrap_servers=os.environ["KAFKA_BROKERS"],
                 group_id=os.environ["SERVICE_NAME"],
-            ),
-            KafkaEventBusSettings,
-        )
+            )
+
+        container = DIContainer()
+        container.provide(kafka_settings)
         bootstrap(container)
 
     Args:

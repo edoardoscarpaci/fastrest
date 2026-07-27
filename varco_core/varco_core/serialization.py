@@ -125,7 +125,7 @@ class Serializer(Protocol[T]):
 # ── JsonSerializer ────────────────────────────────────────────────────────────
 
 
-class JsonSerializer:
+class JsonSerializer(Serializer[Any]):
     """
     Serializer that encodes values to UTF-8 JSON using Pydantic's ``TypeAdapter``.
 
@@ -242,7 +242,7 @@ class JsonSerializer:
 # ── NoOpSerializer ────────────────────────────────────────────────────────────
 
 
-class NoOpSerializer:
+class NoOpSerializer(Serializer[Any]):
     """
     Pass-through serializer for values that are already serialized ``bytes``.
 
@@ -311,7 +311,7 @@ class NoOpSerializer:
 # ── TypedJsonSerializer ───────────────────────────────────────────────────────
 
 
-class TypedJsonSerializer:
+class TypedJsonSerializer(Serializer[Any]):
     """
     Self-describing serializer that embeds the fully-qualified class name in the
     serialized envelope so the original type can be recovered at deserialization

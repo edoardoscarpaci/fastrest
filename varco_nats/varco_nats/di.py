@@ -3,10 +3,16 @@ varco_nats.di
 =============
 Providify DI integration for ``varco_nats``.
 
-All singletons (``NatsEventBus``, ``NatsHealthCheck``, ``NatsStreamManager``,
-``NatsEventBusSettings``, ``NatsChannelManagerSettings``) carry ``@Singleton``
-on their class definitions and are discovered automatically by
-``container.scan("varco_nats", recursive=True)``.
+All singletons (``NatsEventBus``, ``NatsHealthCheck``, ``NatsStreamManager``)
+carry ``@Singleton`` on their class definitions and are discovered automatically
+by ``container.scan("varco_nats", recursive=True)``.
+
+Settings classes are the exception: pydantic ``BaseSettings`` declares
+``__init__(self, **values)``, which providify cannot constructor-inject
+(``LookupError: Cannot resolve 'values: typing.Any'``).  They are therefore
+registered by lowest-priority ``@Provider`` factories — ``nats_channel_manager_settings``
+in ``varco_nats.channel`` and ``NatsDLQConfiguration.nats_dlq_settings`` in
+``varco_nats.dlq`` — which the same ``scan()`` discovers.
 
 No ``@Configuration`` class or ``ainstall()`` call is required for the bus.
 The DLQ is the one exception — ``NatsDLQConfiguration`` (in ``varco_nats.dlq``)
@@ -33,14 +39,18 @@ Or manually::
 
 Overriding the default settings::
 
-    container = DIContainer()
-    container.provide(
-        lambda: NatsEventBusSettings(
+    # ⚠️ @Provider-decorated module-level function: provide() rejects bare
+    #    lambdas and takes no second "interface" argument (the return
+    #    annotation is the interface).
+    @Provider(singleton=True)
+    def nats_settings() -> NatsEventBusSettings:
+        return NatsEventBusSettings(
             servers=os.environ["NATS_SERVERS"],
             durable_name=os.environ["SERVICE_NAME"],
-        ),
-        NatsEventBusSettings,
-    )
+        )
+
+    container = DIContainer()
+    container.provide(nats_settings)           # before scan() — order matters
     container.scan("varco_nats", recursive=True)
 """
 
@@ -56,12 +66,14 @@ def bootstrap(container: Any = None) -> Any:
     """
     Bootstrap ``varco_nats`` into a ``DIContainer``.
 
-    Calls ``container.scan("varco_nats", recursive=True)`` to discover all
-    ``@Singleton``-annotated classes — ``NatsEventBusSettings``, ``NatsEventBus``,
-    ``NatsHealthCheck``, ``NatsChannelManagerSettings`` and ``NatsStreamManager``.
+    Calls ``container.scan("varco_nats", recursive=True)`` to discover the
+    ``@Singleton``-annotated classes (``NatsEventBus``, ``NatsHealthCheck``,
+    ``NatsStreamManager``) plus the ``@Provider`` factories that register
+    ``NatsEventBusSettings`` and ``NatsChannelManagerSettings``.
 
-    No ``ainstall()`` call is required for the bus — settings self-register via
-    ``@Singleton`` on the Pydantic ``BaseSettings`` subclasses.  Install
+    No ``ainstall()`` call is required for the bus.  Settings come from
+    ``@Provider`` factories rather than class-level ``@Singleton`` — a pydantic
+    ``BaseSettings`` cannot be constructor-injected.  Install
     ``NatsDLQConfiguration`` separately if a dead-letter queue is needed.
 
     Call this **once** at application startup, before resolving any singletons::
@@ -77,15 +89,17 @@ def bootstrap(container: Any = None) -> Any:
         from varco_nats.config import NatsEventBusSettings
         from providify import DIContainer
 
-        container = DIContainer()
-        # Register a higher-priority provider — wins over the @Singleton default.
-        container.provide(
-            lambda: NatsEventBusSettings(
+        # Registered before bootstrap() so it wins over the package default;
+        # add priority=... instead if you must register afterwards.
+        @Provider(singleton=True)
+        def nats_settings() -> NatsEventBusSettings:
+            return NatsEventBusSettings(
                 servers=os.environ["NATS_SERVERS"],
                 durable_name=os.environ["SERVICE_NAME"],
-            ),
-            NatsEventBusSettings,
-        )
+            )
+
+        container = DIContainer()
+        container.provide(nats_settings)
         bootstrap(container)
 
     Args:

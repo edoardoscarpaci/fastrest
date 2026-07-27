@@ -111,14 +111,10 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event
 from varco_core.event.serializer import JsonEventSerializer
-
-if TYPE_CHECKING:
-    from varco_core.event.serializer import EventSerializer
 
 _logger = logging.getLogger(__name__)
 
@@ -207,7 +203,7 @@ class InboxEntry:
         event: Event,
         *,
         channel: str = CHANNEL_DEFAULT,
-        serializer: EventSerializer | None = None,
+        serializer: JsonEventSerializer | None = None,
     ) -> InboxEntry:
         """
         Construct an ``InboxEntry`` from an incoming ``Event``.
@@ -386,7 +382,7 @@ class InboxPoller:
         *,
         inbox: InboxRepository,
         bus: AbstractEventBus,
-        serializer: EventSerializer | None = None,
+        serializer: JsonEventSerializer | None = None,
         poll_interval: float = _DEFAULT_POLL_INTERVAL,
         batch_size: int = _DEFAULT_BATCH_SIZE,
     ) -> None:
@@ -401,7 +397,7 @@ class InboxPoller:
         """
         self._inbox = inbox
         self._bus = bus
-        self._serializer: EventSerializer = serializer or JsonEventSerializer()
+        self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
         self._poll_interval = poll_interval
         self._batch_size = batch_size
         # Background asyncio Task — created in start(), cancelled in stop().
@@ -591,7 +587,7 @@ def _make_inbox_wrapper(
     inbox: InboxRepository,
     channel: str,
     *,
-    serializer: EventSerializer | None = None,
+    serializer: JsonEventSerializer | None = None,
 ) -> object:
     """
     Wrap a handler (or retry wrapper) with inbox save-before / mark-after logic.

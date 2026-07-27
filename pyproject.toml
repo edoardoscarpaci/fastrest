@@ -22,9 +22,13 @@ members = [
 ]
 
 [tool.uv.sources]
-# Use the vendored wheel of providify 0.1.6 so all workspace members pick up
+# Use the vendored wheel of providify 1.1.0 so all workspace members pick up
 # the latest scanner that discovers @Configuration classes via scan().
-# The wheel is a pre-built copy of /home/edoardo/projects/providify at 0.1.6.
+# The wheel is a pre-built copy of /home/edoardo/projects/providify at 1.1.0.
+#
+# ⚠️ Keep this version in sync with the `providify>=…` constraint every package
+#    declares — a wheel older than that constraint means varco is developed and
+#    tested against a version no PyPI consumer ever resolves.
 #
 # DESIGN: vendored wheel over editable path source
 #   ✅ Docker-compatible — the wheel file is inside the build context (vendor/).
@@ -32,7 +36,7 @@ members = [
 #   ✅ Single declaration — applies to every workspace member automatically.
 #   ❌ Must re-build the wheel (uv build in providify/) when providify changes.
 #   ❌ Wheel file committed to git — larger repo than a PyPI version pin.
-providify = { path = "vendor/providify-0.1.6-py3-none-any.whl" }
+providify = { path = "vendor/providify-1.1.0-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

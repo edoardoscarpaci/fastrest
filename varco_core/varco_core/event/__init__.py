@@ -17,7 +17,7 @@ All public symbols are importable directly from ``varco_core.event``::
     from varco_core.event import EventBusSettings
 
     # Serializer
-    from varco_core.event import EventSerializer, JsonEventSerializer
+    from varco_core.event import JsonEventSerializer, JsonEventSerializer
 
     # Producer side
     from varco_core.event import AbstractEventProducer
@@ -87,7 +87,7 @@ from varco_core.event.domain import (
     EntityUpdatedEvent,
 )
 from varco_core.event.memory import InMemoryEventBus, NoopEventBus
-from varco_core.event.serializer import EventSerializer, JsonEventSerializer
+from varco_core.event.serializer import JsonEventSerializer
 from varco_core.event.producer import (
     AbstractEventProducer,
     BusEventProducer,
@@ -130,7 +130,6 @@ __all__ = [
     "InMemoryEventBus",
     "NoopEventBus",
     # ── Serializer ──────────────────────────────────────────────────────────
-    "EventSerializer",
     "JsonEventSerializer",
     # ── Producer ────────────────────────────────────────────────────────────
     "AbstractEventProducer",

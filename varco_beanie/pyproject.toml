@@ -1,6 +1,6 @@
 [project]
 name          = "varco-beanie"
-version       = "1.1.0"
+version       = "1.1.1"
 description   = "Beanie (Motor / MongoDB) async backend for varco — runtime ORM generation, repository, and UoW"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
@@ -31,7 +31,7 @@ dependencies = [
     # Explicit direct dependency for varco_beanie.di — providify is already
     # a transitive dep via varco-core but listing it here makes the di module's
     # imports explicit and protects against future varco-core decoupling.
-    "providify>=1.0.0a0",
+    "providify>=1.1.0",
 ]
 
 [project.urls]

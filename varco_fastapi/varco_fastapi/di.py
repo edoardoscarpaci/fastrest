@@ -11,7 +11,7 @@ modules (SA, Redis, etc.) at application bootstrap::
     container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus
     container.install(SAModule)
     container.install(VarcoFastAPIModule)
-    bind_clients(container, OrderClient, UserClient)
+    bind_clients(container, OrderClient, UserClient)  # ⚠️ currently broken — see bind_clients() docstring
 
 Registered defaults (all overrideable via ``container.bind()``):
 
@@ -130,8 +130,12 @@ def bind_clients(container: Any, *client_classes: type) -> None:
 
     Edge cases:
         - Client without ``_router_class`` → ``TypeError`` with helpful message.
-        - Same client registered twice → second registration wins (DI container
-          replaces the earlier binding).
+        - Same client registered twice → the **first** registration wins, not
+          the second. `DIContainer.get()` picks the highest-*priority* binding
+          for an interface and both registrations share the same (default)
+          priority, so ties resolve to the earliest-registered candidate — the
+          binding is appended, never replaced (same first-registered-wins rule
+          as ``container.provide()`` / ``container.install()``).
         - No configurator → client will need an explicit ``base_url`` at construction.
 
     Thread safety:  ✅ Registration happens at bootstrap; no concurrent access.
@@ -159,21 +163,28 @@ def bind_clients(container: Any, *client_classes: type) -> None:
             """Singleton factory — DI container calls this once."""
             return __cls()
 
-        # Patch return annotation so providify generic resolution works
-        # (same pattern as bind_repositories: patches __annotations__["return"])
+        # Patch the return annotation BEFORE decorating: @Provider reads the
+        # annotation to derive the binding interface, so patching afterwards
+        # would register under the placeholder `Any` instead of the alias.
+        # (Same trick as bind_repositories() in varco_sa.di.)
         _factory.__annotations__["return"] = client_alias
 
-        # Register as a singleton provider under the generic alias
-        try:
-            # providify uses container.bind() with a factory callable
-            container.bind(client_alias, _factory)
-        except Exception:
-            # Fall back to container.provide() if bind() doesn't accept callables
-            try:
-                container.provide(_factory)
-            except Exception:
-                # Last resort: register the concrete class directly
-                container.bind(client_cls, client_cls)
+        # DESIGN: `@Provider(singleton=True)` applied explicitly, and
+        # `container.provide()` called WITHOUT a fallback chain.
+        #
+        # `provide()` only accepts @Provider-decorated callables, and `bind()`
+        # rejects a function outright (it calls `issubclass()` on it). The
+        # previous three nested `except Exception` fallbacks could therefore
+        # never succeed — they only converted a precise error into a confusing
+        # one from the last branch, and would silently swallow a genuine
+        # registration failure if any branch ever did succeed by accident.
+        #
+        #   ✅ A registration failure surfaces immediately, naming the real cause.
+        #   ✅ One code path — what is tested is what runs.
+        #   ❌ No "best effort" partial registration; a bad client class aborts
+        #      the whole bind_clients() call (intended — a half-wired container
+        #      fails later, further from the cause).
+        container.provide(Provider(singleton=True)(_factory))
 
 
 # ── VarcoFastAPIModule ────────────────────────────────────────────────────────
@@ -232,17 +243,26 @@ class VarcoFastAPIModule:
         return ClientProfile.from_env()
 
     @Provider(singleton=True)
-    def profiling_settings(self) -> "ProfilingSettings":
+    def profiling_settings(self) -> ProfilingSettings:
         """
         Diagnostic profiler settings loaded from ``VARCO_PROFILER_*`` env vars.
+
+        ⚠️ The return annotation must NOT be quoted and ``ProfilingSettings``
+        must stay imported at module scope (see the import block at the top of
+        this file).  Under PEP 563 a quoted annotation ``-> "ProfilingSettings"``
+        is stored as the *string* ``"'ProfilingSettings'"``; when providify's
+        ``get_type_hints()`` path fails it falls back to ``eval()``, which then
+        yields the plain string ``'ProfilingSettings'`` and registers it as the
+        binding *interface*.  ``DIContainer._build_localns()`` subsequently
+        raises ``AttributeError: 'str' object has no attribute '__name__'``,
+        which ``_collect_kwargs_sync()`` swallows with ``hints = {}`` — after
+        which **every** provider in that container is invoked with zero
+        injected arguments (``TypeError: ... missing 1 required positional
+        argument``).  One quoted annotation silently disables DI container-wide.
 
         Returns:
             A ``ProfilingSettings`` instance configured from the environment.
         """
-        from varco_fastapi.middleware.profiling import (
-            ProfilingSettings,
-        )  # noqa: PLC0415
-
         return ProfilingSettings()
 
     @Provider(singleton=True)

@@ -2449,16 +2449,26 @@ class OrderService(
 
 ```python
 from varco_core.observability import OtelConfig, OtelConfiguration
-from providify import DIContainer
+from providify import DIContainer, Provider
 
-config = OtelConfig(
-    service_name="orders-svc",
-    otlp_endpoint="http://otel-collector:4317",
-    service_version="1.2.0",
-)
+
+# Module-level and @Provider-decorated: `install()` has no `config=` keyword,
+# `provide()` rejects undecorated callables, and under PEP 563 the return
+# annotation is resolved against this function's own module globals.
+@Provider(singleton=True)
+def otel_config() -> OtelConfig:
+    return OtelConfig(
+        service_name="orders-svc",
+        otlp_endpoint="http://otel-collector:4317",
+        service_version="1.2.0",
+    )
+
 
 container = DIContainer()
-container.install(OtelConfiguration, config=config)
+container.provide(otel_config)      # ⚠️ before install() — equal-priority
+container.install(OtelConfiguration)  #    bindings resolve first-registered
+
+tracer_provider = container.get(TracerProvider)
 ```
 
 ### Automatic parameter capture

@@ -7,6 +7,73 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **`varco-core` — event serializers are now genuinely injectable.** The
+  `EventSerializer` type alias was a quoted forward reference
+  (`EventSerializer: TypeAlias = "Serializer[Event]"`) with `Event` imported only
+  under `TYPE_CHECKING`, so at runtime the module-level name was bound to the
+  **string** `"Serializer[Event]"` rather than to a type. Every bus backend
+  annotated its constructor with
+  `Annotated[EventSerializer | None, InjectMeta(optional=True)]`, which therefore
+  evaluated `str | None` and raised `TypeError: unsupported operand type(s) for |`.
+
+  **Impact:** under providify < 1.1.0 the failure was swallowed into an empty hints
+  dict, silently dropping DI for the `serializer` parameter on `KafkaEventBus`,
+  `RedisEventBus`, and `NatsEventBus` — each fell back to `JsonEventSerializer()`,
+  so a user-supplied serializer was **never** injected on any bus. Under providify
+  >= 1.1.0, which correctly refuses to report a clean bill of health it cannot
+  prove, the same defect aborts `container.validate_bindings()` and any app that
+  scanned `varco_kafka`, `varco_redis`, or `varco_nats` failed at startup with
+  `AnnotationResolutionError`.
+
+  ⚠️ `varco_redis`'s test suite passed green throughout — no redis test exercised a
+  path that resolves binding annotations. New `validate_bindings()` regression tests
+  in all three backend packages close that coverage gap.
+
+- **`varco-fastapi` — `bind_clients()` now works.** It previously always raised and
+  registered nothing: the internal `_factory` closure was never
+  `@Provider`-decorated, so `container.bind()` raised (`issubclass()` on a
+  function), the `provide()` fallback raised `ProviderBindingNotDecoratedError`, and
+  the last-resort `bind(client_cls, client_cls)` raised
+  `ClassBindingNotDecoratedError`. `_factory` is now decorated with
+  `@Provider(singleton=True)` after its return annotation is patched, and the three
+  nested `except Exception` fallbacks — which could never succeed and only masked
+  the real cause — have been removed in favour of a single un-guarded
+  `container.provide()` call.
+
+### Changed
+
+- **`Serializer[Event]` is the event-serializer injection interface.** Bus
+  constructors now annotate `Annotated[Serializer[Event] | None,
+  InjectMeta(optional=True)]` instead of a type alias, and `JsonEventSerializer`
+  explicitly subclasses `Serializer[Event]` and carries
+  `@Singleton(priority=-sys.maxsize - 1)` — registered as the lowest-priority
+  default, so it works out of the box but loses to any application-supplied
+  serializer regardless of registration order:
+
+  ```python
+  @Provider(singleton=True)
+  def my_serializer() -> Serializer[Event]:
+      return MyCompactSerializer()
+
+  container.provide(my_serializer)   # wins over JsonEventSerializer
+  ```
+
+  **Breaking:** the `EventSerializer` alias is removed. Replace
+  `EventSerializer` with `Serializer[Event]` (from `varco_core.serialization`) in
+  any annotation. `JsonSerializer`, `NoOpSerializer`, and `TypedJsonSerializer` now
+  subclass `Serializer[Any]` explicitly for the same DI reason.
+
+- **Workspace pins the vendored `providify` 1.1.0 wheel** (was 0.1.6). The previous
+  pin did not satisfy the `providify>=1.1.0` constraint declared by every package,
+  meaning varco was developed and tested against a version no PyPI consumer would
+  resolve. Comments in `pyproject.toml` now note the sync requirement.
+
+---
+
 ## [0.1.0] — 2026-04-07
 
 First public alpha release of the varco framework. All eight packages are published
@@ -234,6 +301,39 @@ breaking changes between alpha versions while the API stabilises.
   `VARCO_JWT_PROFILE__SYSTEM__ISS` — it keeps working with no removal scheduled and
   no runtime `DeprecationWarning`.
 
+#### Fixed
+- Corrected every documented DI override example (`varco_core.observability.di`
+  docstrings, README) that showed `container.install(OtelConfiguration,
+  config=...)` or `container.provide(lambda: OtelConfig(...))` — neither call
+  shape has ever worked: `install()` takes no `config=` keyword and `provide()`
+  rejects undecorated callables (`ProviderBindingNotDecoratedError`). The
+  correct pattern is a module-level `@Provider`-decorated factory function
+  registered with `container.provide(fn)` **before** `install()`/`scan()`
+  (equal-priority bindings resolve first-registered, not last). See
+  `ARCHITECTURE.md`'s DI Wiring section for the full corrected pattern and the
+  quoted-return-annotation landmine below.
+
+### varco-kafka
+
+#### Fixed
+- 🐛 **`container.get(KafkaChannelManager)` / `KafkaChannelManagerSettings`
+  was hard-broken** (`LookupError: Cannot resolve 'values: typing.Any'`) —
+  `KafkaChannelManagerSettings` carried `@Singleton` directly on a pydantic
+  `BaseSettings` subclass, and providify cannot constructor-inject a
+  `**values: Any` signature. Replaced with a lowest-priority `@Provider`
+  factory (`kafka_channel_manager_settings` in `varco_kafka.channel`), the
+  same pattern already used for `varco_casbin` settings. Guarded by
+  `varco_kafka/tests/test_kafka_di.py`.
+
+### varco-nats
+
+#### Fixed
+- 🐛 **`container.get(NatsStreamManager)` / `NatsChannelManagerSettings` was
+  hard-broken** — same root cause and fix as the `varco-kafka` entry above
+  (`@Singleton` on a pydantic `BaseSettings` class replaced by a
+  lowest-priority `nats_channel_manager_settings` `@Provider` factory in
+  `varco_nats.channel`). Guarded by `varco_nats/tests/test_nats_di.py`.
+
 ### varco-fastapi
 
 #### Changed
@@ -260,6 +360,29 @@ breaking changes between alpha versions while the API stabilises.
   `configure_jwt_from_env()` once at startup so the process-global claim-transform
   and token-profile registries match what `VarcoFastAPIModule`'s DI providers hand
   out. Set `configure_jwt=False` to manage the registries yourself.
+
+#### Fixed
+- 🐛 **`container.get(TracerProvider)` raised `TypeError: tracer_provider()
+  missing 1 required positional argument: 'config'`** when `VarcoFastAPIModule`
+  and `varco_core.observability.di.OtelConfiguration` shared one container —
+  `Inject[OtelConfig]` was silently not injected into `OtelConfiguration`'s
+  provider method, even though the two modules looked unrelated. Root cause:
+  `VarcoFastAPIModule.profiling_settings` declared a *quoted* return
+  annotation (`-> "ProfilingSettings"`); under PEP 563 that annotation
+  resolves to the literal string `"'ProfilingSettings'"`, and providify's
+  `eval` fallback (`providify/binding.py`) registered the resulting **string**
+  as a binding interface. That one malformed binding then made
+  `DIContainer._build_localns()` raise, which `_collect_kwargs_sync()`
+  silently swallowed (`except Exception: hints = {}`) — disabling constructor
+  and provider injection for **every** binding in the container, not just the
+  broken one. Fixed by dropping the quotes (`from __future__ import
+  annotations` already made the annotation lazy) and keeping
+  `ProfilingSettings` imported at module scope. The underlying defect is in
+  `providify` (a sibling library) and is **not** fixed here — see
+  `ARCHITECTURE.md`'s DI Wiring section for the landmine and its one-line
+  diagnostic (`[b for b in container._bindings if isinstance(b.interface,
+  str)]`). Guarded by `varco_fastapi/tests/test_di_binding_health.py` and
+  `varco_core/tests/test_observability_di.py`.
 
 ---
 

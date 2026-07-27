@@ -115,7 +115,8 @@ from varco_core.event.base import (
     Subscription,
     _SubscriptionEntry,
 )
-from varco_core.event.serializer import EventSerializer, JsonEventSerializer
+from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_nats.config import NatsDeliverySemantics, NatsEventBusSettings
 
@@ -178,7 +179,9 @@ class NatsEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[EventSerializer | None, InjectMeta(optional=True)] = None,
+        serializer: Annotated[
+            Serializer[Event] | None, InjectMeta(optional=True)
+        ] = None,
     ) -> None:
         """
         Args:
@@ -206,7 +209,7 @@ class NatsEventBus(AbstractEventBus):
         # Use the provided serializer or fall back to JSON.  Stored as an
         # instance so stateful serializers (e.g. ones caching TypeAdapters)
         # work correctly.
-        self._serializer: EventSerializer = serializer or JsonEventSerializer()
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         # Local subscription list — same model as InMemoryEventBus / KafkaEventBus.
         # Handler dispatch happens in-process after a message arrives from NATS.

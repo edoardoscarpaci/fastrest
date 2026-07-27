@@ -11,20 +11,30 @@ Providify DI wiring for OpenTelemetry tracing and metrics.
 Usage (most common — OTLP export to a collector)::
 
     import os
+    from providify import DIContainer, Provider
     from varco_core.observability import OtelConfig, OtelConfiguration
 
-    container = DIContainer()
-    container.install(
-        OtelConfiguration,
-        config=OtelConfig(
+    # The override is a @Provider-decorated *module-level* function.
+    # ⚠️ Not a lambda: DIContainer.provide() rejects undecorated callables.
+    # ⚠️ Module level: under PEP 563 the return annotation is a lazy string
+    #    that providify resolves against the function's __globals__, so a type
+    #    imported inside a function body is invisible to it.
+    @Provider(singleton=True)
+    def otel_config() -> OtelConfig:
+        return OtelConfig(
             service_name="orders-svc",
             service_version="1.0.0",
             otlp_endpoint="http://otel-collector:4317",
             extra_resource_attrs={
                 "k8s.pod.name": os.environ.get("POD_NAME", "unknown"),
             },
-        ),
-    )
+        )
+
+    container = DIContainer()
+    container.provide(otel_config)      # ⚠️ BEFORE install() — see below
+    container.install(OtelConfiguration)
+
+    tracer_provider = container.get(TracerProvider)
 
 Usage (tests / local dev — no export, use InMemorySpanExporter)::
 
@@ -41,11 +51,27 @@ Usage (tests / local dev — no export, use InMemorySpanExporter)::
 
 Overriding the default config::
 
-    container.provide(lambda: OtelConfig(service_name="my-svc"))
+    @Provider(singleton=True)
+    def otel_config() -> OtelConfig:
+        return OtelConfig(service_name="my-svc")
+
+    container.provide(otel_config)
     container.install(OtelConfiguration)
 
     # OtelConfiguration reads OtelConfig from the container — the explicit
-    # provide() call above takes precedence over the default provider.
+    # provide() call above takes precedence over the module's own default.
+
+⚠️ Registration order matters.  Bindings of equal priority resolve to the
+   **first** one registered, so ``provide()`` must run *before*
+   ``install(OtelConfiguration)``.  If you must register afterwards, raise the
+   priority explicitly::
+
+       @Provider(singleton=True, priority=100)
+       def otel_config() -> OtelConfig: ...
+
+⚠️ ``DIContainer.install()`` takes the module class only — there is no
+   ``install(OtelConfiguration, config=...)`` keyword.  Configuration is
+   supplied by binding ``OtelConfig`` as shown above.
 
 DESIGN: OtelConfiguration is synchronous (uses container.install, not ainstall)
     OTel SDK setup — creating providers, attaching exporters — is entirely
@@ -143,14 +169,16 @@ class OtelConfiguration:
 
     Example::
 
-        container = DIContainer()
-        container.install(
-            OtelConfiguration,
-            config=OtelConfig(
+        @Provider(singleton=True)
+        def otel_config() -> OtelConfig:
+            return OtelConfig(
                 service_name="orders-svc",
                 otlp_endpoint="http://otel-collector:4317",
-            ),
-        )
+            )
+
+        container = DIContainer()
+        container.provide(otel_config)       # before install() — order matters
+        container.install(OtelConfiguration)
         tracer_provider = container.get(TracerProvider)
     """
 
@@ -162,12 +190,22 @@ class OtelConfiguration:
         Override before installing this configuration to supply a real
         service name, version, and collector endpoint::
 
-            container.provide(lambda: OtelConfig(
-                service_name="orders-svc",
-                service_version="1.0.0",
-                otlp_endpoint="http://otel-collector:4317",
-            ))
+            @Provider(singleton=True)
+            def otel_config() -> OtelConfig:
+                return OtelConfig(
+                    service_name="orders-svc",
+                    service_version="1.0.0",
+                    otlp_endpoint="http://otel-collector:4317",
+                )
+
+            container.provide(otel_config)
             container.install(OtelConfiguration)
+
+        The override must be a ``@Provider``-decorated module-level function
+        (``provide()`` rejects undecorated callables, and a lazy PEP-563 return
+        annotation only resolves against the function's own ``__globals__``),
+        and it must be registered *before* ``install()`` unless it declares a
+        higher ``priority``.
 
         Returns:
             A minimal ``OtelConfig`` suitable for local development — records
