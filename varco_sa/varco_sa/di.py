@@ -53,7 +53,7 @@ Async safety:   ✅ All providers are synchronous — SQLAlchemy has no async
 """
 
 from __future__ import annotations
-
+import sys
 from typing import TYPE_CHECKING, Any
 
 from providify import Configuration, Inject, Provider
@@ -95,7 +95,7 @@ class SAModule:
     Async safety:   ✅ All providers are synchronous.
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def uow_provider(
         self,
         repo_provider: Inject[RepositoryProvider],

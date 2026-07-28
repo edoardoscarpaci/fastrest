@@ -48,7 +48,7 @@ Async safety:   ✅  All public methods are ``async def``.
 """
 
 from __future__ import annotations
-
+import sys
 import logging
 from typing import Any
 
@@ -546,7 +546,7 @@ class MemcachedCacheConfiguration:
         await container.ainstall(MemcachedCacheConfiguration)
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def memcached_cache_settings(self) -> MemcachedCacheSettings:
         """
         Default ``MemcachedCacheSettings`` pointing at ``localhost:11211``.
@@ -557,7 +557,7 @@ class MemcachedCacheConfiguration:
         # Reads from VARCO_MEMCACHED_CACHE_* env vars if set.
         return MemcachedCacheSettings.from_env()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     async def memcached_cache(
         self,
         settings: Inject[MemcachedCacheSettings],

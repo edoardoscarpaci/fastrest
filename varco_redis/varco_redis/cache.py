@@ -41,6 +41,7 @@ Async safety:   ✅  All public methods are ``async def``.
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -476,7 +477,7 @@ class RedisCacheConfiguration:
         await container.ainstall(RedisCacheConfiguration)
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def redis_cache_settings(self) -> RedisCacheSettings:
         """
         Default ``RedisCacheSettings`` pointing at ``redis://localhost:6379/0``.
@@ -667,7 +668,7 @@ class RedisLayeredCacheConfiguration:
         await container.ainstall(RedisLayeredCacheConfiguration)
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def layered_cache_settings(self) -> LayeredCacheSettings:
         """
         Default ``LayeredCacheSettings`` with localhost Redis and unbounded L1.

@@ -107,6 +107,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -595,7 +596,7 @@ class RedisDLQConfiguration:
         entries = await dlq.pop_batch(limit=10)
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def redis_dlq_settings(self) -> RedisEventBusSettings:
         """
         Default ``RedisEventBusSettings`` for the DLQ.

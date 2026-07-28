@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Sequence
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -80,6 +80,12 @@ class CORSConfig:
     allow_credentials: bool = True
     max_age: int = 600
 
+    allow_origin_regex: str | None = None
+
+    allow_private_network: bool = False
+
+    expose_headers: Sequence[str] = ("X-Total-Count", "X-Page-Size", "Link")
+
     # ── Factory methods ────────────────────────────────────────────────────────
 
     @classmethod
@@ -126,11 +132,26 @@ class CORSConfig:
         except ValueError:
             max_age = 600
 
+        allow_origin_regex = os.environ.get("VARCO_CORS_ALLOW_ORIGIN_REGEX")
+
+        allow_private_network_str = os.environ.get(
+            "VARCO_CORS_ALLOW_PRIVATE_NETWORK", "false"
+        ).lower()
+        allow_private_network = allow_private_network_str not in ("false", "0", "no")
+
+        expose_headers = _split(
+            os.environ.get("VARCO_CORS_EXPOSE_HEADERS"),
+            ("X-Total-Count", "X-Page-Size", "Link"),
+        )
+
         return cls(
             allow_origins=allow_origins,
             allow_methods=allow_methods,
             allow_headers=allow_headers,
             allow_credentials=allow_credentials,
+            allow_origin_regex=allow_origin_regex,
+            allow_private_network=allow_private_network,
+            expose_headers=expose_headers,
             max_age=max_age,
         )
 
@@ -168,6 +189,11 @@ class CORSConfig:
             ),
             allow_credentials=bool(d.get("allow_credentials", True)),
             max_age=int(d.get("max_age", 600)),
+            expose_headers=tuple(
+                d.get("expose_headers", ("X-Total-Count", "X-Page-Size", "Link"))
+            ),
+            allow_origin_regex=d.get("allow_origin_regex"),
+            allow_private_network=bool(d.get("allow_private_network", False)),
         )
 
     @classmethod
@@ -208,6 +234,9 @@ def install_cors(app: FastAPI, config: CORSConfig | None = None) -> None:
         allow_methods=list(cfg.allow_methods),
         allow_headers=list(cfg.allow_headers),
         allow_credentials=cfg.allow_credentials,
+        expose_headers=cfg.expose_headers,
+        allow_private_network=cfg.allow_private_network,
+        allow_origin_regex=cfg.allow_origin_regex,
         max_age=cfg.max_age,
     )
 

@@ -212,7 +212,7 @@ class VarcoFastAPIModule:
     Async safety:   ✅ All providers are synchronous.
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def trust_store(self) -> TrustStore:
         """
         TLS trust store loaded from env vars (``VARCO_TRUST_STORE_DIR``, etc.).
@@ -222,7 +222,7 @@ class VarcoFastAPIModule:
         """
         return TrustStore.from_env()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def cors_config(self) -> CORSConfig:
         """
         CORS configuration from ``VARCO_CORS_ORIGINS`` env var.
@@ -232,7 +232,7 @@ class VarcoFastAPIModule:
         """
         return CORSConfig.from_env()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def client_profile(self) -> ClientProfile:
         """
         Default HTTP client profile from ``VARCO_CLIENT_TIMEOUT`` env vars.
@@ -242,7 +242,7 @@ class VarcoFastAPIModule:
         """
         return ClientProfile.from_env()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def profiling_settings(self) -> ProfilingSettings:
         """
         Diagnostic profiler settings loaded from ``VARCO_PROFILER_*`` env vars.
@@ -265,7 +265,7 @@ class VarcoFastAPIModule:
         """
         return ProfilingSettings()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def jwt_transform_settings(self) -> JwtTransformSettings:
         """
         Flat ``VARCO_JWT_TRANSFORM_*`` claim-transform settings, loaded from
@@ -281,7 +281,7 @@ class VarcoFastAPIModule:
         """
         return JwtTransformSettings.from_env()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def claim_transformer_registry(self) -> ClaimTransformerRegistry:
         """
         The fully parsed claim-transformer registry (global mapping + every
@@ -302,7 +302,7 @@ class VarcoFastAPIModule:
         """
         return JwtTransformConfig.from_env().to_registry()
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def task_registry(self) -> TaskRegistry:
         """
         Shared ``TaskRegistry`` singleton used by all ``VarcoCRUDRouter`` instances.
@@ -315,7 +315,7 @@ class VarcoFastAPIModule:
         """
         return TaskRegistry()
 
-    @Provider
+    @Provider(priority=-sys.maxsize - 1)
     def request_context(self) -> RequestContext:
         """
         Current request context — auth, request ID, raw token.
@@ -329,7 +329,7 @@ class VarcoFastAPIModule:
         """
         return get_request_context()
 
-    @Provider
+    @Provider(priority=-sys.maxsize - 1)
     def jwt_context(self) -> JwtContext:
         """
         Parsed JWT payload for the current request.

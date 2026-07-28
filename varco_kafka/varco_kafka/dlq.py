@@ -100,7 +100,7 @@ Async safety:   ✅ All methods are ``async def``.
 """
 
 from __future__ import annotations
-
+import sys
 import json
 import logging
 from datetime import datetime, timezone
@@ -700,7 +700,7 @@ class KafkaDLQConfiguration:
             await dlq.ack(entry.entry_id)
     """
 
-    @Provider(singleton=True)
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
     def kafka_dlq_settings(self) -> KafkaEventBusSettings:
         """
         Default ``KafkaEventBusSettings`` for the DLQ.
