@@ -24,11 +24,11 @@ Environment variables (prefix ``VARCO_CASBIN_``)
 from __future__ import annotations
 
 from importlib import resources
+from varco_core.config import VarcoSettings
 from typing import Final, Literal
 
 from pydantic_settings import SettingsConfigDict
 
-from varco_core.config import VarcoSettings
 
 # Bundled model presets shipped as package data (varco_casbin/models/*.conf).
 # Keyed by the VARCO_CASBIN_MODEL_PRESET value.
