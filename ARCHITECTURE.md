@@ -1,7 +1,7 @@
 # Architecture Reference — varco
 
 Complete technical map of all packages, modules, classes, and design patterns. Use this to navigate the codebase efficiently.
-
+ 
 ---
 
 ## Package Overview
