@@ -691,7 +691,13 @@ class EventConsumer:
     if TYPE_CHECKING:
         _bus: AbstractEventBus
 
-    def register_to(self, bus: AbstractEventBus) -> list[Subscription]:
+    def register_to(
+        self,
+        bus: AbstractEventBus,
+        *,
+        retry_policy: RetryPolicy | None = None,
+        dlq: AbstractDeadLetterQueue | None = None,
+    ) -> list[Subscription]:
         """
         Subscribe all ``@listen``-decorated methods of this instance to ``bus``.
 
@@ -704,7 +710,17 @@ class EventConsumer:
         requiring callers to retain the return value.
 
         Args:
-            bus: The ``AbstractEventBus`` to register handlers against.
+            bus:          The ``AbstractEventBus`` to register handlers against.
+            retry_policy: Applied ONLY to ``@listen`` entries that declared
+                          neither ``retry_policy=`` nor ``dlq=`` themselves
+                          (Plan 005 Phase 3, U-6). ``None`` (default) — no
+                          instance-level override; entries keep whatever
+                          ``@listen`` declared (today's behaviour, unchanged).
+                          Rationale: ``@listen`` binds at class-definition
+                          time, so an instance cannot otherwise supply a
+                          policy — ``register_to`` is already the imperative
+                          wiring seam (CLAUDE.md layer rule).
+            dlq:          Same fallback rule as ``retry_policy``, independently.
 
         Returns:
             List of ``Subscription`` handles, one per ``@listen`` entry found.
@@ -795,6 +811,21 @@ class EventConsumer:
                     else entry.channel  # plain string → use directly
                 )
 
+                # Apply register_to()'s instance-level retry_policy/dlq fallback
+                # (Plan 005 Phase 3, U-6) — ONLY to entries that declared
+                # neither themselves. An entry that declared its own
+                # retry_policy/dlq via @listen(...) is never overridden here.
+                effective_retry_policy = (
+                    entry.retry_policy
+                    if entry.retry_policy is not None or entry.dlq is not None
+                    else retry_policy
+                )
+                effective_dlq = (
+                    entry.dlq
+                    if entry.retry_policy is not None or entry.dlq is not None
+                    else dlq
+                )
+
                 # Build the wrapper stack at wiring time (not at @listen time)
                 # so the resolved channel string and bound self are available.
                 #
@@ -816,14 +847,14 @@ class EventConsumer:
                 inner_handler: Callable[[Event], Awaitable[None] | None] = (
                     _make_retry_wrapper(
                         method,
-                        entry.retry_policy,
-                        entry.dlq,
+                        effective_retry_policy,
+                        effective_dlq,
                         resolved_channel,
                         deduplicator=entry.deduplicator,
                     )
                     if (
-                        entry.retry_policy is not None
-                        or entry.dlq is not None
+                        effective_retry_policy is not None
+                        or effective_dlq is not None
                         or entry.deduplicator is not None
                     )
                     else method

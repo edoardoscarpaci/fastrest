@@ -284,3 +284,68 @@ class TestInMemoryDeadLetterQueueConcurrency:
 
         await asyncio.gather(*(push_one(i) for i in range(50)))
         assert await dlq.count() == 50
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 3, Step 31 — generalised DeadLetterEntry (source/source_ref/payload)
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Step 32 lands: DeadLetterSource StrEnum (CONSUMER/OUTBOX_RELAY/JOB),
+# and DeadLetterEntry gains `source` (defaults CONSUMER), `source_ref`, `payload`,
+# with `event` becoming `DomainEvent | None`.
+
+
+class TestDeadLetterEntryBackCompat:
+    def test_todays_exact_keyword_set_still_works(self) -> None:
+        # Every existing construction site must keep working unchanged.
+        entry = DeadLetterEntry(
+            event=SampleEvent(),
+            channel="orders",
+            handler_name="OrderConsumer.on_order",
+            error_type="ConnectionError",
+            error_message="DB unavailable",
+            attempts=3,
+        )
+        assert entry.event is not None
+        assert entry.channel == "orders"
+
+
+class TestDeadLetterEntrySourceGeneralisation:
+    def test_source_defaults_to_consumer(self) -> None:
+        from varco_core.event.dlq import DeadLetterSource
+
+        entry = DeadLetterEntry(
+            event=SampleEvent(),
+            channel="orders",
+            handler_name="OrderConsumer.on_order",
+            error_type="ConnectionError",
+            error_message="DB unavailable",
+            attempts=3,
+        )
+        assert entry.source == DeadLetterSource.CONSUMER
+
+    def test_relay_sourced_entry_with_event_none_and_raw_payload_round_trips(
+        self,
+    ) -> None:
+        from varco_core.event.dlq import DeadLetterSource
+
+        entry = DeadLetterEntry(
+            event=None,
+            channel="orders",
+            handler_name="OutboxRelay",
+            error_type="ValueError",
+            error_message="bad payload",
+            attempts=1,
+            source=DeadLetterSource.OUTBOX_RELAY,
+            source_ref="outbox-entry-123",
+            payload=b'{"broken": true}',
+        )
+        assert entry.event is None
+        assert entry.source == DeadLetterSource.OUTBOX_RELAY
+        assert entry.source_ref == "outbox-entry-123"
+        assert entry.payload == b'{"broken": true}'
+
+    def test_job_source_enum_member_exists(self) -> None:
+        from varco_core.event.dlq import DeadLetterSource
+
+        assert DeadLetterSource.JOB == "job"

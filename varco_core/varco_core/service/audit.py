@@ -67,14 +67,22 @@ from typing import Any, TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from varco_core.event.audit_event import AuditEvent
-from varco_core.event.base import Event
+from varco_core.event.base import AbstractEventBus, Event, Subscription
 from varco_core.event.consumer import EventConsumer, listen
+from varco_core.resilience import RetryPolicy
 from varco_core.service.mixin import ServiceMixin
 
 if TYPE_CHECKING:
     from varco_core.auth import AuthContext
     from varco_core.dto import ReadDTO
+    from varco_core.event.dlq import AbstractDeadLetterQueue
     from varco_core.model import DomainModel
+
+# Sentinel distinguishing "retry_policy/dlq kwarg omitted" (apply the
+# class-level safe-by-default policy) from "explicitly passed None" (a
+# deliberate opt-out restoring fire-and-forget) — same pattern as
+# varco_fastapi.auth.server_auth's _AUDIENCE_UNSET (Plan 005 Phase 2).
+_UNSET: Any = object()
 
 _logger = logging.getLogger(__name__)
 
@@ -398,32 +406,125 @@ class AuditConsumer(EventConsumer):
         ❌ Eventual consistency — audit record lands after the event is consumed,
            not atomically with the entity write.
 
+    DESIGN: safe-by-default retry + DLQ (Plan 005 Phase 3, U-6 §2)
+        "Safe-by-default is the right polarity for an audit trail" — losing an
+        audit record silently is worse than retrying too eagerly. ``register_to()``
+        applies ``_default_retry_policy = RetryPolicy.durable_delivery()`` and
+        the constructor's ``dlq`` unless the caller explicitly overrides either.
+        ✅ A transient DB error no longer silently drops an audit record.
+        ✅ Fire-and-forget is still available, explicitly: pass
+           ``retry_policy=None`` to ``register_to()``.
+        ❌ Changes behaviour on upgrade for callers who never configured
+           retry — the failure path only (a succeeding handler is untouched).
+
     Thread safety:  ❌ Not thread-safe.  Use from a single event loop.
     Async safety:   ✅ Handler is ``async def``.
 
     Args:
         audit_repo: ``AuditRepository`` implementation for persistence.
+        dlq:        Optional ``AbstractDeadLetterQueue`` — entries that
+                    exhaust ``_default_retry_policy`` (or an override passed
+                    to ``register_to()``) are pushed here with
+                    ``source=DeadLetterSource.CONSUMER``. ``None`` (default)
+                    — exhausted retries raise ``RetryExhaustedError`` per the
+                    normal ``@listen`` DLQ-less contract.
 
     Edge cases:
         - ``register_to`` must be called before any events are published —
           the subscription is created at wiring time, not at handler call time.
-        - If ``audit_repo.save`` raises, the exception propagates to the bus
-          error policy.  Pair with ``retry_policy`` on ``@listen`` for resilience.
+        - Pass ``retry_policy=None`` to ``register_to()`` **explicitly** to
+          restore fire-and-forget (single attempt, no DLQ) for this one
+          registration — distinct from omitting the kwarg, which applies the
+          safe-by-default policy.
 
     Example::
 
-        consumer = AuditConsumer(audit_repo=SAuditRepository(session))
-        consumer.register_to(event_bus)
+        consumer = AuditConsumer(audit_repo=SAuditRepository(session), dlq=my_dlq)
+        consumer.register_to(event_bus)   # retries + DLQs by default
+
+        # Explicit fire-and-forget opt-out:
+        consumer.register_to(event_bus, retry_policy=None)
     """
 
-    def __init__(self, *, audit_repo: AuditRepository) -> None:
+    # Safe-by-default retry policy — applied by register_to() unless the
+    # caller passes retry_policy=None explicitly (see _UNSET sentinel above).
+    _default_retry_policy: RetryPolicy = RetryPolicy.durable_delivery()
+
+    def __init__(
+        self, *, audit_repo: AuditRepository, dlq: AbstractDeadLetterQueue | None = None
+    ) -> None:
         """
         Args:
             audit_repo: Repository implementation used to persist audit entries.
+            dlq:        Optional DLQ applied by ``register_to()`` unless the
+                        caller overrides it there.
         """
         # Stored as an instance attribute so the @listen handler can access it
         # via self — the handler is a bound method resolved at register_to time.
         self._audit_repo = audit_repo
+        self._dlq = dlq
+
+    def register_to(
+        self,
+        bus: AbstractEventBus,
+        *,
+        retry_policy: RetryPolicy | None = _UNSET,  # type: ignore[assignment]
+        dlq: AbstractDeadLetterQueue | None = _UNSET,  # type: ignore[assignment]
+    ) -> list[Subscription]:
+        """
+        Wire this consumer to ``bus``, applying the safe-by-default
+        ``_default_retry_policy`` / constructor ``dlq`` unless overridden.
+
+        Args:
+            bus:          The ``AbstractEventBus`` to register against.
+            retry_policy: ``_UNSET`` (default, i.e. omitted) applies
+                          ``_default_retry_policy`` (``RetryPolicy.
+                          durable_delivery()``). Pass ``None`` **explicitly**
+                          to opt out (fire-and-forget, today's pre-Phase-3
+                          behaviour). Pass any other ``RetryPolicy`` to use it
+                          instead of the default.
+            dlq:          Same ``_UNSET``-vs-``None`` distinction, independently
+                          — ``_UNSET`` uses ``self._dlq`` (from the
+                          constructor); explicit ``None`` disables the DLQ for
+                          this registration only.
+        """
+        effective_dlq = self._dlq if dlq is _UNSET else dlq
+
+        if retry_policy is None and effective_dlq is None:
+            # Explicit, dlq-less opt-out — true fire-and-forget: the handler
+            # is attempted once and any failure is logged, never propagated.
+            # This is NOT the same as the base EventConsumer's "no wrapper"
+            # path (which re-raises through bus.publish() per the bus's
+            # error_policy) — an audit sink flaking must never break the
+            # caller's write path, which is the whole point of "restores
+            # fire-and-forget" rather than "restores raw/unwrapped".
+            return [self._subscribe_fire_and_forget(bus)]
+
+        effective_retry_policy = (
+            self._default_retry_policy if retry_policy is _UNSET else retry_policy
+        )
+        return super().register_to(
+            bus, retry_policy=effective_retry_policy, dlq=effective_dlq
+        )
+
+    def _subscribe_fire_and_forget(self, bus: AbstractEventBus) -> Subscription:
+        """Subscribe ``on_audit_event`` wrapped to swallow-and-log any
+        failure — used only by the explicit ``retry_policy=None`` opt-out
+        path in ``register_to()``."""
+
+        async def _safe_on_audit_event(event: Event) -> None:
+            try:
+                await self.on_audit_event(event)
+            except Exception as exc:  # noqa: BLE001
+                _logger.warning(
+                    "AuditConsumer: fire-and-forget handler failed for "
+                    "event_id=%s — swallowed (retry_policy=None opt-out): %s",
+                    getattr(event, "event_id", None),
+                    exc,
+                    exc_info=True,
+                )
+
+        return bus.subscribe(AuditEvent, _safe_on_audit_event, channel=_AUDIT_CHANNEL)
 
     @listen(AuditEvent, channel=_AUDIT_CHANNEL)
     async def on_audit_event(self, event: Event) -> None:

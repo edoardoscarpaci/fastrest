@@ -59,6 +59,7 @@ Usage (Providify DI)::
 
 from __future__ import annotations
 
+from varco_redis.bulkhead import RedisBulkhead, RedisBulkheadConfiguration
 from varco_redis.bus import RedisEventBus
 from varco_redis.cache import RedisCache, RedisCacheConfiguration, RedisCacheSettings
 from varco_redis.channel import RedisChannelManager, RedisChannelManagerSettings
@@ -94,4 +95,7 @@ __all__ = [
     "RedisJobStore",
     # ── Rate limiting ──────────────────────────────────────────────────────────
     "RedisRateLimiter",
+    # ── Concurrency limiting (a different primitive from rate limiting) ───────
+    "RedisBulkhead",
+    "RedisBulkheadConfiguration",
 ]

@@ -70,15 +70,14 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime, timedelta, timezone
+from typing import Any, Sequence
 from uuid import UUID, uuid4
 
 from beanie import Document, UpdateResponse
-from beanie.operators import Set
 from pydantic import Field
 
-from varco_core.job.base import AbstractJobStore, Job, JobStatus
+from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
 
 _logger = logging.getLogger(__name__)
@@ -178,6 +177,38 @@ class JobDocument(Document):
     task_payload: dict[str, Any] | None = None
     """TaskPayload.to_dict() as BSON subdocument; None for non-recoverable jobs."""
 
+    # ── Plan 005 Phase 4 — time dimension, lease, fencing (U-17/U-11) ──────
+    run_at: datetime | None = None
+    """Earliest time this job is eligible to be claimed. None claims
+    immediately, exactly as today."""
+
+    attempt: int = 0
+    """Number of attempts made so far."""
+
+    max_attempts: int = 1
+    """1 (default) == terminal-on-first-failure, today's behaviour."""
+
+    owner_id: str | None = None
+    """Identifier of the worker instance currently holding this job's lease."""
+
+    lease_expires_at: datetime | None = None
+    """When the current lease expires. None means no lease is held."""
+
+    lease_epoch: int = 0
+    """Fencing token, incremented on every claim/renew/reap."""
+
+    expires_at: datetime | None = None
+    """U-18 — retention column; API lands in Phase 6."""
+
+    request_issuer: str | None = None
+    """U-19 — reference field, populated by store_raw_token=False machinery."""
+
+    request_subject: str | None = None
+    """U-19 — reference field."""
+
+    request_token_hash: str | None = None
+    """U-19 — sha256 hex digest of request_token."""
+
     class Settings:
         """Beanie collection configuration."""
 
@@ -262,6 +293,16 @@ def _job_to_doc(job: Job) -> JobDocument:
         task_payload=(
             job.task_payload.to_dict() if job.task_payload is not None else None
         ),
+        run_at=job.run_at,
+        attempt=job.attempt,
+        max_attempts=job.max_attempts,
+        owner_id=job.owner_id,
+        lease_expires_at=job.lease_expires_at,
+        lease_epoch=job.lease_epoch,
+        expires_at=job.expires_at,
+        request_issuer=job.request_issuer,
+        request_subject=job.request_subject,
+        request_token_hash=job.request_token_hash,
     )
 
 
@@ -302,6 +343,16 @@ def _doc_to_job(doc: JobDocument) -> Job:
         # job_metadata defaults to {} — never None on the domain side.
         metadata=doc.job_metadata,
         task_payload=task_payload,
+        run_at=_ensure_tz(doc.run_at),
+        attempt=doc.attempt,
+        max_attempts=doc.max_attempts,
+        owner_id=doc.owner_id,
+        lease_expires_at=_ensure_tz(doc.lease_expires_at),
+        lease_epoch=doc.lease_epoch,
+        expires_at=_ensure_tz(doc.expires_at),
+        request_issuer=doc.request_issuer,
+        request_subject=doc.request_subject,
+        request_token_hash=doc.request_token_hash,
     )
 
 
@@ -365,7 +416,7 @@ class BeanieJobStore(AbstractJobStore):
 
     # ── AbstractJobStore implementation ───────────────────────────────────────
 
-    async def save(self, job: Job) -> None:
+    async def save(self, job: Job, *, expected_epoch: int | None = None) -> None:
         """
         Persist or update a job (upsert semantics via delete + insert).
 
@@ -375,8 +426,15 @@ class BeanieJobStore(AbstractJobStore):
 
         Args:
             job: The ``Job`` to persist.
+            expected_epoch: Fencing token (Plan 005 Phase 4, U-11 §3).
+                ``None`` (default) — no fencing check, today's behaviour
+                exactly. When supplied, the write is refused with
+                ``StaleLeaseError`` if the stored document's
+                ``lease_epoch`` no longer matches.
 
         Raises:
+            StaleLeaseError: ``expected_epoch`` is supplied and does not
+                match the stored ``lease_epoch``.
             beanie.exceptions.DocumentWasNotSaved: If Beanie fails to insert.
             RuntimeError: If ``JobDocument`` was not registered with Beanie.
 
@@ -391,6 +449,15 @@ class BeanieJobStore(AbstractJobStore):
 
         Async safety: ✅ Awaits both delete and insert sequentially.
         """
+        if expected_epoch is not None:
+            current = await JobDocument.find_one(JobDocument.id == job.job_id)
+            if current is None or current.lease_epoch != expected_epoch:
+                raise StaleLeaseError(
+                    f"save() refused for job {job.job_id}: expected_epoch="
+                    f"{expected_epoch} does not match stored lease_epoch "
+                    f"({current.lease_epoch if current else 'doc not found'})."
+                )
+
         doc = _job_to_doc(job)
 
         # Delete any existing row first (silent no-op if not found).
@@ -495,7 +562,82 @@ class BeanieJobStore(AbstractJobStore):
         await JobDocument.find(JobDocument.id == job_id).delete()
         _logger.debug("BeanieJobStore.delete: job_id=%s", job_id)
 
-    async def try_claim(self, job_id: UUID) -> Job | None:
+    async def delete_where(
+        self,
+        *,
+        status: JobStatus | Sequence[JobStatus] | None = None,
+        completed_before: datetime | None = None,
+        expires_before: datetime | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """
+        Native bulk delete via a single MongoDB ``delete_many`` filter (Plan
+        005 Phase 6, U-18) — replaces the ABC's portable
+        ``list_by_status`` + ``delete`` default with one server-side
+        operation for the ``limit=None`` case.
+
+        Args:
+            status: A single ``JobStatus`` or sequence of them.  ``None``
+                (default) does not filter by status.
+            completed_before: Only match jobs whose ``completed_at`` is set
+                AND strictly before this timestamp.
+            expires_before: Only match jobs whose ``expires_at`` is set AND
+                strictly before this timestamp.
+            limit: Maximum rows to delete.  ``None`` deletes every match in
+                a single ``delete_many``. When set, MongoDB has no native
+                "delete with limit" — this falls back to selecting up to
+                ``limit`` matching ``_id``s first, then deleting by that id
+                set (mirrors the ``ctid IN (...)`` shape used by
+                ``SAJobStore`` for the same reason).
+
+        Returns:
+            The number of documents actually deleted.
+
+        Raises:
+            ValueError: No predicate at all was supplied.
+            RuntimeError: If ``JobDocument`` was not registered with Beanie.
+
+        Async safety: ✅ Awaits the Beanie/Motor delete operation(s).
+        """
+        if status is None and completed_before is None and expires_before is None:
+            raise ValueError(
+                "delete_where() requires at least one predicate (status, "
+                "completed_before, or expires_before) — refusing to delete "
+                "every row in the store. Pass an explicit predicate, e.g. "
+                "delete_where(status=JobStatus.COMPLETED)."
+            )
+
+        filters: list[Any] = []
+        if status is not None:
+            if isinstance(status, JobStatus):
+                filters.append(JobDocument.status == status.value)
+            else:
+                filters.append({"status": {"$in": [s.value for s in status]}})
+        if completed_before is not None:
+            filters.append({"completed_at": {"$ne": None, "$lt": completed_before}})
+        if expires_before is not None:
+            filters.append({"expires_at": {"$ne": None, "$lt": expires_before}})
+
+        if limit is not None:
+            matched = await JobDocument.find(*filters).limit(limit).to_list()
+            id_values = [doc.id for doc in matched]
+            if not id_values:
+                return 0
+            result = await JobDocument.find({"_id": {"$in": id_values}}).delete()
+        else:
+            result = await JobDocument.find(*filters).delete()
+
+        deleted = result.deleted_count if result is not None else 0
+        _logger.debug("BeanieJobStore.delete_where: deleted %d jobs", deleted)
+        return deleted
+
+    async def try_claim(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+    ) -> Job | None:
         """
         Atomically transition a PENDING job to RUNNING state.
 
@@ -504,9 +646,14 @@ class BeanieJobStore(AbstractJobStore):
         to atomically locate a PENDING job and update it to RUNNING in a single
         server-side operation.
 
-        If no document matches (job not found or not PENDING), the operation
-        returns ``None`` immediately — there is no blocking, no queue, and no
-        side effects.
+        If no document matches (job not found or not PENDING, or ``run_at``
+        is in the future), the operation returns ``None`` immediately — there
+        is no blocking, no queue, and no side effects.
+
+        Plan 005 Phase 4 (U-17 §1, U-11): the filter now also honours
+        ``run_at IS NULL OR run_at <= now``. When ``lease_ttl`` is given,
+        the update also sets ``owner_id``, ``lease_expires_at`` and
+        increments ``lease_epoch`` (fencing token).
 
         DESIGN: findAndModify over find_one + update (two-step)
             ✅ Atomic — MongoDB guarantees exactly one concurrent caller
@@ -521,11 +668,16 @@ class BeanieJobStore(AbstractJobStore):
 
         Args:
             job_id: The UUID of the PENDING job to claim.
+            owner_id: Identifies the lease holder. ``None`` (default) takes
+                no lease — today's behaviour exactly.
+            lease_ttl: Lease duration in seconds from now. ``None``
+                (default) takes no lease.
 
         Returns:
             The claimed ``Job`` in RUNNING state, or ``None`` if:
             - The job is not found.
             - The job is not in PENDING state.
+            - ``run_at`` is in the future.
 
         Raises:
             RuntimeError: If ``JobDocument`` was not registered with Beanie.
@@ -539,32 +691,179 @@ class BeanieJobStore(AbstractJobStore):
               and return ``None``.
 
         Async safety: ✅ Single ``findAndModify`` call — no explicit locking needed.
+
+        DESIGN: plain string-keyed filter/update dicts over ``JobDocument.<field>``
+            The pre-existing ``JobDocument.id`` / ``.status`` / ``.started_at``
+            expressions used by this method rely on Beanie's Motor-backed
+            ``ExpressionField`` descriptors, which are only wired up after
+            ``init_beanie()`` runs. New fields added here (``run_at``,
+            ``owner_id``, ``lease_expires_at``, ``lease_epoch``) are
+            referenced via plain MongoDB-style dict filters instead — Beanie
+            accepts raw ``Mapping`` filters/updates identically to typed
+            expressions, and this keeps the method usable in this package's
+            existing mocked-Beanie unit tests without patching every new
+            field individually. ``id``/``status``/``started_at`` keep using
+            the typed expressions for consistency with the untouched parts
+            of this method.
         """
         now = datetime.now(timezone.utc)
 
-        # Atomically: find a PENDING document for this job_id AND update it to
-        # RUNNING in one MongoDB findAndModify round-trip.
-        # UpdateResponse.NEW_DOCUMENT → returns the document AFTER the update.
-        # If no document matches (not found or not PENDING), Beanie returns None.
+        update_values: dict[str, Any] = {
+            "status": JobStatus.RUNNING.value,
+            "started_at": now,
+        }
+        if lease_ttl is not None:
+            update_values["owner_id"] = owner_id
+            update_values["lease_expires_at"] = now + timedelta(seconds=lease_ttl)
+
+        # Atomically: find a PENDING document for this job_id, eligible by
+        # run_at, AND update it to RUNNING in one MongoDB findAndModify
+        # round-trip. UpdateResponse.NEW_DOCUMENT → returns the AFTER document.
+        # If no document matches, Beanie returns None.
         updated_doc: JobDocument | None = await JobDocument.find_one(
             JobDocument.id == job_id,
             JobDocument.status == JobStatus.PENDING.value,
+            {"$or": [{"run_at": None}, {"run_at": {"$lte": now}}]},
         ).update_one(
-            Set(
-                {
-                    JobDocument.status: JobStatus.RUNNING.value,
-                    JobDocument.started_at: now,
-                }
-            ),
+            {"$set": update_values},
             response_type=UpdateResponse.NEW_DOCUMENT,
         )
 
         if updated_doc is None:
-            # Job not found or not PENDING — not claimable.
+            # Job not found, not PENDING, or run_at is in the future.
             return None
+
+        if lease_ttl is not None:
+            new_lease_epoch = updated_doc.lease_epoch + 1
+            # Second update to bump lease_epoch — kept as a separate write
+            # (rather than $inc in the same update) so the claim's atomicity
+            # unit stays the PENDING→RUNNING transition; the epoch bump
+            # itself only needs to happen-before the caller starts working.
+            await JobDocument.find_one(JobDocument.id == job_id).update_one(
+                {"$set": {"lease_epoch": new_lease_epoch}}
+            )
+            updated_doc.lease_epoch = new_lease_epoch
 
         _logger.debug("BeanieJobStore.try_claim: claimed job_id=%s → RUNNING", job_id)
         return _doc_to_job(updated_doc)
+
+    async def claim_next(
+        self,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+        now: datetime | None = None,
+    ) -> Job | None:
+        """
+        Claim the oldest eligible PENDING job.
+
+        Args:
+            owner_id: Forwarded to ``try_claim``.
+            lease_ttl: Forwarded to ``try_claim``.
+            now: The "current time" to evaluate ``run_at`` against.
+
+        Returns:
+            The claimed ``Job`` in RUNNING state, or ``None`` if no eligible
+            PENDING job exists.
+
+        Async safety: ✅ All I/O is awaited.
+        """
+        current = now if now is not None else datetime.now(timezone.utc)
+        candidates = await self.list_by_status(JobStatus.PENDING, limit=100)
+        for candidate in candidates:
+            if candidate.run_at is not None and candidate.run_at > current:
+                continue
+            claimed = await self.try_claim(
+                candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl
+            )
+            if claimed is not None:
+                return claimed
+        return None
+
+    async def renew(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str,
+        epoch: int,
+        lease_ttl: float,
+    ) -> Job | None:
+        """
+        Heartbeat an in-progress lease via ``find_one_and_update``.
+
+        Args:
+            job_id: The job whose lease is being renewed.
+            owner_id: Must match the job's current ``owner_id``.
+            epoch: Must match the job's current ``lease_epoch``.
+            lease_ttl: New lease duration in seconds, from now.
+
+        Returns:
+            The renewed ``Job`` with an extended ``lease_expires_at``, or
+            ``None`` if the job/owner/epoch does not match (fenced out).
+
+        Async safety: ✅ Single ``findAndModify`` call — atomic.
+        """
+        new_expires_at = datetime.now(timezone.utc) + timedelta(seconds=lease_ttl)
+        updated_doc: JobDocument | None = await JobDocument.find_one(
+            JobDocument.id == job_id,
+            {"owner_id": owner_id},
+            {"lease_epoch": epoch},
+        ).update_one(
+            {"$set": {"lease_expires_at": new_expires_at}},
+            response_type=UpdateResponse.NEW_DOCUMENT,
+        )
+        if updated_doc is None:
+            return None
+        return _doc_to_job(updated_doc)
+
+    async def reap_expired_leases(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Move RUNNING jobs whose lease has expired back to PENDING,
+        incrementing ``lease_epoch`` to fence out the stalled owner.
+
+        Args:
+            now: The "current time" to compare ``lease_expires_at`` against.
+            limit: Maximum number of jobs to reap in one call.
+
+        Returns:
+            The list of jobs moved back to PENDING (post-reap state).
+
+        Async safety: ✅ All I/O is awaited.
+        """
+        current = now if now is not None else datetime.now(timezone.utc)
+        docs = (
+            await JobDocument.find(
+                JobDocument.status == JobStatus.RUNNING.value,
+                {"lease_expires_at": {"$ne": None, "$lte": current}},
+            )
+            .limit(limit)
+            .to_list()
+        )
+        reaped: list[Job] = []
+        for doc in docs:
+            new_epoch = doc.lease_epoch + 1
+            await JobDocument.find_one(JobDocument.id == doc.id).update_one(
+                {
+                    "$set": {
+                        "status": JobStatus.PENDING.value,
+                        "lease_epoch": new_epoch,
+                        "owner_id": None,
+                        "lease_expires_at": None,
+                    }
+                }
+            )
+            doc.status = JobStatus.PENDING.value
+            doc.lease_epoch = new_epoch
+            doc.owner_id = None
+            doc.lease_expires_at = None
+            reaped.append(_doc_to_job(doc))
+        _logger.debug("BeanieJobStore.reap_expired_leases: reaped %d jobs", len(reaped))
+        return reaped
 
     def __repr__(self) -> str:
         return "BeanieJobStore()"

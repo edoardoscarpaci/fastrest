@@ -82,7 +82,16 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Sequence
 from uuid import UUID
 
-from sqlalchemy import DateTime, LargeBinary, String, delete as sa_delete, select
+from sqlalchemy import (
+    DateTime,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    delete as sa_delete,
+    select,
+    update as sa_update,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -150,6 +159,16 @@ class OutboxEntryModel(_OutboxBase):
         nullable=False,
     )
 
+    # ── Plan 005 Phase 3 (U-6) — relay retry/dead-letter accounting ────────
+    # All nullable/defaulted so an existing table (and an existing row)
+    # works unchanged: attempts=0, next_attempt_at=None means "relay this
+    # entry on the very next tick", exactly today's behaviour.
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
 
 # Expose the metadata so users can wire it into Alembic target_metadata.
 outbox_metadata = _OutboxBase.metadata
@@ -179,12 +198,19 @@ def _model_to_entry(row: OutboxEntryModel) -> OutboxEntry:
         # Assume UTC if no timezone info — matches how OutboxEntry stores it.
         created_at = created_at.replace(tzinfo=timezone.utc)
 
+    next_attempt_at = row.next_attempt_at
+    if next_attempt_at is not None and next_attempt_at.tzinfo is None:
+        next_attempt_at = next_attempt_at.replace(tzinfo=timezone.utc)
+
     return OutboxEntry(
         entry_id=row.entry_id,
         event_type=row.event_type,
         channel=row.channel,
         payload=row.payload,
         created_at=created_at,
+        attempts=row.attempts,
+        last_error=row.last_error,
+        next_attempt_at=next_attempt_at,
     )
 
 
@@ -278,6 +304,9 @@ class SAOutboxRepository(OutboxRepository):
             channel=entry.channel,
             payload=entry.payload,
             created_at=entry.created_at,
+            attempts=entry.attempts,
+            last_error=entry.last_error,
+            next_attempt_at=entry.next_attempt_at,
         )
         # add() is synchronous — session tracks the new object in its identity map.
         # The INSERT is deferred to the next flush (or commit).
@@ -350,6 +379,46 @@ class SAOutboxRepository(OutboxRepository):
             entry_id,
         )
 
+    async def mark_failed(
+        self,
+        entry_id: UUID,
+        *,
+        attempts: int,
+        next_attempt_at: datetime | None,
+        error: str,
+    ) -> None:
+        """
+        Native override (Plan 005 Phase 3, U-6) — persists a failed publish
+        attempt via a single ``UPDATE``. Does NOT commit — participates in
+        the caller's transaction, same rule as ``save()``/``delete()`` on
+        this class.
+
+        Args:
+            entry_id: The outbox entry that failed to publish.
+            attempts: New total attempt count.
+            next_attempt_at: Earliest time to retry, or ``None``.
+            error: ``str(exc)`` from the failed publish.
+
+        Edge cases:
+            - Updating an unknown ``entry_id`` affects 0 rows — silent no-op,
+              matching ``delete()``'s behaviour on this class.
+
+        Async safety: ✅ Awaits ``session.execute()``.
+        """
+        stmt = (
+            sa_update(OutboxEntryModel)
+            .where(OutboxEntryModel.entry_id == entry_id)
+            .values(
+                attempts=attempts, next_attempt_at=next_attempt_at, last_error=error
+            )
+        )
+        await self._session.execute(stmt)
+        _logger.debug(
+            "SAOutboxRepository.mark_failed: entry_id=%s attempts=%d (uncommitted)",
+            entry_id,
+            attempts,
+        )
+
     async def save_many(self, entries: Sequence[OutboxEntry]) -> None:
         """
         Bulk-stage multiple outbox entries into the session in one go.
@@ -384,6 +453,9 @@ class SAOutboxRepository(OutboxRepository):
                 channel=entry.channel,
                 payload=entry.payload,
                 created_at=entry.created_at,
+                attempts=entry.attempts,
+                last_error=entry.last_error,
+                next_attempt_at=entry.next_attempt_at,
             )
             for entry in entries
         ]
@@ -497,6 +569,9 @@ class SARelayOutboxRepository(OutboxRepository):
                     channel=entry.channel,
                     payload=entry.payload,
                     created_at=entry.created_at,
+                    attempts=entry.attempts,
+                    last_error=entry.last_error,
+                    next_attempt_at=entry.next_attempt_at,
                 )
             )
             await session.commit()
@@ -574,6 +649,47 @@ class SARelayOutboxRepository(OutboxRepository):
             entry_id,
         )
 
+    async def mark_failed(
+        self,
+        entry_id: UUID,
+        *,
+        attempts: int,
+        next_attempt_at: datetime | None,
+        error: str,
+    ) -> None:
+        """
+        Native override (Plan 005 Phase 3, U-6) — persists a failed publish
+        attempt via a single committed ``UPDATE``. Auto-commits, same rule
+        as ``delete()`` on this class — ``OutboxRelay`` has no session
+        context of its own to commit later.
+
+        Args:
+            entry_id: The outbox entry that failed to publish.
+            attempts: New total attempt count.
+            next_attempt_at: Earliest time to retry, or ``None``.
+            error: ``str(exc)`` from the failed publish.
+
+        Edge cases:
+            - Updating an unknown ``entry_id`` affects 0 rows — silent no-op.
+
+        Async safety: ✅ Each call creates, commits, and closes its own session.
+        """
+        async with self._session_factory() as session:
+            stmt = (
+                sa_update(OutboxEntryModel)
+                .where(OutboxEntryModel.entry_id == entry_id)
+                .values(
+                    attempts=attempts, next_attempt_at=next_attempt_at, last_error=error
+                )
+            )
+            await session.execute(stmt)
+            await session.commit()
+        _logger.debug(
+            "SARelayOutboxRepository.mark_failed: committed entry_id=%s attempts=%d",
+            entry_id,
+            attempts,
+        )
+
     async def save_many(self, entries: Sequence[OutboxEntry]) -> None:
         """
         Bulk INSERT multiple outbox entries in a single committed transaction.
@@ -607,6 +723,9 @@ class SARelayOutboxRepository(OutboxRepository):
                     channel=entry.channel,
                     payload=entry.payload,
                     created_at=entry.created_at,
+                    attempts=entry.attempts,
+                    last_error=entry.last_error,
+                    next_attempt_at=entry.next_attempt_at,
                 )
                 for entry in entries
             ]

@@ -207,6 +207,71 @@ async with (
 
 ---
 
+## Distributed rate limiting
+
+`RedisRateLimiter` (`varco_redis.rate_limit`) implements `varco_core.resilience.RateLimiter`
+as a distributed sliding window over a Redis sorted set with an atomic Lua script — use it
+instead of `InMemoryRateLimiter` whenever more than one process/pod enforces the same limit
+(an in-memory limiter's counter is per-process, so N pods each allow the configured rate,
+not the total).
+
+```python
+from varco_redis.rate_limit import RedisRateLimiter
+from varco_core.resilience import RateLimitConfig
+
+limiter = RedisRateLimiter(redis_client, RateLimitConfig(rate=100, period=1.0))
+
+@rate_limit(limiter)
+async def call_external() -> None: ...
+```
+
+Exported from `varco_redis.__init__`.
+
+---
+
+## Distributed concurrency limiting
+
+`RedisBulkhead` (`varco_redis.bulkhead`, Plan 005 Phase 8 / U-7's second leg) is the
+distributed sibling of `varco_core.resilience.Bulkhead` — a **fleet-wide** semaphore instead
+of a per-process one. Rate limiting and concurrency limiting are different primitives: a
+service can be well within its `RedisRateLimiter` budget and still overwhelm a downstream
+dependency with concurrent in-flight calls (e.g. a burst of long-running requests within the
+same second). Same public surface as `Bulkhead` (`call()`/`protect()`/`available_slots()`),
+backed by a Redis sorted set of holders scored by acquisition time and an atomic Lua
+acquire/release mirroring `varco_redis.lock`'s token-guarded pattern. A holder that crashes
+without releasing has its slot reclaimed once `slot_ttl` elapses — no heartbeat process or
+cleanup job required.
+
+```python
+from varco_redis.bulkhead import RedisBulkhead
+from varco_core.resilience.bulkhead import BulkheadConfig
+
+db_bulkhead = RedisBulkhead(BulkheadConfig(max_concurrent=10, max_wait=0.5))
+await db_bulkhead.connect()
+
+result = await db_bulkhead.call(fetch_user, user_id)
+
+@db_bulkhead.protect
+async def fetch_order(order_id: str) -> Order: ...
+```
+
+DI: `RedisBulkheadConfiguration` is an **opt-in** `@Configuration` (not auto-scanned by
+`container.scan("varco_redis")` — a bulkhead's `max_concurrent` is app-specific tuning, not
+a package-wide default):
+
+```python
+from providify import DIContainer
+from varco_redis.bulkhead import RedisBulkheadConfiguration
+
+container = DIContainer()
+await container.ainstall(RedisBulkheadConfiguration)
+db_bulkhead = await container.aget(RedisBulkhead)
+```
+
+Exported from `varco_redis.__init__`.
+
+---
+
 ## DI integration
 
 ```python

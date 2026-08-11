@@ -74,7 +74,9 @@ Usage example — per-tenant keys::
 from __future__ import annotations
 
 import base64
+import dataclasses
 import struct
+from datetime import datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -176,6 +178,88 @@ class EncryptionError(Exception):
         self.operation = operation
         self.context = context
         super().__init__(message)
+
+
+class KeyDestroyedError(EncryptionError):
+    """
+    Raised when decrypting ciphertext framed with a **destroyed** (crypto-
+    shredded) kid — Phase 1, U-2.
+
+    Distinguishable from the generic ``EncryptionError`` an unknown/retired
+    kid raises: a caller can render "this data was erased" instead of
+    "corrupt data" only if the two are told apart. A bare ``except
+    EncryptionError`` still catches this (it is a subclass), but a caller
+    checking the specific type can react differently.
+
+    Attributes:
+        kid:   The destroyed key ID found in the ciphertext header.
+        scope: The scope the destroyed key belonged to, when known
+               (forwarded from the ``context`` the decrypting registry used).
+
+    DESIGN: destroy() vs retire() — two verbs, two contracts
+      ✅ ``retire(kid)`` removes a key from primary rotation but keeps decrypt
+         working — for the "re-encrypt everything, then drop the old key"
+         rotation workflow.
+      ✅ ``destroy(kid)`` records the kid as destroyed so decrypt raises this
+         error — for the "this data subject's data must become unreadable"
+         crypto-shredding workflow (U-2). The distinction is the whole point:
+         conflating them would make rotation destructive or shredding
+         reversible.
+      ❌ Two verbs on the same registry is one more thing to document — worth
+         it because they answer different questions ("can we still read old
+         data?" vs "must this data become unreadable now?").
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        operation: str,
+        context: str | None = None,
+        kid: str | None = None,
+        scope: str | None = None,
+    ) -> None:
+        self.kid = kid
+        self.scope = scope
+        super().__init__(message, operation=operation, context=context)
+
+
+@dataclasses.dataclass(frozen=True)
+class DestroyReceipt:
+    """
+    Audit record returned by a successful crypto-shred (Phase 1, U-2).
+
+    ⚠️ DEVIATION from the gap register's sketch: the register sketches this as
+    a ``NamedTuple``. This repo's convention (CLAUDE.md: "Frozen
+    ``@dataclass(frozen=True)`` for all value objects") wins over the filer's
+    sketch — a frozen dataclass gets the same immutability with a proper
+    ``to_dict()`` method and clearer field docs.
+
+    Attributes:
+        scope:        The scope that was destroyed.
+        kids:         Every kid tombstoned by this call. Empty on a repeat
+                       call for an already-destroyed scope (idempotent) or an
+                       unknown scope (not an error).
+        destroyed_at: UTC timestamp of the destroy operation.
+        actor:        Optional identity that performed the destruction, for
+                       audit trails. Not persisted by ``EncryptionKeyStore``
+                       itself — callers that need it durable must record it
+                       themselves (e.g. via the audit log, Plan 004).
+    """
+
+    scope: str
+    kids: tuple[str, ...]
+    destroyed_at: datetime
+    actor: str | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        """Serialise to a JSON-compatible dict — e.g. for an audit log entry."""
+        return {
+            "scope": self.scope,
+            "kids": list(self.kids),
+            "destroyed_at": self.destroyed_at.isoformat(),
+            "actor": self.actor,
+        }
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -404,6 +488,10 @@ class MultiKeyEncryptorRegistry:
         # _encryptors maps kid → encryptor; plain dict is safe after startup
         self._encryptors: dict[str, FieldEncryptor] = {primary_kid: primary_encryptor}
         self._primary_kid: str = primary_kid
+        # kids marked destroyed (crypto-shredded) — checked before dispatch in
+        # decrypt(). Unlike retire(), destroy() does NOT remove the encryptor
+        # from _encryptors — see KeyDestroyedError's DESIGN block.
+        self._destroyed: set[str] = set()
 
     def __repr__(self) -> str:
         kids = list(self._encryptors.keys())
@@ -471,6 +559,33 @@ class MultiKeyEncryptorRegistry:
             )
         del self._encryptors[kid]
 
+    def destroy(self, kid: str) -> None:
+        """
+        Mark ``kid`` as crypto-shredded (Phase 1, U-2) — distinct from
+        ``retire()``.
+
+        After this call, ``decrypt()`` on ciphertext framed with ``kid``
+        raises ``KeyDestroyedError`` instead of succeeding or raising the
+        generic "kid not registered" ``EncryptionError``. The encryptor
+        mapping is left intact (unlike ``retire()``, which deletes it) — the
+        point is not to save memory, it is to make the failure
+        distinguishable.
+
+        Args:
+            kid: Key identifier to destroy. No-op (not an error) if ``kid``
+                 was never registered — mirrors ``EncryptionKeyStore.
+                 destroy_scope``'s "unknown scope is not an error" contract.
+
+        Edge cases:
+            - Calling ``destroy()`` twice for the same ``kid`` is idempotent.
+            - A destroyed kid that is also the current primary can still be
+              used to *encrypt* new data — ``destroy()`` only affects
+              ``decrypt()``. Callers driving crypto-shredding should also
+              call ``set_primary()`` to a different kid first if they want to
+              stop new writes under the destroyed kid too.
+        """
+        self._destroyed.add(kid)
+
     def encrypt(self, plaintext: bytes, *, context: str | None = None) -> bytes:
         """
         Encrypt with the primary key and embed the kid in the result.
@@ -501,9 +616,25 @@ class MultiKeyEncryptorRegistry:
             Original plaintext bytes.
 
         Raises:
-            EncryptionError: Malformed header, retired kid, or wrong key.
+            KeyDestroyedError: ``kid`` was crypto-shredded via ``destroy()``
+                — a subclass of ``EncryptionError``, so existing
+                ``except EncryptionError`` call sites keep working.
+            EncryptionError: Malformed header, retired/unknown kid, or wrong
+                key. ``destroy()`` and an unknown kid are deliberately kept
+                distinguishable (see ``KeyDestroyedError``) — do not merge
+                these two branches.
         """
         kid, raw_ciphertext = _unpack_ciphertext(ciphertext)
+        if kid in self._destroyed:
+            raise KeyDestroyedError(
+                f"Decryption failed — kid {kid!r} has been destroyed "
+                f"(crypto-shredded). This ciphertext's data subject has been "
+                f"erased; it is not recoverable.",
+                operation="decrypt",
+                context=context,
+                kid=kid,
+                scope=context,
+            )
         encryptor = self._encryptors.get(kid)
         if encryptor is None:
             raise EncryptionError(
@@ -668,6 +799,84 @@ class TenantAwareEncryptorRegistry:
 
         Raises:
             EncryptionError: Tenant not registered, no default, or wrong key.
+        """
+        return self._resolve(context).decrypt(ciphertext, context=context)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# ScopedEncryptorRegistry — sibling of TenantAwareEncryptorRegistry (Phase 1, U-1)
+# ════════════════════════════════════════════════════════════════════════════════
+
+
+class ScopedEncryptorRegistry:
+    """
+    Per-**scope** encryption key isolation — sibling of
+    ``TenantAwareEncryptorRegistry`` (Phase 1, U-1).
+
+    Identical shape to ``TenantAwareEncryptorRegistry`` but keyed by the
+    opaque ``scope`` dimension instead of ``tenant_id`` — a scope can be a
+    tenant, but does not have to be (e.g. ``f"{tenant}:subject:{sid}"`` for
+    per-data-subject keys). ``TenantAwareEncryptorRegistry`` is left
+    untouched and keeps working exactly as before — this is a genuinely
+    separate class, not a subclass, so a change here can never affect the
+    tenant path.
+
+    Built via ``EncryptionKeyManager.build_scoped_registry(scope)`` — callers
+    should not normally construct this directly.
+
+    Thread safety:  ⚠️ ``register`` is NOT thread-safe — populate at
+                    construction (``build_scoped_registry`` does this once).
+                    ``encrypt`` / ``decrypt`` are safe to call concurrently.
+    Async safety:   ✅ CPU-only; safe from async.
+    """
+
+    def __init__(self, default: FieldEncryptor | None = None) -> None:
+        self._registry: dict[str, FieldEncryptor] = {}
+        self._default = default
+
+    def __repr__(self) -> str:
+        return (
+            f"ScopedEncryptorRegistry("
+            f"scopes={list(self._registry.keys())}, "
+            f"default={'set' if self._default else 'none'})"
+        )
+
+    def register(self, scope: str, encryptor: FieldEncryptor) -> None:
+        """Associate a ``FieldEncryptor`` with ``scope``. Replaces silently."""
+        self._registry[scope] = encryptor
+
+    def _resolve(self, context: str | None) -> FieldEncryptor:
+        if context is not None:
+            encryptor = self._registry.get(context)
+            if encryptor is not None:
+                return encryptor
+
+        if self._default is not None:
+            return self._default
+
+        raise EncryptionError(
+            f"No encryptor registered for scope {context!r} "
+            f"and no default encryptor configured. "
+            f"Registered scopes: {list(self._registry.keys())}. "
+            "Call register() for this scope or provide a default encryptor.",
+            operation="encrypt" if context is None else "decrypt",
+            context=context,
+        )
+
+    def encrypt(self, plaintext: bytes, *, context: str | None = None) -> bytes:
+        """Encrypt using the encryptor registered for ``context`` (scope)."""
+        return self._resolve(context).encrypt(plaintext, context=context)
+
+    def decrypt(self, ciphertext: bytes, *, context: str | None = None) -> bytes:
+        """
+        Decrypt using the encryptor registered for ``context`` (scope).
+
+        Raises:
+            KeyDestroyedError: The resolved encryptor's kid was destroyed —
+                propagated unchanged from the underlying
+                ``MultiKeyEncryptorRegistry``.
+            EncryptionError: Scope not registered / no default, or the
+                underlying encryptor rejected the ciphertext.
         """
         return self._resolve(context).decrypt(ciphertext, context=context)
 

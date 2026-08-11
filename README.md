@@ -13,17 +13,18 @@ A modular Python framework for building expressive, backend-agnostic REST APIs o
 | `varco_sa` | SQLAlchemy async backend (ORM generation, repository, schema guard, Alembic helpers) |
 | `varco_beanie` | Beanie (Motor/MongoDB) async backend |
 | `varco_kafka` | Apache Kafka event bus backend (`KafkaEventBus` via aiokafka) |
+| `varco_nats` | NATS JetStream event bus backend (`NatsEventBus` via nats-py) |
 | `varco_redis` | Redis Pub/Sub event bus + cache backend (`RedisEventBus`, `RedisCache` via redis.asyncio) |
 | `varco_ws` | WebSocket and SSE event bus adapters |
 | `varco_memcached` | Memcached cache backend |
-
----
+| `varco_casbin` | Casbin policy-engine authorization backend (ACL/RBAC/ABAC + REST admin router) |
 
 ---
 
 ## Quickstart — Example App
 
-The [`example/`](example/) directory contains a **complete, runnable Post API** that wires the full varco stack together:
+The [`examples/00-full-stack-post-api/`](examples/00-full-stack-post-api/) directory contains a
+**complete, runnable Post API** that wires the full varco stack together:
 
 - FastAPI + `VarcoCRUDRouter` with 6 CRUD mixins
 - JWT auth (RSA-2048, role-based)
@@ -38,11 +39,16 @@ The [`example/`](example/) directory contains a **complete, runnable Post API** 
 ```bash
 git clone https://github.com/edoardoscarpaci/varco && cd varco
 uv sync
-cd example && docker compose up -d
+cd examples/00-full-stack-post-api && docker compose up -d
 # app at http://localhost:8000/docs
 ```
 
-Full setup, API reference, architecture diagram, and extension guide: **[example/README.md](example/README.md)**
+Full setup, API reference, architecture diagram, and extension guide:
+**[examples/00-full-stack-post-api/README.md](examples/00-full-stack-post-api/README.md)**
+
+The [`examples/`](examples/) directory has 20+ additional focused examples (JWT rotation, Casbin
+policy engine, field encryption, observability, profiling, …) — see
+**[examples/README.md](examples/README.md)** for the full package → example map.
 
 ---
 

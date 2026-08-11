@@ -431,3 +431,120 @@ class TestRedisJobStoreLifecycle:
         assert stored is not None
         assert stored.status == JobStatus.FAILED
         assert stored.error == "external timeout"
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 4, Step 56 — RedisJobStore time/lease/fencing matrix
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until RedisJobStore implements claim_next/renew/reap_expired_leases and
+# serialises the new Job fields (run_at, owner_id, lease_expires_at,
+# lease_epoch, ...), and the atomic claim script gains the run_at predicate.
+
+
+class TestRedisJobStoreRunAtGating:
+    async def test_job_with_future_run_at_is_not_claimed(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        _, store = _make_store()
+        job = _pending_job(run_at=datetime.now(timezone.utc) + timedelta(seconds=60))
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id)
+        assert claimed is None
+
+    async def test_job_is_claimed_after_run_at_passes(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        _, store = _make_store()
+        job = _pending_job(run_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id)
+        assert claimed is not None
+        assert claimed.status == JobStatus.RUNNING
+
+
+class TestRedisJobStoreLease:
+    async def test_try_claim_with_lease_ttl_sets_lease_fields(self) -> None:
+        _, store = _make_store()
+        job = _pending_job()
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+        assert claimed is not None
+        assert claimed.owner_id == "worker-1"
+        assert claimed.lease_expires_at is not None
+        assert claimed.lease_epoch >= 1
+
+    async def test_renew_with_current_epoch_extends_lease(self) -> None:
+        _, store = _make_store()
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+
+        renewed = await store.renew(
+            claimed.job_id,
+            owner_id="worker-1",
+            epoch=claimed.lease_epoch,
+            lease_ttl=60.0,
+        )
+        assert renewed is not None
+
+    async def test_renew_with_stale_epoch_returns_none(self) -> None:
+        _, store = _make_store()
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+
+        result = await store.renew(
+            claimed.job_id,
+            owner_id="worker-1",
+            epoch=claimed.lease_epoch - 1,
+            lease_ttl=60.0,
+        )
+        assert result is None
+
+    async def test_reap_expired_leases_moves_expired_running_row_to_pending(
+        self,
+    ) -> None:
+        import asyncio
+
+        _, store = _make_store()
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(
+            job.job_id, owner_id="worker-1", lease_ttl=0.001
+        )
+
+        await asyncio.sleep(0.05)
+        reaped = await store.reap_expired_leases()
+        assert any(j.job_id == claimed.job_id for j in reaped)
+
+    async def test_defaulted_job_claims_exactly_as_today(self) -> None:
+        _, store = _make_store()
+        job = _pending_job()
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id)
+        assert claimed is not None
+        assert claimed.status == JobStatus.RUNNING
+        assert claimed.lease_expires_at is None
+
+
+import pytest  # noqa: E402
+
+
+@pytest.mark.integration
+class TestRedisJobStoreConcurrentClaimFencing:
+    """
+    Requires a real Redis instance — the atomic Lua claim script's correctness
+    under true concurrency cannot be proven against FakeRedis (no real atomicity
+    guarantees). Two concurrent claimers, exactly one wins, the loser's
+    expected_epoch write is refused.
+    """
+
+    async def test_two_concurrent_claimers_exactly_one_wins_loser_fenced(self) -> None:
+        pytest.skip(
+            "requires a real Redis instance — not available in this environment"
+        )

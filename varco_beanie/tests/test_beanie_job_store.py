@@ -798,3 +798,39 @@ class TestBeanieJobStoreLifecycleMocked:
         assert len(failed_docs) == 1
         assert failed_docs[0].status == JobStatus.FAILED.value
         assert failed_docs[0].error == "something went wrong"
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 4, Step 56 — BeanieJobStore time/lease/fencing matrix
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until BeanieJobStore implements claim_next/renew/reap_expired_leases and
+# threads owner_id/lease_ttl through try_claim's find_one_and_update predicate.
+
+
+class TestBeanieJobStoreLeaseKwargs:
+    async def test_try_claim_accepts_owner_id_and_lease_ttl(self) -> None:
+        store = BeanieJobStore()
+
+        with _patch_doc_attrs(
+            id=MagicMock(),
+            status=MagicMock(),
+            started_at=MagicMock(),
+            find_one=MagicMock(return_value=_make_try_claim_chain(None)),
+        ):
+            # Must not raise TypeError for the new keyword-only params.
+            result = await store.try_claim(uuid4(), owner_id="worker-1", lease_ttl=30.0)
+
+        assert result is None
+
+    async def test_claim_next_method_exists(self) -> None:
+        store = BeanieJobStore()
+        assert hasattr(store, "claim_next")
+
+    async def test_renew_method_exists(self) -> None:
+        store = BeanieJobStore()
+        assert hasattr(store, "renew")
+
+    async def test_reap_expired_leases_method_exists(self) -> None:
+        store = BeanieJobStore()
+        assert hasattr(store, "reap_expired_leases")

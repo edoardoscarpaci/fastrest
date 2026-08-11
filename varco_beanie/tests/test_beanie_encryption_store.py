@@ -447,3 +447,96 @@ class TestBeanieEncryptionKeyStoreIntegration:
         assert len(entries) == 2
         primaries = [e for e in entries if e.is_primary]
         assert len(primaries) == 1
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 1, Step 20 — scope fields / destroy_scope on BeanieEncryptionKeyStore
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Step 19 lands: EncryptionKeyDocument gains scope + destroyed_at
+# fields (+ index on scope), and BeanieEncryptionKeyStore implements
+# load_for_scope/list_scopes/destroy_scope.
+
+
+class TestBeanieEncryptionKeyStoreScopeMethodsExist:
+    def test_store_exposes_scope_methods(self) -> None:
+        store = BeanieEncryptionKeyStore()
+        assert hasattr(store, "load_for_scope")
+        assert hasattr(store, "list_scopes")
+        assert hasattr(store, "destroy_scope")
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(
+    not _os.environ.get("VARCO_RUN_INTEGRATION"),
+    reason="Integration tests disabled — set VARCO_RUN_INTEGRATION=1",
+)
+class TestBeanieEncryptionKeyStoreScopeIntegration:
+    """Real-MongoDB round-trips for the scope dimension and tombstones."""
+
+    @pytest.fixture(scope="class")
+    def mongo_container(self):
+        from testcontainers.mongodb import MongoDbContainer
+
+        with MongoDbContainer() as mongo:
+            yield mongo
+
+    @pytest_asyncio.fixture
+    async def beanie_store(self, mongo_container):
+        from beanie import init_beanie
+        from pymongo import AsyncMongoClient
+
+        db_name = f"test_enc_scope_{uuid.uuid4().hex[:8]}"
+        connection_string = mongo_container.get_connection_url()
+        client = AsyncMongoClient(connection_string)
+
+        await init_beanie(
+            database=client[db_name],
+            document_models=[EncryptionKeyDocument],
+        )
+
+        store = BeanieEncryptionKeyStore()
+        yield store
+
+        await client.drop_database(db_name)
+        await client.close()
+
+    async def test_load_for_scope_filters_by_scope(self, beanie_store) -> None:
+        await beanie_store.save(_make_entry(kid="scope-k1", tenant_id="scope-acme"))
+        result = await beanie_store.load_for_scope("scope-acme")
+        assert any(e.kid == "scope-k1" for e in result)
+
+    async def test_list_scopes_returns_distinct_scopes(self, beanie_store) -> None:
+        await beanie_store.save(_make_entry(kid="scope-k2", tenant_id="scope-beta"))
+        scopes = await beanie_store.list_scopes()
+        assert "scope-beta" in scopes
+
+    async def test_destroy_scope_tombstones_and_is_idempotent(
+        self, beanie_store
+    ) -> None:
+        await beanie_store.save(_make_entry(kid="scope-k3", tenant_id="scope-gamma"))
+        kids = await beanie_store.destroy_scope("scope-gamma")
+        assert "scope-k3" in kids
+
+        entry = await beanie_store.load("scope-k3")
+        assert entry is not None
+        assert entry.is_destroyed is True
+
+        second = await beanie_store.destroy_scope("scope-gamma")
+        assert second == ()
+
+    async def test_pre_migration_row_with_no_scope_yields_tenant_id(
+        self, beanie_store
+    ) -> None:
+        await beanie_store.save(_make_entry(kid="scope-k4", tenant_id="scope-delta"))
+        # Directly null the scope field on the underlying document to
+        # simulate a pre-migration row.
+        doc = await EncryptionKeyDocument.find_one(
+            EncryptionKeyDocument.kid == "scope-k4"
+        )
+        doc.scope = None
+        await doc.save()
+
+        loaded = await beanie_store.load("scope-k4")
+        assert loaded is not None
+        assert loaded.scope == "scope-delta"

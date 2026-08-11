@@ -26,10 +26,13 @@ Async safety:   ✅ Lock is created lazily inside the running event loop.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import sys
+from datetime import datetime, timedelta, timezone
+from typing import Sequence
 from uuid import UUID
 
-from varco_core.job.base import AbstractJobStore, Job, JobStatus
+from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from providify import Singleton
 
 
@@ -80,17 +83,34 @@ class InMemoryJobStore(AbstractJobStore):
             self._lock = asyncio.Lock()
         return self._lock
 
-    async def save(self, job: Job) -> None:
+    async def save(self, job: Job, *, expected_epoch: int | None = None) -> None:
         """
         Persist a job, replacing any existing entry with the same ``job_id``.
 
         Args:
             job: The ``Job`` to save.
+            expected_epoch: Fencing token (Plan 005 Phase 4, U-11 §3).
+                ``None`` (default) — no fencing check, today's behaviour
+                exactly. When supplied, the write is refused with
+                ``StaleLeaseError`` if the stored job's ``lease_epoch`` no
+                longer matches.
+
+        Raises:
+            StaleLeaseError: ``expected_epoch`` is supplied and does not
+                match the stored ``lease_epoch``.
 
         Thread safety:  ✅ Protected by asyncio.Lock — concurrent saves are serialized.
         Async safety:   ✅ Lock acquisition is awaitable.
         """
         async with self._get_lock():
+            if expected_epoch is not None:
+                current = self._jobs.get(job.job_id)
+                if current is None or current.lease_epoch != expected_epoch:
+                    raise StaleLeaseError(
+                        f"save() refused for job {job.job_id}: expected_epoch="
+                        f"{expected_epoch} does not match stored lease_epoch "
+                        f"({current.lease_epoch if current else 'job not found'})."
+                    )
             self._jobs[job.job_id] = job
 
     async def get(self, job_id: UUID) -> Job | None:
@@ -151,7 +171,80 @@ class InMemoryJobStore(AbstractJobStore):
             # dict.pop with default avoids KeyError for unknown IDs
             self._jobs.pop(job_id, None)
 
-    async def try_claim(self, job_id: UUID) -> Job | None:
+    async def delete_where(
+        self,
+        *,
+        status: JobStatus | Sequence[JobStatus] | None = None,
+        completed_before: datetime | None = None,
+        expires_before: datetime | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """
+        Native bulk delete under the shared lock (Plan 005 Phase 6, U-18) —
+        a single lock acquisition over the whole sweep instead of the ABC
+        default's per-job ``list_by_status``/``delete`` round trips.
+
+        Args:
+            status: A single ``JobStatus`` or sequence of them.  ``None``
+                (default) does not filter by status.
+            completed_before: Only match jobs whose ``completed_at`` is set
+                AND strictly before this timestamp.
+            expires_before: Only match jobs whose ``expires_at`` is set AND
+                strictly before this timestamp.
+            limit: Maximum rows to delete.  ``None`` deletes every match.
+
+        Returns:
+            The number of jobs actually deleted.
+
+        Raises:
+            ValueError: No predicate at all was supplied.
+
+        Thread safety:  ✅ Entire sweep runs under one asyncio.Lock acquisition.
+        """
+        if status is None and completed_before is None and expires_before is None:
+            raise ValueError(
+                "delete_where() requires at least one predicate (status, "
+                "completed_before, or expires_before) — refusing to delete "
+                "every row in the store. Pass an explicit predicate, e.g. "
+                "delete_where(status=JobStatus.COMPLETED)."
+            )
+
+        if status is None:
+            statuses: set[JobStatus] | None = None
+        elif isinstance(status, JobStatus):
+            statuses = {status}
+        else:
+            statuses = set(status)
+
+        async with self._get_lock():
+            to_delete: list[UUID] = []
+            for job in self._jobs.values():
+                if statuses is not None and job.status not in statuses:
+                    continue
+                if completed_before is not None and (
+                    job.completed_at is None or job.completed_at >= completed_before
+                ):
+                    continue
+                if expires_before is not None and (
+                    job.expires_at is None or job.expires_at >= expires_before
+                ):
+                    continue
+                to_delete.append(job.job_id)
+                if limit is not None and len(to_delete) >= limit:
+                    break
+
+            for job_id in to_delete:
+                self._jobs.pop(job_id, None)
+
+            return len(to_delete)
+
+    async def try_claim(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+    ) -> Job | None:
         """
         Atomically transition a PENDING job to RUNNING state.
 
@@ -160,12 +253,21 @@ class InMemoryJobStore(AbstractJobStore):
         the same event loop.  This prevents duplicate execution when multiple
         concurrent recovery coroutines discover the same PENDING job.
 
+        Plan 005 Phase 4 (U-17 §1, U-11): also honours
+        ``run_at IS NULL OR run_at <= now``, and when ``lease_ttl`` is given,
+        sets ``owner_id``/``lease_expires_at``/increments ``lease_epoch``.
+
         Args:
             job_id: UUID of the job to claim.
+            owner_id: Identifies the lease holder. ``None`` (default) takes
+                no lease — today's behaviour exactly.
+            lease_ttl: Lease duration in seconds from now. ``None``
+                (default) takes no lease.
 
         Returns:
             The claimed ``Job`` in RUNNING state, or ``None`` if the job does
-            not exist, is not PENDING, or was already claimed by another caller.
+            not exist, is not PENDING, ``run_at`` is in the future, or was
+            already claimed by another caller.
 
         Thread safety:  ✅ Lock makes check-and-set atomic within a single process.
                            Cross-process safety requires a distributed store (Redis, SQL).
@@ -183,10 +285,159 @@ class InMemoryJobStore(AbstractJobStore):
             if job is None or job.status != JobStatus.PENDING:
                 # Already claimed by another caller, or not found
                 return None
+            now = datetime.now(timezone.utc)
+            if job.run_at is not None and job.run_at > now:
+                # Scheduled for the future — not yet eligible.
+                return None
             # Transition to RUNNING — as_running() creates a new frozen Job instance
             claimed = job.as_running()
+            if lease_ttl is not None:
+                claimed = dataclasses.replace(
+                    claimed,
+                    owner_id=owner_id,
+                    lease_expires_at=now + timedelta(seconds=lease_ttl),
+                    lease_epoch=job.lease_epoch + 1,
+                )
             self._jobs[job_id] = claimed
             return claimed
+
+    async def claim_next(
+        self,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+        now: datetime | None = None,
+    ) -> Job | None:
+        """
+        Claim the oldest eligible PENDING job under the shared lock.
+
+        Args:
+            owner_id: Forwarded to the claim.
+            lease_ttl: Forwarded to the claim.
+            now: The "current time" to evaluate ``run_at`` against.
+
+        Returns:
+            The claimed ``Job`` in RUNNING state, or ``None`` if no eligible
+            PENDING job exists.
+
+        Async safety: ✅ Runs under the store's lock — atomic within-process.
+        """
+        current = now if now is not None else datetime.now(timezone.utc)
+        async with self._get_lock():
+            for job in self._jobs.values():
+                if job.status != JobStatus.PENDING:
+                    continue
+                if job.run_at is not None and job.run_at > current:
+                    continue
+                claimed = job.as_running()
+                if lease_ttl is not None:
+                    claimed = dataclasses.replace(
+                        claimed,
+                        owner_id=owner_id,
+                        lease_expires_at=current + timedelta(seconds=lease_ttl),
+                        lease_epoch=job.lease_epoch + 1,
+                    )
+                self._jobs[job.job_id] = claimed
+                return claimed
+            return None
+
+    async def renew(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str,
+        epoch: int,
+        lease_ttl: float,
+    ) -> Job | None:
+        """
+        Heartbeat an in-progress lease under the shared lock.
+
+        Args:
+            job_id: The job whose lease is being renewed.
+            owner_id: Must match the job's current ``owner_id``.
+            epoch: Must match the job's current ``lease_epoch``.
+            lease_ttl: New lease duration in seconds, from now.
+
+        Returns:
+            The renewed ``Job`` with an extended ``lease_expires_at``, or
+            ``None`` if the job/owner/epoch does not match (fenced out).
+
+        Async safety: ✅ Runs under the store's lock — atomic within-process.
+        """
+        async with self._get_lock():
+            job = self._jobs.get(job_id)
+            if job is None or job.owner_id != owner_id or job.lease_epoch != epoch:
+                return None
+            renewed = dataclasses.replace(
+                job,
+                lease_expires_at=datetime.now(timezone.utc)
+                + timedelta(seconds=lease_ttl),
+            )
+            self._jobs[job_id] = renewed
+            return renewed
+
+    async def reap_expired_leases(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Move RUNNING jobs whose lease has **expired** back to PENDING,
+        incrementing ``lease_epoch`` to fence out the stalled owner.
+
+        A RUNNING job with **no lease at all** (``lease_expires_at is None``)
+        is skipped, not reaped. Plan 005 Step 48 scopes this method to
+        "RUNNING rows whose ``lease_expires_at <= now``" — a NULL lease is
+        not an expired lease, it is the absence of the signal this method
+        reads.
+
+        DESIGN: NULL lease is skipped rather than treated as reapable
+            ✅ Preserves today's behaviour byte-for-byte for every caller
+               that never passes ``lease_ttl`` — the plan's compatibility
+               posture. Leases are opt-in; enabling the lease-aware poller
+               must not retroactively reclassify unleased in-flight jobs.
+            ✅ Keeps the two death signals separate and composable:
+               ``JobPoller`` reaps leased jobs by expiry and falls back to
+               the wall-clock age threshold for unleased ones.
+            ❌ A job whose claimant crashed *before* taking a lease is
+               recovered by the slower age threshold rather than instantly.
+               Accepted: that is exactly today's behaviour, and the fix is
+               to claim with ``lease_ttl``.
+
+        Args:
+            now: The "current time" to compare ``lease_expires_at`` against.
+            limit: Maximum number of jobs to reap in one call.
+
+        Returns:
+            The list of jobs moved back to PENDING (post-reap state).
+
+        Async safety: ✅ Runs under the store's lock — atomic within-process.
+        """
+        current = now if now is not None else datetime.now(timezone.utc)
+        async with self._get_lock():
+            reaped: list[Job] = []
+            for job in list(self._jobs.values()):
+                if job.status != JobStatus.RUNNING:
+                    continue
+                # No lease taken → nothing to expire; the age threshold owns
+                # this job, not lease reaping.
+                if job.lease_expires_at is None:
+                    continue
+                if job.lease_expires_at > current:
+                    continue
+                new_job = dataclasses.replace(
+                    job,
+                    status=JobStatus.PENDING,
+                    lease_epoch=job.lease_epoch + 1,
+                    owner_id=None,
+                    lease_expires_at=None,
+                )
+                self._jobs[job.job_id] = new_job
+                reaped.append(new_job)
+                if len(reaped) >= limit:
+                    break
+            return reaped
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

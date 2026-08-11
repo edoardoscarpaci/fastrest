@@ -1947,7 +1947,7 @@ wheels = [
 
 [[package]]
 name = "varco-beanie"
-version = "1.1.1"
+version = "1.1.2"
 source = { editable = "varco_beanie" }
 dependencies = [
     { name = "beanie" },
@@ -2045,7 +2045,7 @@ dev = [
 
 [[package]]
 name = "varco-core"
-version = "1.1.3"
+version = "1.1.4"
 source = { editable = "varco_core" }
 dependencies = [
     { name = "cryptography" },
@@ -2115,7 +2115,7 @@ dev = [
 
 [[package]]
 name = "varco-fastapi"
-version = "1.1.7"
+version = "1.1.8"
 source = { editable = "varco_fastapi" }
 dependencies = [
     { name = "fastapi" },
@@ -2286,7 +2286,7 @@ dev = [
 
 [[package]]
 name = "varco-redis"
-version = "2.1.1"
+version = "2.1.2"
 source = { editable = "varco_redis" }
 dependencies = [
     { name = "providify" },
@@ -2319,7 +2319,7 @@ dev = [
 
 [[package]]
 name = "varco-sa"
-version = "2.1.1"
+version = "2.1.2"
 source = { editable = "varco_sa" }
 dependencies = [
     { name = "providify" },

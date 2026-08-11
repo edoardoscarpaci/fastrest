@@ -28,8 +28,9 @@ pip install varco-core
 - **Fluent query builder** — `QueryBuilder` → AST → `QueryParser` (string → AST via Lark grammar); backend-independent
 - **JWT / JWK** — `JwtBuilder`, `JwtParser`, `JwkBuilder`, `MultiKeyAuthority`, OIDC + PEM sources
 - **Event system** — `AbstractEventBus`, `EventConsumer`, `BusEventProducer`, `listen` decorator; backend-agnostic pub/sub
-- **Dead Letter Queue** — `AbstractDeadLetterQueue`, `InMemoryDeadLetterQueue`; failed events routed after retry exhaustion
-- **Transactional Outbox** — `OutboxEntry`, `OutboxRepository`, `OutboxRelay`; at-least-once event delivery via DB-backed outbox
+- **Dead Letter Queue** — `AbstractDeadLetterQueue`, `InMemoryDeadLetterQueue`, `DeadLetterEntry` (one shape for `EventConsumer`/`OutboxRelay`/job-runner failures, via `DeadLetterSource`); failed events routed after retry exhaustion
+- **Transactional Outbox** — `OutboxEntry` (with attempt tracking), `OutboxRepository`, `OutboxRelay` (`retry_policy=`/`dlq=`/`max_attempts=`); at-least-once event delivery via DB-backed outbox
+- **Background jobs** — `AbstractJobStore`/`AbstractJobRunner` (`varco_core.job`); scheduling (`run_at`), bounded retry (`attempt`/`max_attempts`), and fenced leases (`try_claim(owner_id=, lease_ttl=)`, `renew()`, `reap_expired_leases()`, `save(expected_epoch=)` → `StaleLeaseError`)
 - **Resilience** — `@retry` with exponential back-off, `CircuitBreaker` (CLOSED / OPEN / HALF_OPEN), `@timeout`; composable on any sync/async callable
 - **Diagnostic profiler** — `@profile`, `profiled()`, `ProfileSession`; pluggable CPU/memory backends (`cprofile`, `tracemalloc`; extensible to pyinstrument/memray/py-spy)
 - **Async cache** — `InMemoryCache`, `LayeredCache`, `CachedService`; pluggable invalidation strategies (TTL, Explicit, Tagged, EventDriven, Composite)

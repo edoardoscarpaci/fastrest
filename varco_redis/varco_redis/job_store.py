@@ -60,10 +60,11 @@ Async safety:   ✅ All methods are ``async def``.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from datetime import datetime, timedelta, timezone
+from typing import Any, Sequence, TYPE_CHECKING
 from uuid import UUID
 
 from varco_core.job.base import AbstractJobStore, Job, JobStatus
@@ -115,6 +116,16 @@ def _job_to_json(job: Job) -> str:
             "task_payload": (
                 job.task_payload.to_dict() if job.task_payload is not None else None
             ),
+            "run_at": _dt_to_str(job.run_at),
+            "attempt": job.attempt,
+            "max_attempts": job.max_attempts,
+            "owner_id": job.owner_id,
+            "lease_expires_at": _dt_to_str(job.lease_expires_at),
+            "lease_epoch": job.lease_epoch,
+            "expires_at": _dt_to_str(job.expires_at),
+            "request_issuer": job.request_issuer,
+            "request_subject": job.request_subject,
+            "request_token_hash": job.request_token_hash,
         }
     )
 
@@ -144,6 +155,16 @@ def _json_to_job(raw: str | bytes) -> Job:
         request_token=data.get("request_token"),
         metadata=data.get("metadata") or {},
         task_payload=task_payload,
+        run_at=_str_to_dt(data.get("run_at")),
+        attempt=data.get("attempt", 0),
+        max_attempts=data.get("max_attempts", 1),
+        owner_id=data.get("owner_id"),
+        lease_expires_at=_str_to_dt(data.get("lease_expires_at")),
+        lease_epoch=data.get("lease_epoch", 0),
+        expires_at=_str_to_dt(data.get("expires_at")),
+        request_issuer=data.get("request_issuer"),
+        request_subject=data.get("request_subject"),
+        request_token_hash=data.get("request_token_hash"),
     )
 
 
@@ -374,7 +395,101 @@ class RedisJobStore(AbstractJobStore):
         await self._client.delete(job_key)
         _logger.debug("RedisJobStore.delete: job_id=%s", job_id)
 
-    async def try_claim(self, job_id: UUID) -> Job | None:
+    async def delete_where(
+        self,
+        *,
+        status: JobStatus | Sequence[JobStatus] | None = None,
+        completed_before: datetime | None = None,
+        expires_before: datetime | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """
+        Native bulk delete (Plan 005 Phase 6, U-18) — walks the per-status
+        Sorted Set index(es) instead of the ABC's portable
+        ``list_by_status`` + ``delete`` default, saving the extra
+        deserialize-then-re-filter-by-status round trip the default does
+        (status filtering here is index-native via which Sorted Set is
+        scanned; only ``completed_before``/``expires_before`` require a GET
+        + deserialize per candidate).
+
+        Args:
+            status: A single ``JobStatus`` or sequence of them.  ``None``
+                (default) scans every status's Sorted Set.
+            completed_before: Only match jobs whose ``completed_at`` is set
+                AND strictly before this timestamp.
+            expires_before: Only match jobs whose ``expires_at`` is set AND
+                strictly before this timestamp.
+            limit: Maximum rows to delete.  ``None`` deletes every match.
+
+        Returns:
+            The number of jobs actually deleted.
+
+        Raises:
+            ValueError: No predicate at all was supplied.
+
+        Edge cases:
+            - Same eventual-consistency caveat as the rest of this store:
+              the Sorted Set index and the job JSON value can diverge on a
+              crash mid-write; stale index entries are skipped (no job JSON
+              found at that key).
+
+        Async safety: ✅ All I/O is awaited; each job's ZREM+DELETE pair is
+            independent — no cross-job atomicity needed for a delete sweep.
+        """
+        if status is None and completed_before is None and expires_before is None:
+            raise ValueError(
+                "delete_where() requires at least one predicate (status, "
+                "completed_before, or expires_before) — refusing to delete "
+                "every row in the store. Pass an explicit predicate, e.g. "
+                "delete_where(status=JobStatus.COMPLETED)."
+            )
+
+        if status is None:
+            statuses: tuple[JobStatus, ...] = tuple(JobStatus)
+        elif isinstance(status, JobStatus):
+            statuses = (status,)
+        else:
+            statuses = tuple(status)
+
+        deleted = 0
+        for st in statuses:
+            status_key = self._status_key(st)
+            # Fetch the whole index for this status — the Sorted Set already
+            # narrows the candidate set to the right status, so there is no
+            # need for the ABC default's generous per-status over-fetch.
+            job_id_strs: list[bytes] = await self._client.zrange(status_key, 0, -1)
+            for jid_bytes in job_id_strs:
+                if limit is not None and deleted >= limit:
+                    return deleted
+                job_id = UUID(jid_bytes.decode())
+                raw = await self._client.get(self._job_key(job_id))
+                if raw is None:
+                    # Stale index entry — clean it up and move on.
+                    await self._client.zrem(status_key, str(job_id))
+                    continue
+                try:
+                    job = _json_to_job(raw)
+                except Exception:
+                    continue
+                if completed_before is not None and (
+                    job.completed_at is None or job.completed_at >= completed_before
+                ):
+                    continue
+                if expires_before is not None and (
+                    job.expires_at is None or job.expires_at >= expires_before
+                ):
+                    continue
+                await self.delete(job_id)
+                deleted += 1
+        return deleted
+
+    async def try_claim(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+    ) -> Job | None:
         """
         Atomically claim a PENDING job and transition it to RUNNING.
 
@@ -384,14 +499,22 @@ class RedisJobStore(AbstractJobStore):
         Steps:
         1. ``SET claim_key "1" NX EX {claim_ttl}`` — atomic claim acquisition.
         2. Read the job JSON (``GET job_key``).
-        3. If the job is PENDING, update it to RUNNING and save.
+        3. If the job is PENDING and ``run_at`` has passed, update it to
+           RUNNING (and, when ``lease_ttl`` is given, set ``owner_id`` /
+           ``lease_expires_at`` / incremented ``lease_epoch``) and save.
         4. Return the running ``Job``; release claim key on failure.
+
+        Plan 005 Phase 4 (U-17 §1, U-11): the claim predicate now also
+        honours ``run_at IS NULL OR run_at <= now``.
 
         DESIGN: claim key (SET NX EX) over WATCH/MULTI/EXEC
             ✅ Simpler than a Redis transaction — one extra key, one extra command.
             ✅ EX TTL auto-expires if the runner crashes after claiming but
                before updating the job — prevents indefinite lock-out.
-            ✅ No Lua script required.
+            ✅ No Lua script required for single-process correctness — a real
+               multi-replica deployment should extend this with a Lua claim
+               script (see module docstring); the decisive N-concurrent-
+               claimers test is `@pytest.mark.integration` against real Redis.
             ❌ The claim key and the job JSON are two separate keys — not atomically
                linked.  A crash after NX-SET but before job JSON update leaves the
                job PENDING until the claim TTL expires.  After expiry, another runner
@@ -399,11 +522,16 @@ class RedisJobStore(AbstractJobStore):
 
         Args:
             job_id: The UUID of the PENDING job to claim.
+            owner_id: Identifies the lease holder. ``None`` (default) takes
+                no lease — today's behaviour exactly.
+            lease_ttl: Lease duration in seconds from now. ``None``
+                (default) takes no lease.
 
         Returns:
             The claimed ``Job`` in RUNNING state, or ``None`` if:
             - The job does not exist.
             - The job is not in PENDING state.
+            - ``run_at`` is in the future.
             - The claim key was already held by another caller.
 
         Async safety: ✅ SET NX is atomic on the Redis server.
@@ -432,8 +560,22 @@ class RedisJobStore(AbstractJobStore):
                 # Already running or terminal — another path got here first.
                 return None
 
+            if job.run_at is not None and job.run_at > datetime.now(timezone.utc):
+                # Scheduled for the future — not yet eligible. Release the
+                # claim key so another (later) attempt can succeed.
+                await self._client.delete(claim_key)
+                return None
+
             # Transition PENDING → RUNNING and persist.
             running_job = job.as_running()
+            if lease_ttl is not None:
+                running_job = dataclasses.replace(
+                    running_job,
+                    owner_id=owner_id,
+                    lease_expires_at=datetime.now(timezone.utc)
+                    + timedelta(seconds=lease_ttl),
+                    lease_epoch=job.lease_epoch + 1,
+                )
             await self.save(running_job)
 
             _logger.debug(
@@ -445,6 +587,123 @@ class RedisJobStore(AbstractJobStore):
             # On any error, release the claim key so another runner can try.
             await self._client.delete(claim_key)
             raise
+
+    async def claim_next(
+        self,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+        now: datetime | None = None,
+    ) -> Job | None:
+        """
+        Claim the oldest eligible PENDING job.
+
+        Uses the PENDING status index (Sorted Set, oldest-first) and delegates
+        the actual claim to ``try_claim`` so lease-write logic lives in one
+        place. For a store with many future-scheduled jobs interleaved with
+        eligible ones, this may scan past several ineligible entries — see
+        module docstring for the sorted-by-run_at index this could be
+        upgraded to for very large backlogs.
+
+        Args:
+            owner_id: Forwarded to ``try_claim``.
+            lease_ttl: Forwarded to ``try_claim``.
+            now: The "current time" to evaluate ``run_at`` against.
+
+        Returns:
+            The claimed ``Job`` in RUNNING state, or ``None`` if no eligible
+            PENDING job exists.
+
+        Async safety: ✅ All I/O is awaited.
+        """
+        current = now if now is not None else datetime.now(timezone.utc)
+        candidates = await self.list_by_status(JobStatus.PENDING, limit=100)
+        for candidate in candidates:
+            if candidate.run_at is not None and candidate.run_at > current:
+                continue
+            claimed = await self.try_claim(
+                candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl
+            )
+            if claimed is not None:
+                return claimed
+        return None
+
+    async def renew(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str,
+        epoch: int,
+        lease_ttl: float,
+    ) -> Job | None:
+        """
+        Heartbeat an in-progress lease.
+
+        Args:
+            job_id: The job whose lease is being renewed.
+            owner_id: Must match the job's current ``owner_id``.
+            epoch: Must match the job's current ``lease_epoch``.
+            lease_ttl: New lease duration in seconds, from now.
+
+        Returns:
+            The renewed ``Job`` with an extended ``lease_expires_at``, or
+            ``None`` if the job/owner/epoch does not match (fenced out).
+
+        Async safety: ✅ GET + conditional SET — not atomic across the two
+            (same tradeoff documented for ``save()``); acceptable because a
+            heartbeat racing a reap is expected to occasionally lose.
+        """
+        raw = await self._client.get(self._job_key(job_id))
+        if raw is None:
+            return None
+        job = _json_to_job(raw)
+        if job.owner_id != owner_id or job.lease_epoch != epoch:
+            return None
+
+        renewed = dataclasses.replace(
+            job,
+            lease_expires_at=datetime.now(timezone.utc) + timedelta(seconds=lease_ttl),
+        )
+        await self.save(renewed)
+        return renewed
+
+    async def reap_expired_leases(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Move RUNNING jobs whose lease has expired back to PENDING,
+        incrementing ``lease_epoch`` to fence out the stalled owner.
+
+        Args:
+            now: The "current time" to compare ``lease_expires_at`` against.
+            limit: Maximum number of jobs to reap in one call.
+
+        Returns:
+            The list of jobs moved back to PENDING (post-reap state).
+
+        Async safety: ✅ All I/O is awaited; each reaped job's save is
+            independent (no cross-job atomicity needed).
+        """
+        current = now if now is not None else datetime.now(timezone.utc)
+        running = await self.list_by_status(JobStatus.RUNNING, limit=limit)
+        reaped: list[Job] = []
+        for job in running:
+            if job.lease_expires_at is None or job.lease_expires_at > current:
+                continue
+            new_job = dataclasses.replace(
+                job,
+                status=JobStatus.PENDING,
+                lease_epoch=job.lease_epoch + 1,
+                owner_id=None,
+                lease_expires_at=None,
+            )
+            await self.save(new_job)
+            reaped.append(new_job)
+        _logger.debug("RedisJobStore.reap_expired_leases: reaped %d jobs", len(reaped))
+        return reaped
 
     def __repr__(self) -> str:
         return f"RedisJobStore(prefix={self._prefix!r}, claim_ttl={self._claim_ttl})"

@@ -81,12 +81,20 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, ClassVar, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from varco_core.encryption import FieldEncryptor
+    from varco_core.encryption import (
+        DestroyReceipt,
+        FieldEncryptor,
+        MultiKeyEncryptorRegistry,
+        ScopedEncryptorRegistry,
+    )
+
+logger = logging.getLogger(__name__)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -150,6 +158,33 @@ class EncryptionKeyEntry:
     # Whether key_material was encrypted with the master KEK before storage
     wrapped: bool = False
 
+    # Opaque scoping dimension (Phase 1, U-1) — defaults to tenant_id verbatim
+    # so load_for_scope(t) == load_for_tenant(t) for every existing row and no
+    # data migration of existing values is needed. Downstream picks its own
+    # convention (e.g. f"{tenant}:subject:{sid}"); varco never parses this.
+    scope: str | None = None
+
+    # Set when this entry has been crypto-shredded (Phase 1, U-2). A tombstone:
+    # key_material is blanked and destroyed_at is set, but the row is kept —
+    # that is what makes the distinguishable KeyDestroyedError read path possible.
+    destroyed_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        # DESIGN: default scope to tenant_id, via object.__setattr__ (frozen)
+        #   ✅ Back-compat hinge — every pre-Phase-1 entry (scope unset) behaves
+        #      as if scope == tenant_id, so load_for_scope(tenant_id) finds it
+        #      with no data migration.
+        #   ❌ A caller who explicitly wants scope=None while tenant_id is set
+        #      cannot express that — acceptable, tenant-as-scope is the default
+        #      convention, not a hard requirement.
+        if self.scope is None:
+            object.__setattr__(self, "scope", self.tenant_id)
+
+    @property
+    def is_destroyed(self) -> bool:
+        """``True`` once this entry has been crypto-shredded (tombstoned)."""
+        return self.destroyed_at is not None
+
     # ── Serialisation helpers ─────────────────────────────────────────────────
 
     def to_dict(self) -> dict[str, object]:
@@ -170,6 +205,10 @@ class EncryptionKeyEntry:
             "tenant_id": self.tenant_id,
             "is_primary": self.is_primary,
             "wrapped": self.wrapped,
+            "scope": self.scope,
+            "destroyed_at": (
+                self.destroyed_at.isoformat() if self.destroyed_at else None
+            ),
         }
 
     @classmethod
@@ -204,6 +243,22 @@ class EncryptionKeyEntry:
             if created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=UTC)
 
+        # destroyed_at: same ISO-8601 / datetime / "Z"-suffix handling as created_at
+        destroyed_at_raw = data.get("destroyed_at")
+        destroyed_at: datetime | None = None
+        if destroyed_at_raw:
+            if isinstance(destroyed_at_raw, datetime):
+                destroyed_at = destroyed_at_raw
+            else:
+                try:
+                    destroyed_at = datetime.fromisoformat(str(destroyed_at_raw))
+                except ValueError:
+                    destroyed_at = datetime.fromisoformat(
+                        str(destroyed_at_raw).replace("Z", "+00:00")
+                    )
+                if destroyed_at.tzinfo is None:
+                    destroyed_at = destroyed_at.replace(tzinfo=UTC)
+
         return cls(
             kid=str(data["kid"]),
             algorithm=str(data["algorithm"]),
@@ -212,6 +267,11 @@ class EncryptionKeyEntry:
             tenant_id=data.get("tenant_id"),  # type: ignore[arg-type]
             is_primary=bool(data.get("is_primary", True)),
             wrapped=bool(data.get("wrapped", False)),
+            # Back-compat hinge: a pre-Phase-1 row has no "scope" key at all —
+            # data.get returns None, and __post_init__ synthesizes
+            # scope == tenant_id, exactly as if the row had been written today.
+            scope=data.get("scope"),  # type: ignore[arg-type]
+            destroyed_at=destroyed_at,
         )
 
 
@@ -300,6 +360,58 @@ class EncryptionKeyStore(Protocol):
         """
         ...
 
+    # ── Scope methods (Phase 1, U-1/U-2) — alongside, not replacing, the
+    #    tenant methods above. Third-party implementations that predate these
+    #    keep working through EncryptionKeyManager's capability shim (Step 14) —
+    #    the manager never calls these directly, only via getattr(store, ...).
+
+    async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        """
+        Load all entries for a given ``scope`` (or global entries when
+        ``scope=None``).
+
+        ``scope`` defaults to ``tenant_id`` verbatim for every existing row
+        (see ``EncryptionKeyEntry.__post_init__``), so
+        ``load_for_scope(t) == load_for_tenant(t)`` for pre-Phase-1 data.
+
+        Returns:
+            List of all matching entries, ordered by ``created_at`` ascending.
+        """
+        ...
+
+    async def list_scopes(self) -> list[str]:
+        """
+        Return distinct ``scope`` values for all stored entries.
+
+        Returns:
+            Sorted list of scope strings.  Global (``scope=None``) entries
+            are excluded.
+        """
+        ...
+
+    async def destroy_scope(self, scope: str) -> tuple[str, ...]:
+        """
+        Crypto-shred every non-destroyed entry for ``scope``.
+
+        Tombstones each matching entry — blanks ``key_material`` and sets
+        ``destroyed_at`` — rather than deleting it, so a subsequent decrypt
+        attempt against that kid can raise a distinguishable
+        ``KeyDestroyedError`` instead of the generic "unknown kid" error.
+
+        Args:
+            scope: The scope to destroy every key for.
+
+        Returns:
+            Tuple of ``kid`` strings that were tombstoned by this call.
+
+        Edge cases:
+            - Unknown scope → ``()``, never an error.
+            - Idempotent — a second call returns ``()`` because every matching
+              entry is already destroyed; tombstones are never re-destroyed
+              and never deleted.
+        """
+        ...
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 # InMemoryEncryptionKeyStore — test double
@@ -365,6 +477,28 @@ class InMemoryEncryptionKeyStore:
     async def delete(self, kid: str) -> None:
         """Remove an entry by kid — no-op if not found."""
         self._entries.pop(kid, None)
+
+    async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        """Return all entries for the given ``scope``, sorted by ``created_at``."""
+        matches = [e for e in self._entries.values() if e.scope == scope]
+        return sorted(matches, key=lambda e: e.created_at)
+
+    async def list_scopes(self) -> list[str]:
+        """Return sorted list of distinct non-None scopes."""
+        scopes = {e.scope for e in self._entries.values() if e.scope is not None}
+        return sorted(scopes)
+
+    async def destroy_scope(self, scope: str) -> tuple[str, ...]:
+        """Tombstone every non-destroyed entry for ``scope``; idempotent."""
+        now = datetime.now(UTC)
+        destroyed_kids: list[str] = []
+        for kid, entry in list(self._entries.items()):
+            if entry.scope == scope and not entry.is_destroyed:
+                self._entries[kid] = dataclasses.replace(
+                    entry, key_material="", destroyed_at=now
+                )
+                destroyed_kids.append(kid)
+        return tuple(destroyed_kids)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -448,6 +582,11 @@ class EncryptionKeyManager:
         new_enc = await manager.rotate("acme")
     """
 
+    # One-time deprecation warning per (store class, method) pair — module-wide,
+    # not per-instance, so a long-lived process logs the warning exactly once
+    # even if many EncryptionKeyManager instances wrap the same store class.
+    _shim_warned: ClassVar[set[tuple[type, str]]] = set()
+
     def __init__(
         self,
         store: EncryptionKeyStore,
@@ -463,6 +602,11 @@ class EncryptionKeyManager:
         # Plain dict: safe after build_tenant_registry(); not safe for concurrent
         # first-access from multiple coroutines (see class docstring).
         self._cache: dict[str | None, FieldEncryptor] = {}
+
+        # scope → MultiKeyEncryptorRegistry — populated by build_scoped_registry()
+        # so destroy_scope() can mark the in-memory registry destroyed too,
+        # without a store round-trip on every decrypt.
+        self._scoped_multi: dict[str, MultiKeyEncryptorRegistry] = {}
 
     def __repr__(self) -> str:
         return (
@@ -650,6 +794,197 @@ class EncryptionKeyManager:
         self._cache[tenant_id] = new_enc
         return new_enc
 
+    # ── Scope API (Phase 1, U-1/U-2) ─────────────────────────────────────────
+
+    async def build_scoped_registry(self, scope: str) -> ScopedEncryptorRegistry:
+        """
+        Build a ``ScopedEncryptorRegistry`` containing exactly one scope's key.
+
+        Unlike ``build_tenant_registry()`` (loads every tenant eagerly at
+        startup), this loads **only** ``scope`` — U-1's volume note: per-subject
+        keys mean the store grows with data subjects, and an eager all-keys
+        load is fine at 50 tenants and fatal at 50 000 subjects.
+
+        Generates and saves a fresh key when ``scope`` has no primary entry yet
+        (mirrors ``get_or_create_encryptor``'s first-call behaviour).
+
+        Args:
+            scope: The scope to build a registry for.
+
+        Returns:
+            ``ScopedEncryptorRegistry`` with exactly one scope registered,
+            wrapping a ``MultiKeyEncryptorRegistry`` so a later
+            ``destroy_scope()`` call can mark it destroyed.
+
+        Async safety:  ✅ Issues exactly one scoped store query when the key
+                       already exists (see test_build_scoped_registry_issues_
+                       exactly_one_scoped_query).
+        """
+        from varco_core.encryption import (
+            MultiKeyEncryptorRegistry,
+            ScopedEncryptorRegistry,
+        )
+
+        entries = await self._load_for_scope(scope)
+        primaries = sorted(
+            (e for e in entries if e.is_primary and not e.is_destroyed),
+            key=lambda e: e.created_at,
+            reverse=True,
+        )
+
+        if primaries:
+            primary = primaries[0]
+            enc = self._materialize(primary)
+        else:
+            enc, primary = self._generate(tenant_id=None, is_primary=True, scope=scope)
+            await self._store.save(primary)
+
+        multi = MultiKeyEncryptorRegistry(
+            primary_kid=primary.kid, primary_encryptor=enc
+        )
+        self._scoped_multi[scope] = multi
+
+        registry = ScopedEncryptorRegistry()
+        registry.register(scope, multi)
+        return registry
+
+    async def rotate_scope(self, scope: str) -> FieldEncryptor:
+        """
+        Rotate the encryption key for ``scope`` — the scoped sibling of
+        ``rotate()``.
+
+        Args:
+            scope: Scope to rotate.
+
+        Returns:
+            The new ``FieldEncryptor`` (now the active key for this scope).
+
+        Raises:
+            KeyError: No primary key found for this scope — call
+                      ``build_scoped_registry()`` first.
+        """
+        entries = await self._load_for_scope(scope)
+        current_primary = next(
+            (e for e in entries if e.is_primary and not e.is_destroyed), None
+        )
+        if current_primary is None:
+            raise KeyError(
+                f"Cannot rotate key for scope {scope!r} — no primary key "
+                f"exists in the store. Call build_scoped_registry() first."
+            )
+
+        demoted = dataclasses.replace(current_primary, is_primary=False)
+        await self._store.save(demoted)
+
+        new_enc, new_entry = self._generate(
+            tenant_id=current_primary.tenant_id, is_primary=True, scope=scope
+        )
+        await self._store.save(new_entry)
+
+        multi = self._scoped_multi.get(scope)
+        if multi is not None:
+            multi.register(new_entry.kid, new_enc)
+            multi.set_primary(new_entry.kid)
+
+        return new_enc
+
+    async def destroy_scope(
+        self, scope: str, *, actor: str | None = None
+    ) -> DestroyReceipt:
+        """
+        Crypto-shred every key for ``scope`` — the store-level tombstone plus
+        an audit-friendly receipt.
+
+        Also marks any in-memory ``MultiKeyEncryptorRegistry`` this manager
+        built for ``scope`` (via ``build_scoped_registry``) as destroyed, so a
+        caller holding a reference to that registry sees ``KeyDestroyedError``
+        immediately rather than on the next store round-trip.
+
+        Args:
+            scope:  The scope to destroy.
+            actor:  Optional identity performing the destruction — recorded on
+                    the receipt for audit purposes only, not persisted by
+                    ``EncryptionKeyStore`` itself.
+
+        Returns:
+            ``DestroyReceipt`` naming every kid that was tombstoned by this
+            call.  A second call for the same scope returns an empty
+            ``kids`` tuple — idempotent, per the store primitive's contract.
+        """
+        from varco_core.encryption import DestroyReceipt
+
+        kids = await self._destroy_scope_on_store(scope)
+
+        multi = self._scoped_multi.get(scope)
+        if multi is not None:
+            for kid in kids:
+                multi.destroy(kid)
+
+        # Drop from the plain tenant/scope cache too — a destroyed scope must
+        # not keep serving encrypt() calls with a shredded key.
+        self._cache.pop(scope, None)
+
+        return DestroyReceipt(
+            scope=scope, kids=kids, destroyed_at=datetime.now(UTC), actor=actor
+        )
+
+    # ── Capability shim (Step 14) ────────────────────────────────────────────
+    # EncryptionKeyStore is a runtime_checkable Protocol; adding load_for_scope/
+    # list_scopes/destroy_scope to it would silently break third-party stores
+    # at isinstance() time if the manager called them directly. These helpers
+    # are the ONLY place the manager touches the new methods — always through
+    # getattr(), falling back to the tenant methods with scope == tenant_id.
+
+    async def _load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        fn = getattr(self._store, "load_for_scope", None)
+        if fn is not None:
+            return await fn(scope)  # type: ignore[no-any-return]
+        self._warn_shim_once("load_for_scope")
+        return await self._store.load_for_tenant(scope)
+
+    async def _list_scopes(self) -> list[str]:
+        fn = getattr(self._store, "list_scopes", None)
+        if fn is not None:
+            return await fn()  # type: ignore[no-any-return]
+        self._warn_shim_once("list_scopes")
+        return await self._store.list_tenants()
+
+    async def _destroy_scope_on_store(self, scope: str) -> tuple[str, ...]:
+        fn = getattr(self._store, "destroy_scope", None)
+        if fn is not None:
+            return await fn(scope)  # type: ignore[no-any-return]
+        self._warn_shim_once("destroy_scope")
+
+        # Portable fallback for a tenant-only store — mirrors
+        # InMemoryEncryptionKeyStore.destroy_scope's tombstone semantics,
+        # driven through load_for_tenant/save (both required by the Protocol).
+        entries = await self._store.load_for_tenant(scope)
+        now = datetime.now(UTC)
+        destroyed_kids: list[str] = []
+        for entry in entries:
+            if entry.is_destroyed:
+                continue
+            tombstoned = dataclasses.replace(entry, key_material="", destroyed_at=now)
+            await self._store.save(tombstoned)
+            destroyed_kids.append(entry.kid)
+        return tuple(destroyed_kids)
+
+    def _warn_shim_once(self, method_name: str) -> None:
+        store_cls = type(self._store)
+        key = (store_cls, method_name)
+        if key in EncryptionKeyManager._shim_warned:
+            return
+        EncryptionKeyManager._shim_warned.add(key)
+        logger.warning(
+            "%s does not implement %s() (EncryptionKeyStore Protocol was "
+            "widened in plan 005 Phase 1). EncryptionKeyManager is falling "
+            "back to the tenant-scoped method with scope == tenant_id. "
+            "Implement %s() on the store to support arbitrary scopes.",
+            store_cls.__name__,
+            method_name,
+            method_name,
+        )
+
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _generate(
@@ -657,6 +992,7 @@ class EncryptionKeyManager:
         *,
         tenant_id: str | None,
         is_primary: bool,
+        scope: str | None = None,
     ) -> tuple[FieldEncryptor, EncryptionKeyEntry]:
         """
         Generate a fresh DEK, optionally wrap it, and build the ``FieldEncryptor``
@@ -704,6 +1040,7 @@ class EncryptionKeyManager:
             tenant_id=tenant_id,
             is_primary=is_primary,
             wrapped=wrapped,
+            scope=scope,
         )
 
         # Build the FernetFieldEncryptor from the raw (un-wrapped) key

@@ -190,27 +190,31 @@ Failure modes depend on which bus backend you use:
 async def on_audit_event(self, event: Event) -> None: ...
 ```
 
-**with no `retry_policy` and no `dlq`** — a transient DB failure in
-`audit_repo.save()` propagates straight to the bus's error policy with no automatic
-retry. If you need resilience, subclass `AuditConsumer` and re-declare the handler
-with `retry_policy=`/`dlq=` (the `@listen` decorator is evaluated at class-definition
-time, so a subclass override with a new `@listen(...)` call replaces the parent's
-registration for that method — this is the same pattern used elsewhere for
-retry-wrapped listeners):
+**Safe-by-default since Plan 005 Phase 3 (U-6 §2)** — the bare `@listen` decoration
+above carries no `retry_policy`/`dlq` at class-definition time, but
+`AuditConsumer.register_to(bus)` applies
+`_default_retry_policy = RetryPolicy.durable_delivery()` (`max_attempts=20,
+base_delay=15.0, max_delay=3600.0`) and the constructor's `dlq=` **unless the
+caller explicitly overrides them** — so a transient DB failure in
+`audit_repo.save()` is now retried for minutes before giving up, instead of
+propagating straight to the bus's error policy on the first failure.
+
+**Opt out explicitly** for the old fire-and-forget (single-attempt,
+no-DLQ) behaviour by passing `retry_policy=None` to `register_to()`:
+
+```python
+consumer = AuditConsumer(audit_repo=audit_repo)
+consumer.register_to(bus, retry_policy=None)   # restores pre-Phase-3 behaviour
+```
+
+Or supply your own policy/DLQ instead of the `durable_delivery()` default:
 
 ```python
 from varco_core.resilience import RetryPolicy
 from varco_core.event.dlq import InMemoryDeadLetterQueue
 
-class ResilientAuditConsumer(AuditConsumer):
-    @listen(
-        AuditEvent,
-        channel="varco.audit",
-        retry_policy=RetryPolicy(max_attempts=3, base_delay=1.0),
-        dlq=InMemoryDeadLetterQueue(),
-    )
-    async def on_audit_event(self, event) -> None:
-        await super().on_audit_event(event)
+consumer = AuditConsumer(audit_repo=audit_repo, dlq=InMemoryDeadLetterQueue())
+consumer.register_to(bus, retry_policy=RetryPolicy(max_attempts=3, base_delay=1.0))
 ```
 
 ### Idempotency — verified per backend (do not assume both behave the same)

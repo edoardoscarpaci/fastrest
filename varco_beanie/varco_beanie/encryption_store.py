@@ -126,13 +126,22 @@ class EncryptionKeyDocument(Document):
     # True = key_material encrypted with master KEK
     wrapped: bool = False
 
+    # Opaque scoping dimension (Phase 1, U-1) — None on a pre-migration
+    # document; _doc_to_entry passes None through so EncryptionKeyEntry.
+    # __post_init__ defaults it to tenant_id.
+    scope: str | None = None
+
+    # Set when this entry has been crypto-shredded — tombstone, never deleted.
+    destroyed_at: datetime | None = None
+
     class Settings:
         # Collection name — matches the SA table name for cross-backend consistency
         name = "varco_encryption_keys"
 
-        # Index on tenant_id — makes load_for_tenant O(N_tenant) not O(N_total)
-        # Beanie 2.x manages indexes via init_beanie() at startup
-        indexes = ["tenant_id"]
+        # Index on tenant_id/scope — makes load_for_tenant/load_for_scope
+        # O(N_scope) not O(N_total). Beanie 2.x manages indexes via
+        # init_beanie() at startup.
+        indexes = ["tenant_id", "scope"]
 
     def __repr__(self) -> str:
         return (
@@ -234,6 +243,8 @@ class BeanieEncryptionKeyStore:
             tenant_id=entry.tenant_id,
             is_primary=entry.is_primary,
             wrapped=entry.wrapped,
+            scope=entry.scope,
+            destroyed_at=entry.destroyed_at,
         )
 
         # save() upserts by _id — safe to call for new and existing kids
@@ -341,6 +352,46 @@ class BeanieEncryptionKeyStore:
             return  # idempotent — already gone
         await doc.delete()
 
+    # ── Scope methods (Phase 1, U-1/U-2) ─────────────────────────────────────
+
+    async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        """Load all entries for ``scope``, ordered by ``created_at`` ascending."""
+        docs = (
+            await EncryptionKeyDocument.find({"scope": scope})
+            .sort("+created_at")
+            .to_list()
+        )
+        return [_doc_to_entry(doc) for doc in docs]
+
+    async def list_scopes(self) -> list[str]:
+        """Return sorted list of distinct non-null scopes."""
+        docs = await EncryptionKeyDocument.find({"scope": {"$ne": None}}).to_list()
+        seen: set[str] = {doc.scope for doc in docs if doc.scope is not None}
+        return sorted(seen)
+
+    async def destroy_scope(self, scope: str) -> tuple[str, ...]:
+        """
+        Tombstone every non-destroyed entry for ``scope``.
+
+        Args:
+            scope: The scope to destroy every key for.
+
+        Returns:
+            Tuple of kids tombstoned by this call — ``()`` for an unknown
+            scope or one whose entries are already all destroyed.
+        """
+        docs = await EncryptionKeyDocument.find(
+            {"scope": scope, "destroyed_at": None}
+        ).to_list()
+        now = datetime.now(UTC)
+        destroyed_kids: list[str] = []
+        for doc in docs:
+            doc.key_material = ""
+            doc.destroyed_at = now
+            await doc.save()
+            destroyed_kids.append(doc.id)
+        return tuple(destroyed_kids)
+
 
 # ── Serialisation helper ──────────────────────────────────────────────────────
 
@@ -364,6 +415,14 @@ def _doc_to_entry(doc: EncryptionKeyDocument) -> EncryptionKeyEntry:
     if hasattr(created_at, "tzinfo") and created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=UTC)
 
+    destroyed_at = doc.destroyed_at
+    if (
+        destroyed_at is not None
+        and hasattr(destroyed_at, "tzinfo")
+        and destroyed_at.tzinfo is None
+    ):
+        destroyed_at = destroyed_at.replace(tzinfo=UTC)
+
     return EncryptionKeyEntry(
         kid=doc.id,  # MongoDB _id → kid
         algorithm=doc.algorithm,
@@ -372,4 +431,8 @@ def _doc_to_entry(doc: EncryptionKeyDocument) -> EncryptionKeyEntry:
         tenant_id=doc.tenant_id,
         is_primary=doc.is_primary,
         wrapped=doc.wrapped,
+        # Back-compat hinge: a pre-migration document has scope=None —
+        # EncryptionKeyEntry.__post_init__ defaults it to tenant_id.
+        scope=doc.scope,
+        destroyed_at=destroyed_at,
     )

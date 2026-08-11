@@ -43,6 +43,8 @@ Usage::
 
 from __future__ import annotations
 
+import dataclasses
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from varco_core.encryption_store import EncryptionKeyEntry
@@ -120,6 +122,14 @@ class RedisEncryptionKeyStore:
         """Redis Set tracking all distinct tenant IDs: ``{prefix}:tenants``."""
         return f"{self._prefix}:tenants"
 
+    def _scope_set_key(self, scope: str) -> str:
+        """Redis Set key for scope index: ``{prefix}:scope:{scope}``."""
+        return f"{self._prefix}:scope:{scope}"
+
+    def _all_scopes_set_key(self) -> str:
+        """Redis Set tracking all distinct scopes: ``{prefix}:scopes``."""
+        return f"{self._prefix}:scopes"
+
     # ── EncryptionKeyStore protocol ───────────────────────────────────────────
 
     async def save(self, entry: EncryptionKeyEntry) -> None:
@@ -155,6 +165,11 @@ class RedisEncryptionKeyStore:
         else:
             # Global key — add to dedicated global Set so load_for_tenant(None) works
             await self._client.sadd(f"{self._prefix}:global", entry.kid)  # type: ignore[misc]
+
+        # Update scope index — mirrors the tenant index above (Phase 1, U-1)
+        if entry.scope is not None:
+            await self._client.sadd(self._scope_set_key(entry.scope), entry.kid)  # type: ignore[misc]
+            await self._client.sadd(self._all_scopes_set_key(), entry.scope)  # type: ignore[misc]
 
     async def load(self, kid: str) -> EncryptionKeyEntry | None:
         """
@@ -282,6 +297,76 @@ class RedisEncryptionKeyStore:
             # Global key — remove from global Set
             await self._client.srem(f"{self._prefix}:global", kid)  # type: ignore[misc]
 
+    # ── Scope methods (Phase 1, U-1/U-2) ─────────────────────────────────────
+
+    async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        """
+        Load all entries for ``scope``, using the scope Set index (mirrors
+        ``load_for_tenant``).
+
+        Returns:
+            Entries sorted by ``created_at`` ascending.
+        """
+        if scope is None:
+            return []
+        kids_raw = await self._client.smembers(self._scope_set_key(scope))  # type: ignore[misc]
+        if not kids_raw:
+            return []
+        entries: list[EncryptionKeyEntry] = []
+        for kid_bytes in kids_raw:
+            kid = (
+                kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
+            )
+            entry = await self.load(kid)
+            if entry is not None:
+                entries.append(entry)
+        return sorted(entries, key=lambda e: e.created_at)
+
+    async def list_scopes(self) -> list[str]:
+        """Return sorted list of distinct scopes via the global scopes Set."""
+        raw = await self._client.smembers(self._all_scopes_set_key())  # type: ignore[misc]
+        scopes = [(s.decode("utf-8") if isinstance(s, bytes) else s) for s in raw]
+        return sorted(scopes)
+
+    async def destroy_scope(self, scope: str) -> tuple[str, ...]:
+        """
+        Tombstone every non-destroyed entry for ``scope``.
+
+        DESIGN: sequential HSET per entry over a single Lua script
+          ✅ Works against any ``redis.asyncio`` client without requiring
+             ``EVAL``/``SCRIPT LOAD`` support in the test double, keeping the
+             unit-test suite Docker-free (mirrors the plan's own note that
+             ``save``/``delete`` are already non-atomic across Hash+Set).
+          ❌ Not atomic across entries — a crash mid-destroy could tombstone
+             some kids and not others for the same scope. Acceptable for now
+             because the ``key_material=""`` write is itself idempotent (a
+             partially-completed destroy is safe to retry, and idempotent —
+             see the test list above). A single-scope, all-entries atomic Lua
+             variant (matching ``varco_redis/varco_redis/lock.py``'s pattern)
+             is a natural follow-up if operators need a stronger guarantee.
+
+        Returns:
+            Tuple of kids tombstoned by this call.  ``()`` for an unknown
+            scope or a scope whose entries are already all destroyed.
+        """
+        kids_raw = await self._client.smembers(self._scope_set_key(scope))  # type: ignore[misc]
+        destroyed_kids: list[str] = []
+        for kid_bytes in kids_raw:
+            kid = (
+                kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
+            )
+            entry = await self.load(kid)
+            if entry is None or entry.is_destroyed:
+                continue
+            tombstoned = dataclasses.replace(
+                entry, key_material="", destroyed_at=datetime.now(UTC)
+            )
+            await self._client.hset(  # type: ignore[misc]
+                self._hash_key(kid), mapping=_entry_to_redis_mapping(tombstoned)
+            )
+            destroyed_kids.append(kid)
+        return tuple(destroyed_kids)
+
     # ── Maintenance helpers ────────────────────────────────────────────────────
 
     async def _repair_tenant_index(self) -> None:
@@ -357,6 +442,8 @@ def _entry_to_redis_mapping(entry: EncryptionKeyEntry) -> dict[str, str]:
         "tenant_id": entry.tenant_id if entry.tenant_id is not None else "__global__",
         "is_primary": "1" if entry.is_primary else "0",
         "wrapped": "1" if entry.wrapped else "0",
+        "scope": entry.scope if entry.scope is not None else "__global__",
+        "destroyed_at": entry.destroyed_at.isoformat() if entry.destroyed_at else "",
     }
 
 
@@ -392,6 +479,14 @@ def _redis_mapping_to_entry(
     tenant_raw = data.get("tenant_id")
     tenant_id: str | None = None if tenant_raw in (None, "__global__") else tenant_raw
 
+    # Back-compat hinge: a pre-Phase-1 hash has no "scope" field at all —
+    # data.get returns None, and EncryptionKeyEntry.from_dict's own
+    # __post_init__ defaulting synthesizes scope == tenant_id.
+    scope_raw = data.get("scope")
+    scope: str | None = None if scope_raw in (None, "__global__") else scope_raw
+
+    destroyed_at_raw = data.get("destroyed_at") or None
+
     return EncryptionKeyEntry.from_dict(
         {
             "kid": data["kid"],
@@ -401,5 +496,7 @@ def _redis_mapping_to_entry(
             "tenant_id": tenant_id,
             "is_primary": data.get("is_primary", "1") == "1",
             "wrapped": data.get("wrapped", "0") == "1",
+            "scope": scope,
+            "destroyed_at": destroyed_at_raw,
         }
     )

@@ -61,6 +61,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Final
 from uuid import UUID, uuid4
 
@@ -74,6 +75,27 @@ _logger = logging.getLogger(__name__)
 # dropping the oldest entries.  This prevents unbounded memory growth in tests
 # or long-running in-process scenarios.
 _IN_MEMORY_MAX_SIZE: Final[int] = 10_000
+
+
+# ── DeadLetterSource ──────────────────────────────────────────────────────────
+
+
+class DeadLetterSource(StrEnum):
+    """
+    Which varco subsystem produced a ``DeadLetterEntry`` (Plan 005 Phase 3,
+    U-6). One DLQ concept serving all three producers — U-17 §4's own words —
+    rather than a second, job-specific DLQ abstraction.
+    """
+
+    CONSUMER = "consumer"
+    """An ``EventConsumer`` handler exhausted its ``retry_policy`` (existing
+    behaviour, unchanged — this is simply the new explicit name for it)."""
+
+    OUTBOX_RELAY = "outbox_relay"
+    """``OutboxRelay`` could not deserialize or publish an ``OutboxEntry``."""
+
+    JOB = "job"
+    """A job exhausted its ``max_attempts`` in ``JobRunner`` (Phase 4)."""
 
 
 # ── DeadLetterEntry ───────────────────────────────────────────────────────────
@@ -107,19 +129,34 @@ class DeadLetterEntry:
         attempts:       Total number of call attempts made (including first).
         first_failed_at: UTC datetime of the first failure for this event.
         last_failed_at:  UTC datetime of the final failed attempt.
+        source:          Which subsystem produced this entry (Plan 005 Phase 3).
+                         Defaults to ``CONSUMER`` — every pre-Phase-3 call site
+                         (positional or keyword, without ``source=``) keeps
+                         working unchanged.
+        source_ref:      Opaque string identifying the source record — an
+                         outbox ``entry_id`` or a job id, as ``str``. ``None``
+                         for consumer-sourced entries (the ``event`` itself
+                         carries identity).
+        payload:         Raw bytes when ``event`` could not be deserialized at
+                         all (``OutboxRelay``'s failed-to-deserialize path) —
+                         the whole reason ``event`` had to become optional.
 
     Edge cases:
         - ``first_failed_at`` and ``last_failed_at`` are equal when
           ``attempts=1`` (no retries configured).
         - ``error_type`` and ``error_message`` are strings — the original
           exception object is NOT stored (not picklable/serializable in general).
+        - ``event=None`` is only expected when ``source != CONSUMER`` — a
+          consumer-sourced entry always carries the original event.
     """
 
     entry_id: UUID = field(default_factory=uuid4)
     """Auto-generated unique ID for this DLQ entry."""
 
-    event: Event = field(default=None)  # type: ignore[assignment]
-    """Original event that could not be processed."""
+    event: Event | None = field(default=None)
+    """Original event that could not be processed. ``None`` for a
+    relay-sourced entry whose payload could not even be deserialized —
+    see ``payload`` below."""
 
     channel: str = ""
     """Channel the event was published to."""
@@ -146,6 +183,18 @@ class DeadLetterEntry:
         default_factory=lambda: datetime.now(tz=timezone.utc)
     )
     """UTC datetime of the most recent (final) failed attempt."""
+
+    source: DeadLetterSource = DeadLetterSource.CONSUMER
+    """Which subsystem produced this entry (Plan 005 Phase 3) — defaults to
+    the pre-Phase-3 behaviour (a consumer handler's retry exhaustion)."""
+
+    source_ref: str | None = None
+    """Opaque source-record identifier (outbox ``entry_id`` / job id, as
+    ``str``) — ``None`` for consumer-sourced entries."""
+
+    payload: bytes | None = None
+    """Raw bytes when ``event`` could not be deserialized — ``None`` unless
+    a relay-sourced entry's payload was unparseable."""
 
     @classmethod
     def from_failure(

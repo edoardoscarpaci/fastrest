@@ -101,6 +101,12 @@ _KEY_TABLE = Table(
     Column("is_primary", Boolean, nullable=False, default=True),
     # True = key_material is wrapped (encrypted with master KEK)
     Column("wrapped", Boolean, nullable=False, default=False),
+    # Opaque scoping dimension (Phase 1, U-1) — indexed, nullable so a
+    # pre-migration row (scope=NULL) yields scope == tenant_id on read
+    # (see _row_to_entry / EncryptionKeyEntry.__post_init__).
+    Column("scope", String(255), nullable=True, index=True),
+    # Set when this entry has been crypto-shredded — tombstone, never deleted.
+    Column("destroyed_at", DateTime(timezone=True), nullable=True),
 )
 
 
@@ -278,6 +284,71 @@ class SAEncryptionKeyStore:
         async with self._engine.begin() as conn:
             await conn.execute(sa.delete(_KEY_TABLE).where(_KEY_TABLE.c.kid == kid))
 
+    # ── Scope methods (Phase 1, U-1/U-2) ─────────────────────────────────────
+
+    async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        """Load all entries for ``scope``, ordered by ``created_at`` ascending."""
+        async with self._engine.connect() as conn:
+            if scope is None:
+                stmt = (
+                    sa.select(_KEY_TABLE)
+                    .where(_KEY_TABLE.c.scope.is_(None))
+                    .order_by(_KEY_TABLE.c.created_at.asc())
+                )
+            else:
+                stmt = (
+                    sa.select(_KEY_TABLE)
+                    .where(_KEY_TABLE.c.scope == scope)
+                    .order_by(_KEY_TABLE.c.created_at.asc())
+                )
+            result = await conn.execute(stmt)
+            return [self._row_to_entry(row) for row in result.fetchall()]
+
+    async def list_scopes(self) -> list[str]:
+        """Return sorted list of distinct non-NULL scopes."""
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(_KEY_TABLE.c.scope)
+                .where(_KEY_TABLE.c.scope.isnot(None))
+                .distinct()
+                .order_by(_KEY_TABLE.c.scope)
+            )
+            return [row[0] for row in result.fetchall()]
+
+    async def destroy_scope(self, scope: str) -> tuple[str, ...]:
+        """
+        Tombstone every non-destroyed entry for ``scope`` in a single
+        ``UPDATE ... RETURNING kid`` (falls back to select+update on dialects
+        without ``RETURNING``, e.g. SQLite < 3.35).
+
+        Idempotent — a second call returns ``()`` since every matching entry
+        is already destroyed.
+        """
+        now = datetime.now(UTC)
+        stmt = (
+            sa.update(_KEY_TABLE)
+            .where(_KEY_TABLE.c.scope == scope)
+            .where(_KEY_TABLE.c.destroyed_at.is_(None))
+            .values(key_material="", destroyed_at=now)
+        )
+        async with self._engine.begin() as conn:
+            try:
+                result = await conn.execute(stmt.returning(_KEY_TABLE.c.kid))
+                return tuple(row[0] for row in result.fetchall())
+            except Exception:
+                # Dialect without UPDATE ... RETURNING support — select the
+                # target kids first, then update (still one transaction).
+                select_stmt = (
+                    sa.select(_KEY_TABLE.c.kid)
+                    .where(_KEY_TABLE.c.scope == scope)
+                    .where(_KEY_TABLE.c.destroyed_at.is_(None))
+                )
+                target_rows = await conn.execute(select_stmt)
+                kids = tuple(row[0] for row in target_rows.fetchall())
+                if kids:
+                    await conn.execute(stmt)
+                return kids
+
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     async def _upsert(self, conn: AsyncConnection, entry: EncryptionKeyEntry) -> None:
@@ -342,6 +413,14 @@ class SAEncryptionKeyStore:
         if hasattr(created_at, "tzinfo") and created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=UTC)
 
+        destroyed_at = getattr(row, "destroyed_at", None)
+        if (
+            destroyed_at is not None
+            and hasattr(destroyed_at, "tzinfo")
+            and destroyed_at.tzinfo is None
+        ):
+            destroyed_at = destroyed_at.replace(tzinfo=UTC)
+
         return EncryptionKeyEntry(
             kid=row.kid,
             algorithm=row.algorithm,
@@ -350,6 +429,11 @@ class SAEncryptionKeyStore:
             tenant_id=row.tenant_id,
             is_primary=bool(row.is_primary),
             wrapped=bool(row.wrapped),
+            # Back-compat hinge: a pre-migration row has scope=NULL — passing
+            # None lets EncryptionKeyEntry.__post_init__ default it to
+            # tenant_id, exactly as if the row were written today.
+            scope=getattr(row, "scope", None),
+            destroyed_at=destroyed_at,
         )
 
 
@@ -375,4 +459,6 @@ def _entry_to_row(entry: EncryptionKeyEntry) -> dict[str, Any]:
         "tenant_id": entry.tenant_id,
         "is_primary": entry.is_primary,
         "wrapped": entry.wrapped,
+        "scope": entry.scope,
+        "destroyed_at": entry.destroyed_at,
     }

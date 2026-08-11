@@ -437,6 +437,12 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
         _job_runner: Injected ``AbstractJobRunner`` for async offload.
         _auth:       ``AbstractServerAuth`` instance used for all routes.
         _event_bus:  ``AbstractEventBus`` for WebSocket/SSE mixins.
+        _store_raw_token: Plan 005 Phase 6 (U-19). Whether ``_submit_job()``'s
+                     auto-populated ``Job`` carries the raw Bearer token
+                     (``True``, default — required for the completion
+                     callback's ``Authorization: Bearer`` forwarding) or only
+                     its non-reversible reference fields (``False`` — pair
+                     with a service-credential-authenticated callback).
 
     Service-backed usage (CRUD router)::
 
@@ -533,6 +539,25 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
     # Per-instance override is still possible via __init__(auth=...) in VarcoCRUDRouter,
     # which writes self._auth as an instance attribute that shadows this ClassVar.
     _auth: ClassVar[AbstractServerAuth | None]
+
+    # Plan 005 Phase 6 (U-19) — controls whether _submit_job()'s
+    # auto-populated Job carries the raw Bearer token or only its
+    # reference fields (request_issuer/request_subject/request_token_hash).
+    # DESIGN: default True over default False
+    #   ✅ JobRunner._fire_callback() forwards job.request_token as the
+    #      completion callback's `Authorization: Bearer` header — flipping
+    #      the default to False would silently break callback auth for
+    #      every existing async-capable route (Source correction 4).
+    #   ✅ Setting this False on a router is an explicit, auditable opt-in —
+    #      it also removes a token-replay surface, but requires the
+    #      callback receiver to authenticate the request some other way
+    #      (a service credential / mTLS / signed callback URL), since the
+    #      caller's own token is never forwarded once this is False.
+    #   ❌ A router that sets this False and relies on `request_token`-based
+    #      callback auth will see 401s on its own webhook receiver — this
+    #      is intentional (a token-replay surface removed on purpose), but
+    #      it must be paired with a callback-side auth change.
+    _store_raw_token: ClassVar[bool] = True
 
     def __repr__(self) -> str:
         return (
@@ -1576,11 +1601,20 @@ async def _submit_job(
     # Capture raw Bearer token for webhook callback authentication
     raw_token = request_token_var.get(None)
 
+    # Plan 005 Phase 6 (U-19) — opt-out via a router ClassVar. Default True:
+    # forwarding job.request_token as the callback's Authorization: Bearer
+    # header (see JobRunner._fire_callback) is the existing behaviour and
+    # must not silently change for routers that don't set this. Setting it
+    # False requires the callback to authenticate with a service credential
+    # instead of replaying the caller's token — see VarcoRouter._store_raw_token.
+    store_raw_token = getattr(router, "_store_raw_token", True)
+
     job = Job(
         job_id=job_id,
         auth_snapshot=auth_snapshot,
         request_token=raw_token,
         callback_url=callback_url,
+        store_raw_token=store_raw_token,
     )
 
     # Closure captures coro_fn and args — the coroutine is not created until

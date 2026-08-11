@@ -294,10 +294,11 @@ class PolicyEngine(ABC):
         Returns:
             ``True`` if the policy permits the request, ``False`` otherwise.
 
-        Raises:
-            Implementations should not raise on a *denial* (return ``False``).
-            They may raise on infrastructure failure (engine not started,
-            store unreachable) — callers treat that as fail-closed.
+        Edge cases:
+            - Implementations should not raise on a *denial* (return
+              ``False``). They may raise on infrastructure failure (engine
+              not started, store unreachable) — callers treat that as
+              fail-closed.
         """
         ...
 

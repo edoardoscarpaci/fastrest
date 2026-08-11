@@ -268,3 +268,174 @@ class TestOutboxRelayOnce:
 
         await relay._relay_once()
         assert len(repo._entries) == 0
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 3, Step 35 — OutboxRelay retry/DLQ resilience
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Steps 36-38 land: OutboxEntry gains attempts/last_error/next_attempt_at,
+# OutboxRepository gains a concrete mark_failed(), and OutboxRelay.__init__ gains
+# retry_policy/dlq/max_attempts with the described _relay_entry() behaviour.
+
+
+class _TrackingOutboxRepository(OutboxRepository):
+    """In-memory repo that also records mark_failed() calls for assertions."""
+
+    def __init__(self) -> None:
+        self._entries: list[OutboxEntry] = []
+        self.mark_failed_calls: list[tuple] = []
+
+    async def save(self, entry: OutboxEntry) -> None:
+        self._entries.append(entry)
+
+    async def get_pending(self, *, limit: int = 100) -> list[OutboxEntry]:
+        return list(self._entries[:limit])
+
+    async def delete(self, entry_id: UUID) -> None:
+        self._entries = [e for e in self._entries if e.entry_id != entry_id]
+
+    async def mark_failed(
+        self, entry_id: UUID, *, attempts: int, next_attempt_at, error: str
+    ) -> None:
+        self.mark_failed_calls.append((entry_id, attempts, next_attempt_at, error))
+        await super().mark_failed(
+            entry_id, attempts=attempts, next_attempt_at=next_attempt_at, error=error
+        )
+
+
+class _AlwaysFailingBus(InMemoryEventBus):
+    async def publish(self, event: Event, *, channel: str = CHANNEL_DEFAULT) -> None:
+        raise RuntimeError("broker down")
+
+
+class TestOutboxEntryAttemptFields:
+    def test_new_fields_default_and_dont_change_from_event(self) -> None:
+        entry = OutboxEntry.from_event(OrderPlacedEvent(), channel="orders")
+        assert entry.attempts == 0
+        assert entry.last_error is None
+        assert entry.next_attempt_at is None
+
+
+class TestOutboxRelayNoRetryPolicyIsByteIdenticalToToday:
+    async def test_no_retry_policy_publish_failure_leaves_entry_in_place(self) -> None:
+        repo = _TrackingOutboxRepository()
+        relay = OutboxRelay(outbox=repo, bus=_AlwaysFailingBus(), poll_interval=0.01)
+        await repo.save(OutboxEntry.from_event(OrderPlacedEvent(), channel="orders"))
+
+        await relay._relay_once()
+
+        assert len(repo._entries) == 1
+        assert repo._entries[0].attempts == 0
+
+
+class TestOutboxRelayConstructionValidation:
+    def test_max_attempts_without_dlq_raises_value_error(self) -> None:
+        with pytest.raises(ValueError):
+            OutboxRelay(
+                outbox=_TrackingOutboxRepository(),
+                bus=InMemoryEventBus(),
+                max_attempts=3,
+            )
+
+
+class TestOutboxRelayWithRetryPolicy:
+    async def test_attempts_increments_and_next_attempt_at_moves_forward(
+        self,
+    ) -> None:
+        from varco_core.event.dlq import InMemoryDeadLetterQueue
+        from varco_core.resilience import RetryPolicy
+
+        repo = _TrackingOutboxRepository()
+        dlq = InMemoryDeadLetterQueue()
+        relay = OutboxRelay(
+            outbox=repo,
+            bus=_AlwaysFailingBus(),
+            poll_interval=0.01,
+            retry_policy=RetryPolicy(max_attempts=5, base_delay=1.0),
+            dlq=dlq,
+            max_attempts=5,
+        )
+        await repo.save(OutboxEntry.from_event(OrderPlacedEvent(), channel="orders"))
+
+        await relay._relay_once()
+
+        assert len(repo._entries) == 1
+        assert repo._entries[0].attempts == 1
+        assert repo._entries[0].next_attempt_at is not None
+
+    async def test_future_next_attempt_at_entry_is_skipped(self) -> None:
+        from varco_core.event.dlq import InMemoryDeadLetterQueue
+        from varco_core.resilience import RetryPolicy
+
+        repo = _TrackingOutboxRepository()
+        bus = InMemoryEventBus()
+        dlq = InMemoryDeadLetterQueue()
+        relay = OutboxRelay(
+            outbox=repo,
+            bus=bus,
+            poll_interval=0.01,
+            retry_policy=RetryPolicy(max_attempts=5, base_delay=1.0),
+            dlq=dlq,
+            max_attempts=5,
+        )
+
+        entry = dataclasses_replace_future_entry()
+        await repo.save(entry)
+
+        await relay._relay_once()
+
+        # Still present — must not have been published because run in the future.
+        assert len(repo._entries) == 1
+
+    async def test_exhausted_attempts_pushes_to_dlq_and_deletes(self) -> None:
+        from varco_core.event.dlq import InMemoryDeadLetterQueue
+        from varco_core.resilience import RetryPolicy
+
+        repo = _TrackingOutboxRepository()
+        dlq = InMemoryDeadLetterQueue()
+        relay = OutboxRelay(
+            outbox=repo,
+            bus=_AlwaysFailingBus(),
+            poll_interval=0.01,
+            retry_policy=RetryPolicy(max_attempts=1, base_delay=0.01),
+            dlq=dlq,
+            max_attempts=1,
+        )
+        await repo.save(OutboxEntry.from_event(OrderPlacedEvent(), channel="orders"))
+
+        await relay._relay_once()
+
+        assert len(repo._entries) == 0
+        assert await dlq.count() == 1
+
+    async def test_repository_without_mark_failed_degrades_with_warning(
+        self, caplog
+    ) -> None:
+        # A plain repo (today's InMemoryOutboxRepository, no mark_failed override)
+        # must fall back to unbounded-retry behaviour via the concrete ABC default.
+        from varco_core.resilience import RetryPolicy
+
+        repo = InMemoryOutboxRepository()
+        relay = OutboxRelay(
+            outbox=repo,
+            bus=_AlwaysFailingBus(),
+            poll_interval=0.01,
+            retry_policy=RetryPolicy(max_attempts=5, base_delay=1.0),
+        )
+        await repo.save(OutboxEntry.from_event(OrderPlacedEvent(), channel="orders"))
+
+        await relay._relay_once()
+        # Entry survives — degrade to unbounded retry, not crash.
+        assert len(repo._entries) == 1
+
+
+def dataclasses_replace_future_entry() -> OutboxEntry:
+    import dataclasses as _dc
+
+    entry = OutboxEntry.from_event(OrderPlacedEvent(), channel="orders")
+    return _dc.replace(
+        entry,
+        next_attempt_at=datetime.now(tz=timezone.utc)
+        + __import__("datetime").timedelta(hours=1),
+    )

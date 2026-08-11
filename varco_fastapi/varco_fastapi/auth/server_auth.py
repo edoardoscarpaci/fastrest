@@ -47,11 +47,18 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException, Request, status
-
 from varco_core.auth.base import AuthContext
 
-if TYPE_CHECKING:
-    from varco_core.authority import TrustedIssuerRegistry
+# Sentinel distinguishing "audience kwarg omitted" from "audience=None passed
+# explicitly" (Plan 005, Phase 2 / U-13). The two must NOT be treated the
+# same: an omitted audience with no VARCO_JWT_AUDIENCE means the caller never
+# thought about it (fail closed — raise); an explicit audience=None is the
+# pre-Phase-2 idiom for "I am deliberately not enforcing audience" and must
+# keep working exactly as before (see
+# varco_fastapi/tests/milestone_a/test_server_auth.py::
+# test_audience_none_does_not_enforce_either_way, which stays green
+# unmodified).
+_AUDIENCE_UNSET = object()
 
 _logger = logging.getLogger(__name__)
 
@@ -59,6 +66,8 @@ _logger = logging.getLogger(__name__)
 # JwtBearerAuth when required=False and no token is present.
 _ANONYMOUS: AuthContext = AuthContext()
 
+if TYPE_CHECKING:
+    from varco_core.authority import TrustedIssuerRegistry
 
 # ── AbstractServerAuth ────────────────────────────────────────────────────────
 
@@ -121,13 +130,27 @@ class JwtBearerAuth(AbstractServerAuth):
                             no token is present.  Defaults to ``AuthContext()``.
         audience:           Expected ``aud`` claim value(s), threaded into
                             ``registry.verify(audience=...)`` (Plan 002 C-2).
-                            ``None`` (default) reads ``VARCO_JWT_AUDIENCE``; if
-                            that is also unset, audience is NOT enforced — a
-                            **single** warning is logged at construction time
-                            (opt-in hardening, decision D-17; matches
-                            historical "no aud check in the HTTP path"
-                            behaviour so existing deployments are not broken
-                            by silently start-401ing).
+                            Omitted (default) reads ``VARCO_JWT_AUDIENCE``; if
+                            that is also unset, construction **raises
+                            ``ValueError``** (Plan 005 Phase 2 / U-13 — a
+                            BREAKING security-default change: a service that
+                            forgets to set an audience used to log one
+                            warning and proceed; it now refuses to start).
+                            Pass ``audience=None`` **explicitly** to keep the
+                            pre-Phase-2 "not enforced" behaviour for this one
+                            instance (audience is a deliberate, per-instance
+                            opt-out — distinct from ``allow_any_audience``,
+                            which is a process-wide policy statement); or use
+                            ``allow_any_audience=True`` /
+                            ``VARCO_JWT_ALLOW_ANY_AUDIENCE=true`` for the
+                            documented, named escape hatch.
+        allow_any_audience: Explicit, named opt-out from the ``ValueError``
+                            above (Plan 005 Phase 2 / U-13). ``False``
+                            (default) reads
+                            ``VARCO_JWT_ALLOW_ANY_AUDIENCE``. When ``True``
+                            and no audience is configured, construction
+                            succeeds but logs a **single** warning — the same
+                            shape as the old default, now opt-in only.
         leeway:             Clock-skew leeway in seconds, threaded into
                             ``registry.verify(leeway=...)`` (Plan 002 C-1).
                             ``None`` (default) reads ``VARCO_JWT_LEEWAY_SECONDS``
@@ -139,6 +162,19 @@ class JwtBearerAuth(AbstractServerAuth):
         ✅ Same verification path for JWT-based server and client auth
         ❌ Requires at least one issuer to be registered in the registry
 
+    DESIGN: sentinel default for ``audience`` distinguishes "omitted" from
+    "explicitly None"
+        ✅ A caller who never thought about audience enforcement (omitted the
+           kwarg, no env var) gets a startup failure — the whole point of
+           Phase 2.
+        ✅ A caller who explicitly wrote ``audience=None`` is making a
+           deliberate statement and keeps working unmodified — no test in
+           this repo asserting that behaviour needs to change.
+        ❌ One more sentinel object in the codebase — the alternative
+           (treating omitted and explicit-None identically) would silently
+           break every existing ``audience=None`` call site on upgrade,
+           which is a worse failure mode than "one more sentinel".
+
     Thread safety:  ✅ ``TrustedIssuerRegistry.verify`` is thread-safe.
     Async safety:   ✅ ``verify`` is ``async def``.
 
@@ -146,6 +182,8 @@ class JwtBearerAuth(AbstractServerAuth):
         - ``Authorization: Bearer`` with no token value raises 401.
         - Expired tokens raise 401 with "Token expired" detail.
         - Tokens with unknown ``kid`` or ``iss`` raise 401 with "Unknown issuer".
+        - Omitted ``audience``, no ``VARCO_JWT_AUDIENCE``, no
+          ``allow_any_audience`` → ``ValueError`` at construction.
     """
 
     def __init__(
@@ -154,8 +192,9 @@ class JwtBearerAuth(AbstractServerAuth):
         *,
         required: bool = True,
         anonymous_context: AuthContext | None = None,
-        audience: str | list[str] | None = None,
+        audience: str | list[str] | None = _AUDIENCE_UNSET,  # type: ignore[assignment]
         leeway: float | None = None,
+        allow_any_audience: bool | None = None,
     ) -> None:
         from varco_core.jwt.config import JwtVerificationSettings
 
@@ -164,17 +203,37 @@ class JwtBearerAuth(AbstractServerAuth):
         self._registry = registry
         self._required = required
         self._anonymous = anonymous_context or _ANONYMOUS
-        self._audience = audience if audience is not None else settings.audience
+
+        audience_omitted = audience is _AUDIENCE_UNSET
+        if audience_omitted:
+            self._audience = settings.audience
+        else:
+            self._audience = audience  # type: ignore[assignment]
+
         self._leeway = leeway if leeway is not None else settings.leeway_seconds
 
-        if self._audience is None:
-            # Opt-in hardening (D-17) — warn once per JwtBearerAuth instance
-            # (typically once per process, at startup) rather than staying
-            # silent about an unenforced aud claim.
+        effective_allow_any_audience = (
+            allow_any_audience
+            if allow_any_audience is not None
+            else settings.allow_any_audience
+        )
+
+        if self._audience is None and audience_omitted:
+            # Fail closed (Plan 005 Phase 2 / U-13) — only when the caller
+            # never configured an audience at all. An explicit
+            # audience=None is a deliberate opt-out and never reaches here.
+            if not effective_allow_any_audience:
+                raise ValueError(
+                    "JwtBearerAuth: no audience configured — set audience=..., "
+                    "VARCO_JWT_AUDIENCE, or explicitly opt out with "
+                    "allow_any_audience=True / VARCO_JWT_ALLOW_ANY_AUDIENCE=true "
+                    "if this service must accept tokens minted for any audience."
+                )
             _logger.warning(
                 "JwtBearerAuth: audience is not enforced (aud claim is never "
-                "checked). Set audience=... or VARCO_JWT_AUDIENCE to harden "
-                "against tokens minted for a different service."
+                "checked) — allow_any_audience=True. Set audience=... or "
+                "VARCO_JWT_AUDIENCE to harden against tokens minted for a "
+                "different service."
             )
 
     async def __call__(self, request: Request) -> AuthContext:

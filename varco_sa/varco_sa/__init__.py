@@ -51,7 +51,7 @@ from varco_sa.inbox import (
     inbox_metadata,
 )
 from varco_sa.job_store import SAJobStore, jobs_metadata
-from varco_sa.advisory_lock import SAAdvisoryLock
+from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
 from varco_sa.conversation import SAConversationStore, conversation_metadata
 from varco_sa.saga import SASagaRepository, sagas_metadata
 from varco_sa.outbox import (
@@ -120,6 +120,7 @@ __all__ = [
     "conversation_metadata",
     # ── Advisory lock ─────────────────────────────────────────────────────────
     "SAAdvisoryLock",
+    "SAXactAdvisoryLock",
     # ── Health probes ──────────────────────────────────────────────────────────
     "SAHealthCheck",
     "SAPoolSaturationCheck",

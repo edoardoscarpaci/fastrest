@@ -28,6 +28,7 @@ from __future__ import annotations
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -527,3 +528,127 @@ class TestSAJobStoreTryClaimSkipLocked:
         claimed = await store.try_claim(job.job_id)
         assert claimed is not None
         assert claimed.status == JobStatus.RUNNING
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 4, Step 51 — time dimension, lease, fencing
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Steps 52-53 land: SAJobStore gains the ten new Job columns (run_at,
+# attempt, max_attempts, owner_id, lease_expires_at, lease_epoch, expires_at,
+# request_issuer, request_subject, request_token_hash), rewrites try_claim's
+# WHERE clause with the run_at predicate + lease write, and adds claim_next/
+# renew/reap_expired_leases plus StaleLeaseError-raising fenced writes.
+#
+# All tests here run against SQLite (fast, no Docker) — the plan explicitly
+# keeps the SQLite branch working identically for the new lease columns.
+# The decisive N-concurrent-claimers-exactly-one-wins test needs real Postgres
+# row locking and is therefore NOT reproducible on SQLite; it is intentionally
+# omitted here (see Step 56 in varco_sa/varco_redis/varco_beanie integration
+# suites for the cross-backend concurrency matrix).
+
+
+class TestSAJobStoreRunAtGating:
+    async def test_job_with_future_run_at_is_not_claimed(self, store) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        job = _pending_job(run_at=datetime.now(timezone.utc) + timedelta(seconds=60))
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id)
+        assert claimed is None
+
+    async def test_job_is_claimed_after_run_at_passes(self, store) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        job = _pending_job(run_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id)
+        assert claimed is not None
+        assert claimed.status == JobStatus.RUNNING
+
+
+class TestSAJobStoreLease:
+    async def test_try_claim_with_lease_ttl_sets_lease_expires_at_and_epoch(
+        self, store
+    ) -> None:
+        job = _pending_job()
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+        assert claimed is not None
+        assert claimed.owner_id == "worker-1"
+        assert claimed.lease_expires_at is not None
+        assert claimed.lease_epoch >= 1
+
+    async def test_renew_with_current_epoch_extends_lease(self, store) -> None:
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+
+        renewed = await store.renew(
+            claimed.job_id,
+            owner_id="worker-1",
+            epoch=claimed.lease_epoch,
+            lease_ttl=60.0,
+        )
+        assert renewed is not None
+        assert renewed.lease_expires_at >= claimed.lease_expires_at
+
+    async def test_renew_with_stale_epoch_returns_none(self, store) -> None:
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+
+        result = await store.renew(
+            claimed.job_id,
+            owner_id="worker-1",
+            epoch=claimed.lease_epoch - 1,
+            lease_ttl=60.0,
+        )
+        assert result is None
+
+    async def test_write_with_stale_expected_epoch_raises_stale_lease_error(
+        self, store
+    ) -> None:
+        from varco_core.job.base import StaleLeaseError
+
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=30.0)
+
+        stale = claimed.as_completed(result=b"{}")
+        with pytest.raises(StaleLeaseError):
+            await store.save(stale, expected_epoch=claimed.lease_epoch - 1)  # type: ignore[call-arg]
+
+    async def test_reap_expired_leases_moves_expired_running_row_to_pending(
+        self, store
+    ) -> None:
+
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(
+            job.job_id, owner_id="worker-1", lease_ttl=0.001
+        )
+
+        import asyncio
+
+        await asyncio.sleep(0.05)
+
+        reaped = await store.reap_expired_leases()
+        assert any(j.job_id == claimed.job_id for j in reaped)
+        refetched = await store.get(claimed.job_id)
+        assert refetched.status == JobStatus.PENDING
+        assert refetched.lease_epoch > claimed.lease_epoch
+
+    async def test_defaulted_job_claims_exactly_as_today(self, store) -> None:
+        # No run_at, no lease_ttl passed — must claim immediately, unleased,
+        # exactly like the pre-Phase-4 behaviour.
+        job = _pending_job()
+        await store.save(job)
+
+        claimed = await store.try_claim(job.job_id)
+        assert claimed is not None
+        assert claimed.status == JobStatus.RUNNING
+        assert claimed.lease_expires_at is None

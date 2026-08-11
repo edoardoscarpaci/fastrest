@@ -401,3 +401,65 @@ class TestSAEncryptionKeyStoreIntegration:
         # Cleanup
         await pg_store.delete("pg-full")
         assert await pg_store.load("pg-full") is None
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 1, Step 20 — scope columns / destroy_scope on SAEncryptionKeyStore
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Step 16 lands: SAEncryptionKeyStore adds scope (indexed) and
+# destroyed_at columns, and implements load_for_scope/list_scopes/destroy_scope.
+
+
+class TestSAEncryptionKeyStoreScope:
+    async def test_load_for_scope_filters_by_scope(self, store) -> None:
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        result = await store.load_for_scope("acme")
+        assert len(result) == 1
+        assert result[0].kid == "k1"
+
+    async def test_list_scopes_returns_distinct_sorted_scopes(self, store) -> None:
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        await store.save(_make_entry(kid="k2", tenant_id="beta"))
+        scopes = await store.list_scopes()
+        assert scopes == sorted(scopes)
+        assert "acme" in scopes
+        assert "beta" in scopes
+
+    async def test_destroy_scope_tombstones_entries_and_returns_kids(
+        self, store
+    ) -> None:
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        kids = await store.destroy_scope("acme")
+        assert "k1" in kids
+
+        entry = await store.load("k1")
+        assert entry is not None
+        assert entry.is_destroyed is True
+
+    async def test_destroy_scope_is_idempotent(self, store) -> None:
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        first = await store.destroy_scope("acme")
+        assert len(first) == 1
+        second = await store.destroy_scope("acme")
+        assert second == ()
+
+    async def test_pre_migration_row_with_null_scope_yields_tenant_id(
+        self, store, engine
+    ) -> None:
+        # Simulate a row persisted before the migration: scope column NULL.
+        # save() a normal entry, then null out the "scope" column directly.
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+
+        import sqlalchemy as sa
+
+        async with engine.begin() as conn:
+            await conn.execute(
+                sa.text(
+                    "UPDATE varco_encryption_keys SET scope = NULL WHERE kid = 'k1'"
+                )
+            )
+
+        loaded = await store.load("k1")
+        assert loaded is not None
+        assert loaded.scope == "acme"

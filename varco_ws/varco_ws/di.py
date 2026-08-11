@@ -198,11 +198,9 @@ def bind_websocket_adapter(
     Returns:
         None
 
-    Raises:
-        Nothing — if providify is not installed the function logs a warning and
-        returns without raising.
-
     Edge cases:
+        - Never raises — if providify is not installed the function logs a
+          warning and returns without registering anything.
         - Calling twice with the same ``event_type``/``channel`` replaces the
           previous binding — providify last-registration wins.
         - The adapter is **not** started automatically; call ``start()`` in the
@@ -326,11 +324,9 @@ def bind_sse_adapter(
     Returns:
         None
 
-    Raises:
-        Nothing — if providify is not installed the function logs a warning and
-        returns without raising.
-
     Edge cases:
+        - Never raises — if providify is not installed the function logs a
+          warning and returns without registering anything.
         - Calling twice with the same ``event_type``/``channel`` replaces the
           previous binding — providify last-registration wins.
         - The adapter is **not** started automatically; call ``start()`` in the

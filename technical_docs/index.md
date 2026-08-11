@@ -12,8 +12,9 @@ varco_redis       — Redis Pub/Sub event bus + cache backend (redis.asyncio)
 varco_sa          — SQLAlchemy async ORM backend
 varco_beanie      — Beanie/MongoDB async ODM backend
 varco_memcached   — Memcached cache backend
-varco_ws          — WebSocket support
+varco_ws          — WebSocket and Server-Sent Events (SSE) event bus backend
 varco_fastapi     — FastAPI integration (routers, auth, generic REST server)
+varco_casbin      — Casbin policy-engine authorization backend (ACL/RBAC/ABAC + REST admin)
 ```
 
 ## How this site is organized

@@ -454,6 +454,37 @@ See `technical_docs/features/composite-deployment.md` and
 
 ---
 
+## Google A2A protocol (SkillAdapter)
+
+`SkillAdapter` exposes any `VarcoRouter` — or, since Plan 005 Phase 7, any `SkillSource` —
+as a Google A2A agent, at the v1.0.0 surface (`GET /.well-known/agent-card.json`,
+`POST /a2a` JSON-RPC 2.0) plus the pre-v1.0.0 paths for one minor release
+(`legacy_paths=True`, the default).
+
+```python
+from varco_fastapi.router.skill import SkillAdapter
+
+adapter = SkillAdapter(
+    OrderRouter,
+    agent_name="OrderAgent",
+    agent_description="Manages customer orders",
+    client=OrderClient(base_url="http://localhost:8080"),
+)
+adapter.mount(app)  # /.well-known/agent-card.json + /a2a + legacy paths
+```
+
+Not backed by a router? Pass `source=` instead — a `SkillSource` (`skills()` /
+`agent_metadata()` / `async invoke(skill_id, payload, *, ctx=)`) decouples the adapter from
+`VarcoRouter` entirely, and `ctx` carries the verified caller's `AuthContext` through to
+your own `invoke()` implementation for auditing. Long-running skills reuse the existing async
+job machinery — pass `job_runner`/`job_store` and the response returns `state: working`
+immediately; pass `conversation_store` for multi-turn history.
+
+See `technical_docs/features/a2a-surface.md` for the full v1.0.0 path/method table, a
+non-router `SkillSource` example, and the legacy-path deprecation timeline.
+
+---
+
 ## Related packages
 
 | Package | Description |

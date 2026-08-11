@@ -56,14 +56,18 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from varco_fastapi.router.introspection import ResolvedRoute, introspect_routes
+from varco_fastapi.router.a2a.card import build_agent_card_v1
+from varco_fastapi.router.a2a.jsonrpc import JsonRpcDispatcher
+from varco_fastapi.router.a2a.router_source import (
+    RouterSkillSource,
+)
+from varco_fastapi.router.a2a.source import SkillDefinition, SkillSource
+from varco_fastapi.router.introspection import ResolvedRoute
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -76,11 +80,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-# ── Default MIME modes ─────────────────────────────────────────────────────────
-
-_DEFAULT_INPUT_MODES: tuple[str, ...] = ("application/json",)
-_DEFAULT_OUTPUT_MODES: tuple[str, ...] = ("application/json",)
-
 # ── A2A response shape constants ───────────────────────────────────────────────
 # Task states from the A2A spec — https://google.github.io/A2A/
 _STATE_COMPLETED = "completed"
@@ -91,136 +90,48 @@ _STATE_WORKING = "working"
 _STATE_SUBMITTED = "submitted"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-
-def _resource_name(router_cls: type) -> str:
-    """
-    Derive a snake_case resource name from a router class name.
-
-    Strips common suffixes (``Router``, ``Controller``, ``View``) and converts
-    CamelCase to snake_case.
-
-    Args:
-        router_cls: The ``VarcoRouter`` subclass.
-
-    Returns:
-        Lower-case snake_case resource name (e.g. ``"order"`` for ``OrderRouter``).
-
-    Edge cases:
-        - Class named exactly ``"Router"`` → returns ``"resource"`` as fallback.
-        - No recognised suffix → whole class name is snake_cased.
-    """
-    name = router_cls.__name__
-    for suffix in ("Router", "Controller", "View", "Handler"):
-        if name.endswith(suffix) and name != suffix:
-            name = name[: -len(suffix)]
-            break
-    snake = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-    return snake or "resource"
-
-
-def _auto_skill_id(route: ResolvedRoute, resource: str) -> str:
-    """
-    Generate a skill ID when no explicit ``skill_id`` override is set.
-
-    Convention mirrors MCP tool naming:
-        - CRUD: ``{crud_action}_{resource}``  e.g. ``create_order``
-        - Custom: ``{method_name}``            e.g. ``ship_order``
-
-    Args:
-        route:    The ``ResolvedRoute`` to name.
-        resource: Snake-case resource name.
-
-    Returns:
-        Skill ID string suitable for the Agent Card.
-    """
-    if route.is_crud and route.crud_action:
-        return f"{route.crud_action}_{resource}"
-    return route.name
-
-
-def _title_case_id(skill_id: str) -> str:
-    """
-    Convert a snake_case skill ID to a Title Case display name.
-
-    ``"create_order"``  →  ``"Create Order"``
-
-    Args:
-        skill_id: Snake-case skill ID string.
-
-    Returns:
-        Title-cased display name string.
-    """
-    return " ".join(word.capitalize() for word in skill_id.split("_"))
-
-
-def _resolve_description(
-    skill_desc: str | None,
-    summary: str | None,
-    description: str | None,
-    auto: str,
-) -> str:
-    """
-    Apply the skill description fallback chain.
-
-    Priority: ``skill_description`` → ``summary`` → ``description`` → auto-sentence.
-
-    Args:
-        skill_desc:  Explicit override.
-        summary:     OpenAPI summary.
-        description: OpenAPI description.
-        auto:        Auto-generated fallback.
-
-    Returns:
-        Resolved description string (never empty).
-    """
-    return skill_desc or summary or description or auto
-
-
-# ── SkillDefinition ────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class SkillDefinition:
-    """
-    Immutable descriptor for a single A2A skill derived from a ``ResolvedRoute``.
-
-    Used to build the Agent Card and dispatch task requests.
-
-    Attributes:
-        id:           Unique skill identifier within the agent.
-        name:         Human-readable display name.
-        description:  Natural-language description of what the skill does.
-        input_modes:  MIME types the skill accepts.
-        output_modes: MIME types the skill returns.
-        route:        Source ``ResolvedRoute`` for traceability.
-
-    Thread safety:  ✅ frozen=True — immutable.
-    Async safety:   ✅ Pure value object.
-    """
-
-    id: str
-    name: str
-    description: str
-    input_modes: tuple[str, ...]
-    output_modes: tuple[str, ...]
-    route: ResolvedRoute
-
+#
+# _resource_name / _auto_skill_id / _title_case_id / _resolve_description and
+# SkillDefinition now live in varco_fastapi.router.a2a (Phase 7, Step 78) and
+# are imported above. Re-exported here unchanged so
+# ``from varco_fastapi.router.skill import _auto_skill_id, ...`` (used by
+# ``tests/milestone_f/test_skill_adapter.py``) keeps working.
 
 # ── SkillAdapter ───────────────────────────────────────────────────────────────
 
 
 class SkillAdapter:
     """
-    Converts a ``VarcoRouter`` class into a Google A2A agent.
+    Converts a ``VarcoRouter`` class (or any ``SkillSource``) into a Google A2A agent.
 
-    Exposes three A2A protocol surfaces:
+    ``mount()`` always exposes the A2A v1.0.0 surface (Plan 005 Phase 7,
+    gaps U-3/U-4):
 
-    - ``GET  /.well-known/agent.json``  — Agent Card (discovery)
-    - ``POST /tasks/send``              — execute a skill synchronously
+    - ``GET  /.well-known/agent-card.json`` — Agent Card (nested ``capabilities``)
+    - ``POST /a2a``                         — JSON-RPC 2.0 dispatch
+                                              (``message/send``, ``tasks/get``,
+                                              ``tasks/list``, ``tasks/cancel``, ...)
+
+    and, when ``legacy_paths=True`` (the default, for one minor release), also
+    mounts the pre-v1.0.0 surface for backward compatibility:
+
+    - ``GET  /.well-known/agent.json``  — legacy Agent Card (flags at top level)
+    - ``POST /tasks/send``              — execute a skill (sync, or async with
+                                          ``state: working`` when ``job_runner``
+                                          is wired)
     - ``GET  /tasks/{task_id}``         — poll task status
+    - ``GET  /tasks/{task_id}/history`` — full turn history, when
+                                          ``conversation_store`` is wired
 
-    Delegates execution to ``AsyncVarcoClient`` — no handler logic duplicated.
+    See ``mount()``'s own docstring for the full path-customisation options and
+    ``technical_docs/features/a2a-surface.md`` for the JSON-RPC method table,
+    the legacy-path deprecation timeline, and the ``SkillSource`` protocol that
+    decouples the *subject* being exposed from ``VarcoRouter`` (pass ``source=``
+    instead of ``router_cls`` to expose a non-router agent, e.g. a data
+    pipeline).
+
+    Delegates execution to ``AsyncVarcoClient`` (router-backed sources) or the
+    supplied ``SkillSource.invoke()`` — no handler logic duplicated.
 
     Usage::
 
@@ -238,7 +149,8 @@ class SkillAdapter:
         # Inject[SkillAdapter] now resolves to the adapter
 
     Args:
-        router_cls:         The ``VarcoRouter`` subclass to expose.
+        router_cls:         The ``VarcoRouter`` subclass to expose. Mutually exclusive
+                            with ``source=``; exactly one of the two is required.
         agent_name:         Agent display name in the Agent Card.
         agent_description:  Agent description in the Agent Card.
         agent_version:      Semantic version string (default: ``"1.0.0"``).
@@ -253,7 +165,7 @@ class SkillAdapter:
 
     def __init__(
         self,
-        router_cls: type,
+        router_cls: type | None,
         *,
         agent_name: str,
         agent_description: str,
@@ -264,17 +176,25 @@ class SkillAdapter:
         job_runner: AbstractJobRunner | None = None,
         job_store: AbstractJobStore | None = None,
         conversation_store: AbstractConversationStore | None = None,
+        source: SkillSource | None = None,
+        skills: list[SkillDefinition] | None = None,
     ) -> None:
         """
         Args:
-            router_cls:          The ``VarcoRouter`` subclass to expose.
+            router_cls:          The ``VarcoRouter`` subclass to expose. Positional,
+                                 stays supported for backward compatibility — wrapped
+                                 into a ``RouterSkillSource`` internally. Mutually
+                                 exclusive with ``source=``.
             agent_name:          Agent display name in the Agent Card.
             agent_description:   Agent description in the Agent Card.
             agent_version:       Semantic version string (default: ``"1.0.0"``).
             client:              ``AsyncVarcoClient`` instance for execution.
                                  If ``None``, ``handle_task()`` raises ``RuntimeError``.
+                                 Only meaningful when ``router_cls`` is given —
+                                 wrapped into the internal ``RouterSkillSource``.
             base_url:            Shortcut — bare client constructed if ``client`` is ``None``.
             enabled_routes:      Explicit allowlist of route names (``None`` = all skill_enabled).
+                                 Only meaningful when ``router_cls`` is given.
             job_runner:          Optional ``AbstractJobRunner`` for async (long-running) tasks.
                                  When provided, ``POST /tasks/send`` returns immediately with
                                  ``state: working`` and the client polls ``GET /tasks/{task_id}``.
@@ -287,6 +207,16 @@ class SkillAdapter:
                                  the Agent Card advertises ``multiTurnConversation: True``,
                                  and ``GET /tasks/{task_id}/history`` returns the full turn list.
                                  When ``None``, single-turn mode (default, no history stored).
+            source:              A ``SkillSource`` implementation to expose, decoupled from
+                                 ``VarcoRouter`` introspection (Plan 005, Phase 7 / U-3).
+                                 Mutually exclusive with ``router_cls``.
+            skills:              Author-supplied ``SkillDefinition`` objects, added verbatim
+                                 to the source-derived skill list — U-3's R-039 ask: hand-written
+                                 skill text must reach the Agent Card unaltered, not be
+                                 regenerated from route names.
+
+        Raises:
+            ValueError: Neither or both of ``router_cls``/``source`` were given.
 
         Edge cases:
             - ``job_runner`` without ``job_store``: async submission works but polling
@@ -295,12 +225,17 @@ class SkillAdapter:
               not written to during task execution.
             - ``conversation_store`` failures (e.g. DB write error) are logged and
               suppressed — they must never fail the primary task execution.
+            - ``.router_class`` returns ``None`` for a non-router ``source``.
         """
-        self._router_cls = router_cls
+        if (router_cls is None) == (source is None):
+            raise ValueError(
+                "SkillAdapter requires exactly one of router_cls or source= "
+                f"(got router_cls={router_cls!r}, source={source!r})."
+            )
+
         self._agent_name = agent_name
         self._agent_description = agent_description
         self._agent_version = agent_version
-        self._resource = _resource_name(router_cls)
 
         # Async job infrastructure — both are optional for backward compatibility.
         # When job_runner is set, tasks are submitted asynchronously (at-least-once
@@ -322,40 +257,32 @@ class SkillAdapter:
             # Bare client with no auth — for internal / development use only
             self._client = _Client(base_url=base_url)
 
-        # Pre-compute skill list at construction time — routes are immutable
-        all_routes = introspect_routes(router_cls)
-        self._skills: list[SkillDefinition] = []
-        for route in all_routes:
-            if not route.skill_enabled:
-                continue
-            if enabled_routes is not None and route.name not in enabled_routes:
-                continue
-
-            skill_id = route.skill_id or _auto_skill_id(route, self._resource)
-            skill_name = route.skill_name or _title_case_id(skill_id)
-            auto_desc = f"Perform the '{route.crud_action or route.name}' operation on {self._resource}."
-            description = _resolve_description(
-                route.skill_description,
-                route.summary,
-                route.description,
-                auto_desc,
+        # ── Subject resolution (Plan 005, Phase 7 / U-3) ───────────────────────
+        # router_cls stays positional and supported: wrapped into a
+        # RouterSkillSource so the rest of the adapter only ever talks to a
+        # SkillSource, never to introspect_routes() directly.
+        if router_cls is not None:
+            self._router_cls: type | None = router_cls
+            self._source: SkillSource = RouterSkillSource(
+                router_cls, enabled_routes=enabled_routes, client=self._client
             )
-            input_modes = route.skill_input_modes or _DEFAULT_INPUT_MODES
-            output_modes = route.skill_output_modes or _DEFAULT_OUTPUT_MODES
+        else:
+            self._router_cls = None
+            self._source = source  # type: ignore[assignment]  # narrowed by the XOR check above
 
-            self._skills.append(
-                SkillDefinition(
-                    id=skill_id,
-                    name=skill_name,
-                    description=description,
-                    input_modes=input_modes,
-                    output_modes=output_modes,
-                    route=route,
-                )
-            )
+        # Pre-compute skill list at construction time — the source's skill list
+        # is immutable after construction, same contract as the pre-Phase-7
+        # route-introspection loop it replaces.
+        self._skills: list[SkillDefinition] = list(self._source.skills())
+        if skills:
+            # Author-supplied skills are appended VERBATIM — never regenerated.
+            self._skills.extend(skills)
 
         # O(1) lookup for dispatch in handle_task()
         self._skill_by_id: dict[str, SkillDefinition] = {s.id: s for s in self._skills}
+
+        # JSON-RPC 2.0 dispatcher for the v1.0.0 surface (Phase 7, Step 80).
+        self._jsonrpc = JsonRpcDispatcher(self)
 
     # ── Public read-only properties ────────────────────────────────────────────
 
@@ -365,8 +292,11 @@ class SkillAdapter:
         return self._skills
 
     @property
-    def router_class(self) -> type:
-        """The ``VarcoRouter`` class this adapter was built from."""
+    def router_class(self) -> type | None:
+        """
+        The ``VarcoRouter`` class this adapter was built from, or ``None`` when
+        the adapter was constructed with a non-router ``source=``.
+        """
         return self._router_cls
 
     # ── Agent Card ─────────────────────────────────────────────────────────────
@@ -697,25 +627,48 @@ class SkillAdapter:
         base_url: str = "",
         agent_card_path: str = "/.well-known/agent.json",
         tasks_prefix: str = "/tasks",
+        agent_card_v1_path: str = "/.well-known/agent-card.json",
+        jsonrpc_path: str = "/a2a",
+        legacy_paths: bool = True,
     ) -> None:
         """
         Mount the A2A protocol surfaces on a FastAPI application.
 
-        Registers three routes:
+        Always mounts the v1.0.0 surface:
 
-        - ``GET  {agent_card_path}``              → Agent Card JSON
+        - ``GET  {agent_card_v1_path}``  → Agent Card JSON (nested ``capabilities``, no top-level ``id``)
+        - ``POST {jsonrpc_path}``        → JSON-RPC 2.0 dispatch (``message/send``, ``tasks/get``, ...)
+
+        When ``legacy_paths=True`` (the default, for one minor release — Plan
+        005, Phase 7, Step 82), also mounts the pre-v1.0.0 surface:
+
+        - ``GET  {agent_card_path}``              → Agent Card JSON (legacy shape)
         - ``POST {tasks_prefix}/send``            → task execution
-        - ``GET  {tasks_prefix}/{task_id}``       → task status (v1: echo back)
+        - ``GET  {tasks_prefix}/{task_id}``       → task status
+        - ``GET  {tasks_prefix}/{task_id}/history`` → conversation history
 
         Args:
-            app:               The ``FastAPI`` application to mount onto.
-            base_url:          Public base URL embedded in the Agent Card's ``url``
-                               field.  If empty, FastAPI's ``root_path`` is used
-                               at request time.
-            agent_card_path:   Path for the Agent Card endpoint.
-                               Default: ``"/.well-known/agent.json"``.
-            tasks_prefix:      Prefix for task endpoints.
-                               Default: ``"/tasks"``.
+            app:                 The ``FastAPI`` application to mount onto.
+            base_url:            Public base URL embedded in the Agent Card's ``url``
+                                 field.  If empty, FastAPI's ``root_path`` is used
+                                 at request time.
+            agent_card_path:     Path for the legacy Agent Card endpoint.
+                                 Default: ``"/.well-known/agent.json"``.
+            tasks_prefix:        Prefix for legacy task endpoints.
+                                 Default: ``"/tasks"``.
+            agent_card_v1_path:  Path for the v1.0.0 Agent Card endpoint.
+                                 Default: ``"/.well-known/agent-card.json"``.
+            jsonrpc_path:        Path for the v1.0.0 JSON-RPC 2.0 endpoint.
+                                 Default: ``"/a2a"``.
+            legacy_paths:        When ``True`` (default), also mount the
+                                 pre-v1.0.0 surface for one minor release.
+                                 The default flips to ``False`` in the
+                                 following minor release — see
+                                 ``technical_docs/features/a2a-surface.md``.
+
+        Edge cases:
+            - Hitting a legacy path while ``legacy_paths=False`` → 404 (the
+              route was never registered).
 
         Thread safety:  ✅ Called once at startup.
         Async safety:   ✅ Route registration has no I/O.
@@ -723,6 +676,75 @@ class SkillAdapter:
         # Capture self to avoid closure over changing outer scope
         _adapter = self
         _base_url = base_url
+
+        # ── v1.0.0 surface — ALWAYS mounted ─────────────────────────────────────
+
+        @app.get(agent_card_v1_path, include_in_schema=False)
+        async def _agent_card_v1_endpoint(request: Request) -> JSONResponse:
+            """Serve the A2A v1.0.0 Agent Card (nested capabilities, no top-level id)."""
+            resolved_base = _base_url or str(request.base_url).rstrip("/")
+            async_mode = _adapter._job_runner is not None
+            multi_turn = _adapter._conversation_store is not None
+            return JSONResponse(
+                build_agent_card_v1(
+                    name=_adapter._agent_name,
+                    description=_adapter._agent_description,
+                    version=_adapter._agent_version,
+                    base_url=resolved_base,
+                    skills=_adapter._skills,
+                    async_mode=async_mode,
+                    multi_turn=multi_turn,
+                )
+            )
+
+        @app.post(jsonrpc_path, include_in_schema=False)
+        async def _jsonrpc_endpoint(request: Request) -> JSONResponse:
+            """
+            Dispatch a JSON-RPC 2.0 request for the A2A v1.0.0 surface.
+
+            Forwards the verified caller's ``AuthContext`` (U-3's
+            per-request auth passthrough) to ``SkillSource.invoke()`` when
+            auth middleware populated it — see
+            ``varco_fastapi.context.get_auth_context_or_none``.
+            """
+            from varco_fastapi.context import (
+                get_auth_context_or_none,
+            )  # noqa: PLC0415
+
+            try:
+                body = await request.json()
+            except Exception as exc:  # noqa: BLE001
+                return JSONResponse(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32700, "message": f"Parse error: {exc}"},
+                    },
+                    status_code=200,
+                )
+            ctx = get_auth_context_or_none()
+            result = await _adapter._jsonrpc.dispatch(body, ctx=ctx)
+            return JSONResponse(result)
+
+        if not legacy_paths:
+            _logger.info(
+                "SkillAdapter: mounted %d skills — v1.0.0 surface at %s / %s "
+                "(legacy_paths=False)",
+                len(self._skills),
+                agent_card_v1_path,
+                jsonrpc_path,
+            )
+            return
+
+        _logger.warning(
+            "SkillAdapter: mounting legacy (pre-v1.0.0) A2A paths at %s / %s/* "
+            "— deprecated, pass legacy_paths=False once callers have migrated "
+            "to %s / %s. See technical_docs/features/a2a-surface.md.",
+            agent_card_path,
+            tasks_prefix,
+            agent_card_v1_path,
+            jsonrpc_path,
+        )
 
         # ── GET /.well-known/agent.json ──────────────────────────────────────
         @app.get(agent_card_path, include_in_schema=False)
@@ -850,16 +872,20 @@ class SkillAdapter:
             )
 
         _logger.info(
-            "SkillAdapter: mounted %d skills — Agent Card at %s, tasks at %s/send",
+            "SkillAdapter: mounted %d skills — legacy Agent Card at %s, "
+            "tasks at %s/send",
             len(self._skills),
             agent_card_path,
             tasks_prefix,
         )
 
     def __repr__(self) -> str:
+        router_repr = (
+            self._router_cls.__name__ if self._router_cls is not None else None
+        )
         return (
             f"SkillAdapter("
-            f"router={self._router_cls.__name__!r}, "
+            f"router={router_repr!r}, "
             f"agent={self._agent_name!r}, "
             f"skills={len(self._skills)})"
         )

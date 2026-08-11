@@ -21,7 +21,8 @@ varco_casbin.CasbinPolicyRouter     ← varco_fastapi GenericRouter (requires th
 
 ```bash
 pip install varco-casbin                 # engine only (in-memory / file policies)
-pip install "varco-casbin[sqlalchemy]"   # + durable DB-backed policy store
+pip install "varco-casbin[sqlalchemy]"   # + durable SQL-backed policy store
+pip install "varco-casbin[beanie]"       # + durable MongoDB-backed policy store (Beanie)
 pip install "varco-casbin[fastapi]"      # + REST management router
 ```
 
@@ -50,10 +51,15 @@ All settings read from `VARCO_CASBIN_*` env vars (see `CasbinSettings`):
 |---|---|---|
 | `VARCO_CASBIN_MODEL_PRESET` | `rbac` | `acl` / `rbac` / `rbac_domains` / `abac` |
 | `VARCO_CASBIN_MODEL_PATH` | — | explicit `.conf` model file (overrides preset) |
-| `VARCO_CASBIN_ADAPTER` | `memory` | `memory` / `file` / `sqlalchemy` |
-| `VARCO_CASBIN_DB_URL` | — | SQLAlchemy URL for the `sqlalchemy` adapter |
+| `VARCO_CASBIN_ADAPTER` | `memory` | `memory` / `file` / `sqlalchemy` / `beanie` |
+| `VARCO_CASBIN_DB_URL` | — | SQLAlchemy URL for `sqlalchemy`, or Mongo URL for `beanie` |
+| `VARCO_CASBIN_DB_NAME` | — | MongoDB database name — **required** for `adapter=beanie` |
 | `VARCO_CASBIN_POLICY_PATH` | — | CSV path for the `file` adapter |
 | `VARCO_CASBIN_ADMIN_ROLE` | `admin` | role the REST router requires by default |
+
+`memory` is non-durable (dev/test only); `file` is single-process (concurrent writers can
+corrupt the CSV); `sqlalchemy` and `beanie` both support dynamic, durable, concurrent CRUD —
+pick whichever matches the rest of your persistence stack.
 
 ## REST management
 

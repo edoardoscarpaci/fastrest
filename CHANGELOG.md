@@ -9,6 +9,106 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### BREAKING (security default) — `varco-core`, `varco-fastapi`
+
+Plan 005 Phase 2 (U-13, fail-closed JWT verification). Two fail-open holes
+are now fail-closed by default:
+
+- **`TrustedIssuerRegistry.verify()` now enforces the token's `iss` claim**
+  against the resolved issuer's registered value. Previously `iss` was never
+  checked here at all — a token signed by issuer A's key but claiming `iss`
+  of issuer B verified successfully. **Rollback:** set
+  `VARCO_JWT_ENFORCE_ISS=false`, or pass `enforce_issuer=False` to a specific
+  `verify()` call.
+- **`JwtBearerAuth` now refuses to construct** (`ValueError`) when no
+  audience is configured (`audience=` kwarg omitted and `VARCO_JWT_AUDIENCE`
+  unset). Previously this logged one warning and proceeded, accepting a
+  token minted for any audience by any registered issuer. **Rollback:** set
+  `VARCO_JWT_AUDIENCE=<your-service>`, or explicitly opt out with
+  `allow_any_audience=True` / `VARCO_JWT_ALLOW_ANY_AUDIENCE=true` to restore
+  the old warn-and-proceed behaviour.
+
+  A caller who explicitly wrote `audience=None` (as opposed to omitting the
+  kwarg) keeps working unmodified — that remains a deliberate per-instance
+  opt-out, distinct from the process-wide `allow_any_audience` escape hatch.
+
+**Why this is worth a breaking default**: a service that forgets one
+environment variable used to silently accept a token minted for any
+audience by any registered issuer. A startup failure is the control a log
+warning was not.
+
+### Changed (behaviour, non-security)
+
+- **`AuditConsumer` now retries by default.** `_default_retry_policy` is
+  `RetryPolicy.durable_delivery()` (`max_attempts=20, base_delay=15.0,
+  max_delay=3600.0`) instead of no retry policy at all — an audit-persistence
+  failure (DB hiccup, connection drop) is now retried for minutes before
+  giving up, instead of being logged once and dropped. **Only the failure
+  path changes** — a successfully-persisted `AuditEvent` behaves identically.
+  **Rollback:** pass `retry_policy=None` explicitly to `register_to()` to
+  restore the old fire-and-forget behaviour. See
+  `technical_docs/features/database-auditing.md`.
+
+### Added
+
+- **`varco-core` — Dead Letter Queue gains a `source` field and `OutboxRelay`/
+  `JobRunner` DLQ wiring** (Plan 005 Phase 3, U-6). `DeadLetterEntry.source`
+  (`DeadLetterSource.CONSUMER` default, unchanged / `OUTBOX_RELAY` / `JOB`),
+  `event: DomainEvent | None`, and new all-defaulted `source_ref`/`payload`
+  fields. `OutboxRelay.__init__` gains `retry_policy=`/`dlq=`/`max_attempts=`
+  — omitting `retry_policy` reproduces today's exact unbounded
+  retry-in-place behaviour; passing `max_attempts` without `dlq` raises
+  `ValueError` (refuses to silently drop a poison entry).
+  `RetryPolicy.durable_delivery()` is a new named preset
+  (`max_attempts=20, base_delay=15.0, max_delay=3600.0`). See
+  `technical_docs/features/dead-letter-queues.md`.
+
+- **`varco-core`/`varco-fastapi` — job scheduling, leases, retry, and
+  retention** (Plan 005 Phase 4/6, U-17/U-11/U-18/U-19). `Job.run_at`,
+  `AbstractJobRunner.enqueue(run_at=, delay=)` for delayed execution;
+  `Job.attempt`/`max_attempts` + `JobRunner(retry_policy=, dlq=)` for bounded
+  retry (reuses `varco_core.resilience.RetryPolicy`); a fenced lease
+  (`try_claim(owner_id=, lease_ttl=)`, `renew()`, `reap_expired_leases()`,
+  `save(expected_epoch=)` → `StaleLeaseError`); `delete_where(...)` retention
+  primitive (refuses to run with no predicate — `ValueError`);
+  `Job(store_raw_token=False)` to avoid persisting the raw Bearer JWT at
+  rest (hashes it into `request_token_hash` instead). `JobPoller` gains
+  `lease_aware=True` (default) and `retention_sweep=False` (default). Every
+  new parameter is defaulted to reproduce pre-Phase-4 behaviour exactly. See
+  `technical_docs/features/job-scheduling-and-leases.md`.
+
+- **`varco-sa` — `SAXactAdvisoryLock`** (Plan 005 Phase 4, U-16). A
+  transaction-scoped Postgres advisory lock released by the caller's own
+  COMMIT/ROLLBACK (`xact(key, session)`), safe behind a transaction-mode
+  connection pooler (PgBouncer) where the existing session-scoped
+  `SAAdvisoryLock` is not — `release()` can be routed to a different
+  physical connection than `try_acquire()` used.
+
+- **`varco-redis` — `RedisBulkhead`** (Plan 005 Phase 8, U-7 second leg).
+  Distributed concurrency limiting over Redis, complementing the existing
+  `RedisRateLimiter` (distributed rate limiting, already shipped).
+
+- **`varco-fastapi` — A2A v1 surface improvements and RLS DDL helper**
+  (Plan 005 Phase 7/5). `varco_sa.rls.enable_rls_ddl(table, ...)` emits the
+  `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` + tenant-policy DDL for an
+  application's own Alembic revision (varco never applies it itself — see
+  `technical_docs/features/postgres-rls.md`). `varco_fastapi/router/a2a/`
+  hardens the mounted A2A task surface. See
+  `technical_docs/features/a2a-surface.md`.
+
+- **`varco-core` — per-arbitrary-scope encryption keys + crypto-shredding**
+  (Plan 005 Phase 1, U-1/U-2). `EncryptionKeyEntry` gains `scope` (defaults
+  to `tenant_id` at the Python level — a persisted-store `scope = tenant_id`
+  backfill is required before `load_for_scope`/`destroy_scope` see
+  pre-existing rows; see `technical_docs/features/crypto-shredding.md`) and
+  `destroyed_at`.
+  `EncryptionKeyStore` gains `load_for_scope`/`list_scopes`/`destroy_scope`
+  (via a capability shim so third-party Protocol implementations keep
+  working). `EncryptionKeyManager` gains `build_scoped_registry`,
+  `rotate_scope`, `destroy_scope`. `MultiKeyEncryptorRegistry.destroy(kid)`
+  makes decrypting a crypto-shredded key raise the new, distinguishable
+  `KeyDestroyedError`. See `technical_docs/features/crypto-shredding.md`.
+
 ### Fixed
 
 - **`varco-core` — event serializers are now genuinely injectable.** The
@@ -71,6 +171,143 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pin did not satisfy the `providify>=1.1.0` constraint declared by every package,
   meaning varco was developed and tested against a version no PyPI consumer would
   resolve. Comments in `pyproject.toml` now note the sync requirement.
+
+### varco-core
+
+#### Added
+- **JWT claim transformation** (`varco_core.jwt.transform`) — consume foreign-shaped
+  JWTs (Keycloak, Cognito, Auth0, a bespoke claim, …) without any application code
+  change. `ClaimMapping` / `ClaimRule` / `ClaimPath` (code-configured) and
+  `JwtTransformSettings` / `JwtTransformConfig` (env-driven, `VARCO_JWT_TRANSFORM_*`
+  + per-issuer `VARCO_JWT_TRANSFORM__<LABEL>__*`) both resolve through the
+  `ClaimTransformer` Protocol; `JwtParser.parse()`, `TrustedIssuerRegistry.verify()`,
+  and `varco-fastapi`'s `JwtBearerAuth`/`PassthroughAuth` all pick it up for free
+  through one shared funnel. Zero-config behaviour is unchanged (`IDENTITY`
+  transformer, no copy). See `technical_docs/features/jwt-claim-transformer.md`.
+- **Named token profiles** (`varco_core.jwt.profile`) — `TokenProfile` /
+  `TokenProfileRegistry` recognise multiple kinds of special/internal tokens
+  (`system`, `internal`, `partner`, `service-mesh`, …) by issuer/token_type/audience/
+  required claims, env-configured via `VARCO_JWT_PROFILE__<NAME>__*`, and can grant
+  `implied_roles`/`implied_scopes`. `JwtUtil.matches_profile()` /
+  `.profile_name()` / `.assert_profile()`; `JwtBuilder.as_profile()`. See
+  `technical_docs/features/token-profiles.md`.
+- **JWT verification hardening** — `VARCO_JWT_LEEWAY_SECONDS` (clock-skew leeway for
+  `exp`/`nbf`, default `0.0`) and `VARCO_JWT_AUDIENCE` (expected `aud`, default
+  `None` = not enforced) via `varco_core.jwt.config.JwtVerificationSettings`,
+  threaded through `JwtParser.parse()`, `TrustedIssuerRegistry.verify()`, and
+  `JwtBearerAuth`.
+- **JWKS caching knobs** — `TrustedIssuerRegistry(min_refresh_interval=...,
+  ttl_seconds=...)` (env: `VARCO_JWKS_MIN_REFRESH_SECONDS` default `10.0`,
+  `VARCO_JWKS_TTL_SECONDS` default `0.0` = disabled) allow a proactive, age-based
+  keyset reload in addition to the existing reactive kid-miss refresh. A background
+  refresher task remains out of scope (needs its own lifespan wiring) — deferred.
+- **`ValueShape.GRANTS`** validation gives an actionable `ClaimTransformError` naming
+  the offending list index and missing key for a malformed `grants` claim, replacing
+  a previously bare `KeyError`.
+
+#### Changed
+- ⚠️ **Widened `AuthContext` materialisation on JWT parse.** A token carrying only
+  `tenant_id`/`actor` claims (no `roles`/`scopes`/`grants`), or matching a
+  `TokenProfile` with `implied_roles`/`implied_scopes`, now materialises a non-`None`
+  `auth_ctx` where it previously stayed `None`. Canonical tokens with none of
+  `roles`/`scopes`/`grants`/`tenant_id`/`actor` and no matching profile still yield
+  `auth_ctx is None`. Code doing `if token.auth_ctx is None: treat as machine token`
+  should account for this.
+- `JsonWebToken.to_claims()` now emits `tenant_id`/`act` claims when present in
+  `auth_ctx.metadata["tenant_id"]`/`["actor"]`, so varco-minted tokens round-trip
+  tenant/actor through re-parsing. `_RESERVED_CLAIM_KEYS` was **not** extended to
+  include `tenant_id`/`act`/`user_id`/`actor` (a deviation from the original plan —
+  the executable test suite requires `JwtBuilder().claim("tenant_id", ...)` /
+  `.claim("act", ...)` to keep succeeding); `JwtBuilder.claim()` behaviour for these
+  keys is unchanged.
+- `JwtUtil.is_system()` now prefers a registered `"system"` `TokenProfile` when one
+  exists, falling back to the historical `SYSTEM_ISSUER` `ClassVar` comparison
+  otherwise. `SYSTEM_ISSUER` is documentation-deprecated in favour of
+  `VARCO_JWT_PROFILE__SYSTEM__ISS` — it keeps working with no removal scheduled and
+  no runtime `DeprecationWarning`.
+
+#### Fixed
+- Corrected every documented DI override example (`varco_core.observability.di`
+  docstrings, README) that showed `container.install(OtelConfiguration,
+  config=...)` or `container.provide(lambda: OtelConfig(...))` — neither call
+  shape has ever worked: `install()` takes no `config=` keyword and `provide()`
+  rejects undecorated callables (`ProviderBindingNotDecoratedError`). The
+  correct pattern is a module-level `@Provider`-decorated factory function
+  registered with `container.provide(fn)` **before** `install()`/`scan()`
+  (equal-priority bindings resolve first-registered, not last). See
+  `ARCHITECTURE.md`'s DI Wiring section for the full corrected pattern and the
+  quoted-return-annotation landmine below.
+
+### varco-kafka
+
+#### Fixed
+- 🐛 **`container.get(KafkaChannelManager)` / `KafkaChannelManagerSettings`
+  was hard-broken** (`LookupError: Cannot resolve 'values: typing.Any'`) —
+  `KafkaChannelManagerSettings` carried `@Singleton` directly on a pydantic
+  `BaseSettings` subclass, and providify cannot constructor-inject a
+  `**values: Any` signature. Replaced with a lowest-priority `@Provider`
+  factory (`kafka_channel_manager_settings` in `varco_kafka.channel`), the
+  same pattern already used for `varco_casbin` settings. Guarded by
+  `varco_kafka/tests/test_kafka_di.py`.
+
+### varco-nats
+
+#### Fixed
+- 🐛 **`container.get(NatsStreamManager)` / `NatsChannelManagerSettings` was
+  hard-broken** — same root cause and fix as the `varco-kafka` entry above
+  (`@Singleton` on a pydantic `BaseSettings` class replaced by a
+  lowest-priority `nats_channel_manager_settings` `@Provider` factory in
+  `varco_nats.channel`). Guarded by `varco_nats/tests/test_nats_di.py`.
+
+### varco-fastapi
+
+#### Changed
+- ⚠️ **Error response bodies now include a `detail` field when present.**
+  `add_exception_handlers()` and `ErrorMiddleware` both stopped silently dropping
+  `ErrorMessage.detail` — a 403 from a denied `RouteGuard` (missing scope/role/token
+  profile/grant) now surfaces its actionable message in the JSON body under
+  `"detail"`, not just `"message"`. Clients parsing only `{"code", "message"}` are
+  unaffected; clients that assert the *absence* of a `"detail"` key should update.
+- **`PassthroughAuth` refactored** onto `JwtParser.parse_unverified()` instead of
+  hand-rolled claim parsing — it now benefits from the claim-transformer pipeline
+  (env-driven or explicit) like every other JWT entry point. A regression test pins
+  the resulting `AuthContext` for a canonical token to the pre-refactor behaviour.
+
+#### Added
+- **`JwtBearerAuth(audience=..., leeway=...)`** — opt-in audience enforcement and
+  configurable clock-skew leeway, both falling back to `VARCO_JWT_AUDIENCE` /
+  `VARCO_JWT_LEEWAY_SECONDS` when omitted. Logs one warning at construction when
+  audience is left unenforced.
+- **`RouteGuard.token_profiles` / `require_token_profile(*names)`** — gate a
+  `@route` on the JWT's resolved token profile (`ctx.metadata["token_profile"]`),
+  checked between the role check and the grant check.
+- **`create_varco_app(configure_jwt=True)`** — calls
+  `configure_jwt_from_env()` once at startup so the process-global claim-transform
+  and token-profile registries match what `VarcoFastAPIModule`'s DI providers hand
+  out. Set `configure_jwt=False` to manage the registries yourself.
+
+#### Fixed
+- 🐛 **`container.get(TracerProvider)` raised `TypeError: tracer_provider()
+  missing 1 required positional argument: 'config'`** when `VarcoFastAPIModule`
+  and `varco_core.observability.di.OtelConfiguration` shared one container —
+  `Inject[OtelConfig]` was silently not injected into `OtelConfiguration`'s
+  provider method, even though the two modules looked unrelated. Root cause:
+  `VarcoFastAPIModule.profiling_settings` declared a *quoted* return
+  annotation (`-> "ProfilingSettings"`); under PEP 563 that annotation
+  resolves to the literal string `"'ProfilingSettings'"`, and providify's
+  `eval` fallback (`providify/binding.py`) registered the resulting **string**
+  as a binding interface. That one malformed binding then made
+  `DIContainer._build_localns()` raise, which `_collect_kwargs_sync()`
+  silently swallowed (`except Exception: hints = {}`) — disabling constructor
+  and provider injection for **every** binding in the container, not just the
+  broken one. Fixed by dropping the quotes (`from __future__ import
+  annotations` already made the annotation lazy) and keeping
+  `ProfilingSettings` imported at module scope. The underlying defect is in
+  `providify` (a sibling library) and is **not** fixed here — see
+  `ARCHITECTURE.md`'s DI Wiring section for the landmine and its one-line
+  diagnostic (`[b for b in container._bindings if isinstance(b.interface,
+  str)]`). Guarded by `varco_fastapi/tests/test_di_binding_health.py` and
+  `varco_core/tests/test_observability_di.py`.
 
 ---
 
@@ -244,145 +481,6 @@ breaking changes between alpha versions while the API stabilises.
 - **`MemcachedCacheConfiguration`** — `@Configuration` class for DI wiring.
 
 ---
-
-## [Unreleased]
-
-### varco-core
-
-#### Added
-- **JWT claim transformation** (`varco_core.jwt.transform`) — consume foreign-shaped
-  JWTs (Keycloak, Cognito, Auth0, a bespoke claim, …) without any application code
-  change. `ClaimMapping` / `ClaimRule` / `ClaimPath` (code-configured) and
-  `JwtTransformSettings` / `JwtTransformConfig` (env-driven, `VARCO_JWT_TRANSFORM_*`
-  + per-issuer `VARCO_JWT_TRANSFORM__<LABEL>__*`) both resolve through the
-  `ClaimTransformer` Protocol; `JwtParser.parse()`, `TrustedIssuerRegistry.verify()`,
-  and `varco-fastapi`'s `JwtBearerAuth`/`PassthroughAuth` all pick it up for free
-  through one shared funnel. Zero-config behaviour is unchanged (`IDENTITY`
-  transformer, no copy). See `technical_docs/features/jwt-claim-transformer.md`.
-- **Named token profiles** (`varco_core.jwt.profile`) — `TokenProfile` /
-  `TokenProfileRegistry` recognise multiple kinds of special/internal tokens
-  (`system`, `internal`, `partner`, `service-mesh`, …) by issuer/token_type/audience/
-  required claims, env-configured via `VARCO_JWT_PROFILE__<NAME>__*`, and can grant
-  `implied_roles`/`implied_scopes`. `JwtUtil.matches_profile()` /
-  `.profile_name()` / `.assert_profile()`; `JwtBuilder.as_profile()`. See
-  `technical_docs/features/token-profiles.md`.
-- **JWT verification hardening** — `VARCO_JWT_LEEWAY_SECONDS` (clock-skew leeway for
-  `exp`/`nbf`, default `0.0`) and `VARCO_JWT_AUDIENCE` (expected `aud`, default
-  `None` = not enforced) via `varco_core.jwt.config.JwtVerificationSettings`,
-  threaded through `JwtParser.parse()`, `TrustedIssuerRegistry.verify()`, and
-  `JwtBearerAuth`.
-- **JWKS caching knobs** — `TrustedIssuerRegistry(min_refresh_interval=...,
-  ttl_seconds=...)` (env: `VARCO_JWKS_MIN_REFRESH_SECONDS` default `10.0`,
-  `VARCO_JWKS_TTL_SECONDS` default `0.0` = disabled) allow a proactive, age-based
-  keyset reload in addition to the existing reactive kid-miss refresh. A background
-  refresher task remains out of scope (needs its own lifespan wiring) — deferred.
-- **`ValueShape.GRANTS`** validation gives an actionable `ClaimTransformError` naming
-  the offending list index and missing key for a malformed `grants` claim, replacing
-  a previously bare `KeyError`.
-
-#### Changed
-- ⚠️ **Widened `AuthContext` materialisation on JWT parse.** A token carrying only
-  `tenant_id`/`actor` claims (no `roles`/`scopes`/`grants`), or matching a
-  `TokenProfile` with `implied_roles`/`implied_scopes`, now materialises a non-`None`
-  `auth_ctx` where it previously stayed `None`. Canonical tokens with none of
-  `roles`/`scopes`/`grants`/`tenant_id`/`actor` and no matching profile still yield
-  `auth_ctx is None`. Code doing `if token.auth_ctx is None: treat as machine token`
-  should account for this.
-- `JsonWebToken.to_claims()` now emits `tenant_id`/`act` claims when present in
-  `auth_ctx.metadata["tenant_id"]`/`["actor"]`, so varco-minted tokens round-trip
-  tenant/actor through re-parsing. `_RESERVED_CLAIM_KEYS` was **not** extended to
-  include `tenant_id`/`act`/`user_id`/`actor` (a deviation from the original plan —
-  the executable test suite requires `JwtBuilder().claim("tenant_id", ...)` /
-  `.claim("act", ...)` to keep succeeding); `JwtBuilder.claim()` behaviour for these
-  keys is unchanged.
-- `JwtUtil.is_system()` now prefers a registered `"system"` `TokenProfile` when one
-  exists, falling back to the historical `SYSTEM_ISSUER` `ClassVar` comparison
-  otherwise. `SYSTEM_ISSUER` is documentation-deprecated in favour of
-  `VARCO_JWT_PROFILE__SYSTEM__ISS` — it keeps working with no removal scheduled and
-  no runtime `DeprecationWarning`.
-
-#### Fixed
-- Corrected every documented DI override example (`varco_core.observability.di`
-  docstrings, README) that showed `container.install(OtelConfiguration,
-  config=...)` or `container.provide(lambda: OtelConfig(...))` — neither call
-  shape has ever worked: `install()` takes no `config=` keyword and `provide()`
-  rejects undecorated callables (`ProviderBindingNotDecoratedError`). The
-  correct pattern is a module-level `@Provider`-decorated factory function
-  registered with `container.provide(fn)` **before** `install()`/`scan()`
-  (equal-priority bindings resolve first-registered, not last). See
-  `ARCHITECTURE.md`'s DI Wiring section for the full corrected pattern and the
-  quoted-return-annotation landmine below.
-
-### varco-kafka
-
-#### Fixed
-- 🐛 **`container.get(KafkaChannelManager)` / `KafkaChannelManagerSettings`
-  was hard-broken** (`LookupError: Cannot resolve 'values: typing.Any'`) —
-  `KafkaChannelManagerSettings` carried `@Singleton` directly on a pydantic
-  `BaseSettings` subclass, and providify cannot constructor-inject a
-  `**values: Any` signature. Replaced with a lowest-priority `@Provider`
-  factory (`kafka_channel_manager_settings` in `varco_kafka.channel`), the
-  same pattern already used for `varco_casbin` settings. Guarded by
-  `varco_kafka/tests/test_kafka_di.py`.
-
-### varco-nats
-
-#### Fixed
-- 🐛 **`container.get(NatsStreamManager)` / `NatsChannelManagerSettings` was
-  hard-broken** — same root cause and fix as the `varco-kafka` entry above
-  (`@Singleton` on a pydantic `BaseSettings` class replaced by a
-  lowest-priority `nats_channel_manager_settings` `@Provider` factory in
-  `varco_nats.channel`). Guarded by `varco_nats/tests/test_nats_di.py`.
-
-### varco-fastapi
-
-#### Changed
-- ⚠️ **Error response bodies now include a `detail` field when present.**
-  `add_exception_handlers()` and `ErrorMiddleware` both stopped silently dropping
-  `ErrorMessage.detail` — a 403 from a denied `RouteGuard` (missing scope/role/token
-  profile/grant) now surfaces its actionable message in the JSON body under
-  `"detail"`, not just `"message"`. Clients parsing only `{"code", "message"}` are
-  unaffected; clients that assert the *absence* of a `"detail"` key should update.
-- **`PassthroughAuth` refactored** onto `JwtParser.parse_unverified()` instead of
-  hand-rolled claim parsing — it now benefits from the claim-transformer pipeline
-  (env-driven or explicit) like every other JWT entry point. A regression test pins
-  the resulting `AuthContext` for a canonical token to the pre-refactor behaviour.
-
-#### Added
-- **`JwtBearerAuth(audience=..., leeway=...)`** — opt-in audience enforcement and
-  configurable clock-skew leeway, both falling back to `VARCO_JWT_AUDIENCE` /
-  `VARCO_JWT_LEEWAY_SECONDS` when omitted. Logs one warning at construction when
-  audience is left unenforced.
-- **`RouteGuard.token_profiles` / `require_token_profile(*names)`** — gate a
-  `@route` on the JWT's resolved token profile (`ctx.metadata["token_profile"]`),
-  checked between the role check and the grant check.
-- **`create_varco_app(configure_jwt=True)`** — calls
-  `configure_jwt_from_env()` once at startup so the process-global claim-transform
-  and token-profile registries match what `VarcoFastAPIModule`'s DI providers hand
-  out. Set `configure_jwt=False` to manage the registries yourself.
-
-#### Fixed
-- 🐛 **`container.get(TracerProvider)` raised `TypeError: tracer_provider()
-  missing 1 required positional argument: 'config'`** when `VarcoFastAPIModule`
-  and `varco_core.observability.di.OtelConfiguration` shared one container —
-  `Inject[OtelConfig]` was silently not injected into `OtelConfiguration`'s
-  provider method, even though the two modules looked unrelated. Root cause:
-  `VarcoFastAPIModule.profiling_settings` declared a *quoted* return
-  annotation (`-> "ProfilingSettings"`); under PEP 563 that annotation
-  resolves to the literal string `"'ProfilingSettings'"`, and providify's
-  `eval` fallback (`providify/binding.py`) registered the resulting **string**
-  as a binding interface. That one malformed binding then made
-  `DIContainer._build_localns()` raise, which `_collect_kwargs_sync()`
-  silently swallowed (`except Exception: hints = {}`) — disabling constructor
-  and provider injection for **every** binding in the container, not just the
-  broken one. Fixed by dropping the quotes (`from __future__ import
-  annotations` already made the annotation lazy) and keeping
-  `ProfilingSettings` imported at module scope. The underlying defect is in
-  `providify` (a sibling library) and is **not** fixed here — see
-  `ARCHITECTURE.md`'s DI Wiring section for the landmine and its one-line
-  diagnostic (`[b for b in container._bindings if isinstance(b.interface,
-  str)]`). Guarded by `varco_fastapi/tests/test_di_binding_health.py` and
-  `varco_core/tests/test_observability_di.py`.
 
 ---
 

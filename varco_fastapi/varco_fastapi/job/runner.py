@@ -39,7 +39,15 @@ from contextvars import ContextVar
 from typing import Any, Coroutine
 from uuid import UUID, uuid4
 
+from datetime import datetime, timedelta, timezone
+
+from varco_core.event.dlq import (
+    AbstractDeadLetterQueue,
+    DeadLetterEntry,
+    DeadLetterSource,
+)
 from varco_core.job.base import AbstractJobRunner, AbstractJobStore, Job, JobStatus
+from varco_core.resilience.retry import RetryPolicy
 from varco_fastapi.job.response import JobProgressEvent
 from varco_core.event import AbstractEventBus
 from providify import Inject, Instance, Singleton
@@ -116,6 +124,27 @@ class JobRunner(AbstractJobRunner):
         enable_otel:           If ``True``, create OTel spans per job.
                                Auto-disabled if ``opentelemetry`` is not installed.
         tracer_name:           OpenTelemetry tracer name.
+        retry_policy:          Plan 005 Phase 4 (U-17 §3) — optional
+                               ``RetryPolicy`` for job **execution** failures
+                               (distinct from ``callback_retry_policy``, which
+                               only covers webhook delivery). ``None``
+                               (default) reproduces today's behaviour exactly:
+                               a failed job transitions straight to FAILED.
+                               When set, a failure with
+                               ``attempt + 1 < max_attempts`` transitions the
+                               job back to PENDING via ``Job.as_retry()`` with
+                               ``run_at = now + retry_policy.compute_delay(attempt)``
+                               instead. Reuses
+                               ``varco_core.resilience.RetryPolicy`` — no
+                               second retry model.
+        dlq:                   Plan 005 Phase 4 (U-17 §3) — optional
+                               ``AbstractDeadLetterQueue``. When a job
+                               exhausts ``max_attempts`` (or ``retry_policy``
+                               is unset and it fails at all): with a ``dlq``
+                               wired, the job transitions to DEAD and a
+                               ``DeadLetterEntry(source=JOB, source_ref=str(job_id))``
+                               is pushed; without a ``dlq``, it transitions to
+                               FAILED exactly as today.
 
     Lifecycle::
 
@@ -144,6 +173,8 @@ class JobRunner(AbstractJobRunner):
         callback_retry_policy: Any | None = None,
         enable_otel: bool = True,
         tracer_name: str = "varco_fastapi.job",
+        retry_policy: RetryPolicy | None = None,
+        dlq: AbstractDeadLetterQueue | None = None,
     ) -> None:
         self._store = store
         self._event_bus = event_bus
@@ -151,6 +182,8 @@ class JobRunner(AbstractJobRunner):
         self._callback_retry_policy = callback_retry_policy
         self._enable_otel = enable_otel and self._check_otel()
         self._tracer_name = tracer_name
+        self._retry_policy = retry_policy
+        self._dlq = dlq
 
         # asyncio.Task registry — keyed by job_id for cancel() and stop()
         # Lazy: populated at submit() time, never at __init__ (no event loop yet)
@@ -333,6 +366,7 @@ class JobRunner(AbstractJobRunner):
         callback_url: str | None = None,
         auth_snapshot: dict[str, Any] | None = None,
         request_token: str | None = None,
+        store_raw_token: bool = True,
         **kwargs: Any,
     ) -> UUID:
         """
@@ -354,6 +388,18 @@ class JobRunner(AbstractJobRunner):
             callback_url:  Optional webhook URL for completion notification.
             auth_snapshot: Serialized ``AuthContext`` from the originating request.
             request_token: Raw Bearer JWT for audit trail and callback auth.
+            store_raw_token: Plan 005 Phase 6 (U-19). ``True`` (default) —
+                today's exact behaviour: ``request_token`` is stored as-is,
+                and ``_fire_callback()`` forwards it as the completion
+                callback's ``Authorization: Bearer`` header. ``False`` —
+                ``Job.__post_init__`` hashes ``request_token`` into
+                ``request_token_hash`` and clears ``request_token`` to
+                ``None``; the callback then carries NO ``Authorization``
+                header (``_fire_callback`` already no-ops on a falsy
+                ``request_token``), so the receiving endpoint must
+                authenticate the callback some other way — a service
+                credential, mTLS, or a signed callback URL. Setting this
+                ``False`` also removes a token-replay surface.
             **kwargs:      Keyword arguments forwarded to the task function.
 
         Returns:
@@ -380,6 +426,7 @@ class JobRunner(AbstractJobRunner):
             callback_url=callback_url,
             auth_snapshot=auth_snapshot,
             request_token=request_token,
+            store_raw_token=store_raw_token,
             task_payload=payload,
         )
 
@@ -564,13 +611,71 @@ class JobRunner(AbstractJobRunner):
             raise
 
         except Exception as exc:
-            error_msg = str(exc)
-            job = job.as_failed(error_msg)
-            await self._store.save(job)
-            await self._publish_progress(job.job_id, JobStatus.FAILED, error=error_msg)
+            await self._handle_job_failure(job, exc, span)
+            logger.exception("JobRunner: recovered job %s failed", job.job_id)
+
+    async def _handle_job_failure(
+        self, job: Job, exc: BaseException, span: Any
+    ) -> None:
+        """
+        Terminalize (or retry-schedule) a job whose coroutine raised.
+
+        Plan 005 Phase 4 (U-17 §3) retry binding — shared by ``_run_job`` and
+        ``_run_claimed_job`` so the retry/DLQ decision lives in exactly one
+        place.
+
+        Decision table:
+        - ``self._retry_policy`` is set AND ``job.attempt + 1 < job.max_attempts``
+          → ``Job.as_retry(run_at=now + retry_policy.compute_delay(attempt))``,
+          transitions back to PENDING for a later reclaim.
+        - Otherwise (attempts exhausted, or no ``retry_policy`` configured —
+          ``max_attempts`` defaults to ``1`` so this is immediate) →
+          terminal: ``DEAD`` + a ``DeadLetterEntry(source=JOB,
+          source_ref=str(job_id))`` push when ``self._dlq`` is wired,
+          otherwise ``FAILED`` — today's exact behaviour when both
+          ``retry_policy`` and ``dlq`` are ``None`` (the default).
+
+        Args:
+            job:  The ``Job`` in RUNNING state that failed.
+            exc:  The exception raised by the job coroutine.
+            span: The OTel span for this job run, or ``None``.
+
+        Async safety: ✅ All I/O is awaited.
+        """
+        error_msg = str(exc)
+
+        if self._retry_policy is not None and job.attempt + 1 < job.max_attempts:
+            delay_seconds = self._retry_policy.compute_delay(job.attempt)
+            next_run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+            retried = job.as_retry(next_run_at)
+            await self._store.save(retried)
+            await self._publish_progress(job.job_id, JobStatus.PENDING, error=error_msg)
             if span is not None:
                 self._finish_otel_span(span, success=False, exc=exc)
-            logger.exception("JobRunner: recovered job %s failed", job.job_id)
+            return
+
+        if self._dlq is not None:
+            dead = job.as_dead(error_msg)
+            await self._store.save(dead)
+            await self._dlq.push(
+                DeadLetterEntry(
+                    channel="",
+                    handler_name="JobRunner",
+                    error_type=type(exc).__name__,
+                    error_message=error_msg,
+                    attempts=job.attempt + 1,
+                    source=DeadLetterSource.JOB,
+                    source_ref=str(job.job_id),
+                )
+            )
+            await self._publish_progress(job.job_id, JobStatus.DEAD, error=error_msg)
+        else:
+            failed = job.as_failed(error_msg)
+            await self._store.save(failed)
+            await self._publish_progress(job.job_id, JobStatus.FAILED, error=error_msg)
+
+        if span is not None:
+            self._finish_otel_span(span, success=False, exc=exc)
 
     async def cancel(self, job_id: UUID) -> bool:
         """
@@ -676,14 +781,8 @@ class JobRunner(AbstractJobRunner):
             raise
 
         except Exception as exc:
-            # ── Transition to FAILED ──────────────────────────────────────────
-            error_msg = str(exc)
-            job = job.as_failed(error_msg)
-            await self._store.save(job)
-            await self._publish_progress(job_id, JobStatus.FAILED, error=error_msg)
-            if span is not None:
-                self._finish_otel_span(span, success=False, exc=exc)
-
+            # ── Transition to FAILED / PENDING (retry) / DEAD ──────────────────
+            await self._handle_job_failure(job, exc, span)
             logger.exception("JobRunner: job %s failed", job_id)
             # Don't re-raise — the task is done; error is persisted in the store
 

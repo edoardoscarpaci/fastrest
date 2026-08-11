@@ -74,7 +74,7 @@ class ProfilingSettings(VarcoSettings):
         VARCO_PROFILER_ATTACH_HEADERS=true
         VARCO_PROFILER_TOP_N=10
 
-    Args:
+    Attributes:
         enabled:             Whether to install the middleware at all (default ``False``).
         skip_paths:          Request paths to never profile (default: ``/metrics``,
                              ``/health``, ``/readyz``).

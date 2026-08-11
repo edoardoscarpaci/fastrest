@@ -16,7 +16,7 @@ cd varco
 uv sync
 
 # 2. Start infrastructure
-cd example
+cd examples/00-full-stack-post-api
 docker compose up -d          # PostgreSQL + Redis
 
 # 3. Run the app

@@ -15,12 +15,14 @@ All tests use InMemoryEventBus — no broker required.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
 
+from varco_core.resilience.retry import RetryPolicy
 from varco_core.event.audit_event import AuditEvent
 from varco_core.event.memory import InMemoryEventBus
 from varco_core.service.audit import (
@@ -705,3 +707,126 @@ async def test_after_create_not_called_on_create_failure() -> None:
         await service.create(_WidgetCreate(name="X"), ctx)
 
     assert service.after_create_calls == 0
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 3, Step 41 — AuditConsumer safe-by-default retry/DLQ
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Step 40 lands: AuditConsumer gains a class attribute
+# `_default_retry_policy = RetryPolicy.durable_delivery()` and
+# `__init__(..., dlq=None)`; register_to() passes both unless the caller
+# overrode them.
+
+
+@pytest.fixture
+def instant_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """
+    Collapse the retry wrapper's backoff sleeps to zero.
+
+    ``AuditConsumer``'s Phase 3 default is ``RetryPolicy.durable_delivery()``
+    (``max_attempts=20``, ``base_delay=15.0``, ``max_delay=3600.0``) — correct
+    for a production audit trail, and hours of wall clock in a test. These
+    tests assert the retry *binding* (that retries happen at all by default,
+    and where exhausted events land), not the sleep durations, so the delay is
+    stubbed out while the attempt sequencing stays real.
+
+    The stub still yields to the event loop so ordering behaves as it does in
+    production — it does not turn the retry loop into a tight spin.
+
+    ``varco_core.resilience.retry`` does a plain ``import asyncio`` and calls
+    ``asyncio.sleep(delay)``, so patching the shared module object reaches it.
+    (Patching ``varco_core.resilience.retry`` by name does not work — the
+    package ``__init__`` rebinds that name to the ``retry`` *decorator*.)
+    ``monkeypatch`` restores the original at teardown.
+    """
+    real_sleep = asyncio.sleep
+
+    async def _no_delay(_delay: float, *args: object, **kwargs: object) -> None:
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", _no_delay)
+
+
+async def test_audit_consumer_default_policy_is_durable_delivery() -> None:
+    # The safe-by-default polarity itself (U-6 §2) — pinned separately from
+    # the behavioural tests below so it survives any change to their timing
+    # strategy.
+    assert AuditConsumer._default_retry_policy == RetryPolicy.durable_delivery()
+
+
+async def test_audit_consumer_default_retries_a_handler_that_fails_twice(
+    instant_backoff: None,
+) -> None:
+    from varco_core.event.dlq import InMemoryDeadLetterQueue
+
+    bus = InMemoryEventBus()
+
+    class _FlakyAuditRepository(InMemoryAuditRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self._call_count = 0
+
+        async def save(self, entry: AuditEntry) -> None:
+            self._call_count += 1
+            if self._call_count < 3:
+                raise RuntimeError("transient DB error")
+            await super().save(entry)
+
+    repo = _FlakyAuditRepository()
+    dlq = InMemoryDeadLetterQueue()
+    consumer = AuditConsumer(audit_repo=repo, dlq=dlq)
+    consumer.register_to(bus)
+
+    event = AuditEvent(entity_type="Order", entity_id="ord-1", action="create")
+    await bus.publish(event, channel="varco.audit")
+    await bus.drain()
+
+    assert len(repo.entries) == 1
+    assert repo._call_count == 3
+
+
+async def test_audit_consumer_always_failing_handler_lands_in_dlq(
+    instant_backoff: None,
+) -> None:
+    from varco_core.event.dlq import DeadLetterSource, InMemoryDeadLetterQueue
+
+    bus = InMemoryEventBus()
+
+    class _AlwaysFailingAuditRepository(InMemoryAuditRepository):
+        async def save(self, entry: AuditEntry) -> None:
+            raise RuntimeError("permanent DB error")
+
+    repo = _AlwaysFailingAuditRepository()
+    dlq = InMemoryDeadLetterQueue()
+    consumer = AuditConsumer(audit_repo=repo, dlq=dlq)
+    consumer.register_to(bus)
+
+    event = AuditEvent(entity_type="Order", entity_id="ord-2", action="create")
+    await bus.publish(event, channel="varco.audit")
+    await bus.drain()
+
+    assert await dlq.count() == 1
+    entries = await dlq.pop_batch(limit=1)
+    assert entries[0].source == DeadLetterSource.CONSUMER
+
+
+async def test_audit_consumer_explicit_none_retry_policy_restores_fire_and_forget() -> (
+    None
+):
+    bus = InMemoryEventBus()
+
+    class _AlwaysFailingAuditRepository(InMemoryAuditRepository):
+        async def save(self, entry: AuditEntry) -> None:
+            raise RuntimeError("permanent DB error")
+
+    repo = _AlwaysFailingAuditRepository()
+    consumer = AuditConsumer(audit_repo=repo)
+    # Explicit opt-out — must restore today's single-attempt fire-and-forget.
+    consumer.register_to(bus, retry_policy=None)
+
+    event = AuditEvent(entity_type="Order", entity_id="ord-3", action="create")
+    # Must not raise out of publish — handler failure is swallowed by the bus
+    # dispatch machinery same as today.
+    await bus.publish(event, channel="varco.audit")
+    await bus.drain()

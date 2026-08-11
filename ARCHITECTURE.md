@@ -139,7 +139,12 @@ AbstractDeadLetterQueue (ABC)
   ├── InMemoryDeadLetterQueue (tests)
   ├── KafkaDLQ                (varco_kafka)
   ├── NatsDLQ                 (varco_nats)    — WorkQueue-retention stream; exact count()
-  └── RedisDLQ                (varco_redis)
+  ├── RedisDLQ                (varco_redis)
+  └── SADeadLetterQueue       (varco_sa)      — durable, varco_dead_letters table (Plan 005 Phase 3)
+
+DeadLetterEntry (Plan 005 Phase 3) — event: DomainEvent | None, source: DeadLetterSource
+  (CONSUMER default / OUTBOX_RELAY / JOB), source_ref, payload — one shape for all three
+  producers (EventConsumer retry exhaustion, OutboxRelay, JobRunner)
 
 EventMiddleware (Callable[[Event, str, next] → Awaitable[None]])
   ├── CorrelationMiddleware   — propagates correlation_id across the event chain
@@ -370,6 +375,13 @@ Bulkhead (shared instance pattern — same rule as CircuitBreaker)
   └── Rule: one Bulkhead per external dependency — shared semaphore counts across all callers
   └── Methods: call(fn, *args), protect(fn)
   └── BulkheadConfig: max_concurrent (semaphore slots), max_wait (0.0 = fail-fast)
+  └── RedisBulkhead (varco_redis, Plan 005 Phase 8 / U-7) — distributed sibling, same
+      call()/protect()/available_slots() surface, fleet-wide max_concurrent via a Redis
+      sorted set of holders (score = acquisition time) + Lua acquire/release mirroring
+      RedisLock; TTL-based (slot_ttl) reclaim for a crashed holder's slot. Concurrency
+      limiting (Bulkhead) and rate limiting (RateLimiter) are different primitives — a
+      service can be within its rate budget and still overwhelm a dependency with
+      concurrent in-flight calls.
 
 RateLimiter (ABC — two implementations)
   ├── InMemoryRateLimiter  — per-process sliding window (collections.deque), single-node
@@ -391,6 +403,7 @@ Type hierarchy (resilience)::
       └── RedisRateLimiter     (varco_redis)  — distributed, sorted-set + Lua
 
     Bulkhead           (varco_core)   — asyncio.Semaphore, shared per dependency
+      └── RedisBulkhead  (varco_redis) — distributed, sorted-set + Lua, TTL reclaim
     CircuitBreaker     (varco_core)   — shared state machine, lazy asyncio.Lock
 
 ### Outbox Pattern
@@ -406,12 +419,20 @@ OutboxEntry (frozen dataclass)
 OutboxRepository (ABC)
   ├── save_outbox(entry: OutboxEntry)
   ├── get_pending(limit: int) → list[OutboxEntry]
-  └── delete(entry_id: str)
+  ├── delete(entry_id: str)
+  └── mark_failed(entry_id, *, attempts, next_attempt_at, error) — concrete, not abstract
+      (Plan 005 Phase 3); default no-ops with a one-time warning per repo class
+
+OutboxEntry gains (Plan 005 Phase 3, all defaulted): attempts: int = 0,
+  last_error: str | None = None, next_attempt_at: datetime | None = None
 
 OutboxRelay (background task)
   ├── poll loop: get_pending() → publish() → delete()
-  └── Rule: only place allowed to call AbstractEventBus directly (besides register_to)
-  └── Contract: push() to DLQ must never raise — logs errors and swallows
+  ├── Rule: only place allowed to call AbstractEventBus directly (besides register_to)
+  ├── Contract: push() to DLQ must never raise — logs errors and swallows
+  └── (Plan 005 Phase 3) retry_policy= / dlq= / max_attempts= — attempts bumped +
+      next_attempt_at scheduled via mark_failed() on failure; exhausted entries are
+      dead-lettered then deleted; ValueError if max_attempts set without a dlq
 ```
 
 ### Audit Trail (varco_core.service.audit)
@@ -435,7 +456,10 @@ AuditLogMixin (service mixin, MRO — compose LEFT of AsyncService)
 
 AuditConsumer (EventConsumer)
   └── @listen(AuditEvent, channel="varco.audit") → AuditRepository.save()
-  └── Rule: ships with no retry_policy/dlq — subclass + re-declare @listen for resilience
+  └── Rule: safe-by-default (Plan 005 Phase 3, U-6 §2) — _default_retry_policy =
+            RetryPolicy.durable_delivery() (max_attempts=20, base_delay=15.0, max_delay=3600.0)
+            unless the caller overrides it; pass retry_policy=None explicitly to
+            register_to() to restore the old fire-and-forget behaviour
   └── Rule: eventually consistent (post-commit event) — route through the outbox for
             "must not lose an audit record" guarantees
 ```
@@ -463,7 +487,29 @@ SAAdvisoryLock (varco_sa) — PostgreSQL pg_try_advisory_lock(int8) / pg_advisor
   ├── String keys hashed to int64 via MD5 (first 8 bytes masked to 63 bits)
   ├── TTL accepted for API compatibility but NOT enforced at DB level
   │   (session-level lock lasts until connection closes)
+  ├── ⚠️ UNSUPPORTED behind transaction-mode connection pooling (PgBouncer
+  │   pool_mode=transaction) — release() may be routed to a different physical
+  │   connection than try_acquire() used, leaking the lock (Plan 005 Phase 5, U-16).
+  │   See technical_docs/features/distributed-locks.md for the failure sequence.
   └── Rule: NOT compatible with SQLite — PostgreSQL-specific advisory lock functions
+
+SAXactAdvisoryLock (varco_sa) — PostgreSQL pg_try_advisory_xact_lock(int8) (Plan 005 Phase 5, U-16)
+  ├── Same module as SAAdvisoryLock (varco_sa/advisory_lock.py) — shares _key_to_int64
+  ├── xact(key, session) → AsyncIterator[bool]   — PRIMARY API
+  │   └── Runs on the CALLER's session/transaction; released automatically at
+  │       COMMIT/ROLLBACK — no release() call, no extra pinned connection.
+  │       Safe under transaction-mode pooling by construction.
+  ├── try_acquire(key, *, ttl) / release(key, token) → AbstractDistributedLock ABC shape
+  │   └── Opens and pins its OWN connection+transaction for the lock's lifetime
+  │       (same cost as SAAdvisoryLock, just transaction- not session-scoped).
+  │       ttl is documented as MEANINGLESS (not merely unenforced) — the
+  │       transaction's own commit/rollback is what bounds the lock.
+  └── Recommended default whenever the deployment might sit behind a pooler.
+
+varco_sa.di.SAModule — AbstractDistributedLock → SAAdvisoryLock (default, upgrade-safe binding);
+  SAXactAdvisoryLock also registered as a directly-injectable singleton
+  (Inject[SAXactAdvisoryLock]); override recipe: provide() before install()/scan(),
+  or @Provider(priority=100) — see varco_sa/varco_sa/di.py
 
 LockNotAcquiredError(Exception)
   └── Raised by acquire() when timeout expires before the lock is free
@@ -532,18 +578,39 @@ Rule: record() inside the same DB transaction as the business operation to avoid
 
 ```
 AbstractJobStore (ABC) — varco_core.job.base
-  ├── save(job: Job) → None              (upsert semantics — replaces existing job)
+  ├── save(job: Job, *, expected_epoch: int | None = None) → None    (upsert; fenced write)
   ├── get(job_id: UUID) → Job | None
   ├── list_by_status(status, *, limit=100) → list[Job]  (ordered created_at ASC)
   ├── delete(job_id: UUID) → None        (silent no-op for unknown IDs)
-  └── try_claim(job_id: UUID) → Job | None  (PENDING → RUNNING; atomic; None on failure)
+  ├── delete_where(*, status=, completed_before=, expires_before=, limit=) → int
+  │     (Plan 005 Phase 6, U-18 — concrete default; ValueError with no predicate at all)
+  ├── try_claim(job_id, *, owner_id=None, lease_ttl=None) → Job | None
+  │     (PENDING → RUNNING; atomic; honours run_at IS NULL OR run_at <= now; Plan 005 Phase 4)
+  ├── claim_next(*, owner_id=, lease_ttl=, now=) → Job | None
+  │     (concrete default: list_by_status(PENDING) + try_claim loop — correct, slower)
+  ├── renew(job_id, *, owner_id, epoch, lease_ttl) → Job | None
+  │     (concrete-but-raises NotImplementedError by default — no correct lease fallback)
+  └── reap_expired_leases(*, now=, limit=100) → list[Job]
+        (concrete-but-raises NotImplementedError by default; RUNNING → PENDING, epoch+1)
 
 Job (frozen dataclass): job_id, status, created_at, started_at, completed_at,
                         result (bytes), error, callback_url, auth_snapshot, request_token,
-                        metadata, task_payload (TaskPayload | None)
-  └── Transition helpers: as_running(), as_completed(result), as_failed(error), as_cancelled()
+                        metadata, task_payload (TaskPayload | None),
+                        run_at, attempt, max_attempts, owner_id, lease_expires_at, lease_epoch,
+                        expires_at, request_issuer, request_subject, request_token_hash,
+                        store_raw_token: bool = True  (Plan 005 Phases 4 & 6 — all defaulted)
+  ├── Transition helpers: as_running(), as_completed(result), as_failed(error), as_cancelled(),
+  │                       as_retry(next_run_at), as_dead(error)
+  ├── request_token: discouraged (Plan 005 Phase 6, U-19) — docstring-only, no
+  │     DeprecationWarning, no removal (matches JwtUtil.SYSTEM_ISSUER precedent) —
+  │     a JWT is base64-encoded not encrypted; prefer request_issuer/request_subject/
+  │     request_token_hash instead
+  └── __post_init__: when store_raw_token=False and request_token is set, computes
+        request_token_hash = sha256(request_token).hexdigest() and clears request_token to None
 
-JobStatus (StrEnum): PENDING, RUNNING, COMPLETED, FAILED, CANCELLED
+JobStatus (StrEnum): PENDING, RUNNING, COMPLETED, FAILED, CANCELLED, DEAD (Plan 005 Phase 4)
+
+StaleLeaseError (Exception) — raised by save(expected_epoch=...) on a fenced-out write
 
 TaskPayload (dataclass): task_name, args, kwargs  — for recoverable background jobs
 
@@ -553,17 +620,58 @@ Implementations:
   │   ├── save(): DELETE + INSERT (upsert, compatible with SQLite and PostgreSQL)
   │   ├── try_claim(): SELECT FOR UPDATE SKIP LOCKED on PostgreSQL (dialect-detected)
   │   │   └── plain SELECT + UPDATE on SQLite and other dialects (single-process safe)
+  │   ├── native claim_next/renew/reap_expired_leases as single atomic UPDATEs
+  │   ├── native delete_where(): single DELETE; limit form uses
+  │   │     ctid IN (SELECT ctid ... LIMIT n) on PostgreSQL / rowid on SQLite
+  │   │     (index-friendly given ix_varco_jobs_expires) — Plan 005 Phase 6, U-18
+  │   ├── indexes (Plan 005 Phase 4): ix_varco_jobs_claim(status,run_at,created_at),
+  │   │     ix_varco_jobs_lease(status,lease_expires_at), ix_varco_jobs_expires(expires_at)
   │   └── ensure_table() / jobs_metadata for Alembic integration
+  ├── RedisJobStore (varco_redis) — JSON-per-key + status ZSET index; claim guard key (SET NX EX)
+  │     now also honours run_at and writes lease fields on claim
+  │     native delete_where(): walks the per-status ZSET index(es), skips/cleans stale entries
   └── BeanieJobStore (varco_beanie)
       ├── varco_jobs collection (JobDocument, UUID primary key)
       ├── save(): find().delete() + doc.insert() (upsert via two round-trips)
-      └── try_claim(): find_one(...).update_one(Set(...), response_type=NEW_DOCUMENT)
-          └── MongoDB findAndModify — atomic PENDING → RUNNING in one server-side op
+      ├── try_claim(): find_one(...).update_one({"$set": ...}, response_type=NEW_DOCUMENT)
+      │   └── MongoDB findAndModify — atomic PENDING → RUNNING in one server-side op;
+      │       run_at/lease fields referenced via plain dict filters (not typed
+      │       ExpressionFields) so they work identically pre-/post-init_beanie()
+      └── native delete_where(): single delete_many(); limit form selects matching
+          _ids first then deletes by that id set (no native "delete with limit")
 
 Rule: try_claim() must be atomic — SAJobStore uses SELECT FOR UPDATE SKIP LOCKED;
       BeanieJobStore uses MongoDB findAndModify — both prevent double-claiming across replicas
 Rule: include jobs_metadata (SAJobStore) or JobDocument (BeanieJobStore) in your init call
 Rule: save() has upsert semantics — always safe to call on terminal jobs (COMPLETED, FAILED)
+Rule: delete_where() with no predicate at all raises ValueError — chunk large sweeps with
+      limit= in a loop until it returns 0 (avoids pinning a pooled connection; Plan 005 Phase 6)
+
+AbstractJobRunner (ABC) — enqueue(job, coro, *, run_at=None, delay=None) mutually exclusive
+  ├── JobRunner (varco_fastapi) — retry_policy=/dlq= (Plan 005 Phase 4): failure with
+  │     attempt+1 < max_attempts → Job.as_retry(); attempts exhausted → as_dead()+DLQ push
+  │     when dlq wired, else as_failed() (today's exact behaviour when both are None)
+  └── enqueue_task(..., store_raw_token: bool = True) (Plan 005 Phase 6, U-19)
+        — forwarded to Job(); False clears request_token via __post_init__, so
+          _fire_callback()'s Authorization: Bearer forwarding is skipped (callback
+          must then authenticate some other way — service credential / mTLS / signed URL)
+
+VarcoRouter._store_raw_token: ClassVar[bool] = True (Plan 005 Phase 6, U-19)
+  └── Read by router.base._submit_job() when auto-populating the Job for async-offloaded
+      CRUD/custom routes — same True-default/False-opt-out contract as enqueue_task() above
+
+JobPoller (varco_fastapi) — lease_aware: bool = True (Plan 005 Phase 4)
+  ├── both signals run every tick, over disjoint sets: reap_expired_leases() reaps RUNNING
+  │     jobs holding an EXPIRED lease (lease_expires_at <= now); the wall-clock stale_threshold
+  │     still owns RUNNING jobs with NO lease at all (lease_expires_at IS NULL) — a NULL lease
+  │     is not an expired lease, so it is invisible to reap_expired_leases(). The lease-reap
+  │     step is skipped entirely (falling back to stale_threshold alone) when the store raises
+  │     NotImplementedError (no lease support)
+  └── retention_sweep: bool = False, retention_batch_size: int | None = None (Plan 005 Phase 6, U-18)
+        — when True, each poll tick also calls
+          store.delete_where(expires_before=now, limit=retention_batch_size); one bounded
+          call per tick (not looped to drain in one shot) so a large backlog is worked off
+          gradually; default False — no deployment starts deleting rows on upgrade
 ```
 
 ### Conversation Store
@@ -907,6 +1015,14 @@ filtered_query = transformer.transform(base_query, params, User)
 - **Saga impl**: `SASagaRepository` — `varco_sagas` table; DELETE+INSERT dialect-agnostic upsert
 - **Conversation impl**: `SAConversationStore` — `varco_conversation_turns` table, turn-per-row
 - **Advisory lock**: `SAAdvisoryLock` — `pg_try_advisory_lock` / `pg_advisory_unlock`; one pinned connection per held lock
+  (session-scoped — see `technical_docs/features/distributed-locks.md` for the transaction-pooler
+  hazard); `SAXactAdvisoryLock` — transaction-scoped sibling, released at COMMIT/ROLLBACK
+- **Row-Level Security helpers**: `varco_sa.rls` (Plan 005 Phase 8 / U-5, helpers only, nothing
+  wired) — `enable_rls_ddl(table, ...)` returns DDL for the application's own Alembic revision,
+  always emitting the `(SELECT current_setting(..., true))` InitPlan form (see the 150× cliff
+  in `technical_docs/features/postgres-rls.md`); `set_tenant_local(session, tenant_id)` sets the
+  RLS GUC via transaction-scoped `set_config(..., true)` — PgBouncer-transaction-mode safe, same
+  defect class as the session-scoped advisory lock above
 - **Query applicator**: `SQLAlchemyFilterVisitor` converts AST → WHERE clause
 - **Pool metrics**: `pool_metrics(engine)` returns `SAPoolMetrics` snapshot; `SAFastrestApp.pool_metrics()` for convenience
 - **Health check**: `SAHealthCheck` — `SELECT 1` probe against the engine
@@ -915,7 +1031,12 @@ filtered_query = transformer.transform(base_query, params, User)
   `varco_encryption_keys` table using SQLAlchemy Core (no `SAModelFactory` dependency).
   Call `await store.ensure_table()` at startup or add a manual Alembic migration.
   Table schema: `kid` (PK), `algorithm`, `key_material` (base64url), `created_at`,
-  `tenant_id` (NULL = global), `is_primary`, `wrapped`.
+  `tenant_id` (NULL = global), `is_primary`, `wrapped`, `scope` (indexed, Plan 005
+  Phase 1 — `EncryptionKeyEntry.scope` defaults to `tenant_id` at the Python level, but
+  `load_for_scope`/`destroy_scope` filter on the persisted `scope` column itself, so a
+  one-time `scope = tenant_id` backfill is required before they see pre-existing rows),
+  `destroyed_at` (nullable — crypto-shred tombstone). See
+  `technical_docs/features/crypto-shredding.md`.
 
   ```python
   from varco_sa.encryption_store import SAEncryptionKeyStore
@@ -964,6 +1085,9 @@ filtered_query = transformer.transform(base_query, params, User)
 - **Lock impl**: `RedisLock` — SET NX PX for acquisition; Lua script for token-guarded release
 - **Conversation impl**: `RedisConversationStore` — Redis List per task_id; RPUSH/LRANGE; optional TTL
 - **Rate limiter**: `RedisRateLimiter` — distributed sliding window via sorted set + Lua (multi-pod)
+- **Bulkhead**: `RedisBulkhead` — distributed concurrency limiter (Plan 005 Phase 8 / U-7's
+  second leg), sorted set of holders + Lua acquire/release, TTL-based crashed-holder reclaim;
+  opt-in via `RedisBulkheadConfiguration` (`@Configuration`, not auto-scanned)
 - **Channel routing**: Redis pubsub channels or streams
 - **DLQ impl**: Dedicated Redis stream for dead letters
 - **Invalidation**: `EventDrivenStrategy` can subscribe to events and invalidate cache keys
@@ -1193,29 +1317,82 @@ app.add_middleware(ProfilingMiddleware, settings=ProfilingSettings(enabled=True,
 CORS → Error → Tracing → Metrics → Logging → RequestContext → Profiling → route
 ```
 
-#### SkillAdapter — Google A2A protocol
+#### SkillAdapter — Google A2A protocol (v1.0.0 + SkillSource)
 
-`SkillAdapter` converts any `VarcoRouter` class into a Google A2A (Agent-to-Agent) agent.
-It reads `ResolvedRoute` metadata via `introspect_routes()` and exposes every route flagged
-with `skill_enabled=True` as an A2A skill. Execution is delegated to `AsyncVarcoClient` —
-no handler logic is duplicated.
+`SkillAdapter` exposes an agent over the Google A2A protocol. Plan 005 Phase 7 (gaps U-3 +
+U-4, "one piece of work upstream") did two things together: moved the protocol surface to
+**A2A v1.0.0** and decoupled the adapter's *subject* from `VarcoRouter` introspection via a
+new `SkillSource` seam. Both the v1.0.0 and pre-v1.0.0 surfaces are mounted for one minor
+release.
 
-A2A protocol surfaces mounted by `adapter.mount(app)`:
-- `GET  /.well-known/agent.json` — Agent Card (skill discovery)
-- `POST /tasks/send` — execute a skill synchronously
-- `GET  /tasks/{task_id}` — poll task status (v1: echo-back, no history stored)
+```
+SkillAdapter(router_cls | source=, ...)     ← exactly one of the two, ValueError otherwise
+  router_cls   → wrapped into RouterSkillSource (introspect_routes(), extracted verbatim)
+  source=      → any SkillSource — no VarcoRouter required
+       ↓ both implement
+  SkillSource (Protocol, varco_fastapi.router.a2a.source):
+      skills() -> list[SkillDefinition]
+      agent_metadata() -> AgentMetadata
+      async invoke(skill_id, payload, *, ctx: AuthContext | None = None) -> Any
+```
+
+Modules (`varco_fastapi/varco_fastapi/router/a2a/`):
+- `source.py` — `SkillDefinition`, `AgentMetadata`, the `SkillSource` Protocol.
+- `router_source.py` — `RouterSkillSource`, today's route-introspection behaviour, **extracted
+  verbatim** — no behaviour change, `tests/milestone_f/test_skill_adapter.py` stays green
+  unmodified against it.
+- `card.py` — the v1.0.0 Agent Card builder: capability flags nested under a `capabilities`
+  object, **no top-level `id`** (the legacy card had flags at the top level and included `id`).
+- `jsonrpc.py` — JSON-RPC 2.0 envelope + dispatch for `message/send`, `message/stream`,
+  `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/resubscribe`. Maps onto the existing async
+  machinery (`job_runner`/`job_store`, `router/skill.py:264-266`) and the v1 task states
+  `submitted`/`working`/`completed`/`failed`/`canceled`. A `SkillSource.invoke()` that raises
+  is mapped to a JSON-RPC error envelope (HTTP 200), never a bare 500.
+
+A2A surfaces mounted by `adapter.mount(app, legacy_paths=True)`:
+
+**v1.0.0 — always mounted:**
+- `GET  /.well-known/agent-card.json` — Agent Card (nested `capabilities`, no top-level `id`)
+- `POST /a2a` — JSON-RPC 2.0 dispatch
+
+**Pre-v1.0.0 (legacy) — mounted only while `legacy_paths=True`, the default for one minor
+release, with one deprecation warning logged per mount:**
+- `GET  /.well-known/agent.json` — legacy Agent Card
+- `POST /tasks/send` — execute a skill; **synchronous by default**, or **asynchronous** when
+  `job_runner` + `job_store` are supplied to `SkillAdapter.__init__` — the response returns
+  immediately with `state: working` and the client polls task status.
+- `GET  /tasks/{task_id}` — poll task status. With `job_store` wired this reflects the real,
+  persisted job state (`working`/`completed`/`failed`), not a stub response.
+- `GET  /tasks/{task_id}/history` — full turn history, returned when a `conversation_store`
+  is supplied (multi-turn mode); otherwise task history is not tracked (single-turn mode).
+
+⚠️ **Async A2A already worked before Phase 7** (Source correction 2, `plans/005-upstream-gaps.md`)
+— `job_runner`/`job_store`/`conversation_store` support predates the v1.0.0 surface. Phase 7
+moved the *protocol shape*, not the async machinery.
 
 ```python
 from varco_fastapi.router.skill import SkillAdapter, bind_skill_adapter
 
-# Direct usage
+# router_cls path (unchanged, positional)
 adapter = SkillAdapter(
     OrderRouter,
     agent_name="OrderAgent",
     agent_description="Manages customer orders",
     client=OrderClient(base_url="http://localhost:8080"),
 )
-adapter.mount(app)  # registers /.well-known/agent.json + /tasks/*
+adapter.mount(app)  # v1.0.0 (/.well-known/agent-card.json, /a2a) + legacy paths
+
+# SkillSource path — no VarcoRouter required (U-3)
+from varco_fastapi.router.a2a.source import AgentMetadata, SkillDefinition
+
+class ReportSkillSource:
+    def skills(self) -> list[SkillDefinition]: ...
+    def agent_metadata(self) -> AgentMetadata: ...
+    async def invoke(self, skill_id, payload, *, ctx=None): ...
+
+adapter = SkillAdapter(None, source=ReportSkillSource(), agent_name="ReportAgent",
+                       agent_description="Generates PDF reports")
+adapter.mount(app, legacy_paths=False)  # v1.0.0 surface only
 
 # DI-friendly usage
 bind_skill_adapter(container, OrderRouter, agent_name="OrderAgent",
@@ -1223,18 +1400,36 @@ bind_skill_adapter(container, OrderRouter, agent_name="OrderAgent",
 # Inject[SkillAdapter] now resolves to the adapter
 ```
 
-**Design**: v1 tasks are synchronous — all CRUD operations complete in the `/tasks/send`
-response. Long-running operations (ML inference, file processing) will require async task
-storage in a future version.
+**The `ctx` auth-passthrough contract (U-3)**: `SkillSource.invoke(skill_id, payload, *, ctx=)`
+receives the verified caller's `AuthContext` (resolved from
+`varco_fastapi.context.get_auth_context_or_none()` at JSON-RPC dispatch), or `None` when no
+auth middleware populated one — so end user / another agent / integrating platform are
+distinguishable in a `SkillSource`'s own audit trail. `skills=` on `SkillAdapter.__init__`
+accepts author-supplied `SkillDefinition` objects **verbatim**, appended to whatever the
+source returns — hand-written skill text reaches the Agent Card unaltered, not regenerated
+from route names.
+
+**Design**: tasks are synchronous by default — all CRUD operations complete in the
+`/tasks/send`/`message/send` response. Long-running operations (ML inference, file
+processing) support async task storage: pass `job_runner` + `job_store` to `SkillAdapter`
+and the response returns `state: working` while the client polls; pass `conversation_store`
+for `/tasks/{task_id}/history`.
 
 **Optional extra**: `pip install varco-fastapi[a2a]` for the Google A2A SDK types.
 `SkillAdapter` itself works without it — the extra only adds A2A client utilities.
+
+See `technical_docs/features/a2a-surface.md` for the full v1.0.0 path/method table, a
+non-router `SkillSource` example, and the legacy-path deprecation timeline.
 
 #### MCPAdapter — Model Context Protocol
 
 `MCPAdapter` converts any `VarcoRouter` class into an MCP (Model Context Protocol) server.
 Routes flagged with `mcp_enabled=True` are exposed as MCP tools. Execution is delegated
 to `AsyncVarcoClient`.
+
+**`MCPAdapter` exposes varco routes *as* an MCP server — it is not an MCP client.**
+There is no varco component that calls out to a third-party MCP server; if a downstream
+app needs to *consume* other MCP servers, that is a separate concern outside this adapter.
 
 ```python
 from varco_fastapi.router.mcp import MCPAdapter, bind_mcp_adapter

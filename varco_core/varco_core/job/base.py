@@ -63,16 +63,29 @@ Async safety:   ✅  All methods are ``async def``.
 from __future__ import annotations
 
 import dataclasses
+import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, Coroutine, TYPE_CHECKING
+from typing import Any, Coroutine, Sequence, TYPE_CHECKING
 from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext
     from varco_core.job.task import TaskPayload, TaskRegistry, VarcoTask
+
+
+class StaleLeaseError(Exception):
+    """
+    Raised when a write with ``expected_epoch=`` is refused because the
+    stored ``lease_epoch`` has moved on (Plan 005 Phase 4, U-11 §3).
+
+    This is the Kleppmann fencing case: a claimant that stalls past its
+    lease window, gets reaped, and then resumes and tries to write must be
+    rejected **at the point of write**, not merely detected after the fact.
+    A stalled worker catching this must abort — it no longer owns the job.
+    """
 
 
 # ── JobStatus ──────────────────────────────────────────────────────────────────
@@ -84,13 +97,20 @@ class JobStatus(StrEnum):
 
     State machine::
 
-        PENDING
-            ↓ (runner picks it up)
+        PENDING ──(run_at future)──► PENDING (unclaimed until run_at <= now)
+            ↓ (runner claims it — try_claim / claim_next)
         RUNNING
-            ↓ (coroutine completes)         ↓ (coroutine raises)      ↓ (client cancels)
-        COMPLETED                          FAILED                   CANCELLED
+            ↓ (coroutine completes)   ↓ (coroutine raises,       ↓ (client
+            │                          attempt+1 < max_attempts)   cancels)
+            │                          ↓
+            │                        PENDING (as_retry — run_at scheduled)
+            │                          ↓ (attempts exhausted)
+        COMPLETED                    FAILED / DEAD              CANCELLED
 
-    Terminal states: COMPLETED, FAILED, CANCELLED — no further transitions.
+    Terminal states: COMPLETED, FAILED, CANCELLED, DEAD (Plan 005 Phase 4,
+    U-17 §3) — no further transitions. ``DEAD`` specifically means "handed to
+    a DLQ" (``as_dead()``) — a job that exhausted ``max_attempts`` with no
+    DLQ wired lands in ``FAILED`` instead, exactly as it does today.
 
     Thread safety:  ✅ StrEnum members are immutable singletons.
     Async safety:   ✅ Pure value; no I/O.
@@ -101,11 +121,20 @@ class JobStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    DEAD = "dead"
+    """Attempts exhausted AND handed to a DLQ (Plan 005 Phase 4). Distinct
+    from FAILED: FAILED means "gave up, no DLQ"; DEAD means "gave up, and a
+    DLQ has the poison record" (``source=DeadLetterSource.JOB``)."""
 
     @property
     def is_terminal(self) -> bool:
         """Return True if this status cannot transition to another state."""
-        return self in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED)
+        return self in (
+            JobStatus.COMPLETED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+            JobStatus.DEAD,
+        )
 
 
 # ── Job ────────────────────────────────────────────────────────────────────────
@@ -136,6 +165,16 @@ class Job:
         auth_snapshot:   Serialized ``AuthContext`` at request time.
                          JSON-safe dict — see ``auth_context_to_snapshot()``.
         request_token:   Raw Bearer JWT for audit trail and callback authentication.
+                         **Discouraged** (Plan 005 Phase 6, U-19) — no
+                         ``DeprecationWarning``, no removal scheduled (matches
+                         how ``JwtUtil.SYSTEM_ISSUER`` was handled). A JWT is
+                         base64-encoded, not encrypted, so any PII in its
+                         claims is readable at rest by anyone with read
+                         access to the jobs table/collection (OWASP/NIST
+                         finding). Prefer ``request_issuer`` /
+                         ``request_subject`` / ``request_token_hash`` — pass
+                         ``store_raw_token=False`` to have this dataclass
+                         populate them for you and leave this field ``None``.
         metadata:        Arbitrary extra data (excluded from equality and hashing).
 
     Thread safety:  ✅ frozen=True — immutable after construction.
@@ -184,7 +223,13 @@ class Job:
     # frozenset fields in AuthContext (roles, scopes) are serialized as sorted lists.
     auth_snapshot: dict[str, Any] | None = None
 
-    # Raw Bearer JWT from the originating request — for audit trail + callback auth
+    # Raw Bearer JWT from the originating request — for audit trail + callback auth.
+    # DISCOURAGED (Plan 005 Phase 6, U-19): a JWT is base64-encoded, not
+    # encrypted — any PII in its claims is readable at rest. Prefer
+    # request_issuer/request_subject/request_token_hash below; pass
+    # store_raw_token=False to populate them and leave this field None.
+    # No DeprecationWarning, no removal scheduled — see the Attributes
+    # docstring above for the full rationale.
     request_token: str | None = None
 
     # Arbitrary extra data — excluded from equality and hashing
@@ -195,6 +240,97 @@ class Job:
     # up the function name in the TaskRegistry and calling it with stored args.
     # None for jobs submitted via the legacy coroutine-only path (non-recoverable).
     task_payload: TaskPayload | None = field(default=None, compare=False, hash=False)
+
+    # ── Phase 4 (Plan 005): time dimension, lease, fencing ─────────────────────
+    # All defaulted so an unchanged caller gets today's behaviour exactly:
+    # run_at=None claims immediately, lease_ttl=None takes no lease,
+    # max_attempts=1 fails terminally on first failure.
+
+    run_at: datetime | None = None
+    """U-17 §1 — earliest time this job is eligible to be claimed. ``None``
+    (default) claims immediately, exactly as today. The predicate uses the
+    **database's** ``now()``, not the worker's clock — see ``claim_next``."""
+
+    attempt: int = 0
+    """U-17 §3 — number of times this job has been attempted so far
+    (incremented by ``as_retry``). ``0`` until the first failed attempt."""
+
+    max_attempts: int = 1
+    """U-17 §3 — ``1`` (default) means terminal-on-first-failure, exactly
+    today's behaviour. A retry-capable job sets this higher and pairs it
+    with a ``retry_policy`` on the runner."""
+
+    owner_id: str | None = None
+    """U-11 — identifier of the worker instance currently holding this
+    job's lease. ``None`` when unleased."""
+
+    lease_expires_at: datetime | None = None
+    """U-11 — when the current lease expires. ``None`` means no lease is
+    held — a store can run leased and unleased jobs side by side."""
+
+    lease_epoch: int = 0
+    """U-11 — fencing token, incremented on every claim/renew and on every
+    lease-expiry reap. Used with ``expected_epoch=`` on writes to reject a
+    stalled worker that resumes after being fenced out (``StaleLeaseError``)
+    — the Kleppmann point: fencing happens at the point of *write*, not
+    merely at claim time."""
+
+    expires_at: datetime | None = None
+    """U-18 — column added in Phase 4; retention API lands in Phase 6
+    (``delete_where(expires_before=...)``). ``None`` = never expires."""
+
+    request_issuer: str | None = None
+    """U-19 — the originating request token's ``iss`` claim, as a reference
+    field. Column added in Phase 4; populated by ``store_raw_token=False``
+    machinery — see ``request_token_hash`` below."""
+
+    request_subject: str | None = None
+    """U-19 — the originating request token's ``sub`` claim, as a reference
+    field. ``None`` unless explicitly supplied by the caller (this dataclass
+    does not decode JWTs itself)."""
+
+    request_token_hash: str | None = None
+    """U-19 — sha256 hex digest of ``request_token``, populated automatically
+    by ``__post_init__`` when ``store_raw_token=False`` — see below. Prefer
+    this + ``request_issuer``/``request_subject`` over the raw
+    ``request_token`` for anything written to a jobs table: a JWT is
+    base64-encoded, not encrypted, so any PII in its claims is readable at
+    rest (OWASP/NIST finding)."""
+
+    store_raw_token: bool = True
+    """U-19 — when ``False``, ``__post_init__`` computes
+    ``request_token_hash`` from ``request_token`` and then clears
+    ``request_token`` to ``None``. **Default stays ``True``** — Source
+    correction 4: ``JobRunner`` forwards ``job.request_token`` as the
+    completion callback's ``Authorization: Bearer`` header, so flipping the
+    default would silently break callback auth. Setting this ``False``
+    requires the callback to authenticate with a service credential instead
+    of replaying the caller's token — which also removes a token-replay
+    surface. Discouraged-not-deprecated: no ``DeprecationWarning``, no
+    removal scheduled for ``request_token`` itself (matches how
+    ``JwtUtil.SYSTEM_ISSUER`` was handled)."""
+
+    def __post_init__(self) -> None:
+        """
+        Apply the ``store_raw_token=False`` reference-fields transform
+        (Plan 005 Phase 6, U-19).
+
+        Frozen dataclass — uses ``object.__setattr__``, the established
+        escape hatch for post-construction field synthesis in this codebase
+        (see ``EncryptionKeyEntry.__post_init__``).
+
+        Edge cases:
+            - ``store_raw_token=True`` (default) — no-op, ``request_token``
+              is left exactly as passed.
+            - ``store_raw_token=False`` with ``request_token=None`` — no-op,
+              nothing to hash.
+            - The hash never contains the raw token as a substring — it is a
+              sha256 hex digest, a one-way function.
+        """
+        if not self.store_raw_token and self.request_token is not None:
+            digest = hashlib.sha256(self.request_token.encode("utf-8")).hexdigest()
+            object.__setattr__(self, "request_token_hash", digest)
+            object.__setattr__(self, "request_token", None)
 
     # ── State transitions (return new Job via dataclasses.replace) ─────────────
 
@@ -308,6 +444,77 @@ class Job:
         return dataclasses.replace(
             self,
             status=JobStatus.CANCELLED,
+            completed_at=datetime.now(timezone.utc),
+        )
+
+    def as_retry(self, next_run_at: datetime) -> Job:
+        """
+        Transition this job back to PENDING for a scheduled retry
+        (Plan 005 Phase 4, U-17 §3 — the retry binding).
+
+        Args:
+            next_run_at: When the job becomes eligible to be reclaimed —
+                         typically ``now + retry_policy.compute_delay(attempt)``.
+
+        Returns:
+            New ``Job`` with ``status=PENDING``, ``run_at=next_run_at``, and
+            ``attempt`` incremented by one. ``started_at``/``completed_at``
+            are left as-is (the previous RUNNING attempt's timestamps) —
+            the next claim overwrites ``started_at`` again.
+
+        Raises:
+            ValueError: If the current status is not RUNNING — only a
+                        job that was actually running can be retried.
+
+        Edge cases:
+            - Callers are responsible for checking
+              ``attempt + 1 < max_attempts`` before calling this — ``as_retry``
+              itself does not enforce the ceiling (that decision belongs to
+              the runner, which chooses between ``as_retry`` and
+              ``as_failed``/``as_dead``).
+        """
+        if self.status != JobStatus.RUNNING:
+            raise ValueError(
+                f"Cannot transition job {self.job_id} to a retry from "
+                f"{self.status!r}. Only RUNNING jobs can be retried."
+            )
+        return dataclasses.replace(
+            self,
+            status=JobStatus.PENDING,
+            run_at=next_run_at,
+            attempt=self.attempt + 1,
+        )
+
+    def as_dead(self, error: str) -> Job:
+        """
+        Transition this job to DEAD state — attempts exhausted **and** the
+        job was handed to a DLQ (Plan 005 Phase 4, U-17 §3).
+
+        Distinct from ``as_failed()``: ``FAILED`` means "gave up, no DLQ
+        wired"; ``DEAD`` means "gave up, and a DLQ has the poison record"
+        (``source=DeadLetterSource.JOB``). Callers push to the DLQ
+        themselves (this method only records the terminal state) — mirrors
+        ``OutboxRelay``'s "dead-letter first, then delete/terminalize" order.
+
+        Args:
+            error: Human-readable terminal error message.
+
+        Returns:
+            New ``Job`` with ``status=DEAD``, ``error`` set, and
+            ``completed_at`` set to current UTC time.
+
+        Raises:
+            ValueError: If the current status is not RUNNING.
+        """
+        if self.status != JobStatus.RUNNING:
+            raise ValueError(
+                f"Cannot transition job {self.job_id} to DEAD from "
+                f"{self.status!r}. Only RUNNING jobs can be dead-lettered."
+            )
+        return dataclasses.replace(
+            self,
+            status=JobStatus.DEAD,
+            error=error,
             completed_at=datetime.now(timezone.utc),
         )
 
@@ -441,15 +648,25 @@ class AbstractJobStore(ABC):
     """
 
     @abstractmethod
-    async def save(self, job: Job) -> None:
+    async def save(self, job: Job, *, expected_epoch: int | None = None) -> None:
         """
         Persist or update a ``Job``.  Upsert semantics — if a job with the
         same ``job_id`` exists, it is replaced.
 
         Args:
             job: The job to save.
+            expected_epoch: Fencing token (Plan 005 Phase 4, U-11 §3).
+                ``None`` (default) — no fencing check, today's behaviour
+                exactly. When supplied, implementations MUST refuse the
+                write with ``StaleLeaseError`` if the row's stored
+                ``lease_epoch`` no longer equals ``expected_epoch`` — this
+                is the Kleppmann case: a claimant that stalls past its
+                lease window and resumes must be rejected **at the point of
+                write**, not merely detected after the fact.
 
         Raises:
+            StaleLeaseError: ``expected_epoch`` is supplied and no longer
+                matches the stored ``lease_epoch``.
             Exception: Any backend-specific persistence error propagates
                 to the caller unchanged.
 
@@ -459,6 +676,11 @@ class AbstractJobStore(ABC):
             - Concurrent saves for the same ``job_id`` are implementation-defined;
               last-write-wins is acceptable for the RUNNING → COMPLETED transition
               since only one task should ever hold a job.
+            - Implementations that do not support leases may treat
+              ``expected_epoch`` as a no-op (document this explicitly) rather
+              than raising ``NotImplementedError`` — unlike ``renew``/
+              ``reap_expired_leases``, a store with zero lease usage never
+              has a stale epoch to detect.
         """
 
     @abstractmethod
@@ -514,9 +736,22 @@ class AbstractJobStore(ABC):
         """
 
     @abstractmethod
-    async def try_claim(self, job_id: UUID) -> Job | None:
+    async def try_claim(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+    ) -> Job | None:
         """
         Atomically transition a PENDING job to RUNNING state.
+
+        ⚠️ **This is an addition, not the activation of a dormant
+        parameter** (Plan 005, Source correction 1) — pre-Phase-4
+        ``try_claim(job_id)`` took no lease-related arguments at all.
+        External ``AbstractJobStore`` subclasses must add ``owner_id``/
+        ``lease_ttl`` to their own override before enabling leases; callers
+        that never pass them are completely unaffected.
 
         This is the distributed-safety primitive for job recovery.  When multiple
         runner instances start concurrently (e.g. after a rolling restart or in a
@@ -553,6 +788,248 @@ class AbstractJobStore(ABC):
             - Concurrent calls on the same ``job_id`` → exactly one returns the Job,
               all others return ``None``.
         """
+
+    # ── Phase 4 (Plan 005): concrete default implementations ───────────────────
+    # These are concrete (not @abstractmethod) so existing external
+    # AbstractJobStore subclasses keep importing/instantiating unchanged —
+    # see "Compatibility posture" in plan 005: ABCs get default
+    # implementations rather than new abstract methods.
+
+    async def claim_next(
+        self,
+        *,
+        owner_id: str | None = None,
+        lease_ttl: float | None = None,
+        now: datetime | None = None,
+    ) -> Job | None:
+        """
+        Claim the oldest eligible PENDING job, honouring the schedule
+        predicate ``run_at IS NULL OR run_at <= now`` (Plan 005 Phase 4).
+
+        Default implementation: ``list_by_status(PENDING)`` filtered
+        client-side by the schedule predicate, then a ``try_claim`` loop —
+        correct but not lock-free/atomic across the *selection* step
+        (only the individual ``try_claim`` call is atomic). Backends with a
+        native atomic claim query (``SAJobStore``, ``RedisJobStore``,
+        ``BeanieJobStore``) override this with a single round-trip.
+
+        Args:
+            owner_id: Forwarded to ``try_claim`` — identifies the lease
+                holder. ``None`` takes no lease.
+            lease_ttl: Forwarded to ``try_claim`` — lease duration in
+                seconds. ``None`` takes no lease.
+            now: The "current time" to evaluate ``run_at`` against.
+                Defaults to ``datetime.now(timezone.utc)``. Exposed as a
+                parameter for deterministic testing.
+
+        Returns:
+            The claimed ``Job`` in RUNNING state, or ``None`` if no eligible
+            PENDING job exists (all future-scheduled, or the list was empty,
+            or every candidate was already claimed by a concurrent caller).
+
+        Edge cases:
+            - Jobs with ``run_at`` in the future are skipped even if PENDING.
+            - Under this default impl, two concurrent callers each list
+              PENDING independently; only one wins any given job's
+              ``try_claim`` — no double-claim, but callers may briefly
+              contend on the same candidate.
+
+        Async safety: ✅ All I/O is awaited.
+        """
+        candidates = await self.list_by_status(JobStatus.PENDING, limit=100)
+        current = now if now is not None else datetime.now(timezone.utc)
+        for candidate in candidates:
+            if candidate.run_at is not None and candidate.run_at > current:
+                continue
+            claimed = await self.try_claim(
+                candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl
+            )
+            if claimed is not None:
+                return claimed
+        return None
+
+    async def delete_where(
+        self,
+        *,
+        status: JobStatus | Sequence[JobStatus] | None = None,
+        completed_before: datetime | None = None,
+        expires_before: datetime | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """
+        Bulk-delete jobs matching one or more predicates (Plan 005 Phase 6,
+        U-18 — job retention).
+
+        Concrete on the ABC (not ``@abstractmethod``) with a portable default
+        implementation over ``list_by_status`` + ``delete`` — correct for any
+        existing external ``AbstractJobStore`` subclass, just not as fast as
+        a native single-statement ``DELETE``. Backends with a native bulk
+        delete (``SAJobStore``, ``RedisJobStore``, ``BeanieJobStore``,
+        ``InMemoryJobStore``) override this method.
+
+        **Chunked-sweep recipe** — the recommended way to retire old jobs
+        without starving a pooled connection::
+
+            deleted = -1
+            while deleted != 0:
+                deleted = await store.delete_where(
+                    status=JobStatus.COMPLETED,
+                    completed_before=cutoff,
+                    limit=1000,
+                )
+
+        ``limit`` exists specifically for this: enumerating and deleting rows
+        one id at a time under a transaction-mode connection pooler pins a
+        server connection for the ENTIRE sweep (every round-trip must land on
+        the same physical connection the transaction started on). Looping
+        bounded ``delete_where(..., limit=N)`` calls, each its own short
+        transaction, releases the connection back to the pool between
+        batches instead.
+
+        Args:
+            status: A single ``JobStatus`` or a sequence of them to match.
+                ``None`` (default) does not filter by status — matches every
+                status (subject to the other predicates below).
+            completed_before: Only match jobs whose ``completed_at`` is set
+                AND strictly before this timestamp. Jobs with
+                ``completed_at=None`` (never completed) never match this
+                predicate.
+            expires_before: Only match jobs whose ``expires_at`` is set AND
+                strictly before this timestamp. Jobs with ``expires_at=None``
+                (never expires) never match this predicate.
+            limit: Maximum number of rows to delete in this call. ``None``
+                (default) deletes every matching row in one call — see the
+                chunked-sweep recipe above for large backlogs.
+
+        Returns:
+            The number of jobs actually deleted — callers loop on this value
+            (``0`` means the sweep is done).
+
+        Raises:
+            ValueError: No predicate at all was supplied (``status``,
+                ``completed_before``, and ``expires_before`` are all
+                ``None``) — refusing to silently delete every row in the
+                store. Pass at least one explicit predicate.
+
+        Edge cases:
+            - ``status`` as a bare ``JobStatus`` and as a one-element
+              ``Sequence[JobStatus]`` are equivalent.
+            - Combining ``status`` with ``completed_before``/``expires_before``
+              is an AND — a job must match every supplied predicate.
+            - The portable default fetches up to ``max(limit, 1000)`` (or a
+              flat ``10_000`` when ``limit`` is ``None``) candidates per
+              status before filtering — a backlog larger than that requires
+              multiple chunked calls even for `limit=None`, exactly like the
+              chunked-sweep recipe.
+
+        Async safety: ✅ All I/O is awaited.
+        """
+        if status is None and completed_before is None and expires_before is None:
+            raise ValueError(
+                "delete_where() requires at least one predicate (status, "
+                "completed_before, or expires_before) — refusing to delete "
+                "every row in the store. Pass an explicit predicate, e.g. "
+                "delete_where(status=JobStatus.COMPLETED)."
+            )
+
+        if status is None:
+            statuses: tuple[JobStatus, ...] = tuple(JobStatus)
+        elif isinstance(status, JobStatus):
+            statuses = (status,)
+        else:
+            statuses = tuple(status)
+
+        # Fetch generously so predicate filtering below has enough candidates
+        # to work with — see the chunked-sweep recipe above for backlogs
+        # larger than this per-status fetch size.
+        per_status_fetch = max(limit, 1000) if limit is not None else 10_000
+
+        deleted = 0
+        for st in statuses:
+            candidates = await self.list_by_status(st, limit=per_status_fetch)
+            for job in candidates:
+                if limit is not None and deleted >= limit:
+                    return deleted
+                if completed_before is not None and (
+                    job.completed_at is None or job.completed_at >= completed_before
+                ):
+                    continue
+                if expires_before is not None and (
+                    job.expires_at is None or job.expires_at >= expires_before
+                ):
+                    continue
+                await self.delete(job.job_id)
+                deleted += 1
+        return deleted
+
+    async def renew(
+        self,
+        job_id: UUID,
+        *,
+        owner_id: str,
+        epoch: int,
+        lease_ttl: float,
+    ) -> Job | None:
+        """
+        Heartbeat an in-progress lease, extending ``lease_expires_at``
+        (Plan 005 Phase 4, U-11).
+
+        Default implementation deliberately raises — there is no correct
+        fallback for a lease renewal (a silent no-op heartbeat would be
+        worse than an error, masking a lease that is about to expire).
+
+        Args:
+            job_id: The job whose lease is being renewed.
+            owner_id: Must match the job's current ``owner_id``.
+            epoch: Must match the job's current ``lease_epoch`` — a stale
+                epoch means this caller was fenced out (e.g. reaped after a
+                stall) and must NOT succeed in renewing.
+            lease_ttl: New lease duration in seconds, from ``now``.
+
+        Returns:
+            The renewed ``Job`` with an extended ``lease_expires_at``, or
+            ``None`` when the epoch is stale (fenced out) — never raises for
+            that case, only for "this store does not support leases at all".
+
+        Raises:
+            NotImplementedError: This store does not support leases.
+
+        Async safety: ✅ (raises synchronously from an async function).
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support leases")
+
+    async def reap_expired_leases(
+        self,
+        *,
+        now: datetime | None = None,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Return RUNNING jobs whose lease has expired back to PENDING,
+        incrementing ``lease_epoch`` to fence out the stalled owner
+        (Plan 005 Phase 4, U-11).
+
+        Default implementation deliberately raises — same rationale as
+        ``renew()``: there is no correct fallback for lease expiry
+        detection, and a silent no-op would leave dead workers' jobs stuck
+        RUNNING forever.
+
+        Args:
+            now: The "current time" to compare ``lease_expires_at`` against.
+                Defaults to ``datetime.now(timezone.utc)``.
+            limit: Maximum number of jobs to reap in one call.
+
+        Returns:
+            The list of jobs that were moved back to PENDING (already
+            reflecting the new state — same shape as ``try_claim``'s
+            return value pattern).
+
+        Raises:
+            NotImplementedError: This store does not support leases.
+
+        Async safety: ✅ (raises synchronously from an async function).
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not support leases")
 
 
 # ── AbstractJobRunner ──────────────────────────────────────────────────────────
@@ -596,6 +1073,9 @@ class AbstractJobRunner(ABC):
         self,
         job: "Job",
         coro: Coroutine[Any, Any, Any],
+        *,
+        run_at: datetime | None = None,
+        delay: timedelta | None = None,
     ) -> None:
         """
         Persist ``job`` to the store as PENDING, then schedule ``coro`` for
@@ -614,8 +1094,16 @@ class AbstractJobRunner(ABC):
         Args:
             job:  A ``Job`` instance in PENDING state.
             coro: The coroutine to execute in the background.
+            run_at: Plan 005 Phase 4, U-17 §2 — earliest time this job is
+                eligible to be claimed, pass-through to ``Job.run_at``.
+                Mutually exclusive with ``delay``. ``None`` (default) claims
+                immediately, exactly as today.
+            delay: Convenience alternative to ``run_at`` — resolved to
+                ``now + delay`` by implementations. Mutually exclusive with
+                ``run_at``.
 
         Raises:
+            ValueError: Both ``run_at`` and ``delay`` were supplied.
             Exception: Any store-specific error from ``store.save()`` propagates
                 to the caller unchanged.
 

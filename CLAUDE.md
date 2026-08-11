@@ -14,7 +14,9 @@ All commands run from the **workspace root** (`/home/edoardo/projects/varco`) us
 # Install everything (all workspace members + dev deps)
 uv sync
 
-# Run all tests for one package
+# Run all tests for one package (every workspace member has its own tests/ dir:
+# varco_core, varco_kafka, varco_nats, varco_redis, varco_sa, varco_beanie,
+# varco_memcached, varco_ws, varco_fastapi, varco_casbin)
 uv run pytest varco_core/tests/
 uv run pytest varco_kafka/tests/
 uv run pytest varco_redis/tests/
@@ -26,7 +28,7 @@ uv run pytest varco_core/tests/test_event.py
 # Run a single test by name
 uv run pytest varco_core/tests/test_event.py::TestInMemoryEventBus::test_subscribe
 
-# Run integration tests (require Docker — Kafka, Redis, or MongoDB broker)
+# Run integration tests (require Docker — Kafka, NATS, Redis, Memcached, or MongoDB broker)
 uv run pytest varco_kafka/tests/ -m integration
 uv run pytest varco_redis/tests/ -m integration
 
@@ -34,31 +36,46 @@ uv run pytest varco_redis/tests/ -m integration
 uv run python -c "from varco_core.event import AbstractEventBus"
 ```
 
-There is no lint command configured. There is no type-check command configured. `pytest-asyncio` is installed with `asyncio_mode = "auto"` in every package — all `async def test_*` functions run automatically without `@pytest.mark.asyncio`.
+The `Makefile` (workspace root) wraps the above plus lint/type-check/build/docs targets across
+every package in one call — `make lint` (`ruff check`), `make format` (`ruff format` + `ruff
+check --fix`), `make type-check` (`mypy`), `make test` / `make test PKG=varco_redis`, `make
+integration-test`, `make build`, `make publish`, `make docs` / `make docs-serve`. Run `make
+help` for the full list. `pytest-asyncio` is installed with `asyncio_mode = "auto"` in every
+package — all `async def test_*` functions run automatically without `@pytest.mark.asyncio`.
 
 ---
 
 ## Architecture
 
-Varco is a **uv workspace monorepo** of five packages. Each package is independently installable from PyPI. `varco_core` has no sibling dependencies; all other packages depend on it.
+Varco is a **uv workspace monorepo** of ten packages (`pyproject.toml`'s `[tool.uv.workspace]`,
+plus the `examples` workspace member). Each package is independently installable from PyPI.
+`varco_core` has no sibling dependencies; every other package depends on it.
 
 ```
 varco_core        — domain model, service layer, event system, resilience, DI contracts
 varco_kafka       — Kafka event bus backend (aiokafka)
+varco_nats        — NATS JetStream event bus backend (nats-py)
 varco_redis       — Redis Pub/Sub event bus + cache backend (redis.asyncio)
 varco_sa          — SQLAlchemy async ORM backend
 varco_beanie      — Beanie/MongoDB async ODM backend
+varco_memcached   — Memcached cache backend (aiomcache)
+varco_ws          — WebSocket + Server-Sent Events (SSE) event bus backend
+varco_fastapi     — FastAPI adapter — routing mixins, auth middleware, typed HTTP client, DI wiring, A2A/MCP surfaces
 varco_casbin      — Casbin policy-engine authorization backend (ACL/RBAC/ABAC + REST admin)
 ```
 
 ### Dependency graph
 
 ```
-varco_kafka  ──┐
-varco_redis  ──┤
-varco_sa     ──┤─→ varco_core
-varco_beanie ──┤
-varco_casbin ──┘   (+ optional varco_fastapi for the REST admin router)
+varco_kafka     ──┐
+varco_nats      ──┤
+varco_redis     ──┤
+varco_sa        ──┤─→ varco_core
+varco_beanie    ──┤
+varco_memcached ──┤
+varco_ws        ──┤
+varco_fastapi   ──┤   (+ optional varco_core for the REST admin router it hosts)
+varco_casbin    ──┘   (+ optional varco_fastapi[fastapi] extra for the REST admin router)
 ```
 
 `varco_core` is the only package without a `[tool.uv.sources]` sibling reference. All backend packages resolve it from the workspace rather than PyPI during development.
@@ -144,9 +161,9 @@ async def call_external() -> Response: ...
 
 ### Dead Letter Queue (varco_core.event.dlq)
 
-`AbstractDeadLetterQueue` is the interface. `InMemoryDeadLetterQueue` is for tests. Backend implementations (`KafkaDLQ`, `RedisDLQ` in their respective packages) push to a dedicated topic/channel.
+`AbstractDeadLetterQueue` is the interface. `InMemoryDeadLetterQueue` is for tests. Backend implementations (`KafkaDLQ`, `RedisDLQ`, `SADeadLetterQueue` in their respective packages) push to a dedicated topic/channel/table.
 
-**Contract**: `push()` must never raise — the retry wrapper in `_make_retry_wrapper` cannot recover from DLQ failures. Implementations must log errors and swallow them.
+**Contract**: `push()` must never raise — the retry wrapper in `_make_retry_wrapper` cannot recover from DLQ failures, and neither can `OutboxRelay` or `JobRunner` (Plan 005 Phase 3/4). Implementations must log errors and swallow them.
 
 ```python
 # Handler that retries 3x then routes to DLQ
@@ -158,6 +175,20 @@ async def call_external() -> Response: ...
 )
 async def on_order(self, event: OrderPlacedEvent) -> None: ...
 ```
+
+**One `DeadLetterEntry`, three sources** (Plan 005 Phase 3, U-6) —
+`DeadLetterSource.CONSUMER` (default, unchanged), `OUTBOX_RELAY`, `JOB`.
+`event: DomainEvent` became `DomainEvent | None`; `source_ref`/`payload` are
+new, all-defaulted fields. `OutboxRelay.__init__` gains `retry_policy=`,
+`dlq=`, `max_attempts=` — with no `retry_policy` the relay is
+byte-identical to today; `max_attempts` set without `dlq` raises `ValueError`
+at construction (refuses to configure silent data loss). `RetryPolicy.durable_delivery()`
+(`max_attempts=20, base_delay=15.0, max_delay=3600.0`) is the named preset
+`OutboxRelay`/`AuditConsumer` reach for instead of changing the global
+`RetryPolicy()` default. `AuditConsumer` is now safe-by-default
+(`_default_retry_policy = RetryPolicy.durable_delivery()`); pass
+`retry_policy=None` explicitly to restore fire-and-forget. See
+`technical_docs/features/dead-letter-queues.md`.
 
 ### SQLAlchemy backend (varco_sa)
 
@@ -303,6 +334,34 @@ async with uow:
 
 `OutboxRepository` is an ABC; `varco_sa` and `varco_beanie` each ship a concrete implementation. `OutboxRelay` is the only place allowed to call `AbstractEventBus` directly (besides `EventConsumer.register_to()`).
 
+### Background jobs — time, lease, fencing (varco_core.job / Plan 005 Phase 4)
+
+`AbstractJobStore`/`AbstractJobRunner` (`varco_core.job.base`) gained a time
+dimension (`Job.run_at`, `AbstractJobRunner.enqueue(run_at=, delay=)`), bounded
+retry (`Job.attempt`/`max_attempts`, `JobRunner(retry_policy=, dlq=)` — reuses
+`varco_core.resilience.RetryPolicy`, no second retry model), and a fenced
+lease (`try_claim(owner_id=, lease_ttl=)`, `renew()`, `reap_expired_leases()`,
+`save(expected_epoch=)` → `StaleLeaseError` on a stale write). Every new
+parameter is `None`/`1`-defaulted to reproduce today's exact behaviour.
+
+```python
+claimed = await store.try_claim(job_id, owner_id="worker-7", lease_ttl=30.0)
+renewed = await store.renew(job_id, owner_id="worker-7", epoch=claimed.lease_epoch, lease_ttl=30.0)
+await store.save(claimed.as_completed(result), expected_epoch=claimed.lease_epoch)
+# StaleLeaseError if a stalled worker resumes after being fenced out by a reap
+```
+
+`JobPoller(lease_aware=True)` (the new default) detects death via
+`store.reap_expired_leases()` instead of the old wall-clock `stale_threshold`
+— falls back to the age check automatically when the store raises
+`NotImplementedError` (no lease support). `renew()`/`reap_expired_leases()`
+are concrete-but-raising on the ABC (no correct fallback for a lease exists);
+`claim_next()` has a portable default (`list_by_status(PENDING)` +
+`try_claim` loop). `delete_where(...)` (Plan 005 Phase 6, U-18) is the
+retention primitive — refuses to run with no predicate at all (`ValueError`).
+See `technical_docs/features/job-scheduling-and-leases.md` for the TTL/heartbeat
+sizing formula, the retry-binding decision table, and the retention recipe.
+
 ### Database auditing (varco_core.service.audit)
 
 An append-only audit trail for `create`/`update`/`delete` mutations, event-driven like the
@@ -341,6 +400,73 @@ subclass and re-declare the `@listen`-decorated method if you need resilience. F
 outbox instead of a direct `_produce()` call. See
 `technical_docs/features/database-auditing.md` for the full wiring guide (Alembic/Beanie
 setup, `list_for_entity()`, consistency trade-offs).
+
+### Field-level encryption & crypto-shredding (varco_core.encryption / encryption_store)
+
+`FieldEncryptor` (Protocol) → `FernetFieldEncryptor` / `MultiKeyEncryptorRegistry`
+(rotation) / `TenantAwareEncryptorRegistry` (per-tenant) / `ScopedEncryptorRegistry`
+(per-arbitrary-scope, Plan 005 Phase 1). `EncryptionKeyManager` persists DEKs via an
+`EncryptionKeyStore` (`InMemoryEncryptionKeyStore` for tests; `SAEncryptionKeyStore`,
+`RedisEncryptionKeyStore`, `BeanieEncryptionKeyStore` for production).
+
+**Scope vs tenant**: `EncryptionKeyEntry.scope` defaults to `tenant_id` verbatim at the
+Python level (`__post_init__`/`from_dict`), so `load_for_tenant`/`build_tenant_registry()`
+are unaffected by upgrading. ⚠️ `load_for_scope`/`destroy_scope`/`list_scopes` filter on
+the persisted `scope` column/index itself on every backend — a one-time
+`UPDATE ... SET scope = tenant_id WHERE scope IS NULL` (or equivalent per-backend backfill)
+is required before `build_scoped_registry(tenant_id)` finds pre-existing rows. Use
+`manager.build_scoped_registry(scope)` (loads **only** that scope, unlike the eager
+`build_tenant_registry()`) for per-data-subject keys. Never embed personal data in a scope
+string — varco does not parse it. See `technical_docs/features/crypto-shredding.md` for the
+full backfill recipe.
+
+**Destroy vs retire**: `retire(kid)` removes a key from rotation but decrypt still
+works. `manager.destroy_scope(scope)` crypto-shreds every key for a scope (tombstone:
+`key_material` blanked, `destroyed_at` set) — a subsequent decrypt raises
+`KeyDestroyedError`, distinguishable from the generic `EncryptionError` an unknown kid
+raises. See `technical_docs/features/crypto-shredding.md` for the full model, the
+operator backup-retention obligation, and the capability-shim rule for third-party
+`EncryptionKeyStore` implementations (it is a `runtime_checkable` Protocol — never call
+`load_for_scope`/`list_scopes`/`destroy_scope` directly, always through
+`EncryptionKeyManager`'s shim).
+
+### A2A protocol surface — SkillAdapter + SkillSource (varco_fastapi.router.a2a / router.skill)
+
+`SkillAdapter` exposes an agent over the Google A2A protocol. Plan 005 Phase 7 (U-3 + U-4)
+decoupled the adapter's **subject** from `VarcoRouter` introspection and moved the **protocol**
+to v1.0.0, mounted alongside the pre-v1.0.0 surface for one minor release:
+
+```
+SkillAdapter(router_cls | source=, ...)
+  ↑ exactly one of the two — ValueError otherwise
+router_cls   → wrapped into RouterSkillSource (today's introspect_routes() behaviour, verbatim)
+source=      → any SkillSource — decouples the adapter from VarcoRouter entirely
+  ↓ both implement
+SkillSource (Protocol): skills() / agent_metadata() / async invoke(skill_id, payload, *, ctx=)
+```
+
+`adapter.mount(app, legacy_paths=True)` (default) always mounts the v1.0.0 surface
+(`GET /.well-known/agent-card.json` — capability flags nested under `capabilities`, no
+top-level `id` — and `POST /a2a`, a JSON-RPC 2.0 dispatcher for `message/send`, `tasks/get`,
+`tasks/list`, `tasks/cancel`, `tasks/resubscribe`) and, while `legacy_paths=True`, also the
+pre-v1.0.0 paths (`GET /.well-known/agent.json`, `POST /tasks/send`, `GET /tasks/{task_id}`,
+`GET /tasks/{task_id}/history`) with one deprecation warning logged per mount.
+
+**Async A2A already works and predates v1.0.0** — `SkillAdapter(job_runner=, job_store=,
+conversation_store=)` makes `message/send`/`POST /tasks/send` return `state: working`
+immediately and `tasks/get`/`GET /tasks/{task_id}` poll the real job status; Phase 7 did not
+add this, it only moved the protocol shape (see Source correction 2 in
+`plans/005-upstream-gaps.md`).
+
+**`ctx` is the U-3 auth-passthrough contract**: `SkillSource.invoke(skill_id, payload, *,
+ctx=)` receives the verified caller's `AuthContext` (or `None` when no auth middleware
+populated one) so the three caller classes — end user, another agent, an integrating
+platform — are distinguishable in the audit trail. `skills=` on `SkillAdapter.__init__`
+accepts author-supplied `SkillDefinition` objects **verbatim** — hand-written skill text
+reaches the Agent Card unaltered, never regenerated from route names.
+
+See `technical_docs/features/a2a-surface.md` for the full v1.0.0 path/method table, a
+non-router `SkillSource` example, and the legacy-path deprecation timeline.
 
 ### Authority / JWT system (varco_core.authority)
 
@@ -417,7 +543,9 @@ precedence, and IdP recipes (Keycloak/Cognito/Auth0).
 | Env var | Default | Effect |
 |---|---|---|
 | `VARCO_JWT_LEEWAY_SECONDS` | `0.0` | clock-skew leeway for `exp`/`nbf` checks — fixes intermittent cross-host 401s |
-| `VARCO_JWT_AUDIENCE` | `None` | this service's expected `aud` — `None` = **not enforced** (opt-in hardening); `JwtBearerAuth` logs one warning at construction when unset |
+| `VARCO_JWT_AUDIENCE` | `None` | this service's expected `aud` — **required** unless `VARCO_JWT_ALLOW_ANY_AUDIENCE=true` (Plan 005 Phase 2 / U-13, **BREAKING security default**: `JwtBearerAuth` now *refuses to construct* with `ValueError` when omitted, instead of logging a warning and proceeding) |
+| `VARCO_JWT_ALLOW_ANY_AUDIENCE` | `false` | named escape hatch restoring the pre-Phase-2 "warn once and proceed with no audience enforcement" behaviour |
+| `VARCO_JWT_ENFORCE_ISS` | `true` | whether `TrustedIssuerRegistry.verify()` checks the token's `iss` claim against the resolved issuer's registered value (Plan 005 Phase 2 / U-13, **BREAKING security default**: previously never enforced here) |
 | `VARCO_JWT_TRANSFORM_*` | — | claim-transform mapping (global) — see the claim-transformer feature doc |
 | `VARCO_JWT_TRANSFORM__<LABEL>__*` | — | per-issuer claim-transform override, keyed by `iss` |
 | `VARCO_JWT_PROFILE__<NAME>__*` | — | named token profile declaration |
@@ -468,8 +596,10 @@ enable_policy_authorizer(container)      # OPT-IN: binds PolicyEngineAuthorizer 
   the `varco-casbin[fastapi]` extra) — a plain FastAPI `APIRouter` rather than a `VarcoRouter`
   (a standalone admin surface with its own JSON-body handlers; it predates `@route`'s full
   FastAPI-parameter support and there is no need to migrate it).
-- Persisted dynamic CRUD needs `adapter="sqlalchemy"` (the `varco-casbin[sqlalchemy]` extra); the
-  default `memory` adapter is non-durable.
+- Persisted dynamic CRUD needs `adapter="sqlalchemy"` (the `varco-casbin[sqlalchemy]` extra) or
+  `adapter="beanie"` (the `varco-casbin[beanie]` extra, MongoDB via Beanie — also requires
+  `VARCO_CASBIN_DB_NAME`); the default `memory` adapter is non-durable, and `adapter="file"`
+  is durable but single-process only (concurrent writers can corrupt the CSV).
 
 ---
 
@@ -816,9 +946,9 @@ class PaymentService:
 # 3. timeout cancels if > 10s
 ```
 
-**Rate limiting**: Use `@rate_limit` to cap calls per second.  `InMemoryRateLimiter` is per-process; use `varco_redis.RedisRateLimiter` in multi-pod deployments.
+**Rate limiting**: Use `@rate_limit` to cap calls per second.  `InMemoryRateLimiter` is per-process; use `varco_redis.RedisRateLimiter` (already shipped — U-7's first leg) in multi-pod deployments.
 
-**Bulkhead**: Use `Bulkhead` to cap concurrent in-flight calls to one dependency.  Must be a **shared** instance (same rule as `CircuitBreaker`):
+**Bulkhead**: Use `Bulkhead` to cap concurrent in-flight calls to one dependency.  Must be a **shared** instance (same rule as `CircuitBreaker`).  `Bulkhead` is per-process, same limitation as `InMemoryRateLimiter` — use `varco_redis.RedisBulkhead` (U-7's second leg, Plan 005 Phase 8) for fleet-wide concurrency limiting in multi-pod deployments; rate limiting and concurrency limiting are different primitives and a service can be well within its rate budget while still overwhelming a downstream dependency with concurrent in-flight calls:
 
 **Hedged requests**: Use `@hedge` only for idempotent reads to cut tail latency — never for writes.
 
@@ -897,6 +1027,51 @@ authorized `AuthContext` when it matches a profile declaring `implied_roles`/`im
 (⚠️ intentional materialisation — see `technical_docs/features/token-profiles.md`).
 `JwtUtil.SYSTEM_ISSUER`/`is_system()` keep working unchanged for callers not ready to migrate.
 
+#### Scenario: Expose a non-router subject over A2A
+
+Use `source=` instead of `router_cls` when the thing you want other agents to call is not a
+`VarcoRouter` — a data pipeline, a wrapper around a third-party API, anything with no CRUD
+routes to introspect:
+
+```python
+from varco_fastapi.router.a2a.source import SkillDefinition, AgentMetadata
+from varco_fastapi.router.skill import SkillAdapter
+
+class ReportSkillSource:
+    def skills(self) -> list[SkillDefinition]:
+        return [
+            SkillDefinition(
+                id="generate_report",
+                name="Generate Report",
+                description="Builds a PDF summary for the given date range",
+                input_modes=("application/json",),
+                output_modes=("application/json",),
+                route=None,  # no VarcoRouter route backs this skill
+            )
+        ]
+
+    def agent_metadata(self) -> AgentMetadata:
+        return AgentMetadata(name="ReportAgent", description="Generates PDF reports")
+
+    async def invoke(self, skill_id: str, payload: dict, *, ctx=None) -> dict:
+        # ctx is the verified caller's AuthContext (U-3) — use it for the audit trail,
+        # e.g. record which end user / agent / platform requested the report.
+        return {"report_url": await build_report(payload, requested_by=ctx)}
+
+adapter = SkillAdapter(
+    None,                       # router_cls omitted
+    source=ReportSkillSource(),
+    agent_name="ReportAgent",
+    agent_description="Generates PDF reports",
+    client=None,                # not needed — invoke() does its own work
+)
+adapter.mount(app)              # same v1.0.0 + legacy A2A surface as a router-backed adapter
+```
+
+`adapter.router_class` is `None` for a non-router source — that is the documented contract,
+not a bug. `router_cls` and `source=` are mutually exclusive; passing both or neither raises
+`ValueError` at construction.
+
 ---
 
 ## Coding Standards
@@ -938,6 +1113,7 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Missing `await` on async call** | Coroutine leaked, cleanup never runs | Easy to miss on unfamiliar APIs | IDE linting catches this; always `await` calls to `async def` |
 | **Per-call Bulkhead** | Concurrency never limited, dependency can be overwhelmed | Instance has its own fresh semaphore each call | Shared `Bulkhead` per external dependency, same as `CircuitBreaker` |
 | **InMemoryRateLimiter in multi-pod** | Each pod has its own counter; total rate = N × configured rate | Per-process storage, not shared | Use `varco_redis.RedisRateLimiter` for distributed (multi-pod) enforcement |
+| **In-process `Bulkhead` in multi-pod** | Each pod caps its own concurrency; fleet-wide concurrency to the downstream dependency = N × `max_concurrent` | `varco_core.resilience.Bulkhead` is a per-process semaphore, not shared state — the same defect class as `InMemoryRateLimiter` above, but for *concurrency* rather than *rate* (U-7, Plan 005 Phase 8: they are genuinely different primitives) | Use `varco_redis.RedisBulkhead` — a Redis sorted-set-backed distributed semaphore with TTL-based reclaim for crashed holders (mirrors `RedisLock`'s Lua pattern); same `call()`/`protect()`/`available_slots()` surface as `Bulkhead` |
 | **Hedging non-idempotent writes** | Duplicate side-effects (email sent twice, double charge) | Both hedged copies execute concurrently | Only apply `@hedge` to idempotent reads/upserts; never to INSERT or transactional writes |
 | **`requires=` without `_auth`** | `RuntimeError` at `build_router()` startup | Guard can never be satisfied with no `AuthContext` | Set `_auth` on the router, or use `allow_anonymous()` if the route is public |
 | **`ctx` declared but no `_auth`** | Handler gets 500 (missing argument) | Without auth middleware, no `AuthContext` is injected | Set `_auth` on the router or remove `ctx` from the handler signature |
@@ -950,7 +1126,7 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **A package's suite is green but its container won't bootstrap** | Tests pass; a real app dies at startup with `AnnotationResolutionError` | No test hit a path that resolves *binding* annotations — unit tests construct objects directly instead of resolving them | Add a `container.scan(pkg); container.validate_bindings()` test per package — one call covers every present and future singleton (see `varco_redis/tests/test_redis_di.py`) |
 | **`container.provide(lambda: X())`** | `ProviderBindingNotDecoratedError` at bootstrap | `provide()` only accepts `@Provider`-decorated callables and takes no second "interface" argument | Declare a module-level `@Provider(singleton=True) def x() -> X:` and pass the function |
 | **Override registered after `install()`/`scan()`** | The package default wins; your settings are silently ignored | Equal-priority bindings resolve to the **first** registered | `provide()` before `install()`/`scan()`, or declare `@Provider(..., priority=100)` |
-| **`memory` adapter in production** | Policies vanish on restart | The in-memory adapter has no durable store | Use `adapter="sqlalchemy"` (`varco-casbin[sqlalchemy]`) for persisted CRUD |
+| **`memory` adapter in production** | Policies vanish on restart | The in-memory adapter has no durable store | Use `adapter="sqlalchemy"` (`varco-casbin[sqlalchemy]`) or `adapter="beanie"` (`varco-casbin[beanie]`) for persisted CRUD |
 | **Sync Casbin adapter with AsyncEnforcer** | `RuntimeError: Invalid parameters for enforcer` | `AsyncEnforcer` requires an `AsyncAdapter` | Use `casbin.persist.adapters.asyncio.*` (the factory in `varco_casbin.adapter` already does) |
 | **Profiling left always-on** | 20–100% overhead in production | `cProfile`/`tracemalloc` are expensive deterministic tools | Default is off (`VARCO_PROFILING_ENABLED=false`); activate only to diagnose a hotspot |
 | **Two profiling sessions concurrent** | Contaminated reports (each session records the other's frames) | `cProfile`/`tracemalloc` are process-global | The middleware serialises with a `Lock`; for manual use, never profile two operations simultaneously |
@@ -961,7 +1137,8 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Custom service method unknown on `self._service`** | Type checker reports `.compile`/`.custom_method()` etc. as unknown attributes | Router declared without the 6th `S` type arg — `self._service` is only typed as the erased `AsyncService[Any, ...]` base | Subscript `CRUDRouter[..., ConcreteService]` (or `VarcoCRUDRouter[..., ConcreteService]`) and use `self.service`/`self._service`, both narrowed to `ConcreteService` |
 | **Roles empty although the JWT has them** | `AuthContext.roles` is empty for a valid, correctly-signed token | The claim is named `sofy-roles`/`realm_access.roles`, not `roles` — the default mapping never looked there | Set `VARCO_JWT_TRANSFORM_ROLES_FIELD` (see `technical_docs/features/jwt-claim-transformer.md`) |
 | **`is_system()` false for my internal token** | A token minted by your own internal issuer is not recognised as "system" | Only one static `SYSTEM_ISSUER` was configured, and this token's issuer doesn't match it | Define `VARCO_JWT_PROFILE__SYSTEM__ISS` (or any named `TokenProfile`) instead — see `technical_docs/features/token-profiles.md` |
-| **Token from another service accepted** | A JWT minted for a different service (different `aud`) verifies successfully here | `aud` was never enforced — `JwtBearerAuth`/`TrustedIssuerRegistry.verify()` default to `audience=None` | Set `VARCO_JWT_AUDIENCE` (or `JwtBearerAuth(audience=...)`) to opt in to audience enforcement |
+| **Token from another service accepted** | Since Plan 005 Phase 2: `JwtBearerAuth()` **fails to start** (`ValueError`) unless `audience=`/`VARCO_JWT_AUDIENCE`/`allow_any_audience=True` is set — this used to be a silent accept | `aud` was never enforced by default — now fails closed instead of warning | Set `VARCO_JWT_AUDIENCE` (or `JwtBearerAuth(audience=...)`), or explicitly opt out with `allow_any_audience=True` / `VARCO_JWT_ALLOW_ANY_AUDIENCE=true` |
+| **Forged/misrouted `iss` claim accepted** | A token signed by issuer A's key but claiming `iss` of issuer B used to verify successfully | `TrustedIssuerRegistry.verify()` never checked `iss` against the resolving issuer | Since Plan 005 Phase 2 this is enforced by default (`VARCO_JWT_ENFORCE_ISS=true`); opt out per-call with `verify(enforce_issuer=False)` only if you have a specific reason |
 | **Intermittent 401 across hosts** | Same token, same secret, fails verification only on some hosts/some requests | Clock skew between hosts — `exp`/`nbf` checked with zero tolerance by default | Set `VARCO_JWT_LEEWAY_SECONDS=30` (or `leeway=` on `parse()`/`verify()`) |
 | Secret in a span attribute | A password/token value visible in the trace UI | Param capture is on and the param name isn't in the redact list | Add it to `VARCO_OTEL_CAPTURE_PARAMS_EXCLUDE`/`redact_patterns`, or `capture_params=False` on that `@span` |
 | Metric series explosion after adding a global attribute | Prometheus TSDB churn / OOM after a deploy | `k8s.pod.name` was added as a *per-measurement* attribute, so every pod creates its own series for every metric | Put static process identity in `OtelConfig.extra_resource_attrs` (Resource), not in the global attribute registry |
@@ -972,6 +1149,20 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | `relation "varco_audit_log" does not exist` | Consumer raises on first audit event | `audit_metadata` not in the Alembic `target_metadata` | Add `from varco_sa.audit import audit_metadata` to `env.py` |
 | `CollectionWasNotInitialized` on audit save | Beanie raises when the consumer persists | `AuditDocument` missing from `init_beanie(document_models=...)` | Register it at startup |
 | Audit record lost on broker outage | Domain write committed, no audit row | Audit is emitted post-commit as a plain event | Emit the `AuditEvent` through the transactional outbox |
+| **Destroyed key renders as corrupt data** | Decrypt of a crypto-shredded record raises a generic-looking error | `KeyDestroyedError` was caught by a bare `except EncryptionError` and treated the same as tampered data | Catch `KeyDestroyedError` specifically (it's a subclass) and render "erased", not "corrupt" |
+| **Per-subject registry built with `build_tenant_registry`** | Startup loads every key in the store, even ones for scopes not yet needed | `build_tenant_registry()` is eager-all; there is no per-scope equivalent by that name | Use `manager.build_scoped_registry(scope)` — loads exactly one scope's keys |
+| **Poison outbox row silently stops a stream** | `OutboxRelay` retries the same undeliverable entry forever, blocking every entry queued behind it | No `retry_policy`/`dlq` wired — today's default is unbounded retry-in-place | Wire `retry_policy=` + `dlq=` on `OutboxRelay`; exhausted entries are pushed to the DLQ and deleted so the stream unblocks |
+| **`OutboxRelay(max_attempts=...)` without a `dlq`** | `ValueError` at construction | Deleting a poison entry with nowhere durable to put it is silent data loss — refused by design | Pass a `dlq=` (e.g. `SADeadLetterQueue`) alongside `max_attempts` |
+| **Long job killed at 5 minutes** | A legitimately long-running job is marked FAILED mid-work | `JobPoller`'s old wall-clock `stale_threshold` doesn't know the job is still alive | Enable leases (`try_claim(lease_ttl=...)`) — `JobPoller(lease_aware=True)` (default) judges liveness by lease expiry, not age |
+| **Stalled worker resumes and overwrites a completed result** | A worker that stalled past its lease window resumes and clobbers another worker's write | Writes were not fenced against the lease epoch | Pass `expected_epoch=` on every `store.save()` call; catch `StaleLeaseError` and abort |
+| **External `AbstractJobStore` subclass breaks on `lease_ttl`** | `TypeError: unexpected keyword argument 'owner_id'` on `try_claim()` | Pre-Phase-4 overrides only declared `try_claim(self, job_id)` — the lease kwargs are additions, not activation of a dormant parameter | Add `owner_id`/`lease_ttl` to your `try_claim()` override before enabling leases |
+| **`JobPoller` reaps a legitimately-running unleased job** | A RUNNING job with no lease is immediately returned to PENDING regardless of age | `lease_aware=True` (default) treats "no lease at all" as evidence of a failed claim, not as "healthy, just old" | Adopt `lease_ttl` on every claim, or construct `JobPoller(lease_aware=False)` to keep the old age-based check |
+| **`release()` returns false and the lock leaks** | A `SAAdvisoryLock` held by process A appears to release successfully but the next process to borrow that pooled connection inherits an already-locked key | Session-level advisory lock behind a transaction-mode connection pooler (PgBouncer `pool_mode=transaction`) — `release()` is routed to a different physical connection than `try_acquire()` used | Use `SAXactAdvisoryLock.xact(key, session)` instead — the lock is released by the caller's own COMMIT/ROLLBACK, so pooling never has a chance to misroute the release |
+| **Retention sweep starves the pool** | A cleanup job/maintenance script pins a connection for minutes while deleting a huge backlog | `delete_where()` called once with no `limit` (or the caller manually enumerated ids one at a time) under a transaction-mode pooler | Loop bounded `delete_where(..., limit=1000)` calls (each its own short transaction) until it returns `0` — the chunked-sweep recipe on `AbstractJobStore.delete_where` |
+| **Raw JWT readable in the jobs table** | An operator with read access to the jobs table/collection can read PII straight out of `request_token`'s claims | A JWT is base64-encoded, not encrypted — `store_raw_token=True` (default) stores it verbatim | Pass `store_raw_token=False` (`Job(...)`, `JobRunner.enqueue_task(...)`, or `VarcoRouter._store_raw_token = False`) and switch the completion callback to a service-credential/mTLS/signed-URL auth scheme instead of replaying the caller's token |
+| **Hand-written RLS policy uses bare `current_setting(...)`** | A query on an RLS-protected table that flies at test data volumes goes from milliseconds to seconds in production (one documented case: 8 100 ms) | `current_setting()` is `VOLATILE` and not `LEAKPROOF` — without a scalar-subquery wrapper the Postgres planner cannot push the predicate below an index scan and falls back to a sequential scan | Always use `varco_sa.rls.enable_rls_ddl()`, which emits the `(SELECT current_setting(..., true))` InitPlan form; never hand-write `USING (tenant_id = current_setting(...)::uuid)` — see `technical_docs/features/postgres-rls.md` |
+| **RLS tenant GUC set with `SET` instead of `SET LOCAL`** | Under a transaction-mode pooler (PgBouncer), one tenant's queries leak into a session that was actually serving a different tenant's next transaction | Session-scoped `SET`/`set_config(..., false)` survives past the transaction on a pooled connection — same defect class as `SAAdvisoryLock`'s session-scoped release (U-16) | Use `varco_sa.rls.set_tenant_local(session, tenant_id)` — `set_config(..., true)` (`is_local`) scopes the setting to the current transaction only |
+| **`TenantAwareService._scoped_params` bypassed** | Cross-tenant rows returned from a query path that skipped the service mixin (e.g. a raw repository call, an ad-hoc script) | The mixin fails open by design — it only filters queries that actually go through it, there is no enforcement below the service layer | Enable Postgres RLS as defense-in-depth (`varco_sa.rls.enable_rls_ddl()`) on any table where a query bypassing the service layer would leak data across tenants |
 
 ---
 

@@ -25,7 +25,7 @@ AsyncService → AbstractAuthorizer                       (already injected by s
                   ↑ both implemented by
               CasbinPolicyEngine            (varco_casbin — wraps casbin.AsyncEnforcer)
                   ↓ persists via
-              build_adapter()               (memory | file | sqlalchemy)
+              build_adapter()               (memory | file | sqlalchemy | beanie)
 ```
 
 The seam (`PolicyEngine`, `PolicyManagement`, `EnforcementRequest`,
@@ -87,15 +87,18 @@ await engine.add_policy("admin", "*", "*")
 |---|---|---|
 | `VARCO_CASBIN_MODEL_PRESET` | `rbac` | `acl` / `rbac` / `rbac_domains` / `abac` |
 | `VARCO_CASBIN_MODEL_PATH` | — | explicit `.conf` model file (overrides preset) |
-| `VARCO_CASBIN_ADAPTER` | `memory` | `memory` / `file` / `sqlalchemy` |
-| `VARCO_CASBIN_DB_URL` | — | SQLAlchemy URL for `sqlalchemy` adapter |
+| `VARCO_CASBIN_ADAPTER` | `memory` | `memory` / `file` / `sqlalchemy` / `beanie` |
+| `VARCO_CASBIN_DB_URL` | — | SQLAlchemy URL for `sqlalchemy`, or Mongo URL for `beanie` |
+| `VARCO_CASBIN_DB_NAME` | — | MongoDB database name — **required** for `adapter=beanie` |
 | `VARCO_CASBIN_POLICY_PATH` | — | CSV path for `file` adapter |
 | `VARCO_CASBIN_AUTO_SAVE` | `true` | persist each mutation immediately |
 | `VARCO_CASBIN_ADMIN_ROLE` | `admin` | role required by the REST router |
 
 For runtime-editable, durable policy (the dynamic-CRUD use case) use
-`adapter="sqlalchemy"` (install `varco-casbin[sqlalchemy]`). The `memory`
-adapter is non-durable; `file` is single-process.
+`adapter="sqlalchemy"` (install `varco-casbin[sqlalchemy]`) or `adapter="beanie"`
+(install `varco-casbin[beanie]`, MongoDB via Beanie — also requires
+`VARCO_CASBIN_DB_NAME`). The `memory` adapter is non-durable; `file` is
+single-process only.
 
 ## REST management API
 

@@ -436,40 +436,11 @@ class TrustedIssuerRegistry:
               refreshed, so falling through would double-fetch every
               remote source on every call once the cache goes stale.
         """
-        if self._should_proactively_reload():
-            async with self._get_lock():
-                # Re-check inside the lock — another task may have already
-                # refreshed while we were waiting to acquire it.
-                if self._should_proactively_reload():
-                    await self._refresh_all_sources()
-            # Search once, after the proactive refresh, and stop here —
-            # do not fall through to the reactive miss-path below (it would
-            # immediately re-trigger another refresh; see the docstring).
-            return self._search_caches(kid)
-
-        # First pass — search all loaded caches
-        key = self._search_caches(kid)
-        if key is not None:
-            return key
-
-        # Miss — check rate limit before hitting the network
-        now = time.monotonic()
-        if now - self._last_refresh < self._min_refresh_interval:
-            # Rate-limited — don't hit remote sources again so soon
-            return None
-
-        # Trigger refresh of all sources under the lock — prevents concurrent
-        # requests from all firing refresh() simultaneously on the same miss.
-        async with self._get_lock():
-            # Re-check inside lock — another task may have refreshed already
-            key = self._search_caches(kid)
-            if key is not None:
-                return key
-
-            await self._refresh_all_sources()
-
-        # Second pass — search updated caches
-        return self._search_caches(kid)
+        # Delegates to _resolve_key (Plan 005, Phase 2) — identical resolution
+        # logic, this method just discards the matched TrustedIssuerEntry.
+        # Public signature is unchanged.
+        found = await self._resolve_key(kid)
+        return found[0] if found is not None else None
 
     def _search_caches(self, kid: str) -> JsonWebKey | None:
         """Search every registered entry's cached keyset for ``kid``."""
@@ -478,6 +449,56 @@ class TrustedIssuerRegistry:
             if key is not None:
                 return key
         return None
+
+    def _search_caches_with_entry(
+        self, kid: str
+    ) -> tuple[JsonWebKey, TrustedIssuerEntry] | None:
+        """Same as ``_search_caches`` but also returns the matched entry —
+        used by ``_resolve_key`` to recover which issuer's ``iss`` claim to
+        enforce (Plan 005, Phase 2)."""
+        for entry in self._entries.values():
+            key = entry.find_key(kid)
+            if key is not None:
+                return key, entry
+        return None
+
+    async def _resolve_key(
+        self, kid: str
+    ) -> tuple[JsonWebKey, TrustedIssuerEntry] | None:
+        """
+        Find a ``JsonWebKey`` **and** the ``TrustedIssuerEntry`` it resolved
+        from — the entry carries the ``iss`` value ``verify()`` must enforce
+        (Plan 005, Phase 2 / U-13).
+
+        This is ``get_key()``'s resolution logic, generalised to also return
+        which issuer matched — ``get_key()``'s public signature is unchanged
+        and now delegates here, discarding the entry.
+
+        Returns:
+            ``(key, entry)`` on a match, ``None`` on a miss (identical miss
+            semantics to ``get_key()``).
+        """
+        if self._should_proactively_reload():
+            async with self._get_lock():
+                if self._should_proactively_reload():
+                    await self._refresh_all_sources()
+            return self._search_caches_with_entry(kid)
+
+        found = self._search_caches_with_entry(kid)
+        if found is not None:
+            return found
+
+        now = time.monotonic()
+        if now - self._last_refresh < self._min_refresh_interval:
+            return None
+
+        async with self._get_lock():
+            found = self._search_caches_with_entry(kid)
+            if found is not None:
+                return found
+            await self._refresh_all_sources()
+
+        return self._search_caches_with_entry(kid)
 
     def _should_proactively_reload(self) -> bool:
         """
@@ -522,6 +543,7 @@ class TrustedIssuerRegistry:
         *,
         audience: str | list[str] | None = None,
         leeway: float | None = None,
+        enforce_issuer: bool | None = None,
     ) -> JsonWebToken:
         """
         Verify a JWT string against all registered issuers' public keys.
@@ -529,17 +551,27 @@ class TrustedIssuerRegistry:
         Routing is by ``kid`` header claim.  The first registered issuer that
         holds a key with the matching kid is used for verification.
 
-        Does NOT enforce the ``iss`` claim — that is the caller's
-        responsibility.  Use ``JwtUtil(token).is_issuer(expected_iss)`` after
-        this call when issuer identity matters.
+        **Enforces the ``iss`` claim by default** (Plan 005, Phase 2 / U-13 —
+        a BREAKING security-default change from earlier releases): after
+        signature verification, the token's ``iss`` claim is compared against
+        the ``TrustedIssuerEntry.iss`` of the issuer whose key matched the
+        token's ``kid``. A mismatch means the token claims to be from a
+        different issuer than the one whose key actually signed it — the
+        exact "misrouted/forged iss" hole this closes.
 
         Args:
-            token_str: Raw JWT string.
-            audience:  Expected ``aud`` value(s).  ``None`` skips audience check.
-            leeway:    Clock-skew leeway in seconds for ``exp``/``nbf`` checks
-                       (Plan 002 C-1).  ``None`` (default) reads
-                       ``VARCO_JWT_LEEWAY_SECONDS`` (default ``0.0`` — no
-                       leeway, today's behaviour).
+            token_str:      Raw JWT string.
+            audience:       Expected ``aud`` value(s).  ``None`` skips audience check.
+            leeway:         Clock-skew leeway in seconds for ``exp``/``nbf`` checks
+                            (Plan 002 C-1).  ``None`` (default) reads
+                            ``VARCO_JWT_LEEWAY_SECONDS`` (default ``0.0`` — no
+                            leeway, today's behaviour).
+            enforce_issuer: Whether to check ``iss`` against the resolved
+                            issuer's registered value.  ``None`` (default)
+                            reads ``JwtVerificationSettings.enforce_issuer``
+                            (env ``VARCO_JWT_ENFORCE_ISS``, default ``True``).
+                            Pass ``False`` (or set the env var to ``false``)
+                            to restore the pre-Phase-2 behaviour.
 
         Returns:
             ``JsonWebToken`` with all claims populated.
@@ -552,15 +584,20 @@ class TrustedIssuerRegistry:
             jwt.DecodeError:            Token is malformed.
             jwt.InvalidAudienceError:   ``aud`` mismatch when ``audience``
                                         is provided.
+            jwt.InvalidIssuerError:     ``iss`` claim does not match the
+                                        resolved issuer's registered ``iss``
+                                        (only when ``enforce_issuer=True``).
 
         Edge cases:
             - A token with no ``kid`` header raises ``UnknownKidError`` because
               routing by kid is the only strategy — brute-force trying all keys
               would be a timing oracle vulnerability.
-            - ``iss`` is NOT validated — this is by design.  Call
-              ``JwtUtil(token).is_issuer(expected)`` after verify() if needed.
             - If multiple registered issuers share the same kid (misconfiguration),
-              the first-registered one's key is used.
+              the first-registered one's key is used — and the ``iss`` check now
+              catches an `iss` mismatch this previously let through silently.
+            - ``enforce_issuer=False`` is an explicit, auditable opt-out — prefer
+              it over disabling the check globally when only one caller needs
+              the legacy behaviour.
         """
         # Decode header only — cheap base64, no signature verification
         header = _jwt.get_unverified_header(token_str)
@@ -574,9 +611,9 @@ class TrustedIssuerRegistry:
                 kid=None,
             )
 
-        jwk = await self.get_key(kid)
+        resolved = await self._resolve_key(kid)
 
-        if jwk is None:
+        if resolved is None:
             registered = list(self._entries.keys())
             raise UnknownKidError(
                 f"No registered issuer has a key with kid={kid!r}. "
@@ -585,6 +622,7 @@ class TrustedIssuerRegistry:
                 f"configured, or the remote JWKS may not yet contain this kid.",
                 kid=kid,
             )
+        jwk, matched_entry = resolved
 
         # DESIGN: PyJWK converts JsonWebKey.to_dict() → cryptography key object.
         # This is the bridge between our JWK model and PyJWT's verification path.
@@ -625,6 +663,26 @@ class TrustedIssuerRegistry:
         # Delegate to PyJWT for the actual signature + claims verification.
         # Any jwt.exceptions.* propagates unchanged — callers may catch them.
         raw = _jwt.decode(token_str, pyjwk.key, **decode_kwargs)
+
+        # Plan 005, Phase 2 / U-13 — fail-closed issuer enforcement.
+        # Resolve the effective flag: explicit arg > JwtVerificationSettings
+        # (env VARCO_JWT_ENFORCE_ISS, default True).
+        effective_enforce_issuer = enforce_issuer
+        if effective_enforce_issuer is None:
+            from varco_core.jwt.config import JwtVerificationSettings
+
+            effective_enforce_issuer = JwtVerificationSettings.from_env().enforce_issuer
+
+        if effective_enforce_issuer:
+            token_iss = raw.get("iss")
+            if token_iss != matched_entry.iss:
+                raise _jwt.InvalidIssuerError(
+                    f"Token 'iss' claim {token_iss!r} does not match the "
+                    f"registered issuer {matched_entry.iss!r} whose key "
+                    f"(kid={kid!r}) signed this token. "
+                    f"Pass enforce_issuer=False or set "
+                    f"VARCO_JWT_ENFORCE_ISS=false to opt out."
+                )
 
         # Reuse JwtParser's claim reconstruction — AuthContext, timestamps, etc.
         return JwtParser._from_raw_claims(raw)

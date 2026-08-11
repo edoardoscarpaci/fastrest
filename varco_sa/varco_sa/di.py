@@ -57,10 +57,13 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from providify import Configuration, Inject, Provider
+from varco_core.lock import AbstractDistributedLock
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import IUoWProvider
+from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
+from varco_sa.config import SAConfig
 
 if TYPE_CHECKING:
     # Avoid a hard circular import — DIContainer is only needed for the
@@ -82,6 +85,14 @@ class SAModule:
     Registers:
         - ``IUoWProvider`` → ``SQLAlchemyRepositoryProvider`` singleton (via
           ``uow_provider`` below).  ``AsyncService.__init__`` injects this.
+        - ``AbstractDistributedLock`` → ``SAAdvisoryLock`` singleton (via
+          ``sa_advisory_lock`` below) — the default upgrade-safe binding
+          (Plan 005 Phase 5 / U-16). See that provider's docstring for the
+          override recipe if you want ``SAXactAdvisoryLock`` instead.
+        - ``SAXactAdvisoryLock`` singleton, directly injectable via
+          ``Inject[SAXactAdvisoryLock]`` regardless of which class wins the
+          ``AbstractDistributedLock`` binding (via ``sa_xact_advisory_lock``
+          below).
 
     ``SQLAlchemyRepositoryProvider`` and ``SAHealthCheck`` are also registered
     automatically via their ``@Singleton`` decorators when scan discovers them.
@@ -128,6 +139,84 @@ class SAModule:
         # Return the same singleton — RepositoryProvider.make_uow() satisfies
         # IUoWProvider without wrapping.
         return repo_provider
+
+    @Provider(singleton=True)
+    def sa_advisory_lock(self, config: Inject[SAConfig]) -> AbstractDistributedLock:
+        """
+        Bind ``AbstractDistributedLock`` → ``SAAdvisoryLock`` (session-level,
+        Plan 005 Phase 5 / U-16).
+
+        This is the **default** ``AbstractDistributedLock`` binding contributed
+        by ``varco_sa`` — kept as ``SAAdvisoryLock`` (not the newer
+        ``SAXactAdvisoryLock``) specifically so that upgrading to a
+        Plan-005-Phase-5 release does not silently change behaviour for any
+        app already resolving ``Inject[AbstractDistributedLock]``. Read
+        ``SAAdvisoryLock``'s class docstring before deploying behind a
+        transaction-mode connection pooler (PgBouncer ``pool_mode=transaction``
+        and equivalents) — that topology is NOT supported by this default.
+
+        **Override recipe** (per ``CLAUDE.md`` DI pitfalls table — equal-priority
+        bindings resolve to the first registered):
+
+        ```python
+        # Option A — provide() your own binding before install()/scan()
+        @Provider(singleton=True)
+        def my_lock(config: Inject[SAConfig]) -> AbstractDistributedLock:
+            return SAXactAdvisoryLock(config.engine)
+
+        container.provide(my_lock)          # registered FIRST — wins
+        container.scan("varco_sa", recursive=True)
+
+        # Option B — same priority tie-break, explicit @Provider(priority=100)
+        @Provider(singleton=True, priority=100)
+        def my_lock(config: Inject[SAConfig]) -> AbstractDistributedLock:
+            return SAXactAdvisoryLock(config.engine)
+        ```
+
+        ``SAXactAdvisoryLock`` itself is always resolvable directly via
+        ``Inject[SAXactAdvisoryLock]`` regardless of which class wins the
+        ``AbstractDistributedLock`` binding — see ``sa_xact_advisory_lock``
+        below.
+
+        Args:
+            config: ``SAConfig`` singleton — supplies the ``AsyncEngine``.
+
+        Returns:
+            A fresh ``SAAdvisoryLock`` wrapping ``config.engine``.
+
+        Thread safety:  ✅ Called once at singleton resolution time.
+        Async safety:   ✅ Synchronous — no I/O at construction time.
+        """
+        return SAAdvisoryLock(config.engine)
+
+    @Provider(singleton=True)
+    def sa_xact_advisory_lock(self, config: Inject[SAConfig]) -> SAXactAdvisoryLock:
+        """
+        Register ``SAXactAdvisoryLock`` (transaction-level, Plan 005 Phase 5
+        / U-16) as a directly-injectable singleton — ``Inject[SAXactAdvisoryLock]``.
+
+        Deliberately bound under its OWN concrete type, not under
+        ``AbstractDistributedLock`` — ``sa_advisory_lock`` above already owns
+        that interface binding to preserve upgrade behaviour (see its
+        docstring). This provider exists so ``SAXactAdvisoryLock`` — the
+        transaction-pooling-safe sibling and the **recommended default** per
+        its own class docstring — is reachable from the container without
+        every caller having to construct it manually, and so the override
+        recipe documented on ``sa_advisory_lock`` has a ready-made instance
+        to delegate to.
+
+        Args:
+            config: ``SAConfig`` singleton — supplies the ``AsyncEngine`` used
+                    only by the ``try_acquire``/``release`` ABC shape (``xact()``
+                    does not need an engine at all — see its docstring).
+
+        Returns:
+            A fresh ``SAXactAdvisoryLock`` wrapping ``config.engine``.
+
+        Thread safety:  ✅ Called once at singleton resolution time.
+        Async safety:   ✅ Synchronous — no I/O at construction time.
+        """
+        return SAXactAdvisoryLock(config.engine)
 
 
 # ── Per-entity repository binding helper ──────────────────────────────────────

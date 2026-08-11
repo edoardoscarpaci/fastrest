@@ -25,6 +25,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
+
 
 from varco_core.authority.registry import TrustedIssuerRegistry
 from varco_core.jwk.model import JsonWebKeySet
@@ -652,3 +654,106 @@ class TestJwksRefreshKnobs:
         await asyncio.sleep(0.05)
         await registry.get_key("some-kid")
         assert source.refresh_calls == 2
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 2, Step 23 — fail-closed `iss` enforcement in verify()
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Steps 24-26 land: TrustedIssuerRegistry.verify() gains
+# `enforce_issuer: bool | None = None` (default True via JwtVerificationSettings),
+# and rejects a token whose `iss` claim does not match the resolving issuer's
+# registered `iss`. JwtVerificationSettings gains `enforce_issuer: bool = True`
+# (env VARCO_JWT_ENFORCE_ISS).
+
+
+class _TestTrustedIssuerRegistryVerifyIssuerEnforcement:
+    """
+    Not collected directly — see the two subclasses below which parametrize
+    key generation. Kept as a mixin so the RSA key generation (expensive) is
+    shared without regenerating per test via a fixture-shaped helper.
+    """
+
+    def _make_authority(self, *, issuer: str, kid: str):
+        from cryptography.hazmat.primitives.asymmetric import rsa
+
+        from varco_core.authority.jwt_authority import JwtAuthority
+        from cryptography.hazmat.primitives import serialization
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        return JwtAuthority.from_pem(pem, kid=kid, issuer=issuer, algorithm="RS256")
+
+
+class TestVerifyEnforcesIssuerByDefault(
+    _TestTrustedIssuerRegistryVerifyIssuerEnforcement
+):
+    async def test_token_with_mismatched_iss_is_rejected(self) -> None:
+        from varco_core.authority.registry import TrustedIssuerRegistry
+
+        authority_a = self._make_authority(issuer="issuer-a", kid="kid-a")
+        registry = TrustedIssuerRegistry()
+        registry.register_authority(authority_a, label="A")
+        await registry.load_all()
+
+        # Sign a token whose kid resolves to issuer A's key, but whose `iss`
+        # claim names issuer B — a forged/misrouted issuer claim.
+        forged = authority_a.sign(
+            authority_a.token().issuer("issuer-b").subject("user-1")
+        )
+
+        with pytest.raises(Exception):
+            await registry.verify(forged)
+
+    async def test_token_with_matching_iss_is_accepted(self) -> None:
+        from varco_core.authority.registry import TrustedIssuerRegistry
+
+        authority_a = self._make_authority(issuer="issuer-a", kid="kid-a")
+        registry = TrustedIssuerRegistry()
+        registry.register_authority(authority_a, label="A")
+        await registry.load_all()
+
+        token = authority_a.sign(authority_a.token().subject("user-1"))
+        result = await registry.verify(token)
+        assert result is not None
+
+    async def test_enforce_issuer_false_restores_today_behaviour(self) -> None:
+        from varco_core.authority.registry import TrustedIssuerRegistry
+
+        authority_a = self._make_authority(issuer="issuer-a", kid="kid-a")
+        registry = TrustedIssuerRegistry()
+        registry.register_authority(authority_a, label="A")
+        await registry.load_all()
+
+        forged = authority_a.sign(
+            authority_a.token().issuer("issuer-b").subject("user-1")
+        )
+
+        # Explicit opt-out — must NOT raise on the iss mismatch.
+        result = await registry.verify(forged, enforce_issuer=False)
+        assert result is not None
+
+    async def test_env_var_disables_issuer_enforcement(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from varco_core.authority.registry import TrustedIssuerRegistry
+
+        monkeypatch.setenv("VARCO_JWT_ENFORCE_ISS", "false")
+
+        authority_a = self._make_authority(issuer="issuer-a", kid="kid-a")
+        registry = TrustedIssuerRegistry()
+        registry.register_authority(authority_a, label="A")
+        await registry.load_all()
+
+        forged = authority_a.sign(
+            authority_a.token().issuer("issuer-b").subject("user-1")
+        )
+
+        # None (default) reads JwtVerificationSettings.from_env(), which must
+        # now expose enforce_issuer.
+        result = await registry.verify(forged)
+        assert result is not None

@@ -33,6 +33,8 @@ from varco_fastapi.router.mixins import CreateMixin, DeleteMixin, ListMixin, Rea
 from varco_fastapi.router.skill import (
     SkillAdapter,
     SkillDefinition,
+)
+from varco_fastapi.router.a2a.router_source import (
     _auto_skill_id,
     _resolve_description,
     _title_case_id,

@@ -82,6 +82,20 @@ class RetryPolicy:
 
     Where ``attempt_index`` is 0-based (first retry = 0, second = 1, …).
 
+    DESIGN: jitter formula (Plan 005 Phase 3 / U-6 §4 — "verify then act")
+      This is a **multiplicative jitter** in ``[0.5x, 1.5x]`` of the computed
+      exponential delay — it is **not** AWS's "Full Jitter"
+      (``sleep = random(0, backoff)``) nor "Equal Jitter"
+      (``sleep = backoff/2 + random(0, backoff/2)``). U-6 §4's finding was
+      "the docstring does not say *which* formula" — this note is the fix;
+      the numeric behaviour is unchanged (no ``jitter_strategy`` parameter
+      was added, since nothing in this repo's test suite or the plan's own
+      failing-tests-first list exercises one, and introducing an untested
+      knob would be scope creep against the plan's own guidance). Operators
+      who need Full Jitter for AWS-style thundering-herd guidance should
+      compute their own delay and pass ``jitter=False`` with a pre-jittered
+      ``base_delay``, or open a follow-up if this becomes a real ask.
+
     Thread safety:  ✅ Frozen dataclass — immutable and safe to share globally.
     Async safety:   ✅ Stateless — no shared mutable fields.
 
@@ -220,6 +234,42 @@ class RetryPolicy:
               never retried.
         """
         return isinstance(exc, self.retryable_on)
+
+    @classmethod
+    def durable_delivery(cls) -> RetryPolicy:
+        """
+        Named preset for "this must not be silently dropped" delivery paths —
+        the outbox relay and ``AuditConsumer`` (Plan 005 Phase 3, U-6 §3).
+
+        The shipped global default (``max_attempts=3``, ≈7s total with the
+        default backoff) is fine for a request-scoped retry but poor for
+        durable delivery — comparable systems retry far longer before giving
+        up: Oban (Elixir) defaults to 20 attempts, Sidekiq (Ruby) to 25. U-6
+        §3 explicitly asks this be a **report, not a request** to change the
+        global default (many callers depend on today's fast-fail default for
+        request-scoped retries) — this preset gives the relay and
+        ``AuditConsumer`` a sane, durable-delivery-shaped policy without
+        touching anyone else's default.
+
+        Returns:
+            ``RetryPolicy(max_attempts=20, base_delay=15.0, max_delay=3600.0,
+            jitter=True)`` — roughly a day of retry coverage at the tail
+            (exponential growth capped at one hour between attempts).
+
+        Example::
+
+            relay = OutboxRelay(
+                repo, producer, dlq=my_dlq,
+                retry_policy=RetryPolicy.durable_delivery(),
+                max_attempts=20,
+            )
+        """
+        return cls(
+            max_attempts=20,
+            base_delay=15.0,
+            max_delay=3600.0,
+            jitter=True,
+        )
 
 
 # ── RetryExhaustedError ───────────────────────────────────────────────────────

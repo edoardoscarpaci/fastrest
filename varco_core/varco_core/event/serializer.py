@@ -161,7 +161,7 @@ class JsonEventSerializer(Serializer[Event]):
         strings, UUIDs become strings.
 
         Args:
-            event: The event to serialize.
+            value: The event to serialize.
 
         Returns:
             UTF-8 encoded JSON bytes.

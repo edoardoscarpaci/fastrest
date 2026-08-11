@@ -570,3 +570,77 @@ class TestRedisEncryptionKeyStoreIntegration:
         loaded = await real_store.load("int-u")
         assert loaded is not None
         assert loaded.is_primary is False
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 005, Phase 1, Step 20 — scope index / destroy_scope on RedisEncryptionKeyStore
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Step 18 lands: RedisEncryptionKeyStore implements
+# load_for_scope/list_scopes/destroy_scope, plus a scope index set
+# ({prefix}:scope:{scope}) mirroring the existing tenant index, with an
+# atomic Lua destroy_scope.
+
+
+class TestRedisEncryptionKeyStoreScope:
+    async def test_load_for_scope_filters_by_scope(self) -> None:
+        _, store = _make_store()
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        result = await store.load_for_scope("acme")
+        assert len(result) == 1
+        assert result[0].kid == "k1"
+
+    async def test_list_scopes_returns_distinct_scopes(self) -> None:
+        _, store = _make_store()
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        await store.save(_make_entry(kid="k2", tenant_id="beta"))
+        scopes = await store.list_scopes()
+        assert "acme" in scopes
+        assert "beta" in scopes
+
+    async def test_destroy_scope_tombstones_entries_and_returns_kids(self) -> None:
+        _, store = _make_store()
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        kids = await store.destroy_scope("acme")
+        assert "k1" in kids
+
+        entry = await store.load("k1")
+        assert entry is not None
+        assert entry.is_destroyed is True
+
+    async def test_destroy_scope_is_idempotent(self) -> None:
+        _, store = _make_store()
+        await store.save(_make_entry(kid="k1", tenant_id="acme"))
+        first = await store.destroy_scope("acme")
+        assert len(first) == 1
+        second = await store.destroy_scope("acme")
+        assert second == ()
+
+    async def test_pre_migration_entry_with_no_scope_key_yields_tenant_id(
+        self,
+    ) -> None:
+        # An entry serialized before scope existed has no "scope" hash field —
+        # load() must synthesize scope == tenant_id via EncryptionKeyEntry.from_dict.
+        client, store = _make_store()
+        entry = _make_entry(kid="k1", tenant_id="acme")
+        await store.save(entry)
+
+        # Simulate a pre-migration row by deleting the scope field directly
+        # from the fake backing store, if present.
+        key = "varco:enc:key:k1"
+        if key in client._hashes:
+            client._hashes[key].pop(b"scope", None)
+
+        loaded = await store.load("k1")
+        assert loaded is not None
+        assert loaded.scope == "acme"
+
+
+@pytest.mark.integration
+class TestRedisEncryptionKeyStoreScopeIntegration:
+    """Requires a real Redis instance for atomic Lua destroy_scope correctness."""
+
+    async def test_destroy_scope_atomic_across_entries(self) -> None:
+        pytest.skip(
+            "requires a real Redis instance — not available in this environment"
+        )

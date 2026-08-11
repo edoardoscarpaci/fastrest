@@ -5,7 +5,25 @@ profiles (`plans/002-jwt-claim-transformer-and-token-profiles.md`, outside the
 docs tree). Neither blocks the feature; both are recorded here to be fixed
 separately.
 
-Status: **open**, as of 2026-07-26.
+Status, as of 2026-08-12 (verified against the current codebase during a docs
+audit):
+
+- **Issue 1 (`detail` leak): still open.** No opt-in flag
+  (`expose_detail`/`VARCO_EXPOSE_ERROR_DETAIL`) exists anywhere in
+  `varco_core`/`varco_fastapi` — none of the three suggested fixes below were
+  implemented. The team instead accepted the behaviour change and documented
+  it as a ⚠️ breaking `Changed` entry in `CHANGELOG.md` ("Error response
+  bodies now include a `detail` field when present"). Anyone who still wants
+  per-exception-type or per-app redaction needs to implement it themselves;
+  this doc's suggested fix list is still accurate.
+- **Issue 2 (`mkdocs build --strict` warnings): resolved.** `uv run mkdocs
+  build --strict` now exits 0 with zero warnings. The docstrings listed below
+  were corrected (moved prose out of `Raises:` into `Edge cases:`, fixed a
+  `varco_core/varco_core/event/serializer.py` parameter name mismatch, changed
+  `ProfilingSettings`'s `Args:` section to `Attributes:` since it documents
+  pydantic model fields rather than a function signature, and fixed a
+  continuation-line indentation issue in `varco_sa/varco_sa/rls.py`). The
+  section below is kept as a historical record of what was wrong and why.
 
 ---
 

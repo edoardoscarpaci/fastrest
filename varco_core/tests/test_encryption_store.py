@@ -441,3 +441,79 @@ class TestEncryptionKeyManagerEnvelopeEncryption:
         r = repr(manager)
         assert "EncryptionKeyManager" in r
         assert "fernet" in r
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Phase 1 (plan 005, Step 6) — scope field on EncryptionKeyEntry
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# These tests are RED until Step 5 lands: EncryptionKeyEntry gains
+# `scope: str | None = None` and `destroyed_at: datetime | None = None`,
+# `__post_init__` defaults `scope` to `tenant_id` when unset, and
+# `to_dict`/`from_dict` round-trip both fields with back-compat for rows
+# persisted before the migration (no "scope" key in the dict).
+
+
+class TestEncryptionKeyEntryScope:
+    def test_from_dict_with_no_scope_key_defaults_to_tenant_id(self) -> None:
+        # Back-compat hinge: a pre-migration row has no "scope" key at all —
+        # from_dict must synthesize scope == tenant_id so load_for_scope(tenant_id)
+        # finds it without a data migration.
+        data = {
+            "kid": "kid-1",
+            "algorithm": "fernet",
+            "key_material": "abc",
+            "created_at": datetime.now(UTC).isoformat(),
+            "tenant_id": "acme",
+            "is_primary": True,
+            "wrapped": False,
+        }
+        entry = EncryptionKeyEntry.from_dict(data)
+        assert entry.scope == "acme"
+
+    def test_scope_defaults_to_tenant_id_on_construction(self) -> None:
+        # __post_init__ must default scope to tenant_id when the caller does
+        # not pass scope explicitly (frozen dataclass — uses object.__setattr__).
+        entry = _make_entry(tenant_id="acme")
+        assert entry.scope == "acme"
+
+    def test_to_dict_from_dict_round_trip_with_explicit_scope(self) -> None:
+        key = Fernet.generate_key()
+        raw = base64.urlsafe_b64decode(key)
+        key_material = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+        entry = EncryptionKeyEntry(
+            kid="kid-scoped",
+            algorithm="fernet",
+            key_material=key_material,
+            created_at=datetime.now(UTC),
+            tenant_id="acme",
+            scope="acme:subject:42",
+        )
+        data = entry.to_dict()
+        assert data["scope"] == "acme:subject:42"
+        restored = EncryptionKeyEntry.from_dict(data)
+        assert restored.scope == "acme:subject:42"
+
+    def test_tombstone_entry_round_trips_destroyed_at_and_is_destroyed(self) -> None:
+        key = Fernet.generate_key()
+        raw = base64.urlsafe_b64decode(key)
+        _ = base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+        destroyed_at = datetime.now(UTC)
+        entry = EncryptionKeyEntry(
+            kid="kid-tombstone",
+            algorithm="fernet",
+            key_material="",
+            created_at=datetime.now(UTC),
+            tenant_id="acme",
+            destroyed_at=destroyed_at,
+        )
+        assert entry.is_destroyed is True
+
+        data = entry.to_dict()
+        restored = EncryptionKeyEntry.from_dict(data)
+        assert restored.destroyed_at is not None
+        assert restored.is_destroyed is True
+
+    def test_non_tombstone_entry_is_not_destroyed(self) -> None:
+        entry = _make_entry()
+        assert entry.is_destroyed is False

@@ -112,7 +112,7 @@ async def test_api_key_auth_returns_anonymous_when_key_missing_and_not_required(
 async def test_jwt_bearer_auth_raises_when_no_token():
     """JwtBearerAuth raises 401 when no Authorization header."""
     registry = MagicMock()
-    auth = JwtBearerAuth(registry=registry)
+    auth = JwtBearerAuth(registry=registry, allow_any_audience=True)
     req = _make_request()
     with pytest.raises(HTTPException) as exc_info:
         await auth(req)
@@ -126,7 +126,7 @@ async def test_jwt_bearer_auth_calls_registry_verify():
     registry = MagicMock()
     registry.verify = AsyncMock(return_value=mock_jwt)
 
-    auth = JwtBearerAuth(registry=registry)
+    auth = JwtBearerAuth(registry=registry, allow_any_audience=True)
     req = _make_request(headers={"Authorization": "Bearer my.jwt.token"})
     ctx = await auth(req)
 
@@ -137,7 +137,7 @@ async def test_jwt_bearer_auth_calls_registry_verify():
 async def test_jwt_bearer_auth_returns_anonymous_when_not_required():
     """JwtBearerAuth returns anonymous when required=False and no token."""
     registry = MagicMock()
-    auth = JwtBearerAuth(registry=registry, required=False)
+    auth = JwtBearerAuth(registry=registry, required=False, allow_any_audience=True)
     req = _make_request()
     ctx = await auth(req)
     assert ctx.is_anonymous()
@@ -147,7 +147,7 @@ async def test_jwt_bearer_auth_raises_on_verification_failure():
     """JwtBearerAuth raises 401 when registry.verify raises."""
     registry = MagicMock()
     registry.verify = MagicMock(side_effect=ValueError("expired"))
-    auth = JwtBearerAuth(registry=registry)
+    auth = JwtBearerAuth(registry=registry, allow_any_audience=True)
     req = _make_request(headers={"Authorization": "Bearer bad.token"})
     with pytest.raises(HTTPException) as exc_info:
         await auth(req)
@@ -247,7 +247,7 @@ async def test_websocket_auth_extracts_from_query_param():
     mock_jwt.auth_ctx = jwt_ctx
     registry = MagicMock()
     registry.verify = AsyncMock(return_value=mock_jwt)
-    inner = JwtBearerAuth(registry=registry)
+    inner = JwtBearerAuth(registry=registry, allow_any_audience=True)
 
     auth = WebSocketAuth(inner=inner, token_query_param="token")
     req = _make_request(query_params={"token": "my.ws.token"})
@@ -262,7 +262,7 @@ async def test_websocket_auth_extracts_from_protocol_header():
     mock_jwt.auth_ctx = jwt_ctx
     registry = MagicMock()
     registry.verify = AsyncMock(return_value=mock_jwt)
-    inner = JwtBearerAuth(registry=registry)
+    inner = JwtBearerAuth(registry=registry, allow_any_audience=True)
 
     auth = WebSocketAuth(inner=inner, protocol_prefix="bearer.")
     req = _make_request(headers={"Sec-WebSocket-Protocol": "bearer.ws.protocol.token"})
@@ -318,7 +318,7 @@ class TestJwtBearerAuthEnvClaimTransform:
         )
         raw_token = authority.sign(builder)
 
-        auth = JwtBearerAuth(registry)
+        auth = JwtBearerAuth(registry, allow_any_audience=True)
         req = _make_request(headers={"Authorization": f"Bearer {raw_token}"})
         ctx = await auth(req)
 

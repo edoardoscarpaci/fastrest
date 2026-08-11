@@ -312,10 +312,9 @@ class SAPoolSaturationCheck(HealthCheck):
                 while reading pool attributes — this should never happen in
                 practice but the never-raise contract must be honoured.
 
-        Raises:
-            Never — all exceptions are caught and returned as UNHEALTHY results.
-
         Edge cases:
+            - Never raises — all exceptions are caught and returned as
+              UNHEALTHY results.
             - NullPool / StaticPool (tests): all counters are 0, result is
               HEALTHY because ``is_saturated`` is False when checked_out == 0.
             - ``detail`` is always set so operators can see utilisation even

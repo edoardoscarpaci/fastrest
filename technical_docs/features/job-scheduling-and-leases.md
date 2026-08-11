@@ -1,0 +1,262 @@
+# Job scheduling, leases, and retention
+
+Plan 005, Phase 4 (gaps U-17, U-11) + Phase 6 (U-18, U-19 — retention and
+token-reference columns, same migration, different phase for the API).
+Closes: "the job store has no time dimension (no delay/schedule, no bounded
+retry), and `try_claim()` has no lease — a worker that stalls past the point
+another runner reclaims its job can resume and silently overwrite the
+second worker's result."
+
+⚠️ Source correction: U-11's register entry says `try_claim` "accepts a TTL
+and ignores it" — that TTL lives on a different class
+(`SAAdvisoryLock.try_acquire(key, *, ttl)`). Pre-Phase-4 `try_claim(job_id)`
+took **no** lease-related arguments at all. Everything below is an addition,
+not the activation of a dormant parameter.
+
+## Compatibility posture
+
+Every new `Job` field and every new keyword-only parameter is defaulted so
+an unchanged caller gets today's behaviour exactly:
+
+- `run_at=None` claims immediately.
+- `lease_ttl=None` (on `try_claim`/`claim_next`) takes no lease.
+- `max_attempts=1` (the `Job` field default) fails terminally on the first
+  failure, exactly like every job before this phase.
+- `JobRunner(retry_policy=None, dlq=None)` reproduces today's exact
+  terminal-FAILED-on-first-failure behaviour.
+- `JobPoller(lease_aware=True)` is the one default that changes runtime
+  behaviour for a store that has native lease support (see the pitfall table
+  below) — the fallback to the old wall-clock age check only fires when the
+  store raises `NotImplementedError` from `reap_expired_leases()`.
+
+## `run_at` / `delay` — the time dimension (U-17 §1-2)
+
+```python
+from datetime import timedelta
+
+# Schedule for a specific time
+job = Job(run_at=tomorrow_9am)
+
+# Or via the runner's enqueue() convenience — mutually exclusive with run_at
+await runner.enqueue(job, coro, delay=timedelta(minutes=30))
+```
+
+`claim_next()`/`try_claim()` honour `run_at IS NULL OR run_at <= now` — a
+PENDING job scheduled for the future is simply not eligible yet. The
+predicate uses the **store's** notion of "now" (the database server's clock
+on `varco_sa`, the poller's clock elsewhere) — don't assume worker-clock
+precision for very tight schedules.
+
+## Retry binding — `attempt` / `max_attempts` (U-17 §3)
+
+```python
+from varco_core.resilience import RetryPolicy
+from varco_core.event.dlq import AbstractDeadLetterQueue
+
+runner = JobRunner(
+    store=store,
+    retry_policy=RetryPolicy(max_attempts=5, base_delay=2.0),
+    dlq=my_dlq,   # optional — see decision table below
+)
+
+job = Job(max_attempts=5)   # must opt in per-job too — 1 means terminal-on-first-failure
+```
+
+On a job coroutine failure, `JobRunner._handle_job_failure()`:
+
+| Condition | Outcome |
+|---|---|
+| `retry_policy` set AND `attempt + 1 < max_attempts` | `Job.as_retry(run_at=now + retry_policy.compute_delay(attempt))` — back to PENDING for a later reclaim |
+| Attempts exhausted, `dlq` wired | `Job.as_dead(error)` + `DeadLetterEntry(source=JOB, source_ref=str(job_id))` pushed |
+| Attempts exhausted, no `dlq` | `Job.as_failed(error)` — today's exact terminal behaviour |
+
+This reuses `varco_core.resilience.RetryPolicy` — the plan's explicit ask was
+not to invent a second retry model for jobs.
+
+## Leases and fencing (U-11)
+
+A **lease** is a time-boxed claim: `try_claim(owner_id=..., lease_ttl=...)`
+sets `owner_id`, `lease_expires_at = now + lease_ttl`, and increments
+`lease_epoch` (the fencing token). The owner must `renew()` before the lease
+expires to keep the job alive; a lease that is not renewed in time is
+reclaimed by `reap_expired_leases()`, which bumps `lease_epoch` again —
+fencing out the stalled owner.
+
+```python
+claimed = await store.try_claim(job_id, owner_id="worker-7", lease_ttl=30.0)
+...
+renewed = await store.renew(job_id, owner_id="worker-7", epoch=claimed.lease_epoch, lease_ttl=30.0)
+if renewed is None:
+    # Fenced out — another process reaped this job. Stop working on it.
+    raise StaleLeaseError(...)
+...
+await store.save(claimed.as_completed(result), expected_epoch=claimed.lease_epoch)
+# raises StaleLeaseError if the epoch moved on since the claim/last renew —
+# the Kleppmann point: fencing happens at the point of WRITE, not merely at
+# claim time. A worker that stalls past its lease and resumes must be
+# rejected here, even if it never noticed it was fenced.
+```
+
+### TTL vs heartbeat guidance (stated verbatim, per U-11)
+
+**TTL ≥ 3× heartbeat interval, plus 2× worst-case pause. Renew at
+50–75% of remaining TTL, jittered.** A lease that expires before three missed
+heartbeats false-positives on a GC pause or a slow network blip; a renewal
+that always fires at exactly 90% of TTL synchronizes every worker's renewal
+traffic. Example: heartbeat every 10s, worst-case GC/network pause 20s →
+`lease_ttl ≥ 3×10 + 2×20 = 70s`; renew somewhere in the `[35s, 52.5s]` window
+of a 70s lease, randomized per worker.
+
+### `AbstractJobStore.renew()` / `reap_expired_leases()` raise, they don't degrade
+
+Unlike `claim_next()` (which has a correct, if slower, portable default —
+`list_by_status(PENDING)` + a `try_claim` loop), `renew()` and
+`reap_expired_leases()` raise `NotImplementedError("<cls> does not support
+leases")` by default. There is no correct fallback for a lease renewal or
+expiry check — a silent no-op heartbeat is strictly worse than an error,
+because it masks a lease that is about to (or already did) expire.
+
+### `JobPoller(lease_aware=True)` — the default that changes behaviour
+
+```python
+poller = JobPoller(store=store, lease_aware=True)   # default
+```
+
+When the store supports leases, each poll tick runs **both** death signals,
+over disjoint sets of RUNNING jobs:
+
+1. `store.reap_expired_leases()` reaps a RUNNING job **holding a lease that
+   expired** (`lease_expires_at <= now`) back to PENDING with a fenced
+   `lease_epoch`. This fixes the regression U-11 §2 names: age is "correct
+   for short jobs, wrong for anything whose legitimate duration can exceed
+   the threshold" — a job with a **live** lease is never touched here no
+   matter how old `started_at` is, however long the legitimate work takes.
+2. The wall-clock age check (`stale_threshold`) still runs every tick and
+   still owns RUNNING jobs with **no lease at all**
+   (`lease_expires_at IS NULL`).
+
+⚠️ **A RUNNING job with no lease at all is SKIPPED by lease reaping, not
+reaped.** `reap_expired_leases()` reads `lease_expires_at <= now`; a `NULL`
+lease is not an expired lease, it is the absence of the signal that method
+reads (Plan 005 Step 48 scopes it to "RUNNING rows whose
+`lease_expires_at <= now`" — NULL fails that comparison). Unleased jobs
+remain governed by the age threshold exactly as they were pre-Phase-4. This
+is deliberate: enabling `lease_aware=True` (the default) must not
+retroactively reclassify unleased in-flight jobs, which is what keeps
+leases opt-in — a deployment that never passes `lease_ttl` sees byte-
+identical behaviour to before this phase.
+
+When the store raises `NotImplementedError` from `reap_expired_leases()` (no
+lease support — an external `AbstractJobStore` that predates this phase),
+the poller skips the lease-reap step entirely and relies solely on
+`stale_threshold` — the pre-Phase-4 behaviour, unchanged.
+
+## Recurrence — expressible as re-enqueue, cron deliberately not shipped
+
+There is no scheduler/cron primitive in this plan — U-17's own scoping
+explicitly excludes it ("Recurrence/cron for jobs is explicitly not
+requested and not built"). A recurring job is a self-scheduling one-shot:
+
+```python
+class SyncTask(VarcoTask):
+    async def __call__(self, *, interval_seconds: float = 3600.0) -> None:
+        await do_the_sync_work()
+        # Re-enqueue myself for the next run instead of a cron entry.
+        await runner.enqueue_task(
+            self, interval_seconds=interval_seconds,
+            run_at=None,  # or thread run_at through if you added it to enqueue_task
+        )
+```
+
+This keeps the job store as the single source of truth for "what runs next"
+— no second scheduling subsystem, no drift between a cron table and the job
+table.
+
+## Retention — `delete_where` (U-18, Phase 6)
+
+```python
+# Chunked sweep recipe — never enumerate the whole table under transaction
+# pooling (PgBouncer pool_mode=transaction pins a connection for the whole
+# sweep otherwise):
+deleted = 1
+while deleted:
+    deleted = await store.delete_where(
+        status=JobStatus.COMPLETED, completed_before=cutoff, limit=1000,
+    )
+```
+
+`delete_where(status=None, completed_before=None, expires_before=None,
+limit=None)` is concrete on the ABC (portable default over
+`list_by_status` + `delete`) so external stores keep working; `SAJobStore`
+overrides it as a single `DELETE ... WHERE ...`. Calling it with **no
+predicate at all raises `ValueError`** — refusing to truncate the table by
+accident is the point. `JobPoller(retention_sweep=True)` runs
+`delete_where(expires_before=now, limit=...)` each tick; default `False` — no
+deployment starts deleting rows on upgrade.
+
+## Credential-at-rest — `store_raw_token=False` (U-19, Phase 6)
+
+`request_token` is discouraged, not deprecated: a JWT is base64-encoded, not
+encrypted, so any PII in its claims is readable at rest wherever the jobs
+table lives (OWASP/NIST finding). `request_token` itself is **not** removed
+or blanked by default — Source correction 4:
+`varco_fastapi/varco_fastapi/job/runner.py` forwards `job.request_token` as
+`Authorization: Bearer` on the completion callback, so flipping the default
+would silently break callback auth for every existing deployment.
+
+```python
+job = Job(request_token=raw_jwt, store_raw_token=False)
+# job.request_token is None; job.request_token_hash is sha256(raw_jwt).hexdigest()
+```
+
+Setting `store_raw_token=False` requires the completion callback to
+authenticate with a **service credential** instead of replaying the caller's
+token — which also removes a token-replay surface as a side benefit.
+
+`store_raw_token` is threaded through every job-creation call site, all
+defaulting `True`:
+
+- `Job(..., store_raw_token=False)` — the field itself; `__post_init__`
+  does the hash-and-clear transform.
+- `JobRunner.enqueue_task(..., store_raw_token=False)` — forwarded straight
+  into the `Job` it builds.
+- `VarcoRouter._store_raw_token = False` — a router-level `ClassVar` read by
+  `router.base._submit_job()` when it auto-populates the `Job` for
+  async-offloaded (`?with_async=true`) CRUD/custom routes. Set it once on
+  the router class rather than per-request.
+
+```python
+class OrderRouter(CRUDRouter[...]):
+    _prefix = "/orders"
+    _store_raw_token = False   # opt out for every async-offloaded route on this router
+```
+
+## Migration
+
+**One** Alembic revision for the job table
+(`xxxx_job_lease_schedule_retention`), covering every column both phases
+need: `run_at`, `attempt`, `max_attempts`, `owner_id`, `lease_expires_at`,
+`lease_epoch`, `expires_at`, `request_issuer`, `request_subject`,
+`request_token_hash` — all nullable or server-defaulted (`lease_epoch` →
+`0`, `attempt` → `0`, `max_attempts` → `1`). No backfill needed; every new
+behaviour requires the caller to opt in. Three new indexes ride the same
+revision: `ix_varco_jobs_claim (status, run_at, created_at)` — note there was
+previously **no index at all** on `status`, so this is a free performance fix
+— `ix_varco_jobs_lease (status, lease_expires_at)`, and
+`ix_varco_jobs_expires (expires_at)` for the retention sweep. Build them
+`CONCURRENTLY` on a live Postgres table.
+
+⚠️ This repository does not ship an Alembic environment for its own
+infrastructure tables — see `technical_docs/features/crypto-shredding.md`.
+Generate the revision from `jobs_metadata` via `autogenerate`.
+
+## Pitfalls
+
+| Pitfall | Fix |
+|---|---|
+| Long job killed at 5 minutes | Enable leases (`lease_ttl=`) so the poller judges liveness by lease expiry, not wall-clock age |
+| Stalled worker resumes and overwrites a completed result | Pass `expected_epoch=` on every write; catch `StaleLeaseError` and abort |
+| External `AbstractJobStore` subclass breaks after upgrading | Add the `owner_id`/`lease_ttl` kwargs to your `try_claim()` override — `renew()`/`reap_expired_leases()` are concrete but raise `NotImplementedError` until you override them |
+| Retention sweep starves the connection pool | Chunk with `delete_where(..., limit=1000)` in a loop, not one unbounded call |
+| Raw JWT readable in the jobs table at rest | `store_raw_token=False` + authenticate callbacks with a service credential |
+| Long-running unleased job killed at `stale_threshold` although leases are enabled | Unleased RUNNING jobs are always governed by the age check, never by lease reaping — adopt `lease_ttl` on every claim to switch it to lease-based liveness, or raise `stale_threshold` |

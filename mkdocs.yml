@@ -84,10 +84,20 @@ nav:
   - Features:
       - RouteGuard: features/route-guard.md
       - Generic Router: features/generic-router.md
+      - Custom Routes: features/custom-routes.md
+      - Composite Deployment: features/composite-deployment.md
       - Casbin Authorization: features/casbin-authorization.md
       - OPA Backend (Design): features/opa-design.md
       - JWT Claim Transformer: features/jwt-claim-transformer.md
       - Token Profiles: features/token-profiles.md
       - OTel Auto-Attributes: features/observability-attributes.md
       - Database Auditing: features/database-auditing.md
+      - Dead Letter Queues: features/dead-letter-queues.md
+      - Job Scheduling & Leases: features/job-scheduling-and-leases.md
+      - Distributed Locks: features/distributed-locks.md
+      - Crypto-Shredding: features/crypto-shredding.md
+      - Postgres RLS: features/postgres-rls.md
+      - A2A Surface: features/a2a-surface.md
+  - Known Issues:
+      - Plan 002 Follow-ups: known-issues/plan-002-followups.md
   - API Reference: reference/

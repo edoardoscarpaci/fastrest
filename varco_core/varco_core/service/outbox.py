@@ -98,12 +98,16 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Sequence
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, ClassVar, Sequence
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event
 from varco_core.event.serializer import JsonEventSerializer
+
+if TYPE_CHECKING:
+    from varco_core.event.dlq import AbstractDeadLetterQueue
+    from varco_core.resilience import RetryPolicy
 
 _logger = logging.getLogger(__name__)
 
@@ -181,6 +185,21 @@ class OutboxEntry:
     # UTC creation time — useful for monitoring stale entries.
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    # Attempt tracking (Plan 005 Phase 3, U-6) — all defaulted so
+    # from_event() and every existing construction site are unaffected.
+    attempts: int = 0
+    """Total relay publish attempts made so far. ``0`` until the first
+    failure — matches a never-retried entry's implicit state today."""
+
+    last_error: str | None = None
+    """``str(exc)`` from the most recent publish failure. ``None`` until the
+    first failure."""
+
+    next_attempt_at: datetime | None = None
+    """Earliest time the relay should retry this entry. ``None`` means
+    "eligible immediately" — today's unconditional-retry behaviour when no
+    ``retry_policy`` backs off the relay."""
+
     @classmethod
     def from_event(
         cls,
@@ -243,6 +262,11 @@ class OutboxRepository(ABC):
                        have its own repository instance.
     Async safety:   ✅ All methods are ``async def``.
     """
+
+    # One-time "does not support attempt tracking" warning per repository
+    # class — module-wide so a long-lived process logs it exactly once even
+    # across multiple relay/repository instances of the same class.
+    _mark_failed_unsupported_warned: ClassVar[set[type]] = set()
 
     @abstractmethod
     async def save(self, entry: OutboxEntry) -> None:
@@ -345,6 +369,55 @@ class OutboxRepository(ABC):
               deleted it first.
         """
 
+    async def mark_failed(
+        self,
+        entry_id: UUID,
+        *,
+        attempts: int,
+        next_attempt_at: datetime | None,
+        error: str,
+    ) -> None:
+        """
+        Record a failed publish attempt — bumps ``attempts``,
+        ``next_attempt_at``, and ``last_error`` (Plan 005 Phase 3, U-6).
+
+        **Concrete, not abstract** — an ``OutboxRepository`` subclass written
+        before this method existed keeps importing and working unmodified.
+        The default implementation here does nothing durable: it logs a
+        one-time warning per repository class and returns, which means the
+        relay degrades to today's unbounded-retry behaviour (an entry is
+        never dead-lettered by attempt count on a repo that doesn't override
+        this) rather than crashing.
+
+        Override this in a backend repository (``varco_sa``, ``varco_beanie``)
+        to persist an ``UPDATE ... SET attempts = ..., next_attempt_at = ...,
+        last_error = ...`` so attempt tracking survives a relay restart.
+
+        Args:
+            entry_id:        The ``OutboxEntry.entry_id`` that failed to publish.
+            attempts:        New total attempt count (including this failure).
+            next_attempt_at: Earliest time the relay should retry, computed
+                             from the caller's ``RetryPolicy``. ``None`` if
+                             the caller has no backoff policy.
+            error:           ``str(exc)`` from the failure.
+
+        Edge cases:
+            - Default implementation NEVER raises — a repository that cannot
+              track attempts must not break the relay's failure path.
+            - The one-time warning is keyed by repository class, not
+              instance, so it is not repeated per relay tick.
+        """
+        cls = type(self)
+        if cls not in OutboxRepository._mark_failed_unsupported_warned:
+            OutboxRepository._mark_failed_unsupported_warned.add(cls)
+            _logger.warning(
+                "%s does not support attempt tracking (no mark_failed() "
+                "override) — OutboxRelay falls back to unbounded retry for "
+                "this repository. Override mark_failed() to persist "
+                "attempts/next_attempt_at/last_error.",
+                cls.__name__,
+            )
+
 
 # ── OutboxRelay ───────────────────────────────────────────────────────────────
 
@@ -414,6 +487,9 @@ class OutboxRelay:
         serializer: JsonEventSerializer | None = None,
         poll_interval: float = _DEFAULT_POLL_INTERVAL,
         batch_size: int = _DEFAULT_BATCH_SIZE,
+        retry_policy: RetryPolicy | None = None,
+        dlq: AbstractDeadLetterQueue | None = None,
+        max_attempts: int | None = None,
     ) -> None:
         """
         Args:
@@ -425,15 +501,40 @@ class OutboxRelay:
                             balance event delivery latency vs DB load.
             batch_size:     Max entries to fetch per polling cycle.  Tune to
                             balance memory usage vs throughput.
+            retry_policy:   ``RetryPolicy`` used to compute ``next_attempt_at``
+                            backoff on publish failure (Plan 005 Phase 3, U-6).
+                            ``None`` (default) reproduces today's behaviour
+                            byte-for-byte: unbounded retry with no attempt
+                            counter, no backoff — every tick retries every
+                            pending entry. Consider
+                            ``RetryPolicy.durable_delivery()``.
+            dlq:            ``AbstractDeadLetterQueue`` entries are pushed to
+                            once ``attempts >= max_attempts`` (and, if wired,
+                            for a payload that fails to deserialize —
+                            see ``_relay_entry``). ``None`` — no DLQ; a
+                            poison entry (bad payload) is still deleted (as
+                            today) but silently, and ``max_attempts`` cannot
+                            be set (see ``ValueError`` below).
+            max_attempts:   Once an entry's ``attempts`` reaches this value,
+                            it is pushed to ``dlq`` and deleted so the stream
+                            unblocks. ``None`` (default) — never dead-letter
+                            by attempt count (unbounded retry, whether or not
+                            ``retry_policy`` is set).
 
         Raises:
             ValueError: If ``poll_interval`` is not positive.
             ValueError: If ``batch_size`` is not positive.
+            ValueError: If ``max_attempts`` is set but ``dlq`` is not —
+                deleting a poison entry with nowhere to put it is silent
+                data loss, so this configuration is refused outright.
 
         Edge cases:
             - Very small ``poll_interval`` (e.g. 0.01) increases DB load
               significantly for low-volume systems.  Use at least 0.1 in
               production; lower values are only useful for integration tests.
+            - ``retry_policy`` set, ``max_attempts=None`` — attempts are
+              tracked and back off, but an entry is never dead-lettered by
+              attempt count (still unbounded retry, just paced).
         """
         if poll_interval <= 0:
             raise ValueError(
@@ -442,6 +543,13 @@ class OutboxRelay:
             )
         if batch_size <= 0:
             raise ValueError(f"batch_size must be positive, got {batch_size!r}.")
+        if max_attempts is not None and dlq is None:
+            raise ValueError(
+                "OutboxRelay: max_attempts is set but dlq is None. Deleting a "
+                "poison entry after exhausting attempts with nowhere to put "
+                "it would be silent data loss — pass a dlq= to enable "
+                "max_attempts, or omit max_attempts for unbounded retry."
+            )
 
         self._outbox = outbox
         self._bus = bus
@@ -450,6 +558,9 @@ class OutboxRelay:
         self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
         self._poll_interval = poll_interval
         self._batch_size = batch_size
+        self._retry_policy = retry_policy
+        self._dlq = dlq
+        self._max_attempts = max_attempts
 
         # Lazy-created inside start() so the Lock is always bound to the
         # running event loop.  Avoids "got Future attached to a different loop".
@@ -575,9 +686,21 @@ class OutboxRelay:
             # Nothing to do this tick — common case in low-traffic systems.
             return
 
-        _logger.debug("OutboxRelay: relaying %d pending entries.", len(entries))
+        # Client-side filter for backed-off entries (Plan 005 Phase 3, U-6).
+        # A universal fallback that needs no get_pending() signature change —
+        # works with every existing OutboxRepository implementation, at the
+        # cost of still fetching (but not publishing) not-yet-due entries.
+        now = datetime.now(timezone.utc)
+        due_entries = [
+            e for e in entries if e.next_attempt_at is None or e.next_attempt_at <= now
+        ]
 
-        for entry in entries:
+        if not due_entries:
+            return
+
+        _logger.debug("OutboxRelay: relaying %d pending entries.", len(due_entries))
+
+        for entry in due_entries:
             await self._relay_entry(entry)
 
     async def _relay_entry(self, entry: OutboxEntry) -> None:
@@ -587,12 +710,31 @@ class OutboxRelay:
         Args:
             entry: The outbox entry to relay.
 
+        DESIGN: dead-lettering deletes the entry (Plan 005 Phase 3, U-6)
+          ✅ Per-tenant/per-channel FIFO means a single poison row stops the
+             whole stream — the exact failure U-6 §1 names. Deleting after a
+             successful DLQ push unblocks the stream.
+          ✅ ``push()`` must never raise (ABC contract) — but if it somehow
+             reports failure without raising, do NOT delete: losing the
+             entry as a side effect of a DLQ failure would be worse than
+             leaving a poison row in place.
+          ❌ The event is no longer replayable from the outbox itself once
+             dead-lettered — only from the DLQ (hence Step 42's durable
+             `SADeadLetterQueue`, not the default in-memory deque).
+
         Edge cases:
-            - Deserialization failure (bad payload bytes) is logged at ERROR
-              level.  The entry is deleted anyway — a bad payload will never
-              succeed on retry, so leaving it causes infinite retry loops.
-            - If ``bus.publish()`` raises, the entry is NOT deleted and will
-              be retried on the next tick.
+            - Deserialization failure (bad payload bytes): dead-lettered
+              first (``source=OUTBOX_RELAY``, ``event=None``,
+              ``payload=entry.payload``) when a ``dlq`` is wired, then
+              deleted — today it is deleted silently; this is strictly more
+              information, never less.
+            - If ``bus.publish()`` raises and no ``retry_policy`` is
+              configured, behaviour is byte-identical to today: log a
+              warning, leave the entry untouched, retry next tick.
+            - If ``bus.publish()`` raises and a ``retry_policy`` is
+              configured, ``attempts``/``next_attempt_at`` are recorded via
+              ``mark_failed()``; once ``attempts >= max_attempts`` the entry
+              is dead-lettered and deleted.
             - ``asyncio.CancelledError`` from ``bus.publish()`` propagates.
         """
         # Deserialize the payload back to a typed Event so the bus can
@@ -600,8 +742,8 @@ class OutboxRelay:
         try:
             event = self._serializer.deserialize(entry.payload)
         except Exception as exc:  # noqa: BLE001
-            # Unrecoverable bad payload — delete and move on.  Keeping this
-            # entry would cause an infinite retry loop.
+            # Unrecoverable bad payload — dead-letter first (if wired), then
+            # delete. Keeping this entry would cause an infinite retry loop.
             _logger.error(
                 "OutboxRelay: failed to deserialize entry %s (type=%s): %s — "
                 "deleting unrecoverable entry.",
@@ -610,6 +752,8 @@ class OutboxRelay:
                 exc,
                 exc_info=True,
             )
+            if self._dlq is not None:
+                await self._push_to_dlq(entry, exc, attempts=entry.attempts + 1)
             try:
                 await self._outbox.delete(entry.entry_id)
             except Exception as del_exc:  # noqa: BLE001
@@ -628,15 +772,7 @@ class OutboxRelay:
             # Task cancellation — propagate immediately; do not delete entry.
             raise
         except Exception as exc:  # noqa: BLE001
-            _logger.warning(
-                "OutboxRelay: publish failed for entry %s (type=%s, channel=%s): %s — "
-                "will retry on next tick.",
-                entry.entry_id,
-                entry.event_type,
-                entry.channel,
-                exc,
-                exc_info=True,
-            )
+            await self._handle_publish_failure(entry, exc)
             return
 
         # Delete AFTER successful publish.  If this delete fails, the event
@@ -652,6 +788,102 @@ class OutboxRelay:
                 exc,
                 exc_info=True,
             )
+
+    async def _handle_publish_failure(self, entry: OutboxEntry, exc: Exception) -> None:
+        """
+        Handle a ``bus.publish()`` failure — the byte-identical-to-today path
+        when no ``retry_policy`` is configured, or the attempt-tracking /
+        dead-letter path when one is (Plan 005 Phase 3, U-6).
+        """
+        if self._retry_policy is None:
+            # Byte-identical to today — no attempt tracking, unconditional
+            # retry next tick.
+            _logger.warning(
+                "OutboxRelay: publish failed for entry %s (type=%s, channel=%s): %s — "
+                "will retry on next tick.",
+                entry.entry_id,
+                entry.event_type,
+                entry.channel,
+                exc,
+                exc_info=True,
+            )
+            return
+
+        new_attempts = entry.attempts + 1
+
+        if self._max_attempts is not None and new_attempts >= self._max_attempts:
+            _logger.error(
+                "OutboxRelay: entry %s (type=%s) exhausted %d attempts — "
+                "dead-lettering and deleting to unblock the stream.",
+                entry.entry_id,
+                entry.event_type,
+                new_attempts,
+            )
+            await self._push_to_dlq(entry, exc, attempts=new_attempts)
+            try:
+                await self._outbox.delete(entry.entry_id)
+            except Exception as del_exc:  # noqa: BLE001
+                _logger.warning(
+                    "OutboxRelay: could not delete dead-lettered entry %s: %s",
+                    entry.entry_id,
+                    del_exc,
+                )
+            return
+
+        next_attempt_at = datetime.now(timezone.utc) + timedelta(
+            seconds=self._retry_policy.compute_delay(new_attempts - 1)
+        )
+
+        # Mutate the in-hand entry so a caller inspecting the same object
+        # reference (e.g. an in-memory test double whose get_pending() shares
+        # object identity with its internal storage) observes the update
+        # immediately — the durable source of truth is still mark_failed()'s
+        # persisted write for real backends. Frozen dataclass; object.__setattr__
+        # is the established escape hatch used elsewhere in this codebase.
+        object.__setattr__(entry, "attempts", new_attempts)
+        object.__setattr__(entry, "last_error", str(exc))
+        object.__setattr__(entry, "next_attempt_at", next_attempt_at)
+
+        try:
+            await self._outbox.mark_failed(
+                entry.entry_id,
+                attempts=new_attempts,
+                next_attempt_at=next_attempt_at,
+                error=str(exc),
+            )
+        except Exception as mark_exc:  # noqa: BLE001
+            _logger.warning(
+                "OutboxRelay: mark_failed() raised for entry %s — attempt "
+                "tracking may be inconsistent for this tick: %s",
+                entry.entry_id,
+                mark_exc,
+                exc_info=True,
+            )
+
+    async def _push_to_dlq(
+        self, entry: OutboxEntry, exc: Exception, *, attempts: int
+    ) -> None:
+        """Build and push a ``DeadLetterEntry`` for a poison/exhausted
+        outbox entry. ``push()`` must never raise (ABC contract) — any
+        failure here is the DLQ implementation's own responsibility to
+        swallow and log."""
+        from varco_core.event.dlq import DeadLetterEntry, DeadLetterSource
+
+        if self._dlq is None:
+            return
+
+        dead_letter = DeadLetterEntry(
+            event=None,
+            channel=entry.channel,
+            handler_name="OutboxRelay",
+            error_type=type(exc).__name__,
+            error_message=str(exc),
+            attempts=attempts,
+            source=DeadLetterSource.OUTBOX_RELAY,
+            source_ref=str(entry.entry_id),
+            payload=entry.payload,
+        )
+        await self._dlq.push(dead_letter)
 
     def __repr__(self) -> str:
         return (
