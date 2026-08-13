@@ -69,6 +69,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from varco_core.service.audit import AuditEntry, AuditRepository
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -146,6 +147,9 @@ class AuditEntryModel(_AuditBase):
 
 # Expose the metadata so users can wire it into Alembic target_metadata.
 audit_metadata = _AuditBase.metadata
+
+
+_register_fw_metadata("varco_sa.audit", audit_metadata)
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────

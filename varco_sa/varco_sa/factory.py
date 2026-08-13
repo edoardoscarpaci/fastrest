@@ -55,6 +55,7 @@ from varco_core.meta import (
     UniqueConstraint as DomainUniqueConstraint,
 )
 from varco_core.model import DomainModel
+from varco_core.tenancy.settings import TenantIsolation, TenantScope
 
 # TYPE_CHECKING import only — cryptography is optional; FieldEncryptor is
 # imported for annotation purposes only, never at runtime in this module.
@@ -232,6 +233,8 @@ class SAModelFactory:
         domain_cls: type[D],
         encryptor: FieldEncryptor | None = None,
         tenant_id_field: str | None = None,
+        *,
+        isolation: TenantIsolation | str = TenantIsolation.SHARED,
     ) -> tuple[type, _SAAutoMapper[D, Any]]:
         """
         Generate (or return cached) SA ORM class and mapper for ``domain_cls``.
@@ -253,6 +256,19 @@ class SAModelFactory:
                              field and passes it as ``context`` to the
                              encryptor — enabling ``TenantAwareEncryptorRegistry``
                              to select per-tenant keys.  Example: ``"tenant_id"``.
+            isolation:      ``TenantIsolation`` (Plan 007, RD-3). Defaulted
+                            ``SHARED`` — byte-identical to today's behaviour:
+                            the generated ``__table__.schema`` is ``None``.
+                            Under ``TenantIsolation.SCHEMA``, a ``TENANT``-
+                            scoped entity's table carries the symbolic
+                            schema token (``varco_sa.tenancy.router.
+                            SYMBOLIC_SCHEMA_TOKEN``, resolved per-session by
+                            ``SASchemaRouter``); a ``GLOBAL``-scoped entity
+                            never does, regardless of ``isolation`` — it
+                            lives in the untranslated default schema so it
+                            can be joined to tenant tables in one
+                            transaction (a ``SCHEMA``-only advantage over
+                            ``DATABASE``).
 
         Returns:
             ``(generated_orm_class, configured_mapper)``
@@ -277,7 +293,8 @@ class SAModelFactory:
             all_cols = {"id": pk_col, **non_pk_cols}
             pk_attrs = ["id"]
 
-        table_args = self._build_table_args(meta)
+        symbolic_schema = self._symbolic_schema_for(meta, isolation)
+        table_args = self._build_table_args(meta, schema=symbolic_schema)
 
         orm_attrs: dict[str, Any] = {
             "__tablename__": meta.table,
@@ -451,15 +468,62 @@ class SAModelFactory:
         ]
 
     @staticmethod
-    def _build_table_args(meta: ParsedMeta) -> tuple:
-        """Translate domain constraints to SA ``__table_args__`` entries."""
+    def _build_table_args(
+        meta: ParsedMeta, *, schema: str | None = None
+    ) -> tuple | dict:
+        """
+        Translate domain constraints (+ optional symbolic schema, Plan 007
+        RD-3) to SA ``__table_args__`` entries.
+
+        Args:
+            meta:   Parsed metadata — supplies table-level constraints.
+            schema: Symbolic schema token to stamp via a trailing kwargs
+                    dict (``{"schema": schema}``), or ``None`` (today's
+                    default — no ``schema`` entry at all, so
+                    ``__table__.schema`` stays ``None``).
+        """
         args: list[Any] = []
         for c in meta.constraints:
             if isinstance(c, DomainUniqueConstraint):
                 args.append(sa.UniqueConstraint(*c.fields, name=c.name))
             elif isinstance(c, DomainCheckConstraint):
                 args.append(sa.CheckConstraint(c.condition, name=c.name))
-        return tuple(args) if args else ()
+
+        if schema is None:
+            return tuple(args) if args else ()
+
+        # SQLAlchemy accepts __table_args__ as a bare kwargs dict, or a
+        # tuple of positional args with a trailing kwargs dict.
+        if args:
+            return (*args, {"schema": schema})
+        return {"schema": schema}
+
+    @staticmethod
+    def _symbolic_schema_for(
+        meta: ParsedMeta, isolation: TenantIsolation | str
+    ) -> str | None:
+        """
+        Return the symbolic schema token for this table, or ``None``.
+
+        ``None`` under ``TenantIsolation.SHARED`` (byte-identical default)
+        and for any ``TenantScope.GLOBAL`` entity regardless of isolation
+        (RD-3/RD-10 — global tables stay in the untranslated default
+        schema). The token itself (``varco_sa.tenancy.router.
+        SYMBOLIC_SCHEMA_TOKEN``) is resolved per-session by
+        ``SASchemaRouter``, never a literal schema name — the factory has
+        no notion of which real tenant schema a given session will bind to.
+        """
+        resolved = TenantIsolation(isolation)
+        if resolved != TenantIsolation.SCHEMA:
+            return None
+        if meta.tenant_scope != TenantScope.TENANT:
+            return None
+
+        # Imported lazily to avoid a hard import-order requirement between
+        # varco_sa.factory and varco_sa.tenancy.router at module load time.
+        from varco_sa.tenancy.router import SYMBOLIC_SCHEMA_TOKEN
+
+        return SYMBOLIC_SCHEMA_TOKEN
 
     # ── Relationship builders ─────────────────────────────────────────────────
 

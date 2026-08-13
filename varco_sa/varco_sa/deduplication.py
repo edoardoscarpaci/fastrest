@@ -93,6 +93,7 @@ from sqlalchemy import Column, DateTime, MetaData, Table
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from varco_core.event.deduplication import AbstractDeduplicator
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -419,6 +420,9 @@ class SADeduplicator(AbstractDeduplicator):
             f"engine={self._engine!r}, "
             f"ttl_seconds={self._config.ttl_seconds})"
         )
+
+
+_register_fw_metadata("varco_sa.deduplication", dedup_metadata)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

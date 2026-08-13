@@ -94,6 +94,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from varco_core.service.inbox import InboxEntry, InboxRepository
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -173,6 +174,9 @@ class InboxEntryModel(_InboxBase):
 
 # Expose the metadata so users can wire it into Alembic target_metadata.
 inbox_metadata = _InboxBase.metadata
+
+
+_register_fw_metadata("varco_sa.inbox", inbox_metadata)
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────

@@ -47,7 +47,7 @@ from __future__ import annotations
 import io
 from typing import TYPE_CHECKING
 
-from sqlalchemy import MetaData, create_engine
+from sqlalchemy import MetaData, create_mock_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.schema import CreateTable
 
@@ -63,6 +63,7 @@ if TYPE_CHECKING:
 def get_target_metadata(
     *domain_classes: type[DomainModel],
     base: type[DeclarativeBase] | None = None,
+    include_framework: bool = False,
 ) -> MetaData:
     """
     Return the ``MetaData`` covering the given domain classes.
@@ -80,6 +81,15 @@ def get_target_metadata(
                          When provided, ``base.metadata`` is also included —
                          every table defined on any class that inherits from
                          ``base`` appears in the result.
+        include_framework: When ``True``, merge ``varco_sa.metadata.framework_metadata()``
+                         (outbox, inbox, jobs, sagas, conversation, dedup,
+                         audit, dlq, encryption keys) into the result — the
+                         single-branch escape hatch documented in Plan 006's
+                         D3 (an app that does not want the packaged ``varco``
+                         Alembic branch). Defaults to ``False`` because
+                         Phase 2's ``varco`` branch owns those tables by
+                         default — including them here as well would make
+                         app-side autogenerate try to re-create them.
 
     Returns:
         A ``MetaData`` object containing all relevant ``Table`` definitions.
@@ -124,14 +134,20 @@ def get_target_metadata(
         # Copy the Table object into the combined MetaData.
         # tometadata() returns a Table bound to the target MetaData — safe
         # to call multiple times on the same Table (idempotent per MetaData).
-        orm_cls.__table__.tometadata(combined)
+        orm_cls.__table__.to_metadata(combined)
 
     # Optionally include all tables from a hand-crafted DeclarativeBase
     if base is not None:
         for table in base.metadata.tables.values():
             # tometadata() deduplicates — safe even if the same table appeared
             # via domain_classes above
-            table.tometadata(combined)
+            table.to_metadata(combined)
+
+    if include_framework:
+        from varco_sa.metadata import framework_metadata
+
+        for table in framework_metadata().tables.values():
+            table.to_metadata(combined)
 
     return combined
 
@@ -190,37 +206,40 @@ def print_create_ddl(
         #     ...
         # );
 
-    Thread safety:  ✅ Pure function — creates a temporary in-memory engine.
-    Async safety:   ✅ Synchronous — uses ``create_engine``, not async variant.
+    Thread safety:  ✅ Pure function — creates a temporary mock engine.
+    Async safety:   ✅ Synchronous — uses ``create_mock_engine``, not async.
     """
     from varco_sa.factory import SAModelRegistry
 
-    # Use a throwaway in-memory dialect engine solely for DDL compilation.
-    # DESIGN: create_engine("dialect://") without a real URL is not supported —
-    # we use a mock strategy so no actual connection is ever opened.
+    # Use a throwaway "mock" engine solely for DDL compilation. No actual
+    # connection is ever opened — the mock engine's executor callback is
+    # invoked with each compiled statement instead of running it.
     #
-    # ``strategy="mock"`` + executor captures compiled DDL as strings without
-    # requiring a live database.  This is the standard SQLAlchemy pattern for
-    # offline DDL generation (used by Alembic itself in offline mode).
+    # DESIGN: ``sqlalchemy.create_mock_engine`` instead of
+    #   ``create_engine(..., strategy="mock", executor=...)``
+    #   ✅ ``strategy=``/``executor=`` on ``create_engine`` were removed in
+    #      SQLAlchemy 1.4+ — ``create_mock_engine`` is the current spelling
+    #      (source correction 1).
+    #   ✅ Still requires no live database connection — pure offline DDL
+    #      rendering, matching Alembic's own offline-mode recipe.
+    #   ❌ The executor callback receives compiled ``ClauseElement``/SQL
+    #      objects, not necessarily plain strings — we ``str()`` them.
     buf = io.StringIO()
 
-    def _capture(sql: str, *_args: object, **_kwargs: object) -> None:
+    def _capture(sql: object, *_args: object, **_kwargs: object) -> None:
         # Append each DDL statement to the string buffer
-        buf.write(str(sql))
+        buf.write(str(sql).strip())
         buf.write(";\n\n")
 
     # Build a mock engine for the requested dialect
-    engine = create_engine(
-        f"{dialect}://",
-        strategy="mock",
-        executor=_capture,
-    )
+    engine = create_mock_engine(f"{dialect}://", _capture)
 
     for domain_cls in domain_classes:
         orm_cls = SAModelRegistry.get(domain_cls)
-        # CreateTable compiles the Table to a CREATE TABLE statement
-        # for the target dialect without executing it
-        CreateTable(orm_cls.__table__).compile(dialect=engine.dialect)
+        # engine.execute() is what actually invokes the executor callback —
+        # merely calling CreateTable(...).compile() never triggers _capture
+        # (the second half of source correction 1's bug).
+        engine.execute(CreateTable(orm_cls.__table__))
 
     return buf.getvalue().strip()
 

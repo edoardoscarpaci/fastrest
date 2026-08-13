@@ -314,6 +314,47 @@ from varco_core.connection import (
     SSLConfig,
 )
 
+# NOTE: varco_core.migrator (DomainMigrator — data/field migration for
+# domain models) already owns the top-level names "MigrationError" and
+# "MigrationPlan" (imported above at line ~54) — an unrelated, pre-existing
+# concept from "schema migration" (this new varco_core.migration package).
+# To avoid a silent name collision at the package's top-level namespace,
+# schema-migration's MigrationError/MigrationPlan are NOT re-exported here;
+# import them explicitly from varco_core.migration instead:
+#     from varco_core.migration import MigrationError, MigrationPlan
+from varco_core.migration import (
+    AbstractMigrator,
+    InMemoryMigrator,
+    IrreversibleMigrationError,
+    MigrationBackendUnavailable,
+    MigrationLockTimeout,
+    MigrationReport,
+    MigrationSettings,
+    PendingMigrationsError,
+    Revision,
+)
+
+# ── Multitenancy (Plan 007) ─────────────────────────────────────────────────
+# Grep-checked for collisions against every existing top-level name before
+# export (the MigrationError/MigrationPlan lesson from Plan 006) — none of
+# these names were previously bound at the top level.
+from varco_core.tenancy import (
+    AbstractTenantCatalog,
+    AbstractTenantProvisioner,
+    DestructiveOperationRefused,
+    DynamicTenantUoWProvider,
+    ExternalTenantProvisioner,
+    StaticTenantCatalog,
+    TenancySettings,
+    TenantDescriptor,
+    TenantIsolation,
+    TenantIsolationError,
+    TenantNotFoundError,
+    TenantResourcePool,
+    TenantScope,
+    TenantStatus,
+)
+
 __all__ = [
     # ── Domain base ────────────────────────────────────────────────────────────
     "DomainModel",
@@ -368,6 +409,21 @@ __all__ = [
     "TenantUoWProvider",
     "current_tenant",
     "tenant_context",
+    # ── Multitenancy — isolation strategies & control plane (Plan 007) ──────────
+    "TenantIsolation",
+    "TenantScope",
+    "TenantStatus",
+    "TenancySettings",
+    "TenantDescriptor",
+    "AbstractTenantCatalog",
+    "StaticTenantCatalog",
+    "TenantNotFoundError",
+    "TenantIsolationError",
+    "TenantResourcePool",
+    "DynamicTenantUoWProvider",
+    "AbstractTenantProvisioner",
+    "ExternalTenantProvisioner",
+    "DestructiveOperationRefused",
     # ── Soft delete service ─────────────────────────────────────────────────────
     "SoftDeleteService",
     # ── Service type aliases ────────────────────────────────────────────────────
@@ -537,4 +593,16 @@ __all__ = [
     "OAuth2Config",
     "SaslConfig",
     "ConnectionSettings",
+    # ── Schema migrations (varco_core.migration) ────────────────────────────────
+    # MigrationError/MigrationPlan are NOT re-exported here — see the NOTE
+    # above the `from varco_core.migration import (...)` block.
+    "AbstractMigrator",
+    "MigrationReport",
+    "Revision",
+    "MigrationSettings",
+    "PendingMigrationsError",
+    "MigrationLockTimeout",
+    "IrreversibleMigrationError",
+    "MigrationBackendUnavailable",
+    "InMemoryMigrator",
 ]

@@ -400,6 +400,16 @@ class InMemoryDeadLetterQueue(AbstractDeadLetterQueue):
             self._lock = asyncio.Lock()
         return self._lock
 
+    @property
+    def entries(self) -> list[DeadLetterEntry]:
+        """
+        Snapshot of currently stored entries, oldest first.
+
+        Test-only convenience accessor (no lock — reads a ``deque``
+        snapshot). Production code should use ``pop_batch()``.
+        """
+        return list(self._entries)
+
     async def push(self, entry: DeadLetterEntry) -> None:
         """
         Append ``entry`` to the DLQ.

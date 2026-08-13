@@ -1,6 +1,6 @@
 [project]
 name          = "varco-fastapi"
-version       = "1.1.8"
+version       = "1.2.0"
 description   = "FastAPI adapter for varco — routing, auth middleware, job running, typed HTTP client, and DI wiring"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"

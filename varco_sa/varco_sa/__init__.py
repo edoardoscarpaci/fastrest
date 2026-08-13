@@ -70,6 +70,14 @@ from varco_sa.query.applicator import SQLAlchemyQueryApplicator
 from varco_sa.type_coercion import registry_from_sa_model
 from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
 from varco_sa.deduplication import SADeduplicator, SADedupConfig, dedup_metadata
+from varco_sa.audit import audit_metadata
+from varco_sa.dlq import dead_letters_metadata
+from varco_sa.encryption_store import encryption_metadata
+from varco_sa.metadata import (
+    framework_metadata,
+    framework_table_names,
+    register_framework_metadata,
+)
 
 __all__ = [
     # ── DI integration ────────────────────────────────────────────────────────
@@ -128,4 +136,11 @@ __all__ = [
     "SADeduplicator",
     "SADedupConfig",
     "dedup_metadata",
+    # ── Framework schema ──────────────────────────────────────────────────────
+    "framework_metadata",
+    "framework_table_names",
+    "register_framework_metadata",
+    "audit_metadata",
+    "dead_letters_metadata",
+    "encryption_metadata",
 ]

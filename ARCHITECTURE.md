@@ -716,6 +716,106 @@ pool_metrics(engine: AsyncEngine) → SAPoolMetrics
 SAFastrestApp.pool_metrics() → SAPoolMetrics  (convenience method on bootstrap object)
 ```
 
+### Schema Migrations (varco_core.migration + backends)
+
+```
+AbstractMigrator (ABC) — varco_core.migration.base
+  ├── async plan() → MigrationPlan                                    [abstract]
+  ├── async upgrade(target="heads", *, dry_run=False) → MigrationReport [abstract]
+  ├── async downgrade(target) → MigrationReport                       [abstract]
+  ├── async stamp(target="heads") → None                              [abstract]
+  ├── async check() → MigrationPlan   — plan() + raise if pending     [CONCRETE]
+  └── async close() → None            — no-op; engines override       [CONCRETE]
+        ↑
+        ├── AlembicMigrator      — varco_sa.migration.migrator   (needs varco-sa[migrations])
+        │     ├── __init__(engine, *, script_location=None, version_locations=(),
+        │     │            include_framework_branch=True, lock=None, settings=None)
+        │     ├── async adopt_framework_tables() → list[str]   — the ensure_table() bridge
+        │     └── headless Alembic (EnvironmentContext/MigrationContext — no env.py needed);
+        │          transaction_per_migration=True, compare_type=True
+        ├── BeanieMigrator       — varco_beanie.migration.migrator
+        │     └── __init__(db, registry, *, index_guard=None, index_mode="check",
+        │                  settings=None, verify_checksums=True, owner_id=None)
+        └── InMemoryMigrator     — varco_core.migration.inmemory  (standard unit-test double)
+
+Value objects (all @dataclass(frozen=True)) — varco_core.migration.base
+  ├── Revision(id, label, branch=None)      — branch="varco" for framework revisions
+  ├── MigrationPlan(current, pending)       — .is_empty, .format()
+  └── MigrationReport(applied, duration_s, skipped_locked=False)  — .format()
+
+MigrationSettings (frozen dataclass) — varco_core.migration.settings
+  └── from_env(env=None): mode="off" | on_failure="fail" | lock_key="varco:migrate"
+      | lock_timeout=30.0 | timeout=300.0 | target="heads" | dry_run=False
+      (VARCO_MIGRATE_MODE / _ON_FAILURE / _LOCK_KEY / _LOCK_TIMEOUT / _TIMEOUT
+       / _TARGET_REV / _DRY_RUN)
+
+MigrationError(Exception) — varco_core.migration.errors
+  ├── PendingMigrationsError(plan)              — carries the MigrationPlan
+  ├── MigrationLockTimeout(lock_key, waited_s)
+  ├── IrreversibleMigrationError                — Mongo migration with no down()
+  └── MigrationBackendUnavailable               — message names the pip install line
+
+Supporting surfaces
+  ├── varco_sa.migration.lock.migration_lock(engine, key, *, timeout, poll_interval, lock)
+  │     └── dedicated NullPool conn · SET LOCAL idle_in_transaction_session_timeout = 0
+  │          · SAXactAdvisoryLock.xact() · COMMIT IS the release
+  ├── varco_sa.migration.env_template: include_object · configure_kwargs()
+  ├── varco_sa.migration.ops: rls_upgrade(op, table, …) · rls_downgrade(op, table, …)
+  ├── varco_sa.metadata: framework_metadata() · framework_table_names()
+  │                       · register_framework_metadata(name, md)
+  ├── varco_beanie.migration: Migration (version/name/up/down) · MigrationRegistry
+  │                           (register/discover/ordered) · MigrationStore · IndexReconciler
+  ├── varco_fastapi.migrate.MigrationLifecycle(*migrators, settings=None)
+  │     └── structurally satisfies AbstractLifecycle; PREPENDED into VarcoLifespan
+  └── varco_core.cli: `varco migrate …` (entry-point group "varco.commands")
+```
+
+⚠️ `MigrationError` and `MigrationPlan` are **not** re-exported from `varco_core` — the
+pre-existing, unrelated `varco_core.migrator` (domain data/field migration) owns those
+top-level names. Import them from `varco_core.migration`.
+
+See `technical_docs/features/schema-migrations.md`.
+
+### Multitenancy (varco_core.tenancy + backends)
+
+```
+varco_core.tenancy                            ← contracts only, zero third-party deps
+  TenantIsolation(SHARED|SCHEMA|DATABASE) · TenantScope(TENANT|GLOBAL) · TenantStatus
+  TenancySettings.from_env() · TenantDescriptor
+  AbstractTenantCatalog · StaticTenantCatalog · CachedTenantCatalog
+  TenantResourcePool[T]                        — bounded LRU pool, lease-refcounted
+  DynamicTenantUoWProvider                     — new IUoWProvider (TenantUoWProvider untouched)
+  GlobalUoWProvider                            — distinct DI-token type, no ABC change
+  AbstractTenantProvisioner · ExternalTenantProvisioner
+  validate_service_scope() · tenancy_cache_key() · GlobalScopeReadOnlyError
+  control/  → TenantProvisionRequested/Deprovisioned · TenantCatalogChanged
+              TenantControlService · TenantProvisionConsumer (retry+DLQ by default)
+  fanout.py → TenantFanoutSupervisor           — one OutboxRelay/JobPoller/AuditConsumer
+                                                   child per active, pool-resident tenant
+  migration/fanout.py → TenantFanoutMigrator   — global run, then every tenant, sorted
+        ▲                                      ▲
+varco_sa.tenancy                        varco_beanie.tenancy
+  SASchemaRouter (schema_translate_map)   BeanieTenantPool · BeanieTenantBinding
+  SAEngineRegistry (per-tenant AsyncEngine) (per-tenant Document clones + init_beanie)
+  SASchemaProvisioner · SADatabaseProvisioner  BeanieDatabaseProvisioner (dropDatabase)
+  SATenantCatalog (varco_tenants, 10th table)  BeanieTenantCatalog
+  rls_check.assert_rls_enabled (skips GLOBAL)
+  global_scope (42501 → GlobalScopeReadOnlyError)
+  admin/  → SAAdminEngine, SADatabaseProvisioner    (control plane ONLY, RD-4)
+        ▲                                      ▲
+        └────────────── varco_fastapi.tenancy ─┘
+              TenancyLifecycle (stops supervisor before pool.aclose())
+              TenantResolutionMiddleware (checks status BEFORE pool.ensure())
+              build_tenant_router() · mount_tenant_admin() (RD-9, no env-var path)
+```
+
+`varco_fastapi.tenancy` imports only `varco_core.tenancy` — never `varco_sa`,
+`varco_beanie`, `sqlalchemy`, or `pymongo` (import-guard test). `varco_tenants` is the
+tenth framework table, picked up by the existing dynamic `0001_varco_framework_baseline`
+Alembic revision via `framework_metadata()` — no dedicated migration file.
+
+See `technical_docs/features/multitenancy.md`.
+
 ### WebSocket / SSE Push Adapters (varco_ws)
 
 ```

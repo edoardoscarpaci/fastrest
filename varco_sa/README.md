@@ -34,6 +34,12 @@ pip install "varco-sa[sqlite]"
 - **Alembic integration** — `get_target_metadata()` and `print_create_ddl()` helpers for migration scripts
 - **Schema Guard** — `SchemaGuard` detects drift between ORM metadata and the live database schema
 - **Query integration** — accepts `varco-core` `QueryParams` / `QueryBuilder` AST natively; translates to SQLAlchemy `where()` clauses
+- **Multitenancy** — `varco_sa.tenancy`: schema-per-tenant (`SASchemaRouter`, via
+  `schema_translate_map`) and database-per-tenant (`SAEngineRegistry`) isolation
+  strategies, the durable tenant catalog (`SATenantCatalog`), RLS assertion
+  (`assert_rls_enabled()`), and admin-confined cluster provisioning
+  (`varco_sa.tenancy.admin`) — see
+  [`technical_docs/features/multitenancy.md`](../technical_docs/features/multitenancy.md)
 
 ---
 
@@ -128,23 +134,104 @@ from varco_sa import print_create_ddl
 print(print_create_ddl(User, Post, dialect="postgresql"))
 ```
 
-### Infrastructure table migrations (job store, outbox, DLQ)
+> ⚠️ `print_create_ddl` was **broken on SQLAlchemy 2.x** until varco-sa 2.2.0 — it passed
+> the `strategy=`/`executor=` arguments to `create_engine()` that SQLAlchemy removed in
+> 1.4, so it raised `TypeError` unconditionally. It now uses
+> `sqlalchemy.create_mock_engine` and works on 2.0.
 
-⚠️ This package does not ship a checked-in Alembic environment for its own
-infrastructure tables (`varco_jobs`, `varco_outbox`, `varco_dead_letters`,
-`varco_encryption_keys`) — they are plain `Table`/`MetaData` objects (`jobs_metadata`,
-`outbox_metadata`, `dead_letters_metadata`) generated at import time, not
-ORM-mapped domain classes. Include them in your own application's Alembic
-`target_metadata` and let `autogenerate` produce the revision:
+### Migrations
+
+`varco-sa` 2.2.0 ships a full migration layer: an `AbstractMigrator` implementation
+wrapping Alembic, a packaged Alembic branch for varco's own tables, and a
+multi-pod-safe lock. Install the extra:
+
+```bash
+pip install "varco-sa[migrations]"      # adds alembic>=1.13
+```
+
+```python
+from varco_sa.migration import AlembicMigrator
+
+migrator = AlembicMigrator(engine, script_location="alembic")
+
+await migrator.plan()        # → MigrationPlan(current=..., pending=...)
+await migrator.upgrade()     # → applies both branches, under the lock
+```
+
+```bash
+varco migrate pending  -t myapp.db:migrator      # exit 1 if behind → CI gate
+varco migrate upgrade  -t myapp.db:migrator
+```
+
+**Two branches, so `upgrade heads` — plural.** `varco_sa` ships its own revisions inside
+the wheel (`varco_sa/migrations/versions/*`, `branch_labels=("varco",)`) covering all nine
+framework tables. `AlembicMigrator` appends that directory to `version_locations`
+automatically, so `pip install -U varco-sa` brings framework schema changes with it and
+the next `upgrade heads` applies them — nothing in your app repo changes. `alembic upgrade
+head` (singular) would apply only one branch.
+
+**Three lines in an existing `env.py`** so your own `autogenerate` skips framework tables:
 
 ```python
 # alembic/env.py
-from varco_sa.job_store import jobs_metadata
-from varco_sa.outbox import outbox_metadata
-from varco_sa.dlq import dead_letters_metadata
+from varco_sa.migration.env_template import include_object, configure_kwargs
 
-target_metadata = [get_target_metadata(User, Post), jobs_metadata, outbox_metadata, dead_letters_metadata]
+context.configure(
+    connection=connection,
+    target_metadata=target_metadata,
+    include_object=include_object,      # skip framework-owned tables
+    **configure_kwargs(),               # transaction_per_migration=True, compare_type=True
+)
 ```
+
+**`ensure_table()` trade-off.** Six classes (`SAJobStore`, `SAEncryptionKeyStore`,
+`SADeadLetterQueue`, `SASagaRepository`, `SAConversationStore`, `SADeduplicator`) ship an
+`ensure_table()` that calls `create_all(checkfirst=True)`. It is not deprecated — it is
+right for tests and demos — but it and migration management are **mutually exclusive per
+deployment**. Framework baseline revisions are idempotent so they never fail against an
+`ensure_table()`-built database, and an existing deployment bridges into migration
+management with **one** command, run once, before its first upgrade:
+
+```bash
+varco migrate adopt -t myapp.db:migrator     # stamps varco@head, executes no DDL
+```
+
+Order matters: **adopt, then upgrade.**
+
+**Single-branch escape hatch** for shops that will not vendor revisions:
+
+```python
+AlembicMigrator(engine, script_location="alembic", include_framework_branch=False)
+target_metadata = get_target_metadata(User, Post, include_framework=True)
+```
+
+**Auto-on-startup** is opt-in via `VARCO_MIGRATE_MODE` and
+`create_varco_app(migrations=migrator)` — see
+[`technical_docs/features/schema-migrations.md`](../technical_docs/features/schema-migrations.md)
+for the three modes, the lock mechanic, and the operations guidance. The recommended
+production posture is `check` on the pods plus a pre-deploy `varco migrate upgrade` job.
+
+### Framework metadata (the pre-migration path)
+
+If you are *not* using the packaged branch, `framework_metadata()` is the one thing to put
+in `env.py` — one merged `MetaData` covering all ten framework tables
+(`varco_outbox`, `varco_inbox`, `varco_jobs`, `varco_sagas`, `varco_conversation_turns`,
+`varco_dedup_log`, `varco_audit_log`, `varco_dead_letters`, `varco_encryption_keys`,
+`varco_tenants`):
+
+```python
+# alembic/env.py
+from varco_sa import framework_metadata, get_target_metadata
+
+target_metadata = [get_target_metadata(User, Post), framework_metadata()]
+```
+
+Each owning module self-registers at import time, so a framework table added in a future
+release is included automatically on upgrade — no per-table imports to maintain. The
+individual aliases are also exported now, including three that previously were not
+reachable from the public API at all: `audit_metadata`, `dead_letters_metadata`, and
+`encryption_metadata` (the `varco_encryption_keys` table had only a module-private
+`_metadata` before 2.2.0).
 
 Every column added by Plan 005 Phase 3/4 (`OutboxEntryModel.attempts`/`last_error`/
 `next_attempt_at`; `varco_jobs`'s ten new time/lease/retention/reference columns

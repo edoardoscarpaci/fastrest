@@ -56,6 +56,8 @@ import typing
 from enum import Enum
 from typing import Annotated, Any, TypeAlias, TypeVar
 
+from varco_core.tenancy.settings import TenantScope
+
 # ── CompositeKey type aliases ─────────────────────────────────────────────────
 #
 # Ergonomic aliases for composite primary key type hints.
@@ -662,6 +664,12 @@ class ParsedMeta:
     customize: Any  # Callable[[type], None] | None
     # DomainMigrator subclass (the class itself, not an instance) | None
     migrator: Any
+    # Plan 007 — per-entity multitenancy scope. Defaulted (TENANT) and
+    # appended last so every pre-existing positional construction of
+    # ParsedMeta stays valid; a defaulted field on a frozen dataclass is a
+    # deliberate exception to "no silent behaviour change" — the default
+    # itself is fail-closed (see meta_tenant_scope tests + CHANGELOG note).
+    tenant_scope: TenantScope = TenantScope.TENANT
 
     @property
     def is_composite_pk(self) -> bool:
@@ -792,6 +800,20 @@ class MetaReader:
         # not an instance). Only meaningful for VersionedDomainModel subclasses.
         migrator = getattr(meta_cls, "migrator", None)
 
+        # ── 8. Multitenancy scope (Plan 007) ────────────────────────────────
+        # Meta.tenant_scope absent -> TENANT (fail-closed default, see
+        # ParsedMeta.tenant_scope docstring); an invalid value raises
+        # ValueError naming the field rather than silently defaulting.
+        raw_tenant_scope = getattr(meta_cls, "tenant_scope", TenantScope.TENANT)
+        try:
+            tenant_scope = TenantScope(raw_tenant_scope)
+        except ValueError as exc:
+            raise ValueError(
+                f"{domain_cls.__name__}.Meta.tenant_scope={raw_tenant_scope!r} is "
+                f"not a valid TenantScope. Legal values are: "
+                f"{', '.join(s.value for s in TenantScope)}."
+            ) from exc
+
         return ParsedMeta(
             table=table,
             pk_type=pk_type,
@@ -805,6 +827,7 @@ class MetaReader:
             encrypted_fields=frozenset(encrypted_field_names),
             customize=customize,
             migrator=migrator,
+            tenant_scope=tenant_scope,
         )
 
     # ── Single PK extraction ──────────────────────────────────────────────────

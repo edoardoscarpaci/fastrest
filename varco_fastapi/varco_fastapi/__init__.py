@@ -196,6 +196,7 @@ from varco_fastapi.client import (
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 from varco_fastapi.lifespan import VarcoLifespan
+from varco_fastapi.migrate import MigrationLifecycle
 
 # ── Exceptions ────────────────────────────────────────────────────────────────
 from varco_fastapi.exceptions import add_exception_handlers
@@ -327,6 +328,7 @@ __all__ = [
     "OTelClientMiddleware",
     # Lifecycle
     "VarcoLifespan",
+    "MigrationLifecycle",
     # Exceptions
     "add_exception_handlers",
     # DI

@@ -96,6 +96,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from varco_core.service.outbox import OutboxEntry, OutboxRepository
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -172,6 +173,9 @@ class OutboxEntryModel(_OutboxBase):
 
 # Expose the metadata so users can wire it into Alembic target_metadata.
 outbox_metadata = _OutboxBase.metadata
+
+
+_register_fw_metadata("varco_sa.outbox", outbox_metadata)
 
 
 # ── Helper ─────────────────────────────────────────────────────────────────────

@@ -34,6 +34,12 @@ varco_casbin      — Casbin policy-engine authorization backend (ACL/RBAC/ABAC 
   global attribute registry labels every span and metric.
 - [Database auditing](features/database-auditing.md) — wiring `AuditLogMixin` +
   `AuditConsumer` to an append-only audit trail in `varco_sa` / `varco_beanie`.
+- [Schema migrations](features/schema-migrations.md) — the `AbstractMigrator` contract,
+  Alembic and MongoDB engines, the multi-pod lock, auto-on-startup postures
+  (`off`/`check`/`upgrade`), and the `varco migrate` CLI.
+- [Multitenancy](features/multitenancy.md) — selectable isolation strategies (shared/RLS,
+  schema-per-tenant, database-per-tenant), the dynamic tenant control plane
+  (REST + event-driven onboarding), and global/shared scope with the dual-UoW API.
 
 ## Building the docs
 

@@ -67,6 +67,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from varco_core.encryption_store import EncryptionKeyEntry
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:
     pass
@@ -108,6 +109,15 @@ _KEY_TABLE = Table(
     # Set when this entry has been crypto-shredded — tombstone, never deleted.
     Column("destroyed_at", DateTime(timezone=True), nullable=True),
 )
+
+# Public alias for Alembic ``target_metadata`` wiring (Plan 006 Phase 0, source
+# correction 2) — ``_metadata`` stays private so nothing internal moves; this
+# is the only externally reachable name for the ``varco_encryption_keys``
+# table's ``MetaData``.
+encryption_metadata = _metadata
+
+
+_register_fw_metadata("varco_sa.encryption_store", encryption_metadata)
 
 
 # ── SAEncryptionKeyStore ──────────────────────────────────────────────────────

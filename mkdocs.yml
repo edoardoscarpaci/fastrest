@@ -97,6 +97,8 @@ nav:
       - Distributed Locks: features/distributed-locks.md
       - Crypto-Shredding: features/crypto-shredding.md
       - Postgres RLS: features/postgres-rls.md
+      - Schema Migrations: features/schema-migrations.md
+      - Multitenancy: features/multitenancy.md
       - A2A Surface: features/a2a-surface.md
   - Known Issues:
       - Plan 002 Follow-ups: known-issues/plan-002-followups.md

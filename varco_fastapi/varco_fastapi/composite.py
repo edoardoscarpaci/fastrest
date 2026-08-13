@@ -44,6 +44,30 @@ DESIGN: mount pre-built apps vs. merge routers into one container
     settings) would collide, breaking the "different database, different
     environment" guarantee that is the whole point of this feature.
 
+Schema migrations in a composite
+--------------------------------
+No composite-level code is needed for correctness: because
+:class:`CompositeLifespan` drives each sub-app's own lifespan, each service's
+own ``MigrationLifecycle`` (:mod:`varco_fastapi.migrate`) runs with its own
+:class:`~varco_core.migration.MigrationSettings` against its own database,
+exactly as it would standalone.  Two operational properties follow and must be
+planned for:
+
+- **Startup time is the sum, not the max.**  Composite startup is serial by
+  design (fail-fast, so one service's failure aborts the process), which means
+  N services migrate one after another.  Budget ``N × VARCO_MIGRATE_TIMEOUT``
+  in the readiness probe's ``initialDelaySeconds``, not one timeout.
+- **Two services sharing one database converge on the same lock
+  automatically.**  The default lock key is the literal ``"varco:migrate"`` and
+  PostgreSQL advisory locks are already scoped per-database, so two composite
+  members pointed at the same DB serialize with no configuration at all.  Two
+  services on *different* databases never contend.  Set ``lock_key=`` /
+  ``VARCO_MIGRATE_LOCK_KEY`` only for schema-per-service setups that want finer
+  granularity.
+
+See ``technical_docs/features/schema-migrations.md`` for the full migration
+model, and ``technical_docs/features/composite-deployment.md`` for this module.
+
 Thread safety:  ⚠️ ``create_composite_app`` / ``build_service`` are build-time
                 only — call them during startup, not concurrently at runtime.
 Async safety:   ✅ :class:`CompositeLifespan` is an async context manager and

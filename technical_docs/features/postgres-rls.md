@@ -1,10 +1,17 @@
 # Postgres Row-Level Security: the InitPlan cliff, `SET LOCAL`, and two fail-open seams
 
-Plan 005, Phase 8 (gap U-5). Filed as a **report, not a request** — "we build
-RLS ourselves"; this document and `varco_sa/varco_sa/rls.py`'s two helpers are
-the deliverable, not a wired-in tenancy layer. Nothing here is applied to any
-generated table by default. RLS stays opt-in, per table, wired by the
-*application's own* Alembic revisions.
+Plan 005, Phase 8 (gap U-5). Originally filed as a **report, not a request** —
+"we build RLS ourselves"; `varco_sa/varco_sa/rls.py`'s two helpers remain a
+per-table, opt-in primitive, not something any generated table gets by
+default. RLS is wired by the *application's own* Alembic revisions, same as
+day one.
+
+Plan 007 (see [Multitenancy](multitenancy.md)) later added the actual
+tenancy **layer** this document once described as absent: `TenantIsolation.
+SHARED` (± `enforce_rls`) is one of three selectable isolation strategies,
+alongside the schema-per-tenant and database-per-tenant strategies §3
+below covers. RLS itself is unchanged by that — still assert-only, still
+per-table, still opt-in.
 
 ## 1. The InitPlan finding — the 150× cliff
 
@@ -102,37 +109,45 @@ transaction-scoped form is pooling-safe unconditionally, and the
 session-scoped form is only safe under a topology (direct connections, no
 transaction-mode pooler) that is easy to assume and expensive to get wrong.
 
-## 3. The `search_path` hazard
+## 3. Schema-per-tenant: the supported mechanism is `schema_translate_map`, not `search_path`
 
 `varco_sa/varco_sa/connection.py:236` sets `search_path` via
 `server_settings={"search_path": self.schema_name}` **once, at connection
 init time**, from a single deployment-wide `schema_name` setting. This is
-correct and sufficient for the topology varco ships today: **one schema per
+correct and sufficient for the topology it targets: **one schema per
 install**. It is not, and was never designed to be, a per-request or
 per-tenant routing mechanism.
 
-If a downstream consumer wants **schema-per-tenant** (a different isolation
-strategy from RLS — a dedicated Postgres schema per tenant instead of a
-shared table with a policy), setting `search_path` once at connection init is
-unsafe: `search_path` is ordinary session state, and under a pooled
-connection it has exactly the same leak shape as `SET` in §2 — a tenant's
-schema routing set on one borrow of a physical connection would apply to
-whatever the next logical caller runs on that same connection.
+**Schema-per-tenant is now implemented** (`TenantIsolation.SCHEMA`,
+Plan 007 — see [Multitenancy](multitenancy.md)), and the chosen routing
+mechanism is `varco_sa.tenancy.router.SASchemaRouter`, built on SQLAlchemy's
+**`schema_translate_map`** rather than `SET LOCAL search_path`:
 
-The two correct patterns for schema-per-tenant, neither of which is what
-`connection.py:236` does today:
+```python
+engine.execution_options(schema_translate_map={"tenant": "t_acme"})
+```
 
-- **`SET LOCAL search_path`** — the same transaction-scoped `set_config(...,
-  true)` primitive as §2, applied to `search_path` instead of a custom GUC.
-- **SQLAlchemy's `schema_translate_map`** — a per-`Connection`/`Session`
-  mapping that rewrites schema-qualified table references at the SQL-compile
-  layer, without touching the database session's `search_path` at all.
+`schema_translate_map` rewrites schema-qualified table references at the
+SQL-**compile** layer, per session — it never touches the database
+connection's session state at all, so it sidesteps the `SET`-vs-`SET LOCAL`
+pooling hazard from §2 entirely rather than needing the transaction-scoped
+form to stay safe. The decisive property over `SET LOCAL search_path`: a
+table whose ORM class carries no symbolic schema token simply is not
+translated, so a forgotten routing call **fails closed** — a compile/DB
+error, not a silent read of the wrong tenant's schema. `SET LOCAL
+search_path` would fail open on the same mistake: a session that never set
+it silently falls back to the default schema and returns **another
+tenant's rows, successfully**. That asymmetry is why `schema_translate_map`
+is the primary mechanism and `SET LOCAL search_path` is kept only as a
+documented, explicitly-opted-into escape hatch
+(`SASchemaRouter(mechanism="search_path")`) for raw `text()` SQL that
+`schema_translate_map` cannot reach — and even in that escape-hatch mode,
+`SASchemaRouter` always emits `set_config(..., true)` (transaction-scoped),
+**never** a bare session-scoped `SET`.
 
-**Verified: no `schema_translate_map` usage exists anywhere in this codebase
-today.** Schema-per-tenant is not implemented, and if it is ever added, it
-must not reuse the connection-init `search_path` assignment as its routing
-mechanism — that would silently reproduce the pooling hazard this section
-describes.
+**Raw `text()` SQL is not translated by `schema_translate_map`** — it must
+self-qualify its own schema. This is a real, only-partly-mitigable caveat;
+see [Multitenancy](multitenancy.md) for the full guidance.
 
 ## 4. `TenantAwareService._scoped_params` fails open
 
@@ -148,21 +163,87 @@ missed. `TenantAwareService` filters what passes through it and enforces
 nothing below the service layer.
 
 Postgres RLS is the correct **defense-in-depth** answer to this specific
-fail-open surface: a policy applied via `enable_rls_ddl()` enforces tenant
-scoping at the database itself, so a query that bypasses
-`TenantAwareService` still cannot see another tenant's rows — the isolation
-no longer depends on every code path remembering to filter correctly. RLS
-does not replace `TenantAwareService` (the mixin's query shaping, scoped
-pagination, etc. are still needed at the application layer); it closes the
-gap for the paths that skip it.
+fail-open surface under `TenantIsolation.SHARED` (± RLS): a policy applied
+via `enable_rls_ddl()` enforces tenant scoping at the database itself, so a
+query that bypasses `TenantAwareService` still cannot see another tenant's
+rows — the isolation no longer depends on every code path remembering to
+filter correctly. RLS does not replace `TenantAwareService` (the mixin's
+query shaping, scoped pagination, etc. are still needed at the application
+layer); it closes the gap for the paths that skip it.
 
-## Using the helpers
+The **structural** fix for the same fail-open surface is `TenantIsolation.
+SCHEMA` or `TenantIsolation.DATABASE` (§3 above, [Multitenancy](
+multitenancy.md)): under those strategies a query that bypasses
+`TenantAwareService` still cannot reach another tenant's rows, because
+there *is* no other tenant's rows reachable from the routed
+schema/connection — isolation is enforced by what the query can even see,
+not by an application-layer filter or a database policy evaluated per row.
+Pick RLS when tenants must stay in one shared schema (unbounded tenant
+count, cheap to run); pick `SCHEMA`/`DATABASE` when a wrong query must
+*error* rather than merely be *filtered*.
+
+`assert_rls_enabled()` (`varco_sa.tenancy.rls_check`,
+`TenancySettings(enforce_rls=True)`) is the automated version of "did I
+apply RLS to every table that needs it" — it reads `pg_policies`/
+`pg_class.relrowsecurity` and raises naming any table missing a policy. It
+**skips `TenantScope.GLOBAL` tables and the ten framework tables** rather
+than flagging them: a shared reference table legitimately carries no
+`tenant_id` and needs no RLS policy, and without the skip the assertion
+would report every such table as "missing a policy" and be unusable in any
+deployment with global data. See [Multitenancy](multitenancy.md) for the
+full `TenantScope` model.
+
+## Applying RLS via a migration
+
+RLS is DDL. It must be ordered after table creation and reviewed like any
+other schema change, so it belongs in a **revision** — never in a startup
+hook. Nothing in varco applies an RLS policy automatically, and there is no
+mode, flag, or env var that makes it do so.
+
+`varco_sa.migration.ops` provides the two operations (Plan 006 Phase 6):
+
+```python
+from alembic import op
+from varco_sa.migration.ops import rls_upgrade, rls_downgrade
+
+def upgrade() -> None:
+    rls_upgrade(op, "orders")
+
+def downgrade() -> None:
+    rls_downgrade(op, "orders")
+```
+
+`rls_upgrade(op, table, *, tenant_column="tenant_id", policy_name=None,
+setting="rls.tenant_id")` issues `op.execute()` for each statement
+`enable_rls_ddl()` builds — it does not duplicate the SQL, so the
+InitPlan-form `(SELECT current_setting(..., true))` guarantee of §1 holds
+identically here. `varco_sa/tests/test_rls_migration_ops.py` asserts the
+rendered statements match `enable_rls_ddl()`'s output exactly; treat that
+assertion as load-bearing.
+
+`rls_downgrade(op, table, *, policy_name=None)` issues the matching
+`DROP POLICY IF EXISTS` + `ALTER TABLE … DISABLE ROW LEVEL SECURITY`. Pass
+the same `policy_name` you passed to `rls_upgrade` if you overrode the
+default `f"{table}_tenant_isolation"` scheme.
+
+**Both are no-ops with a logged `WARNING` on a non-PostgreSQL dialect**
+rather than raising, so a project that runs the same revisions against
+SQLite in CI and PostgreSQL in production does not crash on the SQLite leg.
+This also means a CI run proves nothing about the policy — the RLS
+integration test needs real PostgreSQL **and a non-superuser role**
+(superusers bypass RLS regardless of `FORCE ROW LEVEL SECURITY`).
+
+See [Schema migrations](schema-migrations.md) for how revisions are applied,
+the framework Alembic branch, and the operations guidance around running DDL
+in production.
+
+## Using the helpers directly
 
 ```python
 from varco_sa.rls import enable_rls_ddl, set_tenant_local
 
-# In an Alembic revision, applied by the APPLICATION — varco never does this
-# to a generated table by default:
+# The lower-level form — rls_upgrade() above wraps exactly this. Use it when
+# you need the raw statements (inspection, a non-Alembic migration tool):
 def upgrade() -> None:
     for stmt in enable_rls_ddl("orders"):
         op.execute(stmt)
@@ -188,10 +269,13 @@ setting does not survive past that transaction (see §2), by design.
 
 ## What is opt-in and what is not
 
-Nothing in this plan applies an RLS policy to any table varco generates.
-`enable_rls_ddl()` is a pure DDL-string generator — a table has no RLS at
-all until an application writes an Alembic revision that calls it and runs
-that revision. This keeps RLS adoption a per-table, per-application decision
+Nothing in varco applies an RLS policy to any table it generates.
+`enable_rls_ddl()` is a pure DDL-string generator, and `rls_upgrade()` only
+runs when an application's own revision calls it — a table has no RLS at
+all until an application writes a revision that does so and runs it. In
+particular, no `VARCO_MIGRATE_MODE` value enables RLS: `mode="upgrade"`
+applies whatever revisions exist, and a revision that does not call
+`rls_upgrade()` will never produce a policy. This keeps RLS adoption a per-table, per-application decision
 matching each table's actual isolation requirements, rather than a
 one-size-fits-all default that could break a table that legitimately needs
 cross-tenant reads (e.g. an admin reporting table).

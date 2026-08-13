@@ -39,6 +39,25 @@ PACKAGES: tuple[str, ...] = (
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REFERENCE_DIR = Path("reference")
 
+# Directory names whose contents are NOT importable API and must never reach
+# mkdocstrings. Alembic revision scripts live in ``versions/`` and are loaded by
+# Alembic *by file path*, so their filenames follow the ``0001_description.py``
+# revision convention rather than Python's identifier rules — importing them by
+# dotted path is impossible and aborts the build. They are also not API: the
+# documented surface is ``varco_sa.migration``, not the individual revisions.
+SKIP_DIRS: frozenset[str] = frozenset({"versions"})
+
+
+def _is_importable(parts: tuple[str, ...]) -> bool:
+    """True when every path segment is a valid Python identifier.
+
+    A module whose dotted path contains a non-identifier segment (a leading
+    digit, a hyphen) cannot be imported by ``mkdocstrings`` and would abort the
+    build, so it is skipped rather than emitted.
+    """
+    return all(part.isidentifier() for part in parts)
+
+
 nav = mkdocs_gen_files.Nav()
 
 for package in sorted(PACKAGES):
@@ -62,6 +81,9 @@ for package in sorted(PACKAGES):
             continue
 
         if not parts:
+            continue
+
+        if SKIP_DIRS.intersection(parts) or not _is_importable(parts):
             continue
 
         nav[parts] = doc_path.as_posix()

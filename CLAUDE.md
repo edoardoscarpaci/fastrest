@@ -601,6 +601,231 @@ enable_policy_authorizer(container)      # OPT-IN: binds PolicyEngineAuthorizer 
   `VARCO_CASBIN_DB_NAME`); the default `memory` adapter is non-durable, and `adapter="file"`
   is durable but single-process only (concurrent writers can corrupt the CSV).
 
+### Schema migrations (varco_core.migration + varco_sa/varco_beanie/varco_fastapi)
+
+One backend-agnostic contract, two engines, one lifespan component, one CLI (Plan 006):
+
+```
+varco_core.migration            ← contracts only, zero third-party deps
+  AbstractMigrator · Revision · MigrationPlan · MigrationReport · MigrationSettings
+  MigrationError · PendingMigrationsError · MigrationLockTimeout
+  IrreversibleMigrationError · MigrationBackendUnavailable · InMemoryMigrator
+        ▲                          ▲                        ▲
+varco_sa.migration        varco_beanie.migration    varco_fastapi.migrate
+  AlembicMigrator            BeanieMigrator            MigrationLifecycle
+   └ packaged "varco" branch  └ varco_migrations coll   └ prepended into VarcoLifespan
+   └ migration_lock (D2)      └ lock doc + heartbeat    └ create_varco_app(migrations=)
+   └ ops.rls_upgrade          └ IndexReconciler
+        ▲                          ▲
+        └──── varco_core.cli ──────┘   `varco migrate …` (entry-point group "varco.commands")
+```
+
+`varco_fastapi` imports **only** `varco_core.migration` — never `varco_sa`,
+`varco_beanie`, or `alembic`. Same seam as `AbstractEventBus`/`AbstractJobStore`.
+
+**Default is `off` — nothing runs.** `MigrationSettings.mode` (`VARCO_MIGRATE_MODE`):
+`off` (default, nothing registered) / `check` (fail startup if behind, never writes DDL —
+**the recommended production posture**) / `upgrade` (lock → apply → release; for
+single-instance, dev, and PaaS-without-a-pre-deploy-hook). `on_failure`
+(`VARCO_MIGRATE_ON_FAILURE`) is `fail` by default; `warn` keeps serving against a possibly
+stale schema and is a foot-gun by construction. Full env table in the feature doc.
+
+**Multi-pod exclusion is a held-open transaction, not a TTL lock.** A dedicated
+`NullPool` connection does `BEGIN` → `SET LOCAL idle_in_transaction_session_timeout = 0`
+→ `SAXactAdvisoryLock.xact(...)`, Alembic runs on its **own** connection with
+`transaction_per_migration=True`, and the lock's `COMMIT` **is** the release — there is no
+`release()` call. Process death releases it too, so there is no TTL to size. The
+`SET LOCAL` is mandatory: a server-level `idle_in_transaction_session_timeout` would
+otherwise kill the lock holder mid-migration and silently un-exclude concurrent DDL.
+MongoDB has no advisory locks, so `BeanieMigrator` uses an owner-fenced lock document with
+a heartbeat (interval ≤ `ttl/3`, cancelled in a `finally`) — and does have the TTL-sizing
+problem.
+
+**Framework tables get their own Alembic branch, shipped in the wheel.** Ten tables
+(`varco_outbox`, `varco_inbox`, `varco_jobs`, `varco_sagas`, `varco_conversation_turns`,
+`varco_dedup_log`, `varco_audit_log`, `varco_dead_letters`, `varco_encryption_keys`,
+`varco_tenants` — the tenant catalog, Plan 007) are
+owned by `varco_sa/migrations/versions/*` with `branch_labels=("varco",)`, appended to
+`version_locations` automatically. Apps never list framework metadata in `env.py` — they
+wire `include_object` from `varco_sa.migration.env_template` so their own autogenerate
+skips those tables. Each owning module self-registers via `register_framework_metadata()`,
+so a table added in a future release is picked up on `pip install -U varco-sa` with no app
+change. Single-branch escape hatch: `include_framework_branch=False` +
+`get_target_metadata(..., include_framework=True)`.
+
+**`ensure_table()` is reconciled, not removed.** Framework baseline revisions are
+idempotent (`has_table()`/`checkfirst` guarded), and
+`AlembicMigrator.adopt_framework_tables()` / `varco migrate adopt` stamps `varco@head`
+against an already-`ensure_table()`-built database without executing DDL. **Order: adopt,
+then upgrade.** This is the one manual step in the feature.
+
+**Mongo index reconciliation is `check` by default, independent of `mode`** —
+`mode="upgrade"` never silently starts an index build. `index_mode="create"` is opt-in and
+belongs in `varco migrate index --create` as a pre-deploy job.
+
+⚠️ **`MigrationError` and `MigrationPlan` are NOT re-exported from `varco_core`** — the
+pre-existing, unrelated `varco_core.migrator` (domain data/field migration) already owns
+those names. Import them from `varco_core.migration` explicitly. Everything else
+(`AbstractMigrator`, `Revision`, `MigrationReport`, `MigrationSettings`,
+`InMemoryMigrator`, the other three exceptions) is on `varco_core` directly.
+
+`alembic` is an optional extra: `pip install "varco-sa[migrations]"`. See
+`technical_docs/features/schema-migrations.md`.
+
+### Multitenancy — isolation strategies, control plane, global scope (Plan 007, Plan 008)
+
+Tenant data isolation is a **selectable deployment strategy**, not one hard-coded shape.
+Three `TenantIsolation` values (`SHARED` — default, unchanged; `SCHEMA` — Postgres only;
+`DATABASE` — Postgres + Mongo), `enforce_rls: bool` as an additive hardening flag on
+`SHARED` rather than a fourth enum value, and an orthogonal `TenantScope`
+(`TENANT`/`GLOBAL`) for shared reference data under every strategy.
+
+```
+varco_core.tenancy            ← contracts only, zero third-party deps
+  TenantIsolation · TenantScope · TenantStatus · TenancySettings
+  AbstractTenantCatalog · StaticTenantCatalog · CachedTenantCatalog · TenantDescriptor
+  TenantResourcePool[T] · DynamicTenantUoWProvider · GlobalUoWProvider
+  AbstractTenantProvisioner · ExternalTenantProvisioner
+  validate_service_scope() · tenancy_cache_key() · GlobalScopeReadOnlyError
+  control/  → TenantProvisionRequested · TenantDeprovisionRequested   (commands)
+              TenantCatalogChanged · TenantNodeReady                 (facts, Plan 008)
+              TenantControlService · TenantProvisionConsumer
+              TenantReadinessCoordinator · TenantReadiness           (Plan 008)
+  fanout.py → TenantFanoutSupervisor
+        ▲                                        ▲
+varco_sa.tenancy                          varco_beanie.tenancy
+  SASchemaRouter · SAEngineRegistry          BeanieTenantPool · BeanieTenantBinding
+  SASchemaProvisioner · SATenantCatalog      BeanieDatabaseProvisioner
+  rls_check.assert_rls_enabled               BeanieTenantCatalog
+  global_scope (42501 → GlobalScopeReadOnlyError)
+  admin/  → SAAdminEngine, SADatabaseProvisioner   (control plane ONLY)
+        ▲                                        ▲
+        └────────── varco_fastapi.tenancy ────────┘
+              TenancyLifecycle · TenantResolutionMiddleware
+              build_tenant_router() · mount_tenant_admin()
+```
+
+`varco_fastapi.tenancy` imports **only** `varco_core.tenancy` — never `varco_sa`,
+`varco_beanie`, `sqlalchemy`, or `pymongo`. Same seam rule as `AbstractEventBus`/
+`AbstractMigrator`.
+
+**Default is byte-identical to pre-Plan-007 behaviour.** `TenancySettings()` defaults:
+`isolation=SHARED`, `enforce_rls=False`, every model `TenantScope.TENANT`,
+`fanout_framework_tables=False`. No pool, no extra engine/client, no symbolic schema, no
+control-plane surface constructed. `create_varco_app(tenancy=None)` (the default)
+registers nothing.
+
+**Schema-per-tenant uses `schema_translate_map`, not `SET LOCAL search_path`.**
+`SASchemaRouter` applies `engine.execution_options(schema_translate_map={"tenant": "t_acme"})`
+per session. A forgotten routing call **fails closed** (compile/DB error) rather than
+silently reading another tenant's rows — the decisive property over `search_path`, which
+fails open on the same mistake. Raw `text()` SQL is **not** translated and must
+self-qualify. `mechanism="search_path"` is a documented escape hatch, still
+`set_config(..., true)` — never a bare session-scoped `SET`. See
+`technical_docs/features/postgres-rls.md` §3.
+
+**Global/shared scope has a dual-UoW API, not a `make_uow(scope=)` parameter.**
+`Inject[GlobalUoWProvider]` is a distinct DI-token type from `Inject[IUoWProvider]` — no
+change to `IUoWProvider`'s ABC. Under `DATABASE`, one transaction cannot span a tenant
+database and the global database (no 2PC) — route atomic cross-scope writes through the
+outbox/saga primitives instead. The app-facing global credential is **read-only by
+default** (RD-10); a denied write surfaces as `GlobalScopeReadOnlyError`, never a raw
+SQLSTATE `42501` traceback.
+
+**Database-per-tenant needs the fan-out supervisor, or outbox/job/audit rows are
+stranded.** Under `TenantIsolation.DATABASE`, a tenant's framework rows live in *that
+tenant's* database — the process-wide `OutboxRelay`/`JobPoller`/`AuditConsumer` never
+polls it. `TenantFanoutSupervisor` owns one child per active, pool-resident tenant,
+reusing `OutboxRelay` etc. verbatim; failure is isolated per tenant (capped backoff,
+restart). `varco_sa.tenancy.guard.guard_fanout_configuration()` refuses to construct a
+db-per-tenant deployment with a relay wired but `fanout_framework_tables=False`.
+
+**The tenant control plane is standalone by default, bundleable on request.** No new
+workspace package. `mount_tenant_admin(app, control_service, acknowledge_bundled_admin=True,
+server_auth=..., admin_role="tenant-admin")` is the **only** way to expose the admin
+surface — there is deliberately **no** `VARCO_TENANCY_MOUNT_ADMIN` env var, ever.
+Onboarding is dynamic (REST via `build_tenant_router()` or event-driven via
+`TenantProvisionConsumer` on channel `"varco.tenancy"`), backed by the durable
+`SATenantCatalog`/`BeanieTenantCatalog` (`varco_tenants`, the **tenth** framework table —
+picked up by the existing dynamic `0001_varco_framework_baseline` revision via
+`framework_metadata()`, no separate migration file). `TenantProvisionConsumer` is
+safe-by-default: `RetryPolicy.durable_delivery()` + a DLQ, following `AuditConsumer`'s
+precedent.
+
+**Both onboarding entry points converge on one catalog transition (Plan 008, RD-11).**
+`TenantProvisionConsumer` takes `control_service=` (a `TenantControlService`), not an
+`AbstractTenantProvisioner` — the bus path now drives the identical `provision()`/
+`deprovision()` transition the REST admin surface does, closing a defect where a
+bus-onboarded tenant's storage existed with no catalog row (permanently unroutable —
+every request 404s). `provisioner=`+`catalog=` survives one minor release as a shim
+(`DeprecationWarning`); `provisioner=` alone is a `ValueError` naming `control_service=`
+— there is no correct behavior to fall back to.
+
+**Two new broadcast verbs, distinct from the local orchestration methods.**
+`TenantControlService.request_provision(tenant_id)` /
+`.request_deprovision(tenant_id, confirm=)` emit `TenantProvisionRequested`/
+`TenantDeprovisionRequested` fleet-wide and do **nothing else** — no local catalog
+write, no local DDL. The broadcaster is not included; a node that must also provision
+itself calls `provision()` first (synchronous local failure), then `request_provision()`
+(broadcast). REST: `POST /tenancy/tenants/{id}/request-provision` (202),
+`DELETE /tenancy/tenants/{id}?broadcast=true`, `POST /tenancy/tenants/{id}/activate`
+(manual `mark_active()` terminator), `GET /tenancy/tenants/{id}/readiness` (only mounted
+when `build_tenant_router(..., coordinator=...)` is given a `TenantReadinessCoordinator`).
+
+**The command/fact DAG rule (RD-13): no handler may emit a command event.**
+Commands (`TenantProvisionRequested`/`TenantDeprovisionRequested`) may only be produced
+by `request_provision()`/`request_deprovision()`. They may produce facts
+(`TenantCatalogChanged`/`TenantNodeReady`); facts may produce nothing further except a
+terminal action (cache invalidation, `mark_active()`). This is what keeps
+`provision()`/the consumer from looping now that they share one code path — `provision()`
+never re-emits its own command. A command event carries `origin: str | None` (the
+broadcaster's `node_id`); a consumer whose own `node_id` matches `origin` skips the event
+(one DEBUG log) — it already handled it synchronously before broadcasting.
+
+**Fan-out mode: `catalog_authority=False` + `TenantReadinessCoordinator`.**
+`TenantControlService(catalog_authority=False)` (worker mode, RD-16) never writes the
+catalog — `provision()` reads it only to refuse a `DELETED`/`DEPROVISIONING` tenant,
+always calls the provisioner (idempotency is now the provisioner's own `IF NOT EXISTS`
+responsibility, not a status check), and emits `TenantNodeReady(tenant_id, node_id,
+store_id)` instead. `TenantReadinessCoordinator(control_service=<authority service>,
+expected_stores=frozenset({...}))` aggregates those facts per **store** (RD-17 — not per
+pod: ten pods of one service share one store, so autoscaling never changes
+`expected_stores`) and calls `control_service.mark_active()` once every expected store
+has reported. A timeout (`timeout_s`, default `900.0`) logs one ERROR and **never**
+activates a fleet known to be incomplete — the only two ways to `ACTIVE` under worker
+mode are full readiness or the manual `POST …/activate`. Readiness state is in-memory
+only (RD-18) — a coordinator restart resets it; recovery is one re-broadcast
+(`request_provision(tenant_id)` again), safe because every layer downstream is already
+idempotent. None of this is wired under the default `TenantIsolation.SHARED`.
+
+**New env vars:** `VARCO_TENANCY_NODE_ID` (`TenantControlService.node_id` — defaults to
+`f"{hostname}:{pid}"`, stamped as `origin` on broadcasts) and `VARCO_TENANCY_STORE_ID`
+(`TenantControlService.store_id` — only meaningful under `catalog_authority=False`,
+stamped on `TenantNodeReady`). See `technical_docs/features/multitenancy.md`'s "Fleet
+fan-out" and "Fleet readiness" sections for the topology table, the command/fact diagram,
+and the worked 3-service readiness example.
+
+**Cluster DDL never reaches an app pod (RD-4).** `SADatabaseProvisioner` cannot be
+constructed without an explicit `VARCO_TENANCY_ADMIN_DSN`, and refuses one equal to the
+app's own request-path engine URL.
+
+```python
+from varco_fastapi.tenancy.mount import mount_tenant_admin
+
+app = create_varco_app(container, routers=[...])       # tenant traffic — no admin privilege
+mount_tenant_admin(                                     # ← privileged surface, opt-in
+    app, control_service,
+    acknowledge_bundled_admin=True,   # required; ValueError without it
+    server_auth=auth, admin_role="tenant-admin", prefix="/tenancy",
+)
+```
+
+`alembic`/Beanie-agnostic: `TenantFanoutMigrator` (`varco_core.migration.fanout`) applies
+the global/framework migration run **before** every tenant's, in sorted order —
+`--skip-global` is required to omit it (tenant tables may FK to global tables). See
+`technical_docs/features/multitenancy.md` for the decision table, all six wiring recipes,
+the connection-budget sizing worksheet, and the RD-7 Mongo clone-cost formula.
+
 ---
 
 ## Planning & Development Workflows
@@ -1072,6 +1297,44 @@ adapter.mount(app)              # same v1.0.0 + legacy A2A surface as a router-b
 not a bug. `router_cls` and `source=` are mutually exclusive; passing both or neither raises
 `ValueError` at construction.
 
+#### Scenario: Turn on schema-per-tenant isolation and onboard a tenant
+
+```python
+from varco_core.tenancy import TenancySettings, TenantIsolation
+from varco_sa.tenancy.router import SASchemaRouter
+from varco_sa.tenancy.provisioner import SASchemaProvisioner
+from varco_sa.tenancy.catalog import SATenantCatalog
+from varco_core.tenancy.control.service import TenantControlService
+
+# 1. Opt in — everything else stays SHARED-shaped until this flips
+settings = TenancySettings(isolation=TenantIsolation.SCHEMA)
+
+# 2. Wire the router (schema_translate_map, not search_path — see
+#    technical_docs/features/postgres-rls.md §3) and the provisioner
+router = SASchemaRouter(schema_template=settings.schema_template)
+provisioner = SASchemaProvisioner(engine=engine)
+
+# 3. The control service ties catalog + provisioner + event emission together
+control_service = TenantControlService(
+    catalog=SATenantCatalog(session=admin_session),
+    provisioner=provisioner,
+    producer=producer,   # AbstractEventProducer — emits TenantCatalogChanged
+)
+
+# 4. Onboard — idempotent; a second call on an already-active tenant is a no-op
+await control_service.provision("acme")
+
+# 5. Per-request: TenantResolutionMiddleware checks catalog status BEFORE
+#    pool.ensure(), then wraps the handler in tenant_context("acme") —
+#    session_factory_for(engine, "acme") resolves every routed table to
+#    schema "t_acme"; global + framework tables stay in the default schema.
+```
+
+**Caveat**: models generated under `SAModelFactory.build(..., isolation="schema")` carry a
+symbolic `"tenant"` schema token only for `TenantScope.TENANT` models — a `GLOBAL` model or
+one of the ten framework tables never does, and under `TenantIsolation.SHARED` (the
+default) `__table__.schema` stays `None`, byte-identical to today.
+
 ---
 
 ## Coding Standards
@@ -1163,6 +1426,39 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Hand-written RLS policy uses bare `current_setting(...)`** | A query on an RLS-protected table that flies at test data volumes goes from milliseconds to seconds in production (one documented case: 8 100 ms) | `current_setting()` is `VOLATILE` and not `LEAKPROOF` — without a scalar-subquery wrapper the Postgres planner cannot push the predicate below an index scan and falls back to a sequential scan | Always use `varco_sa.rls.enable_rls_ddl()`, which emits the `(SELECT current_setting(..., true))` InitPlan form; never hand-write `USING (tenant_id = current_setting(...)::uuid)` — see `technical_docs/features/postgres-rls.md` |
 | **RLS tenant GUC set with `SET` instead of `SET LOCAL`** | Under a transaction-mode pooler (PgBouncer), one tenant's queries leak into a session that was actually serving a different tenant's next transaction | Session-scoped `SET`/`set_config(..., false)` survives past the transaction on a pooled connection — same defect class as `SAAdvisoryLock`'s session-scoped release (U-16) | Use `varco_sa.rls.set_tenant_local(session, tenant_id)` — `set_config(..., true)` (`is_local`) scopes the setting to the current transaction only |
 | **`TenantAwareService._scoped_params` bypassed** | Cross-tenant rows returned from a query path that skipped the service mixin (e.g. a raw repository call, an ad-hoc script) | The mixin fails open by design — it only filters queries that actually go through it, there is no enforcement below the service layer | Enable Postgres RLS as defense-in-depth (`varco_sa.rls.enable_rls_ddl()`) on any table where a query bypassing the service layer would leak data across tenants |
+| **`mode="upgrade"` in a large multi-pod deployment** | Rolling deploys crawl; pods log `MigrationLockTimeout`, exit, and get restarted before eventually serving | Every replica races for one migration lock — the leader migrates while the rest burn `lock_timeout`, re-plan, and (if the leader is still working) raise | Deploy `VARCO_MIGRATE_MODE=check` on the pods and run `varco migrate upgrade` in a pre-deploy job / init container. `upgrade` is the small-deployment and dev convenience, not the production posture |
+| **`ensure_table()` and migrations both active** | Alembic's `CREATE TABLE` fails against a table `ensure_table()` already created | The two mechanisms are mutually exclusive *per deployment*, and the hazard is directional (`create_all(checkfirst=True)` against an Alembic table is a harmless no-op; the reverse is not) | Run `varco migrate adopt` (or `AlembicMigrator.adopt_framework_tables()`) **once**, then pick one mechanism. Order matters: adopt, then upgrade |
+| **`upgrade head` (singular) with the framework branch present** | Only the app's tables (or only the framework's) get migrated; the other branch silently stays behind | `varco_sa` ships its own Alembic branch (`branch_labels=("varco",)`) in the wheel, so there are **two** heads | Always `heads` (plural) — every varco command defaults to it. Or opt out with `include_framework_branch=False` + `get_target_metadata(..., include_framework=True)` |
+| **`index_mode="create"` on a large Mongo collection** | Pod startup blocks for minutes-to-hours; on a replica set the build replicates and can stall secondaries | An index build is real work, and `create` runs it inside the ASGI lifespan at exactly the moment a rolling deploy starts N new pods | Leave `index_mode="check"` (the default, independent of `mode`) and run `varco migrate index -t … --create` as a pre-deploy job |
+| **`VARCO_MIGRATE_MODE` set but no `migrations=` passed** | Env var is set, nothing migrates, no error | `create_varco_app` has no migrator to run — it now logs one WARNING naming the env var rather than staying silent | Pass `migrations=<AbstractMigrator>` to `create_varco_app` |
+| **RLS enabled by a startup hook** | Policies appear/disappear depending on which process booted last; unreviewed DDL in production | RLS is schema DDL that must be ordered after table creation and reviewed like any other change | Put it in a reviewed revision with `varco_sa.migration.ops.rls_upgrade(op, "orders")` / `rls_downgrade`. Nothing in varco auto-enables RLS, and no `VARCO_MIGRATE_MODE` value does either |
+| **`from varco_core import MigrationError`** gets the wrong class | `except MigrationError` never catches a schema-migration failure | `varco_core.migrator` (domain data/field migration) already owns the top-level `MigrationError`/`MigrationPlan` names, so the schema-migration versions are deliberately **not** re-exported | `from varco_core.migration import MigrationError, MigrationPlan`. Every other migration name (`AbstractMigrator`, `Revision`, `MigrationReport`, `MigrationSettings`, `InMemoryMigrator`, the other exceptions) *is* on `varco_core` |
+| **Raw `text()` SQL under `TenantIsolation.SCHEMA`** | A hand-written query returns rows from the wrong tenant's schema, or errors on a missing table | `schema_translate_map` rewrites schema references at SQL-compile time — it never touches raw `text()` SQL | Self-qualify the schema in the raw SQL, or route the query through the ORM so it carries the symbolic `"tenant"` token |
+| **`SET` used instead of `SET LOCAL`/`set_config(..., true)` for schema routing** | Under a transaction-mode pooler, one tenant's schema routing leaks into the next logical caller's session | Session-scoped `SET` survives past the transaction on a pooled connection — same defect class as `SAAdvisoryLock`'s U-16 finding | Use `SASchemaRouter`'s default `mechanism="translate_map"`; if you must use the `"search_path"` escape hatch, it already emits `set_config(..., true)`, never a bare `SET` |
+| **Per-tenant engine/binding never `dispose()`d** | Connections/clients accumulate until the pool or the process runs out | A caller evicts a tenant outside `TenantResourcePool`/`SAEngineRegistry`/`BeanieTenantPool`, bypassing their `closer` | Always go through the pool's `evict()`/`aclose()` — never hold a raw engine/client reference past eviction |
+| **Unbounded per-tenant pool** | Connection exhaustion under `TenantIsolation.DATABASE` at even moderate tenant counts | `max_entries × (pool_size + max_overflow) × n_pods` was never checked against `max_connections` | Follow the sizing worksheet in `technical_docs/features/multitenancy.md`; varco enforces no cap (RD-5) — this is an operator responsibility |
+| **`init_beanie()` rebinds every tenant to one database** | All Mongo tenants silently read the same database, no error | A second `init_beanie()` call with a different database rebinds the Document **class** globally — `BeanieDocRegistry` is process-global, keyed by domain class | Always go through `varco_beanie.tenancy.binding.build_tenant_binding()`, which clones each Document class per tenant instead of calling `init_beanie()` against the shared base classes |
+| **`BeanieDocRegistry.get(User)` expected to return a tenant's clone** | A repository built from `BeanieDocRegistry.get(User)` silently operates on the wrong (base) database | Clones are deliberately never registered in `BeanieDocRegistry` — that registry's contract is "return the base class" | Use `binding.clone_for(User)` from the tenant's `BeanieTenantBinding`, not `BeanieDocRegistry.get(User)` |
+| **`varco migrate upgrade` without `--all-tenants` under db-per-tenant** | Only the global/framework schema advances; every tenant is left N revisions behind with no error | The default target is the single, non-fanned-out migrator | Use `varco migrate upgrade --all-tenants` (or `--tenant <id>` for one), which runs global-then-fan-out via `TenantFanoutMigrator` |
+| **Global migration run after the tenant fan-out** | Tenant-table foreign keys to global tables fail mid-migration | `TenantFanoutMigrator` orders the global/framework run before every tenant's specifically to prevent this | Never pass `--skip-global` unless you have already run the global migration separately and know it is current |
+| **`TenantIsolation.DATABASE` without `fanout_framework_tables`** | Outbox/job/audit rows accumulate in each tenant's database and are never published/claimed/persisted | The process-wide `OutboxRelay`/`JobPoller`/`AuditConsumer` only polls the app's own (non-tenant) database | `guard_fanout_configuration()` raises at construction naming `VARCO_TENANCY_FANOUT_FRAMEWORK_TABLES` — set it, which wires `TenantFanoutSupervisor` |
+| **`TenantIsolation.SCHEMA` on `varco_beanie`** | Expecting a Mongo equivalent of Postgres schemas | MongoDB has no schema-per-tenant primitive | `BeanieTenantPool` raises `ValueError` at construction naming MongoDB — use `SHARED` or `DATABASE` instead |
+| **`TENANT`-scoped cache key built outside `tenant_context()`** | Expecting a graceful unnamespaced fallback | `tenancy_cache_key()` fails closed by design — an unnamespaced `TENANT` key is a cross-tenant leak waiting to happen | Wrap the call in `with tenant_context(tenant_id): ...`, or catch the `RuntimeError` and treat it as a real bug, not something to paper over |
+| **`GLOBAL`-scoped cache key namespaced by tenant** | N× cache waste and N× DB load for reference data every tenant reads identically | A hand-rolled cache key included `tenant_id` for an entity that doesn't need it | Use `tenancy_cache_key(entity_cls, key)` — it detects `TenantScope.GLOBAL` via `is_global_entity()` and omits the tenant segment automatically |
+| **`TenantAwareService` mixed into a `GLOBAL`-entity service** | `_scoped_params` filters on a `tenant_id` field that doesn't exist on the entity — an error at best, silently empty results at worst | The service's MRO includes `TenantAwareService` while its entity is declared `TenantScope.GLOBAL` | `validate_service_scope()` raises `TenantIsolationError` at wiring time naming both the service and the entity — drop the mixin |
+| **Expecting one transaction across a tenant DB and the global DB** | `AttributeError`/design confusion trying to share a UoW across `Inject[IUoWProvider]` and `Inject[GlobalUoWProvider]` | Under `TenantIsolation.DATABASE` these are genuinely two different physical databases — there is no 2PC | Sequence two transactions, or route the atomic-looking write through the transactional outbox/saga primitives instead |
+| **Global write raises `GlobalScopeReadOnlyError`** | A write to a `GLOBAL`-scoped entity from an app pod fails with SQLSTATE `42501` translated into a legible error | The app-facing global credential is read-only by default (RD-10) | Route the write through the tenant control plane, or opt in explicitly with `TenancySettings(global_writable=True)` / `VARCO_TENANCY_GLOBAL_WRITABLE=true` |
+| **Literal DSN stored in `varco_tenants`** | `ValueError` on `catalog.add()` naming RD-2 | `dsn_ref` must be a secret **reference** (resolved by your own secret-manager hook), never a literal connection string | Store a reference, not a credential; pass `allow_literal_dsn=True` only for tests/bootstrap |
+| **Admin DSN present in an app pod that never mounted the admin surface** | Nothing is actually exposed — but the credential sits unused in the wrong process | `VARCO_TENANCY_ADMIN_DSN` alone grants no route; only `mount_tenant_admin()` mounts one | One WARNING is logged recommending the standalone topology; prefer moving the DSN to a dedicated control-plane deployment |
+| **`mount_tenant_admin()` without `acknowledge_bundled_admin=True`** | `ValueError` at mount time, nothing mounted | The friction is intentional — bundling puts admin-adjacent privilege in the app pod's own environment | Pass `acknowledge_bundled_admin=True` only after confirming the standalone deployment genuinely isn't justified |
+| **Bundled admin router left ungated at the ingress** | The `/tenancy/*` admin surface is reachable from wherever the app itself is reachable | Role-guarding (`admin_role="tenant-admin"`) is an application-layer control, not a network one | Use the dedicated `prefix=` to deny it at the ingress, and/or pass `dependencies=[Depends(ip_allowlist)]`/an mTLS check |
+| **Redelivered `TenantProvisionRequested` assumed unique** | Worry about double-provisioning on broker redelivery | `provision()` is idempotent (status is the check) and the consumer additionally dedups same-process redelivery by `event_id`; compose with the durable inbox for cross-restart idempotency | No action needed for the common case — redelivery is a documented, tested no-op, not a hazard to work around manually |
+| **Bus-onboarded tenant 404s** | A tenant provisioned purely via `TenantProvisionRequested` is unroutable forever, even though its schema/database was created | Pre-Plan-008: the consumer called the provisioner directly, never wrote the catalog row `routing.py`/`TenantResolutionMiddleware` look up | Upgrade to a `control_service=`-based `TenantProvisionConsumer` (Plan 008), then repair each affected tenant with one idempotent `POST /tenancy/tenants` — re-running `provision()` finds the missing catalog row, adds it, and the provisioner's own idempotency means no duplicate/destructive DDL runs |
+| **Consumer constructed with `provisioner=`** | `ValueError` at construction (bare `provisioner=`), or a `DeprecationWarning` you're ignoring (`provisioner=`+`catalog=`) | `provisioner=` is a Plan 008 (RD-12) deprecated shim scheduled for removal one minor release after landing | Pass `control_service=TenantControlService(catalog=..., provisioner=..., producer=...)` directly instead |
+| **Bundled node called only `request_provision()` and never provisioned itself** | The broadcasting node's own local storage was never created — it relies on some other node's DDL that never runs there | `request_provision()`/`request_deprovision()` are broadcast-only by design (RD-14) — they deliberately exclude the caller | Call `provision()` **first** (local, synchronous), then `request_provision()` (broadcast) — this ordering also surfaces a local DDL failure before the fleet is told |
+| **Missing store in `expected_stores`** | A tenant activates one store early — traffic is routed to a store that never got its own DDL | A service was added without updating the coordinator's `expected_stores` set | Update `expected_stores` when adding a service to the fleet; the coordinator logs the full expected/seen set at every partial step and on every unexpected-`store_id` WARNING to make the drift visible |
+| **Counting pods instead of stores** | Expecting `expected_stores` to change on every autoscale event, or sizing it by pod count | The readiness unit is a **store** (RD-17), not a pod — ten pods of one service provision the same database, so nine of their `TenantNodeReady` reports are idempotent no-ops | Size `expected_stores` to the number of distinct services/databases, never to pod count; it changes only when a service is added or removed |
+| **Expecting readiness to survive a restart** | A coordinator restart appears to "forget" tenants mid-onboarding — `GET …/readiness` answers 404 (`readiness()` raises `TenantNotFoundError` for a tenant it has not observed since the restart) | Readiness state is in-memory only (RD-18) — no durable/persisted readiness contract exists. The 404 is about the *coordinator's* state, not the catalog's — check `GET /tenancy/tenants?status=pending` for tenant existence | Re-broadcast `request_provision(tenant_id)` — every downstream layer is already idempotent, so this is the documented one-verb recovery, not data loss |
 
 ---
 
@@ -1201,6 +1497,31 @@ Am I adding a new capability?
 │
 ├─ Service layer feature (mixin, hook, outbox)?
 │  └─ → varco_core.service (ABC + mixin) + varco_sa/beanie (repository impl)
+│
+├─ Migration / schema-upgrade feature?
+│  └─ → varco_core.migration (AbstractMigrator contract + MigrationSettings)
+│       + the backend migrator (varco_sa.migration.AlembicMigrator /
+│         varco_beanie.migration.BeanieMigrator)
+│       ↳ Startup wiring? → varco_fastapi.migrate.MigrationLifecycle
+│       ↳ New CLI verb?   → varco_core.cli.migrate (shared verbs) or the backend's
+│                            own migration/cli.py via the "varco.commands" group
+│       ↳ New framework table? → register_framework_metadata() in its owning module
+│                                 + a revision in varco_sa/migrations/versions/
+│
+├─ Multitenancy / isolation-strategy feature?
+│  └─ → varco_core.tenancy (contracts: TenantIsolation/TenantScope/TenancySettings,
+│         AbstractTenantCatalog, TenantResourcePool, DynamicTenantUoWProvider,
+│         GlobalUoWProvider, AbstractTenantProvisioner, TenantFanoutSupervisor)
+│       + the backend implementation (varco_sa.tenancy.SASchemaRouter/SAEngineRegistry/
+│         SATenantCatalog / varco_beanie.tenancy.BeanieTenantPool/BeanieTenantCatalog)
+│       ↳ Startup wiring? → varco_fastapi.tenancy.TenancyLifecycle +
+│                            create_varco_app(tenancy=...)
+│       ↳ Request-scoped tenant resolution? → varco_fastapi.middleware.
+│                            TenantResolutionMiddleware
+│       ↳ Admin/provisioning surface? → varco_fastapi.tenancy.mount_tenant_admin()
+│                            (never a create_varco_app kwarg — RD-9)
+│       ↳ New global/shared entity? → Meta.tenant_scope = TenantScope.GLOBAL,
+│                            never a new mixin (validate_service_scope() guards it)
 │
 └─ ORM/database feature?
    └─ → varco_sa (SQLAlchemy) and/or varco_beanie (MongoDB)

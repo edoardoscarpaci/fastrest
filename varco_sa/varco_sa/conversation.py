@@ -55,6 +55,7 @@ from sqlalchemy import Column, DateTime, MetaData, String, Table, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from varco_core.service.conversation import AbstractConversationStore, ConversationTurn
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -276,6 +277,9 @@ class SAConversationStore(AbstractConversationStore):
 
     def __repr__(self) -> str:
         return f"SAConversationStore(engine={self._engine!r})"
+
+
+_register_fw_metadata("varco_sa.conversation", conversation_metadata)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

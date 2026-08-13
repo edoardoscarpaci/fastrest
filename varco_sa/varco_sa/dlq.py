@@ -84,6 +84,7 @@ from varco_core.event.dlq import (
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -119,6 +120,9 @@ _dead_letters_table = Table(
 
 # Expose metadata for Alembic integration — include in target_metadata.
 dead_letters_metadata = _metadata
+
+
+_register_fw_metadata("varco_sa.dlq", dead_letters_metadata)
 
 
 def _ensure_tz(dt: datetime | None) -> datetime | None:

@@ -74,6 +74,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -133,6 +134,9 @@ _jobs_table = Table(
 
 # Expose metadata for Alembic integration — include in target_metadata.
 jobs_metadata = _metadata
+
+
+_register_fw_metadata("varco_sa.job_store", jobs_metadata)
 
 
 # ── Serialization helpers ─────────────────────────────────────────────────────

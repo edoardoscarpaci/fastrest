@@ -58,6 +58,12 @@ from varco_beanie.saga import BeanieSagaRepository, SagaDocument
 from varco_beanie.provider import BeanieRepositoryProvider
 from varco_beanie.repository import AsyncBeanieRepository
 from varco_beanie.uow import BeanieUnitOfWork
+from varco_beanie.migration import (
+    BeanieMigrator,
+    IndexReconciler,
+    Migration,
+    MigrationRegistry,
+)
 
 __all__ = [
     # Core backend classes
@@ -99,4 +105,9 @@ __all__ = [
     # ── Deduplication ─────────────────────────────────────────────────────────
     "BeanieDeduplicator",
     "DeduplicationDocument",
+    # ── Migrations ────────────────────────────────────────────────────────────
+    "Migration",
+    "MigrationRegistry",
+    "BeanieMigrator",
+    "IndexReconciler",
 ]

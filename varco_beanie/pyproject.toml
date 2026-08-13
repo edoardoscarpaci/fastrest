@@ -1,6 +1,6 @@
 [project]
 name          = "varco-beanie"
-version       = "1.1.2"
+version       = "1.2.0"
 description   = "Beanie (Motor / MongoDB) async backend for varco — runtime ORM generation, repository, and UoW"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
@@ -42,7 +42,8 @@ Issues     = "https://github.com/edoardoscarpaci/varco/issues"
 [tool.uv.sources]
 varco-core = { workspace = true }
 
-
+[project.entry-points."varco.commands"]
+beanie = "varco_beanie.migration.cli:register"
 
 [dependency-groups]
 dev = [

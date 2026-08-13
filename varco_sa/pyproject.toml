@@ -1,6 +1,6 @@
 [project]
 name          = "varco-sa"
-version       = "2.1.2"
+version       = "2.2.0"
 description   = "SQLAlchemy async backend for varco — runtime ORM generation, repository, schema guard, and Alembic helpers"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
@@ -36,6 +36,8 @@ varco-core = { workspace = true }
 [project.optional-dependencies]
 # Install with: uv sync --extra postgresql
 postgresql = ["asyncpg>=0.29"]
+# Install with: uv sync --extra migrations (or `pip install "varco-sa[migrations]"`)
+migrations = ["alembic>=1.13"]
 
 [dependency-groups]
 dev = [
@@ -44,7 +46,11 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
     "aiosqlite>=0.20",
+    "alembic>=1.13",
 ]
+
+[project.entry-points."varco.commands"]
+sa = "varco_sa.migration.cli:register"
 
 [build-system]
 requires      = ["hatchling"]
@@ -52,6 +58,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["varco_sa"]
+# The framework Alembic branch's revision files (Plan 006, step 25) ship
+# automatically because `varco_sa/migrations/` is a regular subdirectory of
+# the `varco_sa` package — `packages = ["varco_sa"]` already includes it
+# recursively. No force-include/artifacts entry is needed (and one would
+# conflict — hatchling refuses to add the same path to the wheel twice).
+# Verified in CI via: uv build && unzip -l dist/varco_sa-*.whl | grep migrations/versions
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

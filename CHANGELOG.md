@@ -39,6 +39,18 @@ warning was not.
 
 ### Changed (behaviour, non-security)
 
+- **⚠️ `TenantProvisionConsumer`'s constructor changed — `provisioner=` is
+  deprecated** (Plan 008, Phase 1, RD-11/RD-12). `TenantProvisionConsumer(
+  provisioner=..., dlq=...)` no longer works as-is; construct with
+  `control_service=TenantControlService(catalog=..., provisioner=..., producer=...)`
+  instead — one catalog writer, shared with the REST admin surface. A one-release
+  shim keeps `provisioner=`+`catalog=` working (raises `DeprecationWarning` and
+  builds the `TenantControlService` internally); `provisioner=` **without**
+  `catalog=` raises `ValueError` at construction naming the fix, rather than
+  reproducing the unroutable-tenant defect the constructor change exists to close.
+  **Rollback:** none — the old bare-`provisioner=` behaviour was itself the bug
+  being fixed. See `technical_docs/features/multitenancy.md`'s migration box.
+
 - **`AuditConsumer` now retries by default.** `_default_retry_policy` is
   `RetryPolicy.durable_delivery()` (`max_attempts=20, base_delay=15.0,
   max_delay=3600.0`) instead of no retry policy at all — an audit-persistence
@@ -50,6 +62,227 @@ warning was not.
   `technical_docs/features/database-auditing.md`.
 
 ### Added
+
+- **Multitenancy: selectable isolation strategies, a dynamic tenant control
+  plane, and global/shared scope** (Plan 007). New across four packages:
+
+  - **`varco-core`** — `varco_core.tenancy`: three `TenantIsolation` values
+    (`SHARED` — today's behaviour, unchanged default; `SCHEMA` — Postgres
+    schema-per-tenant; `DATABASE` — Postgres/Mongo database-per-tenant),
+    `enforce_rls: bool` as an *additive* hardening flag on `SHARED` rather
+    than a fourth enum value, and an orthogonal `TenantScope`
+    (`TENANT`/`GLOBAL`) for shared reference data under every strategy.
+    `TenancySettings.from_env()` reads the `VARCO_TENANCY_*` variables.
+    `AbstractTenantCatalog`/`StaticTenantCatalog`/`CachedTenantCatalog` (the
+    latter combining event invalidation, a TTL backstop, and read-through-
+    on-miss for cross-pod visibility), `TenantResourcePool[T]` (bounded,
+    LRU-evicting, lease-refcounted — never evicts a resource mid-request),
+    `DynamicTenantUoWProvider` (a *new* `IUoWProvider`, leaving
+    `TenantUoWProvider` untouched), `GlobalUoWProvider` (a distinct DI-token
+    type for the non-tenant-routed global scope — no change to
+    `IUoWProvider`'s ABC), `AbstractTenantProvisioner`/
+    `ExternalTenantProvisioner` (the no-op/DBA-workflow path),
+    `validate_service_scope()` and `tenancy_cache_key()` (both catch the
+    `TENANT`/`GLOBAL` mismatch pitfalls in either direction), and
+    `TenantFanoutSupervisor` (one supervised `OutboxRelay`/job-poller/audit-
+    consumer per active, pool-resident tenant under `DATABASE`). A tenant
+    control plane (`varco_core.tenancy.control`) adds
+    `TenantProvisionRequested`/`TenantDeprovisionRequested`/
+    `TenantCatalogChanged` events, `TenantControlService` (idempotent
+    `provision`/`deprovision`/`suspend`/`resume`), and
+    `TenantProvisionConsumer` (safe-by-default: `RetryPolicy.
+    durable_delivery()` + DLQ, following `AuditConsumer`'s precedent).
+    `TenantFanoutMigrator` (`varco_core.migration.fanout`) runs the
+    global/framework migration **before** every tenant's, in sorted order.
+    A new `varco tenant` CLI verb group (`provision`, `deprovision`, `list`)
+    plus `--all-tenants`/`--tenant`/`--skip-global` flags on `varco migrate`.
+  - **`varco-sa`** — `varco_sa.tenancy`: `SASchemaRouter` (schema-per-tenant
+    via SQLAlchemy's `schema_translate_map`, chosen over `SET LOCAL
+    search_path` because a forgotten routing call fails **closed**, not
+    open — see `technical_docs/features/postgres-rls.md` §3),
+    `SAEngineRegistry` (bounded per-tenant `AsyncEngine` pool),
+    `SASchemaProvisioner`/`SADatabaseProvisioner` (the latter confined to an
+    explicit `VARCO_TENANCY_ADMIN_DSN`-backed `SAAdminEngine`, refusing an
+    admin DSN equal to the app's own request-path engine), `SATenantCatalog`
+    (the durable catalog backing `varco_tenants`, the **tenth** framework
+    table), `assert_rls_enabled()` (assert-only, never DDL; skips `GLOBAL`
+    and framework tables), and the SQLSTATE `42501` →
+    `GlobalScopeReadOnlyError` translation (RD-10: the app-facing global
+    credential is read-only by default). `SAModelFactory.build(...,
+    isolation=...)` stamps a symbolic schema token onto `TENANT`-scoped
+    models under `SCHEMA` — under the default `SHARED`, generated
+    `__table__.schema` stays `None`, byte-identical to today.
+  - **`varco-beanie`** — `varco_beanie.tenancy`: `BeanieTenantPool`/
+    `BeanieTenantBinding` (per-tenant Document class **clones** + one
+    `init_beanie()` call per tenant database — `BeanieDocRegistry.get(User)`
+    keeps returning the base class, the documented contract),
+    `BeanieDatabaseProvisioner` (the per-tenant `dropDatabase` GDPR-erasure
+    primitive), and `BeanieTenantCatalog`. `TenantIsolation.SCHEMA` raises
+    `ValueError` at construction — MongoDB has no schema-per-tenant
+    equivalent.
+  - **`varco-fastapi`** — `varco_fastapi.tenancy`: `TenancyLifecycle`
+    (prepended into `VarcoLifespan`, stopping the fan-out supervisor
+    **before** `pool.aclose()`), `build_tenant_router()` (the REST
+    provisioning admin surface — every route 403s on an unauthorised
+    caller, never 500), `mount_tenant_admin()` (the **only** way to expose
+    the admin surface in a bundled deployment — `acknowledge_bundled_admin`
+    is mandatory and there is deliberately **no**
+    `VARCO_TENANCY_MOUNT_ADMIN` env var anywhere in the codebase), and
+    `TenantResolutionMiddleware` (checks catalog status **before**
+    `pool.ensure()` — a non-`active` tenant never causes an engine/binding
+    to be created). A new `create_varco_app(tenancy=...)` parameter,
+    `None` by default (registers nothing).
+
+  **Nothing runs by default.** `TenancySettings()` defaults to
+  `isolation=SHARED`, `enforce_rls=False`, every model `TenantScope.TENANT`,
+  `fanout_framework_tables=False` — no pool, no extra engine/client, no
+  symbolic schema, no control-plane surface. See
+  `technical_docs/features/multitenancy.md` for the decision table, all six
+  strategy wiring recipes, the connection-budget sizing worksheet
+  (informational — varco enforces no tenant-count cap), and the RD-7 Mongo
+  clone-cost formula.
+
+  ⚠️ **`ParsedMeta` gains a new field, `tenant_scope: TenantScope =
+  TenantScope.TENANT`**, appended last and defaulted — constructible
+  without it, so this is source-compatible for keyword construction, but a
+  caller building `ParsedMeta` **positionally** picks up the new field.
+  `Meta.tenant_scope` absent on a domain class defaults to `TENANT`
+  (today's routing behaviour, fail-closed by design — see the multitenancy
+  doc's "Global/shared scope" section for the rationale).
+
+- **Tenant control plane: fleet broadcast, `origin` provenance, and a
+  fleet-readiness coordinator** (Plan 008, Phases 2-3). Built on top of
+  Plan 008 Phase 1's entry-point convergence (see Fixed/Changed above):
+
+  - **`varco-core`** — `TenantControlService.request_provision(tenant_id)` /
+    `.request_deprovision(tenant_id, *, confirm=)`: broadcast-only methods that
+    emit `TenantProvisionRequested`/`TenantDeprovisionRequested` fleet-wide with
+    **no** local catalog write and **no** local provisioner call — the caller is
+    explicitly not included (RD-14). `TenantControlService(catalog_authority=
+    False)` (worker mode, RD-16) makes `provision()` never write the catalog;
+    it runs the local provisioner and emits the new `TenantNodeReady(tenant_id,
+    node_id, store_id)` fact event instead. `TenantControlService.mark_active
+    (tenant_id)` is the authority-only manual terminator (`ValueError` under
+    `catalog_authority=False`). Both command events
+    (`TenantProvisionRequested`/`TenantDeprovisionRequested`) gain
+    `origin: str | None = None` (wire-compatible, defaulted) — a consumer whose
+    own `node_id` matches `origin` skips the event (RD-15), so a node that
+    broadcasts its own already-handled command does not re-process it.
+    `TenantReadinessCoordinator` (`varco_core.tenancy.control.readiness`)
+    aggregates per-store `TenantNodeReady` facts and calls
+    `control_service.mark_active()` once every store in the required
+    `expected_stores: frozenset[str]` has reported (RD-17 — a *store*, not a
+    pod: ten pods of one service share one store and don't change the expected
+    set). A timeout (`timeout_s`, default `900.0`) logs one ERROR and never
+    auto-activates an incomplete fleet. Readiness state is in-memory only
+    (RD-18) — recovery after a coordinator restart is one re-broadcast of
+    `request_provision(tenant_id)`.
+  - **`varco-fastapi`** — three new routes on `build_tenant_router()`:
+    `POST /tenancy/tenants/{id}/request-provision` (202, broadcast-only),
+    `POST /tenancy/tenants/{id}/activate` (manual `mark_active()` terminator),
+    and `GET /tenancy/tenants/{id}/readiness` (only mounted when
+    `build_tenant_router(..., coordinator=<TenantReadinessCoordinator>)` is
+    given a coordinator). `DELETE /tenancy/tenants/{id}?broadcast=true` now
+    calls `request_deprovision()` instead of the local `deprovision()`, behind
+    the same explicit `{"confirm": true}` body every destructive route
+    requires. Every new route is `admin_role`-guarded, same as the existing
+    surface.
+  - **New env vars**: `VARCO_TENANCY_NODE_ID` (`TenantControlService.node_id`
+    — defaults to `f"{hostname}:{pid}"`, stamped as `origin` on broadcasts) and
+    `VARCO_TENANCY_STORE_ID` (`TenantControlService.store_id` — only
+    meaningful under `catalog_authority=False`, stamped on `TenantNodeReady`).
+
+  - **`TenantControlService` gains the read side of the admin surface**:
+    `list_tenants(*, status=)` (read-through to `AbstractTenantCatalog`), and
+    `provision()`/`mark_active()` now **return** the post-transition
+    `TenantDescriptor` instead of `None` — `POST /tenancy/tenants` and
+    `POST /tenancy/tenants/{id}/activate` render it directly. Additive for
+    callers that only want the side effect (`TenantProvisionConsumer` ignores
+    the return value). ⚠️ A third-party `TenantControlService`-shaped object
+    passed to `build_tenant_router()` must now provide `list_tenants()` and
+    return a descriptor from `provision()`.
+  - **`TenantReadinessCoordinator.readiness(tenant_id)` raises
+    `TenantNotFoundError`** for a tenant it has not observed (no
+    `TenantNodeReady` seen since process start), rendered as 404 by
+    `GET /tenancy/tenants/{id}/readiness`. A tenant becomes *observed* on its
+    first `TenantNodeReady` — including one carrying an unexpected `store_id`
+    — after which the route answers 200 with a possibly-empty `seen` set. The
+    404 describes the coordinator's in-memory state (RD-18), never the
+    catalog's; use `GET /tenancy/tenants?status=pending` for tenant existence.
+
+  See `technical_docs/features/multitenancy.md`'s "Fleet fan-out:
+  `provision()` vs `request_provision()`" and "Fleet readiness" sections for
+  the topology table, the command/fact diagram, and the worked 3-service
+  readiness example. None of this is wired under the default
+  `TenantIsolation.SHARED`.
+
+- **Schema migrations for both persistence backends, with opt-in
+  auto-on-startup** (Plan 006). New across four packages:
+
+  - **`varco-core`** — `varco_core.migration`: the backend-agnostic
+    `AbstractMigrator` contract (`plan`/`upgrade`/`downgrade`/`stamp` abstract;
+    `check`/`close` **concrete**, so a third-party migrator is not broken by
+    their addition), the frozen value objects `Revision`/`MigrationPlan`/
+    `MigrationReport`, `MigrationSettings.from_env(env=...)` reading the
+    `VARCO_MIGRATE_*` variables, the `MigrationError` exception family
+    (`PendingMigrationsError`, `MigrationLockTimeout`,
+    `IrreversibleMigrationError`, `MigrationBackendUnavailable`), and
+    `InMemoryMigrator` — the standard unit-test double, mirroring
+    `InMemoryEventBus`/`InMemoryDeadLetterQueue`.
+  - **`varco-core`** — a `varco` **console script** (the first in the workspace),
+    with `migrate` subcommands (`current`, `pending`, `check`, `upgrade`,
+    `downgrade`, `stamp`, `adopt`) resolving an `AbstractMigrator` from a
+    `module:callable` target. Backends contribute extra verbs through the
+    `varco.commands` entry-point group, so `varco_core` keeps zero sibling
+    dependencies. `pending` exits `1` when the schema is behind — a one-line CI
+    gate. `downgrade` refuses to run without `--yes`.
+  - **`varco-sa` 2.2.0** — `varco_sa.migration`: `AlembicMigrator` (headless
+    Alembic — no `env.py` file required; `transaction_per_migration=True`,
+    `compare_type=True`), `migration_lock()` (a dedicated `NullPool` connection
+    holding `SAXactAdvisoryLock.xact()` open across Alembic's own transactions
+    with `SET LOCAL idle_in_transaction_session_timeout = 0`; the `COMMIT` **is**
+    the release, and process death releases it too, so there is no TTL to size),
+    `env_template.include_object`/`configure_kwargs()`, and
+    `ops.rls_upgrade`/`rls_downgrade` so Row-Level Security lands in a reviewed
+    revision instead of a startup hook. A **framework Alembic branch**
+    (`branch_labels=("varco",)`) ships inside the wheel covering all nine
+    framework tables, so `pip install -U varco-sa` brings framework schema
+    changes with it — note this makes `upgrade heads` (plural) the correct
+    invocation. `AlembicMigrator.adopt_framework_tables()` / `varco migrate
+    adopt` bridges an existing `ensure_table()`-built database into migration
+    management (run once, before the first upgrade). `alembic` arrives as the
+    optional `varco-sa[migrations]` extra.
+  - **`varco-sa` 2.2.0** — `varco_sa.metadata`: `framework_metadata()`,
+    `framework_table_names()`, `register_framework_metadata()`. Each owning
+    module self-registers at import time, so a framework table added in a future
+    release is picked up with no app-side change; a completeness test fails the
+    day one is added without registering.
+  - **`varco-beanie` 1.2.0** — `varco_beanie.migration`: `Migration` /
+    `MigrationRegistry` (hand-written, ordered, checksum-verified migrations
+    recorded in a `varco_migrations` collection), `BeanieMigrator`, and
+    `IndexReconciler`. Multi-pod exclusion uses an owner-fenced lock document
+    with a background heartbeat. **Index reconciliation defaults to
+    `index_mode="check"`, independent of `mode`** — `mode="upgrade"` never
+    silently starts an index build.
+  - **`varco-fastapi` 1.2.0** — `MigrationLifecycle` and two new
+    `create_varco_app` arguments, `migrations=` and `migration_settings=`. The
+    component is **prepended** to the lifespan list, so migrations run before the
+    event bus, the outbox relay, and the job runner. `varco_fastapi` imports only
+    `varco_core.migration` — never `varco_sa`, `varco_beanie`, or `alembic`.
+
+  **Nothing runs by default.** `VARCO_MIGRATE_MODE` defaults to `off`, and with
+  `migrations=None` (the default) `create_varco_app` builds an identical
+  `VarcoLifespan`. `check` (fail startup if the schema is behind, never write
+  DDL) is the recommended production posture; `upgrade` is the
+  single-instance/dev convenience. Setting `VARCO_MIGRATE_MODE` without passing
+  `migrations=` now logs one WARNING naming the env var rather than silently
+  doing nothing. See `technical_docs/features/schema-migrations.md`.
+
+  ⚠️ `MigrationError` and `MigrationPlan` are **not** re-exported from
+  `varco_core` — the pre-existing, unrelated `varco_core.migrator` (domain
+  data/field migration) already owns those top-level names. Import them from
+  `varco_core.migration`. Every other new name is available from `varco_core`
+  directly.
 
 - **`varco-core` — Dead Letter Queue gains a `source` field and `OutboxRelay`/
   `JobRunner` DLQ wiring** (Plan 005 Phase 3, U-6). `DeadLetterEntry.source`
@@ -110,6 +343,44 @@ warning was not.
   `KeyDestroyedError`. See `technical_docs/features/crypto-shredding.md`.
 
 ### Fixed
+
+- **`varco-core` — a bus-onboarded tenant was permanently unroutable** (Plan 008,
+  Phase 1, RD-11). `TenantProvisionConsumer.on_provision_requested` called
+  `AbstractTenantProvisioner.provision()` directly, so the tenant's schema/database
+  was created but its catalog row never was — `routing.py`/
+  `TenantResolutionMiddleware`'s catalog lookup 404'd it forever, with no code path
+  that ever repaired it. The consumer now drives `TenantControlService.provision()`
+  — the exact transition `POST /tenancy/tenants` uses — so an event-onboarded tenant
+  is routable as soon as `TenantCatalogChanged` is emitted. Pre-existing
+  bus-onboarded tenants remain unroutable until repaired with one idempotent
+  `POST /tenancy/tenants` (or `provision()` call) per affected tenant.
+- **`varco-core` — deprovision over the bus ran destructive DDL while the catalog
+  still said `ACTIVE`** (Plan 008, Phase 1, RD-11). The mirror-image defect:
+  `on_deprovision_requested` called `provisioner.deprovision(confirm_destroy=True)`
+  directly, leaving a routable-looking tenant with no storage (500s instead of the
+  intended 410) and never reaching the fan-out-supervisor-stop / pool-eviction steps
+  `TenantControlService.deprovision()` performs before destructive DDL. Now routed
+  through `TenantControlService.deprovision()`, same as the REST path.
+
+- **`varco-sa` — `print_create_ddl()` was broken on SQLAlchemy 2.x and raised
+  unconditionally** (Plan 006 Phase 0). It called
+  `create_engine(f"{dialect}://", strategy="mock", executor=_capture)`; the
+  `strategy=`/`executor=` arguments were removed in SQLAlchemy 1.4 (replaced by
+  `sqlalchemy.create_mock_engine`), so on the pinned `sqlalchemy==2.0.48` every
+  call raised `TypeError: Invalid argument(s) 'strategy','executor' sent to
+  create_engine()`. The second half of the same bug was that `.compile()` alone
+  never invoked the capture callback even had the engine constructed. Now uses
+  `create_mock_engine` + `engine.execute(CreateTable(...))`, and
+  `Table.tometadata()` was updated to the current `Table.to_metadata()` spelling.
+  **No test covered this module at all** before now; it has two new test files.
+
+- **`varco-sa` — three framework metadata objects were unreachable from the
+  public API** (Plan 006 Phase 0). `audit_metadata` and `dead_letters_metadata`
+  existed but were unexported, and the `varco_encryption_keys` table had only a
+  module-private `_metadata` with no public alias — it was *impossible* to put
+  that table into Alembic's `target_metadata` without touching a private name.
+  All three (`audit_metadata`, `dead_letters_metadata`, `encryption_metadata`)
+  are now exported, alongside the aggregated `framework_metadata()`.
 
 - **`varco-core` — event serializers are now genuinely injectable.** The
   `EventSerializer` type alias was a quoted forward reference

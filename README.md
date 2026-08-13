@@ -103,6 +103,8 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Bootstrap (one-liner setup)](#bootstrap-one-liner-setup)
   - [Alembic helpers](#alembic-helpers)
   - [Schema Guard](#schema-guard)
+- [Schema Migrations](#schema-migrations)
+  - [The varco CLI](#the-varco-cli)
 - [Beanie Backend](#beanie-backend)
   - [Bootstrap](#bootstrap-beanie)
 - [Cache System](#cache-system)
@@ -938,6 +940,22 @@ provider.registered_tenants()       # ["acme", "globex"]
 current_tenant()                    # "acme" (inside a tenant_context block)
 ```
 
+`TenantUoWProvider` (above) is the static, hand-registered form. For a
+**selectable isolation strategy** (shared schema, optionally RLS-asserted;
+Postgres schema-per-tenant; Postgres/Mongo database-per-tenant), a **dynamic
+tenant control plane** (REST or event-driven onboarding, backed by a
+durable catalog), and **global/shared scope** for reference data every
+tenant reads, see `varco_core.tenancy` and
+[`technical_docs/features/multitenancy.md`](technical_docs/features/multitenancy.md).
+Every default there is byte-identical to the `TenantUoWProvider` shape above
+— nothing changes unless you opt in:
+
+```python
+from varco_core.tenancy import TenancySettings, TenantIsolation
+
+settings = TenancySettings(isolation=TenantIsolation.SCHEMA)   # opt-in
+```
+
 ---
 
 ## Query System
@@ -1560,6 +1578,59 @@ async with provider.make_uow() as uow:
     async for post in uow.posts.stream_by_query(params):
         await process(post)
 ```
+
+---
+
+## Schema Migrations
+
+One backend-agnostic contract (`varco_core.migration.AbstractMigrator`), two engines
+(Alembic for Postgres, a versioned runner for MongoDB), an opt-in ASGI lifespan
+component, and a `varco` CLI.
+
+```bash
+pip install "varco-sa[migrations]"
+```
+
+```python
+from varco_sa.migration import AlembicMigrator
+from varco_fastapi import create_varco_app
+
+migrator = AlembicMigrator(engine, script_location="alembic")
+app = create_varco_app(container, routers=[...], migrations=migrator)
+```
+
+```bash
+VARCO_MIGRATE_MODE=check uvicorn myapp:app     # refuse to serve against a stale schema
+```
+
+`VARCO_MIGRATE_MODE` has three values, and it defaults to `off` — with `migrations=None`
+nothing is registered and nothing changes:
+
+| mode | At startup | Use it for |
+|---|---|---|
+| `off` (default) | nothing | migrations run out-of-band already |
+| `check` | fail startup if the schema is behind; never writes DDL | **the recommended production posture** |
+| `upgrade` | lock → apply pending revisions → release | single-instance, dev, PaaS without a pre-deploy hook |
+
+Multi-pod exclusion is a Postgres advisory lock held open in its own transaction across
+Alembic's — released by `COMMIT` and by process death, so there is no TTL to size.
+`varco_sa` ships its own Alembic branch inside the wheel, so `pip install -U varco-sa`
+brings framework schema changes with it (hence `upgrade heads`, plural). MongoDB index
+reconciliation defaults to report-only even in `upgrade` mode.
+
+### The `varco` CLI
+
+`varco_core` now installs a `varco` console script; backends contribute verbs through the
+`varco.commands` entry-point group.
+
+```bash
+varco migrate pending   -t myapp.db:migrator     # exit 1 if behind → CI gate
+varco migrate upgrade   -t myapp.db:migrator     # the pre-deploy-job path
+varco migrate adopt     -t myapp.db:migrator     # one-time ensure_table() bridge
+varco migrate index     -t myapp.db:migrator --create    # MongoDB, opt-in
+```
+
+Full guide: [`technical_docs/features/schema-migrations.md`](technical_docs/features/schema-migrations.md).
 
 ---
 

@@ -253,6 +253,27 @@ duplicated.
 
 ---
 
+## Schema migrations in a composite
+
+No composite-level code is needed: `CompositeLifespan` drives each sub-app's own
+lifespan, so each service's `MigrationLifecycle` runs with its own settings against
+its own database. Two properties follow:
+
+- **Startup time is the sum, not the max.** Composite startup is serial by design, so
+  N services migrate one after another — budget `N × VARCO_MIGRATE_TIMEOUT` in the
+  readiness probe's `initialDelaySeconds`.
+- **Two services sharing one database converge on the same lock automatically.** The
+  default key is the literal `"varco:migrate"` and Postgres advisory locks are already
+  scoped per-database, so same-DB members serialize with no configuration. Services on
+  different databases never contend. `lock_key=` / `VARCO_MIGRATE_LOCK_KEY` is there for
+  schema-per-service setups wanting finer granularity.
+
+One service failing to migrate aborts the whole composite startup — the documented
+fail-fast behaviour, and correct here. See
+[Schema migrations](schema-migrations.md).
+
+---
+
 ## See also
 
 - **Example 23 — `examples/23-composite-all-in-one/`** — a runnable two-service composite.

@@ -75,7 +75,10 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping
+from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping, Sequence
+
+from varco_core.migration.base import AbstractMigrator
+from varco_core.migration.settings import MigrationSettings
 
 from varco_fastapi.validation import validate_container_bindings, validate_router_class
 
@@ -111,6 +114,9 @@ def create_varco_app(
     skill_tasks_prefix: str = "/tasks",
     extra_middleware: list[Any] | None = None,
     extra_lifespan_components: list[Any] | None = None,
+    migrations: AbstractMigrator | Sequence[AbstractMigrator] | None = None,
+    migration_settings: MigrationSettings | None = None,
+    tenancy: Any | None = None,
     validate: bool = True,
     strict_validation: bool = False,
     openapi_url: str = "/openapi.json",
@@ -307,6 +313,52 @@ def create_varco_app(
     lifespan_components = _collect_lifecycle_components(container)
     for extra in extra_lifespan_components or []:
         lifespan_components.append(extra)
+
+    # ── Migrations (Plan 006 Phase 4) ─────────────────────────────────────────
+    # Prepended BEFORE every other component — nothing else should touch a
+    # table that does not exist yet. migrations=None (the default) leaves
+    # this list byte-identical to today (D1: off is opt-in, not the default).
+    resolved_migration_settings = migration_settings or MigrationSettings.from_env()
+    if migrations is not None:
+        migrators: tuple[AbstractMigrator, ...] = (
+            (migrations,)
+            if isinstance(migrations, AbstractMigrator)
+            else tuple(migrations)
+        )
+        if resolved_migration_settings.mode != "off":
+            from varco_fastapi.migrate import MigrationLifecycle
+
+            lifespan_components = [
+                MigrationLifecycle(*migrators, settings=resolved_migration_settings),
+                *lifespan_components,
+            ]
+    elif resolved_migration_settings.mode != "off":
+        # A set VARCO_MIGRATE_MODE with no migrator passed is the failure
+        # mode that wastes the most operator time — warn loudly rather than
+        # silently doing nothing (Plan 006 step 43).
+        _logger.warning(
+            "VARCO_MIGRATE_MODE=%r is set but create_varco_app() received no "
+            "migrations= argument — no migration will run. Pass migrations=<AbstractMigrator> "
+            "to enable auto-on-startup migrations.",
+            resolved_migration_settings.mode,
+        )
+
+    # ── Multitenancy (Plan 007, Phase 10) ─────────────────────────────────────
+    # tenancy=None (the default) registers nothing — byte-identical to
+    # today. Prepended like MigrationLifecycle: nothing else should touch a
+    # tenant resource pool before its sweeper/fan-out supervisor exist.
+    if tenancy is not None:
+        lifespan_components = [tenancy, *lifespan_components]
+    else:
+        import os as _os
+
+        if _os.environ.get("VARCO_TENANCY_ISOLATION"):
+            _logger.warning(
+                "VARCO_TENANCY_ISOLATION is set but create_varco_app() received "
+                "no tenancy= argument — no tenancy lifecycle will run. Pass "
+                "tenancy=<TenancyLifecycle> to enable it (mirrors "
+                "VARCO_MIGRATE_MODE's warn-without-migrations= behaviour)."
+            )
 
     varco_lifespan = VarcoLifespan(*lifespan_components)
 

@@ -55,6 +55,7 @@ from sqlalchemy import Column, DateTime, Integer, MetaData, String, Table, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from varco_core.service.saga import AbstractSagaRepository, SagaState, SagaStatus
+from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
 
@@ -240,6 +241,9 @@ class SASagaRepository(AbstractSagaRepository):
 
     def __repr__(self) -> str:
         return f"SASagaRepository(engine={self._engine!r})"
+
+
+_register_fw_metadata("varco_sa.saga", sagas_metadata)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
