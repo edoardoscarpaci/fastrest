@@ -12,6 +12,8 @@ import uuid
 import pytest
 import pytest_asyncio
 
+from tests.conftest import SyncOp, provision_rls_app_url
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
@@ -33,27 +35,13 @@ def pg_container():
 async def engine(pg_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    url = pg_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
-    )
+    url = await provision_rls_app_url(pg_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     await eng.dispose()
 
 
-class _SyncOp:
-    """Minimal Alembic-``op``-shaped facade over a sync SQLAlchemy connection."""
-
-    def __init__(self, sync_conn) -> None:
-        self._conn = sync_conn
-
-    def execute(self, stmt: str) -> None:
-        import sqlalchemy as sa
-
-        self._conn.execute(sa.text(str(stmt)))
-
-    def get_bind(self):
-        return self._conn
+_SyncOp = SyncOp
 
 
 async def test_rls_upgrade_hides_cross_tenant_rows_then_downgrade_restores(

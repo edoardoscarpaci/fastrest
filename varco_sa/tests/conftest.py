@@ -18,6 +18,8 @@ DESIGN: fresh DeclarativeBase per test
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -83,3 +85,191 @@ async def session(base: type[DeclarativeBase]) -> AsyncSession:
     async with engine.begin() as conn:
         await conn.run_sync(base.metadata.drop_all)
     await engine.dispose()
+
+
+def asyncpg_url(container: Any) -> str:
+    """
+    Return the container's connection URL on the **asyncpg** dialect.
+
+    DESIGN: ask testcontainers for the driver instead of rewriting the string.
+        ``PostgresContainer.get_connection_url()`` honours the constructor's
+        ``driver`` (default ``"psycopg2"``), so it returns
+        ``postgresql+psycopg2://…``.  Fixtures used to normalise that with
+        ``.replace("postgresql://", "postgresql+asyncpg://")``, which matches
+        nothing on that string and silently hands ``create_async_engine`` a
+        sync-driver DSN — surfacing much later as
+        ``ModuleNotFoundError: No module named 'psycopg2'``.
+        ✅ No string surgery, so it cannot silently no-op on a URL shape
+           change; one helper means the seven call sites cannot drift apart.
+        ❌ Couples to the ``get_connection_url(driver=...)`` keyword, which is
+           testcontainers-specific — acceptable, this is test-only code.
+
+    Args:
+        container: A started ``testcontainers.postgres.PostgresContainer``
+            (typed ``Any`` so this module does not import testcontainers,
+            which is an integration-only optional dependency).
+
+    Returns:
+        A DSN beginning with ``postgresql+asyncpg://``.
+
+    Raises:
+        AssertionError: If the container returned a non-asyncpg DSN — a loud
+            failure here beats an obscure driver-import error later.
+
+    Edge cases:
+        A container constructed with ``driver=None`` or ``driver="asyncpg"``
+        is handled identically; the explicit keyword always wins.
+    """
+    url = container.get_connection_url(driver="asyncpg")
+    assert url.startswith(
+        "postgresql+asyncpg://"
+    ), f"expected an asyncpg DSN from the container, got: {url}"
+    return url
+
+
+class SyncOp:
+    """
+    Minimal Alembic-``op``-shaped facade over a **sync** SQLAlchemy connection.
+
+    ``rls_upgrade``/``framework_rls_upgrade`` accept "any object exposing
+    ``execute()``/``get_bind()``". Inside an async test the only way to reach a
+    sync connection is ``await conn.run_sync(...)``, so this adapter is what
+    lets an integration test drive the real migration op against real Postgres.
+
+    DESIGN: shared in conftest rather than duplicated per test module.
+        ✅ ``test_framework_rls.py`` previously referenced ``_SyncOp`` without
+           defining or importing it (a ``NameError`` that meant two tests had
+           never once run to completion); one shared definition makes that
+           class of drift impossible.
+        ❌ Slightly wider blast radius — a change here touches every RLS
+           integration module at once. Acceptable: the surface is two methods.
+
+    Async safety: ❌ Sync-only by construction — must be used inside
+        ``await conn.run_sync(...)``.
+    """
+
+    def __init__(self, sync_conn: Any) -> None:
+        self._conn = sync_conn
+
+    def execute(self, stmt: Any) -> None:
+        """Execute a raw SQL string, mirroring ``alembic.op.execute``."""
+        import sqlalchemy as sa
+
+        self._conn.execute(sa.text(str(stmt)))
+
+    def get_bind(self) -> Any:
+        """Return the underlying connection, mirroring ``alembic.op.get_bind``."""
+        return self._conn
+
+
+#: Login role used by the RLS integration fixtures. Deliberately NOT the
+#: container's bootstrap role — see ``rls_app_engine``.
+RLS_APP_ROLE = "varco_rls_app"
+RLS_APP_PASSWORD = "varco_rls_pw"
+
+
+async def provision_rls_app_url(container: Any) -> str:
+    """
+    Create a non-superuser login role on ``container`` and return its DSN.
+
+    DESIGN: RLS integration tests must NOT connect as the container's own role.
+        Postgres exempts **superusers** and roles with ``BYPASSRLS`` from row
+        security *unconditionally* — ``FORCE ROW LEVEL SECURITY`` only removes
+        the separate, weaker exemption granted to a table's **owner**.
+        ``PostgresContainer``'s bootstrap role is the cluster superuser
+        (``rolsuper=True, rolbypassrls=True``), so a policy applied and queried
+        over that connection is silently never enforced and every "tenant A
+        cannot see tenant B" assertion fails while the shipped DDL is correct.
+        ✅ Tests now exercise the role shape a real application uses, so they
+           genuinely regress the ``FORCE`` clause in ``enable_rls_ddl``.
+        ✅ The role OWNS the tables it creates, which is precisely the
+           owner-exemption case ``FORCE`` exists to close.
+        ❌ Needs an explicit ``GRANT ... ON SCHEMA public`` (PostgreSQL 15
+           revoked ``CREATE`` on ``public`` from ``PUBLIC``).
+
+    Args:
+        container: A started ``PostgresContainer``.
+
+    Returns:
+        An asyncpg DSN authenticating as the non-superuser role.
+
+    Edge cases:
+        Idempotent — safe to call once per test against a module-scoped
+        container; an already-existing role is left as-is.
+    """
+    import sqlalchemy as sa
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    admin_url = asyncpg_url(container)
+    admin_engine = create_async_engine(admin_url, echo=False)
+    try:
+        async with admin_engine.begin() as conn:
+            exists = await conn.scalar(
+                sa.text("SELECT 1 FROM pg_roles WHERE rolname = :r"),
+                {"r": RLS_APP_ROLE},
+            )
+            if not exists:
+                await conn.execute(
+                    sa.text(
+                        f"CREATE ROLE {RLS_APP_ROLE} LOGIN "
+                        f"PASSWORD '{RLS_APP_PASSWORD}'"
+                    )
+                )
+            # PG15+: CREATE on schema public is no longer granted to PUBLIC.
+            await conn.execute(
+                sa.text(f"GRANT CREATE, USAGE ON SCHEMA public TO {RLS_APP_ROLE}")
+            )
+    finally:
+        await admin_engine.dispose()
+
+    # NB: str(URL) renders the password as "***" — render_as_string with
+    # hide_password=False is the only form that yields a connectable DSN.
+    return (
+        make_url(admin_url)
+        .set(username=RLS_APP_ROLE, password=RLS_APP_PASSWORD)
+        .render_as_string(hide_password=False)
+    )
+
+
+async def create_isolated_database_url(container: Any, name: str) -> str:
+    """
+    Create a fresh database on ``container`` and return its asyncpg DSN.
+
+    DESIGN: a test that migrates must not share the module's database.
+        Applying real Alembic revisions writes ``alembic_version`` rows that
+        outlive the test. A sibling test constructing a migrator with a
+        *different* branch configuration then fails with
+        ``No such revision or branch`` because it cannot resolve the revision
+        ids the first test stamped. An isolated database removes the coupling
+        entirely.
+        ✅ Migration tests become order-independent and re-runnable.
+        ❌ One extra database per call — negligible for a throwaway container.
+
+    Args:
+        container: A started ``PostgresContainer``.
+        name:      Database name to create. Dropped and recreated if present,
+                   so the helper is idempotent across re-runs.
+
+    Returns:
+        An asyncpg DSN pointing at the newly created database.
+
+    Edge cases:
+        ``CREATE DATABASE`` cannot run inside a transaction block, so the
+        admin connection is switched to AUTOCOMMIT.
+    """
+    import sqlalchemy as sa
+    from sqlalchemy.engine import make_url
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    admin_url = asyncpg_url(container)
+    admin_engine = create_async_engine(admin_url, echo=False)
+    try:
+        async with admin_engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT")
+            await conn.execute(sa.text(f'DROP DATABASE IF EXISTS "{name}"'))
+            await conn.execute(sa.text(f'CREATE DATABASE "{name}"'))
+    finally:
+        await admin_engine.dispose()
+
+    return make_url(admin_url).set(database=name).render_as_string(hide_password=False)

@@ -66,6 +66,9 @@ openapi = ["pyyaml>=6.0"]
 [project.scripts]
 varco-gen = "varco_fastapi.client.openapi_gen:main"
 
+[project.entry-points."varco.commands"]
+fastapi = "varco_fastapi.contract.cli:register"
+
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
 Repository = "https://github.com/edoardoscarpaci/varco/tree/main/varco_fastapi"

@@ -101,7 +101,7 @@ KafkaEventBus           — varco_kafka
 RedisEventBus           — varco_redis
 ```
 
-**Rule**: services must never hold or call `AbstractEventBus` directly. They inject `AbstractEventProducer` and call `_produce()` / `_produce_many()`. The only accepted exceptions are `OutboxRelay` (infrastructure) and `EventConsumer.register_to()` (wiring-time only).
+**Rule**: services must never hold or call `AbstractEventBus` directly. They inject `AbstractEventProducer` and call `_produce()` / `_produce_many()`. The only accepted exceptions are `OutboxRelay` (infrastructure), `EventConsumer.register_to()` (wiring-time only), and `DlqRedriver` (`varco_core.event.redrive`, Plan 009 — publishes a dead letter back onto the bus on operator command; it is infrastructure, not application logic, same reasoning as `OutboxRelay`).
 
 **`@listen` is declarative / `register_to` is imperative.** The decorator stores metadata on the function object at class-definition time. No subscription is created until `consumer.register_to(bus)` is called (typically in a `@PostConstruct` method). This separation makes the consumer bus-agnostic and testable.
 
@@ -189,6 +189,23 @@ at construction (refuses to configure silent data loss). `RetryPolicy.durable_de
 (`_default_retry_policy = RetryPolicy.durable_delivery()`); pass
 `retry_policy=None` explicitly to restore fire-and-forget. See
 `technical_docs/features/dead-letter-queues.md`.
+
+**Redrive, retention, tenancy, Beanie backend, REST admin** (Plan 009) —
+`AbstractDeadLetterQueue` gained `supports_random_access: ClassVar[bool]`,
+`get()`/`list_entries()` (concrete-but-raising — no portable random access),
+`delete()` (portable default → `ack()`), `delete_where()`/`count_by_channel()`
+(concrete-but-raising, refuse with no predicate). `DlqRedriver`
+(`varco_core.event.redrive`) owns the redrive *policy* (publish-then-ack,
+never the reverse) rather than the ABC growing `redrive(bus=)` — see the
+layer rule above. `DeadLetterEntry.tenant_id: str | None = None` is stamped
+from the ambient `tenant_context()`, never a constructor param; a `None`
+tenant is deliberately never matched by an explicit `tenant_id=` filter.
+`BeanieDeadLetterQueue` (`varco_beanie.dlq`) ships with **no TTL index by
+default** — dead letters must never be silently deleted (RD-2). `varco dlq`
+(list/redrive/purge) and `varco retention prune` are new CLI verbs;
+`mount_reliability_admin()` (`varco_fastapi.admin.mount`) is the bundled REST
+surface, gated the same way as the tenant control plane (see the pitfall
+table). Full detail: `technical_docs/features/dead-letter-queues.md`.
 
 ### SQLAlchemy backend (varco_sa)
 
@@ -400,6 +417,21 @@ subclass and re-declare the `@listen`-decorated method if you need resilience. F
 outbox instead of a direct `_produce()` call. See
 `technical_docs/features/database-auditing.md` for the full wiring guide (Alembic/Beanie
 setup, `list_for_entity()`, consistency trade-offs).
+
+**Retention, tenancy, REST admin, tamper evidence** (Plan 009) —
+`AuditRepository.list_for_entity()` gained a **breaking**, keyword-only
+`tenant_id: str | None = None` (an out-of-tree override without it now
+raises `TypeError` at call time — the previously-silent security bug this
+fixes). `list()` (concrete-but-raising) and `delete_where()`
+(concrete-but-raising, no-predicate `ValueError`) are new; both are driven
+by `mount_reliability_admin()`'s bundled REST surface
+(`varco_fastapi.admin`), gated identically to the tenant control plane.
+`SAAuditRepository(hash_chain=True)`/`BeanieAuditRepository(hash_chain=True)`
+add opt-in tamper evidence (`AuditEntry.entry_hash()`,
+`AuditRepository.verify_chain()`) — the chain link is established inside
+`save()` under a backend-level serialization guarantee, never computed by
+`AuditConsumer` (would fork silently under concurrent consumers). Full
+detail: `technical_docs/features/database-auditing.md`.
 
 ### Field-level encryption & crypto-shredding (varco_core.encryption / encryption_store)
 
@@ -1335,6 +1367,77 @@ symbolic `"tenant"` schema token only for `TenantScope.TENANT` models — a `GLO
 one of the ten framework tables never does, and under `TenantIsolation.SHARED` (the
 default) `__table__.schema` stays `None`, byte-identical to today.
 
+#### Scenario: Call another varco service
+
+```python
+from varco_fastapi.client import client_for
+
+client = client_for(OrderRouter, "https://orders.internal")   # importable router
+order = await client.read(order_id)
+await client.cancel(order_id, reason="oos")
+```
+
+`client_for()` is the front door — a ready-to-call instance, no subclassing.
+For DI: `bind_clients_from(container, OrderRouter)` then
+`Inject[VarcoClient[OrderRouter]]`. For a fleet of peers with resilience
+pre-wired (retry, timeout, a shared circuit breaker, auth forwarding) and
+"one env var per peer": `PeerRegistry.from_env()` +
+`registry.client("orders", OrderRouter)` — see
+`docs/peer-service-integration.md`. `make_client`/`GenericClient`/
+`OpenAPIClient`/`ClientConfigurator`/`generate_client` still work but moved
+to `varco_fastapi.client.advanced` — importing them from
+`varco_fastapi.client` directly now raises `AttributeError` naming the new
+path.
+
+**Caveat**: `client_for()`'s custom `@route` methods still accept
+`**kwargs: Any` — they are not yet built through the new typed
+`build_client_method` machinery (that only drives `gen-client`/
+`contract_client()` today). Do not document or assume `client_for()` gives
+you a `TypeError` on a wrong kwarg yet. See
+`technical_docs/features/portable-contracts.md`'s status note.
+
+#### Scenario: Cross-repo service integration (no shared Python import)
+
+```bash
+# In the producing service's repo/CI:
+varco export-contract myapp.routers:OrderRouter -o order.contract.json
+
+# In the consuming repo — commit order.contract.json, then either:
+varco gen-client -c order.contract.json -o order_client.py --class-name OrderClient
+```
+
+```python
+from order_client import OrderClient          # generated, typed, checked in
+client = OrderClient("https://orders.internal")
+
+# ...or the runtime one-liner, no generated file:
+from varco_fastapi.contract.runtime import contract_client
+client = contract_client("order.contract.json", "https://orders.internal")
+```
+
+Both go through `build_client_method`, so they cannot diverge from each
+other (enforced by `test_signature_parity`/`test_resolver_parity` — do not
+delete either). See `docs/client-code-generation.md` and
+`technical_docs/features/portable-contracts.md`.
+
+#### Scenario: Opt into durability in one line
+
+```python
+from varco_core.reliability import ReliabilityPreset
+from varco_fastapi import create_varco_app
+from varco_sa.dlq import SADeadLetterQueue
+
+dlq = SADeadLetterQueue(engine)
+app = create_varco_app(container, routers=[...], reliability=ReliabilityPreset.durable(dlq=dlq))
+```
+
+Turns on `RetryPolicy.durable_delivery()` + the DLQ for every bare
+`@listen(...)` handler (via `set_default_reliability_preset()`'s resolution
+at `register_to()` time), starts an `OutboxRelay`, wires an `AuditConsumer`,
+and installs the reliability metrics pack — all from one preset object.
+`reliability=None` (the default) registers nothing — byte-identical to not
+using this feature. See `technical_docs/features/reliability-preset.md`.
+
 ---
 
 ## Coding Standards
@@ -1426,6 +1529,8 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Hand-written RLS policy uses bare `current_setting(...)`** | A query on an RLS-protected table that flies at test data volumes goes from milliseconds to seconds in production (one documented case: 8 100 ms) | `current_setting()` is `VOLATILE` and not `LEAKPROOF` — without a scalar-subquery wrapper the Postgres planner cannot push the predicate below an index scan and falls back to a sequential scan | Always use `varco_sa.rls.enable_rls_ddl()`, which emits the `(SELECT current_setting(..., true))` InitPlan form; never hand-write `USING (tenant_id = current_setting(...)::uuid)` — see `technical_docs/features/postgres-rls.md` |
 | **RLS tenant GUC set with `SET` instead of `SET LOCAL`** | Under a transaction-mode pooler (PgBouncer), one tenant's queries leak into a session that was actually serving a different tenant's next transaction | Session-scoped `SET`/`set_config(..., false)` survives past the transaction on a pooled connection — same defect class as `SAAdvisoryLock`'s session-scoped release (U-16) | Use `varco_sa.rls.set_tenant_local(session, tenant_id)` — `set_config(..., true)` (`is_local`) scopes the setting to the current transaction only |
 | **`TenantAwareService._scoped_params` bypassed** | Cross-tenant rows returned from a query path that skipped the service mixin (e.g. a raw repository call, an ad-hoc script) | The mixin fails open by design — it only filters queries that actually go through it, there is no enforcement below the service layer | Enable Postgres RLS as defense-in-depth (`varco_sa.rls.enable_rls_ddl()`) on any table where a query bypassing the service layer would leak data across tenants |
+| **`enable_rls_ddl()` on a `VARCHAR`/`TEXT` tenant column** | Every migration using the policy aborts with `operator does not exist: character varying = uuid` — this is exactly what made `varco_sa.rls_framework.framework_rls_upgrade()` inapplicable before its fix | `enable_rls_ddl()`'s `cast_type` defaults to `"uuid"`, matching a real `UUID` tenant column; a `String`/`VARCHAR` column needs the GUC cast to match | Pass `cast_type="text"` (`enable_rls_ddl(..., cast_type="text")`); `framework_rls_upgrade()` already does this for the two framework tables, whose `tenant_id` is `String(255)` |
+| **RLS test/connection uses a superuser role** | RLS policies appear to do nothing — every row is visible regardless of the tenant GUC — even though `pg_class.relforcerowsecurity` is `True` and the policy is correctly applied | `FORCE ROW LEVEL SECURITY` only revokes the *table-owner* exemption; `rolbypassrls`/superuser connections bypass RLS **unconditionally**, `FORCE` or not — this is a hard Postgres rule, not a varco gap | Connect (and write RLS tests) as a dedicated non-superuser, non-`BYPASSRLS` application role — see `varco_sa/tests/test_rls.py`/`test_framework_rls.py`'s fixture |
 | **`mode="upgrade"` in a large multi-pod deployment** | Rolling deploys crawl; pods log `MigrationLockTimeout`, exit, and get restarted before eventually serving | Every replica races for one migration lock — the leader migrates while the rest burn `lock_timeout`, re-plan, and (if the leader is still working) raise | Deploy `VARCO_MIGRATE_MODE=check` on the pods and run `varco migrate upgrade` in a pre-deploy job / init container. `upgrade` is the small-deployment and dev convenience, not the production posture |
 | **`ensure_table()` and migrations both active** | Alembic's `CREATE TABLE` fails against a table `ensure_table()` already created | The two mechanisms are mutually exclusive *per deployment*, and the hazard is directional (`create_all(checkfirst=True)` against an Alembic table is a harmless no-op; the reverse is not) | Run `varco migrate adopt` (or `AlembicMigrator.adopt_framework_tables()`) **once**, then pick one mechanism. Order matters: adopt, then upgrade |
 | **`upgrade head` (singular) with the framework branch present** | Only the app's tables (or only the framework's) get migrated; the other branch silently stays behind | `varco_sa` ships its own Alembic branch (`branch_labels=("varco",)`) in the wheel, so there are **two** heads | Always `heads` (plural) — every varco command defaults to it. Or opt out with `include_framework_branch=False` + `get_target_metadata(..., include_framework=True)` |
@@ -1459,6 +1564,12 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **Missing store in `expected_stores`** | A tenant activates one store early — traffic is routed to a store that never got its own DDL | A service was added without updating the coordinator's `expected_stores` set | Update `expected_stores` when adding a service to the fleet; the coordinator logs the full expected/seen set at every partial step and on every unexpected-`store_id` WARNING to make the drift visible |
 | **Counting pods instead of stores** | Expecting `expected_stores` to change on every autoscale event, or sizing it by pod count | The readiness unit is a **store** (RD-17), not a pod — ten pods of one service provision the same database, so nine of their `TenantNodeReady` reports are idempotent no-ops | Size `expected_stores` to the number of distinct services/databases, never to pod count; it changes only when a service is added or removed |
 | **Expecting readiness to survive a restart** | A coordinator restart appears to "forget" tenants mid-onboarding — `GET …/readiness` answers 404 (`readiness()` raises `TenantNotFoundError` for a tenant it has not observed since the restart) | Readiness state is in-memory only (RD-18) — no durable/persisted readiness contract exists. The 404 is about the *coordinator's* state, not the catalog's — check `GET /tenancy/tenants?status=pending` for tenant existence | Re-broadcast `request_provision(tenant_id)` — every downstream layer is already idempotent, so this is the documented one-verb recovery, not data loss |
+| **`list_entries(tenant_id="acme")` misses a framework-level dead letter** | An entry produced outside any tenant context (e.g. a boot-time outbox deserialize failure) never shows up under any explicit `tenant_id=` filter | `DeadLetterEntry.tenant_id=None` is deliberately never matched by `tenant_id="acme"` — a `None` tenant is not "every tenant" (Plan 009, RD-4/R4) | Use no `tenant_id` filter at all for the operator/global view; a `None`-tenant entry is correct, expected behaviour, not a bug |
+| **`redrive(entry_id)` called on Kafka/NATS** | `DeadLetterNotAddressable` | Stream-backed stores cannot address a single message by id — `supports_random_access=False` (RD-4) | Use `redrive_batch()` / the CLI's `--batch` flag, which work on every backend |
+| **`client_for()`'s custom `@route` method assumed typed/strict** | A wrong kwarg silently passes through instead of raising `TypeError`, unlike a `gen-client`-generated client for the same router | `_VarcoClientMeta` (the metaclass behind `client_for()`) was deliberately NOT rewired onto `build_client_method` in Plan 009 Phase 7 (high-blast-radius deferral) — only `contract_client()`/`gen-client` go through it | Don't assume parity between `client_for()` and a cross-repo generated client for custom routes; generate a typed client (`varco gen-client`) if you need the strict signature today — see `technical_docs/features/portable-contracts.md`'s status note |
+| **`mount_reliability_admin()` without `acknowledge_bundled_admin=True`** | `ValueError` at mount time, nothing mounted | This surface can replay bus messages and delete audit/DLQ records — at least as privileged as the tenant control plane (RD-9) | Pass it only after confirming a standalone deployment isn't justified — same rule as `mount_tenant_admin()` |
+| **Per-call breaker for a peer service** | Circuit never opens for a flaky peer | Building a fresh `PeerRegistry`/`CircuitBreaker` per request instead of reusing a singleton registry | Construct `PeerRegistry` once (module scope or a DI singleton via `bind_peers`); it caches one `CircuitBreaker` per peer *name*, never per call |
+| **`ReliabilityPreset(outbox_max_attempts=...)` without `dlq`** | `ValueError` at construction | Mirrors `OutboxRelay`'s own refusal — deleting a poison entry with nowhere durable to put it is silent data loss | Pass a `dlq=` alongside `outbox_max_attempts` |
 
 ---
 
@@ -1522,6 +1633,35 @@ Am I adding a new capability?
 │                            (never a create_varco_app kwarg — RD-9)
 │       ↳ New global/shared entity? → Meta.tenant_scope = TenantScope.GLOBAL,
 │                            never a new mixin (validate_service_scope() guards it)
+│
+├─ Cross-repo service integration (calling a peer whose Python package is
+│  not importable from this repo)?
+│  └─ → varco_fastapi.contract (ServiceContract, build_contract, `varco
+│         export-contract`) + varco_fastapi.client.method
+│         (build_client_method, ImportedTypeResolver/SynthesizedTypeResolver)
+│       ↳ Runtime, no generated file? → varco_fastapi.contract.runtime.contract_client
+│       ↳ Checked-in typed client module? → `varco gen-client` /
+│                            varco_fastapi.contract.codegen.render_client_module
+│       ↳ Just IDE/mypy types for an existing client_for() call site?
+│                            → `varco gen-client-stubs [--check]`
+│       ↳ Fleet of peers, one env var each? → varco_fastapi.client.peer.PeerRegistry
+│                            + bind_peers()
+│       ⚠️ NOT client_for()'s custom-route methods — those are not wired
+│         through build_client_method yet (see the pitfall table)
+│
+├─ Reliability feature (DLQ redrive/retention, audit retention/tamper
+│  evidence, "opt into durability once")?
+│  └─ → varco_core.event.redrive (DlqRedriver) / varco_core.event.dlq
+│         (delete/delete_where/count_by_channel) / varco_core.service.audit
+│         (list/delete_where/verify_chain) for the primitives
+│       ↳ Bundling retry+DLQ+outbox+audit+metrics behind one object?
+│                            → varco_core.reliability.ReliabilityPreset
+│       ↳ FastAPI startup wiring? → varco_fastapi.reliability.ReliabilityLifecycle
+│                            + create_varco_app(reliability=...)
+│       ↳ REST admin/query surface? → varco_fastapi.admin.mount_reliability_admin()
+│                            (never a create_varco_app kwarg — RD-9, same rule
+│                            as mount_tenant_admin())
+│       ↳ New CLI verb? → varco_core.cli.dlq / varco_core.cli.retention
 │
 └─ ORM/database feature?
    └─ → varco_sa (SQLAlchemy) and/or varco_beanie (MongoDB)

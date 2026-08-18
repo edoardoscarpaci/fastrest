@@ -418,6 +418,49 @@ class OutboxRepository(ABC):
                 cls.__name__,
             )
 
+    async def count_pending(self) -> int:
+        """
+        Return the number of unsent outbox entries.
+
+        Concrete-but-raising (Plan 009, Phase 1 / R2): a portable default
+        would be a full ``len(get_pending(limit=huge))`` table scan on the
+        hot path — every existing backend must opt in with a real ``COUNT``.
+        The reliability-metrics gauge (``varco.outbox.pending``) catches the
+        ``NotImplementedError`` once and self-disables with a single INFO log
+        naming this repository class — see
+        ``varco_core.observability.reliability.install_reliability_metrics``.
+
+        Returns:
+            Non-negative count of pending (unpublished) entries.
+
+        Raises:
+            NotImplementedError: unless overridden by a backend repository.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement count_pending() — "
+            "the outbox-lag gauge will self-disable for this repository."
+        )
+
+    async def oldest_pending_at(self) -> datetime | None:
+        """
+        Return the ``created_at`` of the oldest pending entry, or ``None``.
+
+        Concrete-but-raising for the same reason as ``count_pending()`` — a
+        portable default would require the same full scan. Drives
+        ``varco.outbox.lag_seconds`` (``now - oldest_pending_at()``).
+
+        Returns:
+            The oldest pending entry's ``created_at``, or ``None`` when the
+            outbox is empty.
+
+        Raises:
+            NotImplementedError: unless overridden by a backend repository.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement oldest_pending_at() — "
+            "the outbox-lag gauge will self-disable for this repository."
+        )
+
 
 # ── OutboxRelay ───────────────────────────────────────────────────────────────
 
@@ -868,6 +911,7 @@ class OutboxRelay:
         failure here is the DLQ implementation's own responsibility to
         swallow and log."""
         from varco_core.event.dlq import DeadLetterEntry, DeadLetterSource
+        from varco_core.service.tenant import current_tenant
 
         if self._dlq is None:
             return
@@ -882,6 +926,10 @@ class OutboxRelay:
             source=DeadLetterSource.OUTBOX_RELAY,
             source_ref=str(entry.entry_id),
             payload=entry.payload,
+            # Plan 009, Phase 6 (R4) — same ambient-context stamping as the
+            # consumer retry wrapper. None outside a tenant_context() is
+            # correct (framework-level failure, not tenant data).
+            tenant_id=current_tenant(),
         )
         await self._dlq.push(dead_letter)
 

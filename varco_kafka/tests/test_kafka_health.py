@@ -223,6 +223,41 @@ def test_repr_contains_bootstrap_servers() -> None:
     assert "3.0" in text
 
 
+# ── Constructor contract ──────────────────────────────────────────────────────
+
+
+def test_regression_constructor_takes_settings_not_bootstrap_servers() -> None:
+    """
+    User reports: ``KafkaHealthCheck(bootstrap_servers=..., timeout=10.0)``
+    raises ``TypeError: unexpected keyword argument 'bootstrap_servers'``.
+    Correct behaviour is that the probe takes the injected
+    ``KafkaEventBusSettings`` object, because the check is a DI ``@Singleton``
+    whose brokers must be exactly the ones the event bus uses — a second,
+    independently-passed address string is a config-drift hazard.
+
+    The old ``bootstrap_servers=`` kwarg predates the settings-object
+    constructor and survived only in a Docker-gated integration test.
+    """
+    check = KafkaHealthCheck(
+        KafkaEventBusSettings(bootstrap_servers="b1:9092,b2:9092"), timeout=7.5
+    )
+
+    # The probe targets exactly the settings' brokers.
+    assert "b1:9092,b2:9092" in repr(check)
+    assert "7.5" in repr(check)
+
+    with pytest.raises(TypeError):
+        KafkaHealthCheck(bootstrap_servers="b1:9092")  # type: ignore[call-arg]
+
+
+def test_regression_settings_is_positional_and_timeout_keyword_only() -> None:
+    """``timeout`` is keyword-only so it can never be mistaken for settings."""
+    with pytest.raises(TypeError):
+        KafkaHealthCheck(
+            KafkaEventBusSettings(bootstrap_servers="b1:9092"), 3.0
+        )  # type: ignore[misc]
+
+
 # ── Integration: real Kafka ───────────────────────────────────────────────────
 
 
@@ -243,7 +278,14 @@ async def test_integration_healthy_against_real_kafka() -> None:
     # Use testcontainers so the test is self-contained — no pre-running Kafka needed.
     with KafkaContainer() as kafka:
         bootstrap = kafka.get_bootstrap_server()
-        check = KafkaHealthCheck(bootstrap_servers=bootstrap, timeout=10.0)
+        # KafkaHealthCheck takes the injected KafkaEventBusSettings object,
+        # never a bare bootstrap_servers string — same shape every unit test
+        # above uses.  The old `bootstrap_servers=` kwarg predates the
+        # settings-object constructor (varco_core.connection settings pattern)
+        # and only survived here because this test never ran without Docker.
+        check = KafkaHealthCheck(
+            KafkaEventBusSettings(bootstrap_servers=bootstrap), timeout=10.0
+        )
         result = await check.check()
     assert result.status is HealthStatus.HEALTHY
     assert result.latency_ms is not None

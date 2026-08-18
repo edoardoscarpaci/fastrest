@@ -497,3 +497,70 @@ class TestRedisDLQConfiguration:
             await container.ainstall(RedisDLQConfiguration)
             dlq = await container.aget(AbstractDeadLetterQueue)
             assert isinstance(dlq, RedisDLQ)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Plan 009, Phase 2 (R3 retention) / Phase 4 (R1 redrive)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# RedisDLQ is durable and addressable -- supports_random_access=True, with
+# get()/list_entries()/delete_where()/count_by_channel() implemented (unlike
+# Kafka/NATS, which stay concrete-but-raising per RD-4).
+
+
+class TestRedisDLQRandomAccessCapabilityFlag:
+    def test_supports_random_access_is_true(
+        self, settings: RedisEventBusSettings
+    ) -> None:
+        dlq = RedisDLQ(settings)
+        assert dlq.supports_random_access is True
+
+
+class TestRedisDLQGet:
+    async def test_get_returns_pushed_entry(self, dlq: RedisDLQ) -> None:
+        entry = _make_entry()
+        await dlq.push(entry)
+        fetched = await dlq.get(entry.entry_id)
+        assert fetched is not None
+        assert fetched.entry_id == entry.entry_id
+
+    async def test_get_unknown_id_returns_none(self, dlq: RedisDLQ) -> None:
+        assert await dlq.get(uuid.uuid4()) is None
+
+
+class TestRedisDLQListEntries:
+    async def test_list_entries_is_non_destructive(self, dlq: RedisDLQ) -> None:
+        entry = _make_entry()
+        await dlq.push(entry)
+        entries = await dlq.list_entries()
+        assert len(entries) == 1
+        # Must still be there -- list_entries is a READ, unlike pop_batch.
+        assert await dlq.count() == 1
+
+    async def test_list_entries_filters_by_channel(self, dlq: RedisDLQ) -> None:
+        await dlq.push(_make_entry("H.orders"))
+        entries = await dlq.list_entries(channel="orders")
+        assert all(e.channel == "orders" for e in entries)
+
+
+class TestRedisDLQDeleteWhere:
+    async def test_delete_where_no_predicate_raises_value_error(
+        self, dlq: RedisDLQ
+    ) -> None:
+        with pytest.raises(ValueError):
+            await dlq.delete_where()
+
+    async def test_delete_where_older_than_deletes_matching(
+        self, dlq: RedisDLQ
+    ) -> None:
+        await dlq.push(_make_entry())
+        deleted = await dlq.delete_where(older_than=datetime.now())
+        assert deleted >= 0
+
+
+class TestRedisDLQCountByChannel:
+    async def test_count_by_channel_returns_mapping(self, dlq: RedisDLQ) -> None:
+        await dlq.push(_make_entry())
+        counts = await dlq.count_by_channel()
+        assert isinstance(counts, dict)
+        assert counts.get("orders", 0) >= 1

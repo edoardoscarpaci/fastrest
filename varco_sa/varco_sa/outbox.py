@@ -89,6 +89,7 @@ from sqlalchemy import (
     String,
     Text,
     delete as sa_delete,
+    func,
     select,
     update as sa_update,
 )
@@ -739,6 +740,35 @@ class SARelayOutboxRepository(OutboxRepository):
             "SARelayOutboxRepository.save_many: committed %d entries",
             len(entries),
         )
+
+    async def count_pending(self) -> int:
+        """
+        Return a ``COUNT(*)`` of all rows (every row is pending — sent rows
+        are ``delete()``d, not flagged).
+
+        Async safety: ✅ Own session, closed after the query.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(func.count()).select_from(OutboxEntryModel)
+            )
+            return int(result.scalar_one())
+
+    async def oldest_pending_at(self) -> datetime | None:
+        """
+        Return the earliest ``created_at`` across all pending rows, or
+        ``None`` when the outbox is empty.
+
+        Async safety: ✅ Own session, closed after the query.
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(func.min(OutboxEntryModel.created_at))
+            )
+            value = result.scalar_one_or_none()
+            if value is not None and value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value
 
     def __repr__(self) -> str:
         return f"SARelayOutboxRepository(session_factory={self._session_factory!r})"

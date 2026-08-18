@@ -140,6 +140,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Middleware stack](#middleware-stack)
   - [Job runner — async mode](#job-runner--async-mode)
   - [Bootstrap helpers](#bootstrap-helpers)
+  - [Calling other varco services — client_for](#calling-other-varco-services--client_for)
 - [Observability](#observability)
   - [@span — distributed tracing](#span--distributed-tracing)
   - [@counter and @histogram](#counter-and-histogram)
@@ -1628,9 +1629,22 @@ varco migrate pending   -t myapp.db:migrator     # exit 1 if behind → CI gate
 varco migrate upgrade   -t myapp.db:migrator     # the pre-deploy-job path
 varco migrate adopt     -t myapp.db:migrator     # one-time ensure_table() bridge
 varco migrate index     -t myapp.db:migrator --create    # MongoDB, opt-in
+
+# Plan 009 — reliability & service integration
+varco dlq list           -t module:factory [--channel C] [--source S] [--limit N]
+varco dlq redrive        -t module:factory -b module:factory \
+                          (--entry-id UUID | --batch [--limit N]) [--dry-run]
+varco dlq purge          -t module:factory --before ISO8601 [--limit N]
+varco retention prune    --type {dlq,audit} --before ISO8601 [--limit N] [--chunk N] [--dry-run] \
+                          -t module:factory   # or VARCO_RETENTION_TARGET
+varco export-contract    myapp.routers:OrderRouter [-o order.contract.json] [--strict]
+varco gen-client         -c order.contract.json -o order_client.py [--class-name OrderClient]
+varco gen-client-stubs   (myapp.routers:OrderRouter | -c order.contract.json) -o client.pyi [--check]
 ```
 
-Full guide: [`technical_docs/features/schema-migrations.md`](technical_docs/features/schema-migrations.md).
+Full guides: [`technical_docs/features/schema-migrations.md`](technical_docs/features/schema-migrations.md),
+[`technical_docs/features/dead-letter-queues.md`](technical_docs/features/dead-letter-queues.md),
+[`technical_docs/features/portable-contracts.md`](technical_docs/features/portable-contracts.md).
 
 ---
 
@@ -2457,6 +2471,62 @@ fastapi_bootstrap(container, setup_producer=True)
 app = FastAPI(lifespan=VarcoLifespan(container))
 ```
 
+### Calling other varco services — `client_for`
+
+`client_for()` is the documented way to call another varco service — no
+class to subclass, no manual httpx wiring, returns a ready-to-call instance:
+
+```python
+from varco_fastapi.client import client_for
+from orders_service.routers import OrderRouter   # importable peer router
+
+client = client_for(OrderRouter, "https://orders.internal")
+order = await client.read(order_id)
+await client.cancel(order_id, reason="oos")
+```
+
+For a peer whose Python package isn't importable (a different team/repo),
+export a portable contract and generate a typed client, or use the runtime
+one-liner:
+
+```bash
+varco export-contract myapp.routers:OrderRouter -o order.contract.json
+varco gen-client -c order.contract.json -o order_client.py --class-name OrderClient
+```
+
+```python
+from varco_fastapi.contract.runtime import contract_client
+client = contract_client("order.contract.json", "https://orders.internal")
+```
+
+`PeerRegistry` bundles "one env var per peer" plus resilience (retry,
+timeout, a shared circuit breaker, auth forwarding) pre-wired:
+
+```bash
+export VARCO_PEER_ORDERS_URL="https://orders.internal"
+```
+
+```python
+from varco_fastapi.client.peer import PeerRegistry
+
+registry = PeerRegistry.from_env()
+client = registry.client("orders", OrderRouter)
+```
+
+`make_client`, `GenericClient`, `OpenAPIClient`, `ClientConfigurator`, and
+`generate_client` still exist for their original use cases (no-router
+services, third-party OpenAPI docs) — import them from
+`varco_fastapi.client.advanced`. Full guides: [`docs/client.md`](docs/client.md),
+[`docs/client-code-generation.md`](docs/client-code-generation.md),
+[`docs/peer-service-integration.md`](docs/peer-service-integration.md),
+[`technical_docs/features/portable-contracts.md`](technical_docs/features/portable-contracts.md).
+
+⚠️ **Current gap**: `client_for()`'s custom `@route` methods are not yet
+built through the same typed mechanism as `gen-client`/`contract_client()` —
+they still accept `**kwargs: Any`. See the "important" note in
+[`docs/client-code-generation.md`](docs/client-code-generation.md) before
+assuming the two paths behave identically for a given router.
+
 ---
 
 ## Observability
@@ -2623,6 +2693,31 @@ register_global_attribute_provider(
 `varco_beanie`. See the
 [Database Auditing guide](technical_docs/features/database-auditing.md) for
 wiring, the Alembic/Beanie setup, and the per-backend idempotency behaviour.
+
+---
+
+## Changelog summary
+
+Full migration notes live under `technical_docs/migrations/`.
+
+**Plan 009 — Reliability & Service Integration**
+([full note](technical_docs/migrations/009-reliability-and-integration.md)):
+DLQ redrive (`DlqRedriver`, `varco dlq`) and retention/pruning
+(`delete_where()`, `varco retention prune`) across SA/Redis/Beanie (Kafka/NATS
+raise naming their own retention mechanism); tenant-scoped DLQ + audit
+entries with optional Postgres RLS; a reliability metrics pack
+(`varco.dlq.*`/`varco.outbox.*`/`varco.audit.*`); a one-call
+`ReliabilityPreset` for "opt into durability once"; a bundled
+`mount_reliability_admin()` REST surface; opt-in audit hash-chaining for
+tamper evidence; a collapsed client front door (`client_for`) plus typed
+custom-route codegen for cross-repo consumers (`varco export-contract` /
+`varco gen-client`); and `PeerRegistry` for "one env var, one inject" peer
+service calls. ⚠️ Breaking: `AuditRepository.list_for_entity()` gains a
+keyword-only `tenant_id=`; `make_client`/`GenericClient`/`OpenAPIClient`/
+`ClientConfigurator`/`generate_client` moved to `varco_fastapi.client.advanced`.
+See the migration note for the full breaking-change table and a known gap
+(`client_for()`'s custom-route methods are not yet typed via the new
+contract machinery).
 
 ---
 

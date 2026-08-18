@@ -113,6 +113,11 @@ _DEFAULT_DLQ_STREAM_SUFFIX = "-dlq"
 # Short enough to be responsive; long enough not to hammer NATS with polls.
 _FETCH_TIMEOUT_SECONDS = 0.5
 
+# How long ack() waits for the JetStream server to CONFIRM the ack.
+# ack() must not return before the message is actually removed — see the
+# DESIGN block on NatsDLQ.ack.
+_ACK_TIMEOUT_SECONDS = 2.0
+
 
 # ── NatsDLQ ───────────────────────────────────────────────────────────────────
 
@@ -408,17 +413,40 @@ class NatsDLQ(AbstractDeadLetterQueue):
         Under WorkQueue retention, acknowledging a message deletes it from the
         DLQ stream — it will not be returned by a future ``pop_batch()``.
 
+        DESIGN: ``ack_sync()``, never the fire-and-forget ``ack()``.
+            nats-py's ``Msg.ack()`` only publishes to the reply subject and
+            returns immediately, so the message can still be in the stream when
+            this coroutine returns. That breaks
+            ``AbstractDeadLetterQueue.ack``'s postcondition ("Removes the entry
+            from the DLQ so it is not returned by future ``pop_batch`` calls")
+            — a read-after-ack sees stale state — and, more seriously, lets a
+            process exiting straight after ``ack()`` lose the ack entirely, so
+            ``DlqRedriver``'s publish-then-ack policy redelivers the dead
+            letter. ``ack_sync()`` does a request/reply and waits for the
+            server to confirm.
+            ✅ The postcondition holds on return; redrive is not duplicated.
+            ❌ One network round trip per ack instead of zero — the correct
+               trade for a durability primitive.
+
         Args:
             entry_id: The ``DeadLetterEntry.entry_id`` to acknowledge.
+
+        Raises:
+            Nothing — a failed acknowledgement is logged, never propagated, so
+            it cannot abort a relay/redrive loop mid-batch.
 
         Edge cases:
             - Calling with an unknown ``entry_id`` (not returned by a prior
               ``pop_batch()``, or already acked) is a silent no-op.
+            - If the server does not confirm within
+              ``_ACK_TIMEOUT_SECONDS``, the entry is kept in ``_in_flight`` so
+              a later ``ack()`` retries it. A duplicate ack is harmless to
+              JetStream; a silently dropped entry is not.
             - If the process restarts between ``pop_batch()`` and ``ack()``, the
               message is not acked — it is re-fetched on the next ``pop_batch()``
               (at-least-once relay semantics).
 
-        Async safety: ✅ Awaits ``msg.ack()``.
+        Async safety: ✅ Awaits ``msg.ack_sync()``.
         """
         entry_id_str = str(entry_id)
         msg = self._in_flight.pop(entry_id_str, None)
@@ -428,7 +456,20 @@ class NatsDLQ(AbstractDeadLetterQueue):
             _logger.debug("NatsDLQ.ack: entry_id=%s not in-flight — noop.", entry_id)
             return
 
-        await msg.ack()
+        try:
+            await msg.ack_sync(timeout=_ACK_TIMEOUT_SECONDS)
+        except Exception:
+            # Keep the entry acknowledgeable: we do not know whether the server
+            # processed the ack, and a re-ack is harmless while a dropped entry
+            # would be redelivered forever.
+            self._in_flight[entry_id_str] = msg
+            _logger.warning(
+                "NatsDLQ.ack: server did not confirm ack for entry_id=%s — "
+                "left in-flight for retry.",
+                entry_id,
+                exc_info=True,
+            )
+            return
         _logger.debug("NatsDLQ.ack: acknowledged entry_id=%s", entry_id)
 
     async def count(self) -> int:
@@ -460,6 +501,20 @@ class NatsDLQ(AbstractDeadLetterQueue):
             # No DLQ stream yet → nothing has ever been pushed.
             return 0
         return int(info.state.messages)
+
+    async def delete_where(self, **_kwargs: Any) -> int:
+        """
+        Always raises — JetStream has no per-message delete by predicate.
+
+        Raises:
+            NotImplementedError: naming ``MaxAge`` (the stream-level retention
+                setting) as the correct mechanism (RD-4).
+        """
+        raise NotImplementedError(
+            "NatsDLQ does not support delete_where() — JetStream streams are "
+            "not randomly deletable. Configure the DLQ stream's MaxAge "
+            "instead (JetStream's own retention mechanism)."
+        )
 
     # ── Stream / consumer lifecycle helpers ───────────────────────────────────
 

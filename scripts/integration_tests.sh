@@ -49,7 +49,7 @@ echo -e "  ${GREEN}✔${RESET}  Docker daemon is running"
 # manage their own containers.
 #   ✅ Simple to extend: add the package name here, nothing else.
 #   ❌ bash 4+ only (arrays with expansion); not sh-portable.
-ALL_INTEGRATION_PACKAGES=("varco_redis" "varco_kafka" "varco_beanie" "varco_memcached")
+ALL_INTEGRATION_PACKAGES=("varco_redis" "varco_kafka" "varco_beanie" "varco_memcached" "varco_fastapi" "varco_nats" "varco_sa" "varco_casbin" "varco_ws")
 
 # ── Determine which packages to test ──────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
@@ -72,6 +72,7 @@ done
 # -m integration so pytest's marker filter applies — belt-and-suspenders.
 FAILED_PACKAGES=()
 PASSED_PACKAGES=()
+SKIPPED_PACKAGES=()
 
 echo -e "\n${BOLD}── Running integration tests ──────────────────────────────────────────────${RESET}\n"
 
@@ -85,13 +86,30 @@ for pkg in "${SELECTED_PACKAGES[@]}"; do
   #   ✅ Correct rootdir → correct config → tests collect and markers work.
   #   ❌ Changes the working directory inside the subprocess — transparent to the parent shell.
   # shellcheck disable=SC2086  # PYTEST_EXTRA_ARGS intentionally word-splits
-  if (cd "$ROOT/$pkg" && VARCO_RUN_INTEGRATION=1 uv run pytest \
+  # `set -e` must not abort the loop on a non-zero pytest exit — we want to run
+  # every package and summarise at the end, so the status is captured explicitly.
+  status=0
+  (cd "$ROOT/$pkg" && VARCO_RUN_INTEGRATION=1 uv run pytest \
       tests/ \
       -m integration \
       -v \
-      ${PYTEST_EXTRA_ARGS:-}); then
+      ${PYTEST_EXTRA_ARGS:-}) || status=$?
+
+  # DESIGN: pytest exit code 5 (EXIT_NOTESTSCOLLECTED) means "this package has
+  # no @pytest.mark.integration test", which is not a failure — several
+  # workspace members legitimately have none yet.
+  #   ✅ A package that later GAINS an integration test is picked up
+  #      automatically, with no edit to ALL_INTEGRATION_PACKAGES.
+  #   ✅ A genuinely failing suite still exits 1 and is still reported failed.
+  #   ❌ A test file whose marker is accidentally deleted degrades silently to
+  #      "no tests" instead of failing loudly — mitigated by printing the
+  #      skipped packages in the summary so the drift stays visible.
+  if [[ $status -eq 0 ]]; then
     PASSED_PACKAGES+=("$pkg")
     echo -e "${GREEN}✔  $pkg passed${RESET}\n"
+  elif [[ $status -eq 5 ]]; then
+    SKIPPED_PACKAGES+=("$pkg")
+    echo -e "${YELLOW}○  $pkg has no integration tests — skipped${RESET}\n"
   else
     FAILED_PACKAGES+=("$pkg")
     echo -e "${RED}✘  $pkg FAILED${RESET}\n"
@@ -102,6 +120,9 @@ done
 echo -e "${BOLD}── Summary ────────────────────────────────────────────────────────────────${RESET}"
 for pkg in "${PASSED_PACKAGES[@]+"${PASSED_PACKAGES[@]}"}"; do
   echo -e "  ${GREEN}✔  $pkg${RESET}"
+done
+for pkg in "${SKIPPED_PACKAGES[@]+"${SKIPPED_PACKAGES[@]}"}"; do
+  echo -e "  ${YELLOW}○  $pkg (no integration tests)${RESET}"
 done
 for pkg in "${FAILED_PACKAGES[@]+"${FAILED_PACKAGES[@]}"}"; do
   echo -e "  ${RED}✘  $pkg${RESET}"

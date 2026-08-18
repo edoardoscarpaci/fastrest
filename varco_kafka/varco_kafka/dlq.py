@@ -516,6 +516,20 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         )
         return -1
 
+    async def delete_where(self, **_kwargs: Any) -> int:
+        """
+        Always raises — Kafka has no per-message delete.
+
+        Raises:
+            NotImplementedError: naming ``retention.ms`` (the topic-level
+                retention setting) as the correct mechanism (RD-4).
+        """
+        raise NotImplementedError(
+            "KafkaDLQ does not support delete_where() — Kafka topics are not "
+            "randomly deletable. Configure the DLQ topic's retention.ms "
+            "instead (Kafka's own retention mechanism)."
+        )
+
     # ── Consumer lifecycle helper ──────────────────────────────────────────────
 
     async def _ensure_consumer(self) -> AIOKafkaConsumer:

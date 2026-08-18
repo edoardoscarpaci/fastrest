@@ -41,6 +41,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from varco_core.encryption_store import EncryptionKeyEntry, EncryptionKeyStore
 from varco_sa.encryption_store import SAEncryptionKeyStore, _metadata
 
+from tests.conftest import asyncpg_url
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -343,9 +345,7 @@ class TestSAEncryptionKeyStoreIntegration:
     @pytest_asyncio.fixture
     async def pg_store(self, pg_container):
         """``SAEncryptionKeyStore`` backed by a real PostgreSQL instance."""
-        url = pg_container.get_connection_url().replace(
-            "postgresql://", "postgresql+asyncpg://"
-        )
+        url = asyncpg_url(pg_container)
         e = create_async_engine(url, echo=False)
         store = SAEncryptionKeyStore(e)
         await store.ensure_table()

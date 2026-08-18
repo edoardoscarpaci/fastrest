@@ -158,6 +158,275 @@ The SA outbox table gained `attempts INT NOT NULL DEFAULT 0`,
 change, and `SAOutboxRepository`/`SARelayOutboxRepository` both implement
 `mark_failed()` natively as a single `UPDATE`.
 
+## Backend support matrix (Plan 009)
+
+| Backend | `push`/`pop_batch`/`ack`/`count` | `get`/`list_entries` (random access) | `delete`/`delete_where`/`count_by_channel` | `tenant_id` filter |
+|---|---|---|---|---|
+| `InMemoryDeadLetterQueue` | ✅ | ✅ (`supports_random_access = True`) | ✅ | ✅ |
+| `SADeadLetterQueue` (varco_sa) | ✅ | ✅ | ✅ | ✅ |
+| `RedisDLQ` (varco_redis) | ✅ | ✅ | ✅ | ✅ |
+| `BeanieDeadLetterQueue` (varco_beanie) | ✅ | ✅ | ✅ | ✅ |
+| `KafkaDLQ` (varco_kafka) | ✅ | ❌ `NotImplementedError` (RD-4) | ❌ `NotImplementedError` naming `retention.ms` | — (redrive via `redrive_batch` only) |
+| `NatsDLQ` (varco_nats) | ✅ | ❌ `NotImplementedError` (RD-4) | ❌ `NotImplementedError` naming JetStream `MaxAge` | — (redrive via `redrive_batch` only) |
+
+`AbstractDeadLetterQueue.supports_random_access: ClassVar[bool] = False` is
+the capability flag every backend above overrides. Stream-shaped stores
+(Kafka topic, NATS subject) genuinely cannot address a single message by id
+— only `pop_batch()` is meaningful there, so `get`/`list_entries`/
+`delete_where`/`count_by_channel` raise `NotImplementedError` with a message
+naming the backend's own retention mechanism instead of pretending to
+support an operation that would either be destructive or impossible.
+
+### Beanie (`varco_beanie.dlq.BeanieDeadLetterQueue`) — RD-2, no TTL by default
+
+```python
+from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
+
+await init_beanie(database=db, document_models=[Order, DeadLetterDocument])
+dlq = BeanieDeadLetterQueue()   # ttl_seconds=None — no auto-expiry (RD-2)
+```
+
+Collection `varco_dead_letters` — matches `SADeadLetterQueue`'s table name
+and the `varco_audit_log` precedent. **There is deliberately no TTL index by
+default.** A TTL index silently deletes dead letters — precisely the failure
+mode this whole release exists to fix ("nobody notices it died"), made worse
+here because the delete happens *without an operator ever seeing the entry*.
+Retention is explicit: `delete_where()` / `varco retention prune`.
+`ttl_seconds=` is an opt-in escape hatch that logs one WARNING at
+construction naming the data-loss implication — and the index it declares
+still has to be **built** by `varco migrate index --create` (never inside
+the request path or lifespan, Plan 006's `index_mode="check"` precedent);
+declaring `ttl_seconds=` alone does not build the index.
+
+`entry_id` is Mongo's `_id` — `get()`/`ack()` are O(1) `_id` lookups, and a
+duplicate `push()` of the same `entry_id` is a `DuplicateKeyError` treated as
+"already stored" (idempotent on redelivery — a property `SADeadLetterQueue`
+only gets on Postgres via `ON CONFLICT`). Ack semantics mirror
+`SADeadLetterQueue` exactly: `pop_batch()` is a non-destructive read, `ack()`
+deletes — there is no visibility window (SA has none either); the
+single-relay assumption is documented on the class, not silently assumed.
+
+⚠️ **Verification status**: this backend is logic-complete and covered by
+`varco_beanie/tests/test_beanie_dlq.py`, but that suite is
+`@pytest.mark.integration` and requires a real MongoDB container. It has not
+been run against a live Mongo in this environment (no Docker available this
+session) — treat it as unit-reviewed, not integration-verified, until that
+suite has actually been run.
+
+### NATS (`varco_nats.dlq.NatsDLQ`) — `ack()` is a synchronous round trip, not fire-and-forget
+
+`NatsDLQ.ack()` calls nats-py's `Msg.ack_sync(timeout=2.0)`, never the plain
+`Msg.ack()`. The plain form only publishes to the message's reply subject
+and returns immediately — the JetStream server may not have processed the
+ack yet when the coroutine returns, so an immediate `count()` after `ack()`
+could still see the entry (observed taking up to ~1 s to clear), and a
+process that exits right after `ack()` can lose the ack outright, which
+would make `DlqRedriver`'s publish-then-ack policy redeliver a dead letter
+that was already handled. `ack_sync()` waits for the server's confirmation,
+so `ack()`'s postcondition ("not returned by a future `pop_batch()`") holds
+by the time the call returns — at the cost of one network round trip per
+ack instead of zero, the correct trade for a durability primitive.
+
+If the server does not confirm within the 2.0 s timeout, `ack()` does not
+raise: it logs a warning and keeps the entry in its in-process `_in_flight`
+tracking so a later `ack()` call retries it. A duplicate ack is harmless to
+JetStream; a silently dropped one is not. `push()` is unaffected by this —
+it remains the documented fire-and-forget-safe, never-raises primitive.
+
+## Redrive — `DlqRedriver`
+
+Plan 009, Phase 4 (R1). The backlog's literal ask was `redrive(entry_id)`
+**on the ABC**; that was rejected (see the DESIGN block in
+`varco_core/event/dlq.py`) because it would force `AbstractDeadLetterQueue`
+to hold an `AbstractEventBus`, inverting the documented "DLQ is independent
+of the bus" invariant on every backend. Instead, the ABC gained only
+read/delete primitives (`get`, `list_entries`, `delete`, `delete_where`), and
+a separate `DlqRedriver` (`varco_core.event.redrive`) owns the redrive
+*policy*:
+
+```python
+from varco_core.event.redrive import DlqRedriver
+
+redriver = DlqRedriver(dlq, bus, default_channel="orders")
+
+outcome = await redriver.redrive(entry_id)          # single entry
+report = await redriver.redrive_batch(limit=10)      # works on every backend, incl. Kafka/NATS
+```
+
+`DlqRedriver` is one of the **very few** classes permitted to hold an
+`AbstractEventBus` directly — it joins `OutboxRelay` and
+`EventConsumer.register_to()` on that list (see CLAUDE.md's layer-rule
+paragraph): this is infrastructure, not application logic.
+
+### Algorithm — publish-then-ack, never ack-then-publish
+
+1. Resolve the entry (`get(entry_id)`, or `list_entries()`/`pop_batch()` for
+   a batch).
+2. Reject a **payload-only** entry (`event is None`) —
+   `error="payload-only entry; not republishable"` — and a **job-sourced**
+   entry (`source == DeadLetterSource.JOB`) —
+   `error="job-sourced entry; re-enqueue via the job store"`. Neither is
+   acked.
+3. `await bus.publish(entry.event, channel=entry.channel or default_channel)`.
+4. On success: `await dlq.ack(entry.entry_id)`.
+5. On publish failure: the entry is **not** acked — it stays in the DLQ, and
+   the error is recorded on the outcome.
+6. `dry_run=True` skips steps 3–4 entirely; the report says what *would*
+   have happened.
+
+Publish-then-ack (never the reverse) means a crash between the two
+re-delivers the dead letter — **at-least-once**, the correct bias for a
+message you already nearly lost. A duplicate republish is possible; the
+inbox/dedup primitives handle it, same as everywhere else in this codebase.
+
+### Stream-backed stores — single-entry redrive is unsupported (RD-4)
+
+```python
+redriver.redrive(entry_id)   # Kafka/NATS DLQ → DeadLetterNotAddressable
+```
+
+`DeadLetterNotAddressable` names the backend class and points at
+`redrive_batch()` / the CLI's `--batch` flag, both of which work everywhere:
+`redrive_batch()` falls back to `pop_batch()` (the one portable read every
+backend has) when `list_entries()` raises `NotImplementedError`.
+
+**⚠️ Redrive can re-poison the stream.** If the handler that originally
+failed is still broken, a redriven entry comes straight back to the DLQ.
+There is deliberately no automatic/scheduled redrive (parked, see the
+plan's Non-goals) — use `dry_run=True` first, and watch the
+`varco.dlq.redriven{status}` counter (see the observability doc).
+
+### CLI
+
+```bash
+varco dlq list    -t module:factory [--channel C] [--source S] [--limit N]
+varco dlq redrive -t module:factory -b module:factory \
+                   (--entry-id UUID | --batch [--limit N] [--channel C] [--source S]) \
+                   [--dry-run]
+varco dlq purge   -t module:factory --before ISO8601 [--limit N]
+```
+
+`-t/--target` and `-b/--bus` name an importable zero-arg factory (or a bare
+instance) returning the `AbstractDeadLetterQueue` / `AbstractEventBus` — the
+CLI has no access to your app's DI container.
+
+## Retention — `delete()` / `delete_where()` / `count_by_channel()`
+
+Plan 009, Phase 2 (R3). Following the `AbstractJobStore.delete_where`
+precedent (portable default where a correct one exists, concrete-but-raising
+where none does):
+
+| Member | Choice | Why |
+|---|---|---|
+| `delete(entry_id)` | **portable default** → `await self.ack(entry_id)` | Every backend's `ack()` already means "never return this entry again" — exactly the storage-semantics meaning of "delete". `ack` is the message-semantics name for the same operation. |
+| `delete_where(older_than=, source=, channel=, tenant_id=, limit=)` | concrete-but-raising | Any `pop_batch()`-based default would have to `ack()` non-matching entries just to reach matching ones — silent data loss. Refusing is strictly safer. |
+| `count_by_channel()` | concrete-but-raising | `count()` itself is already `-1` (an approximation) on Kafka — a per-channel breakdown isn't portable even in principle there. |
+
+`delete_where()` with **no predicate at all** raises `ValueError` — refusing
+to silently truncate the whole DLQ, same rule as `AbstractJobStore.delete_where`.
+`limit=` caps rows deleted per call; chunk a large sweep with repeated calls
+rather than one unbounded delete (each SA chunk is its own transaction under
+a transaction-mode pooler).
+
+```bash
+varco retention prune --type dlq --before 2026-01-01T00:00:00Z --limit 5000 --chunk 1000 \
+    --target module:factory   # or set VARCO_RETENTION_TARGET
+varco retention prune --type dlq --before ... --dry-run   # prints the count, deletes nothing
+```
+
+The default sweep behaviour loops `delete_where(..., limit=chunk)` until it
+returns `0`. `--target` is required unless `VARCO_RETENTION_TARGET` is set —
+mirrors `varco migrate`'s own config-resolution pattern.
+
+**Kafka/NATS**: `delete_where()` raises `NotImplementedError` naming
+`retention.ms` (Kafka topic retention) / JetStream `MaxAge` as the correct
+mechanism — retention on a stream-backed store is not a varco concern.
+
+## Multitenancy (Plan 009, Phase 6 / R4)
+
+`DeadLetterEntry.tenant_id: str | None = None` (new, defaulted, appended —
+non-breaking on the dataclass) is stamped from the ambient
+`varco_core.tenancy.tenant_context()` at push time by every producer
+(`EventConsumer`'s retry wrapper, `OutboxRelay`'s dead-letter path) — never a
+constructor parameter a caller fills in by hand.
+
+```python
+async with tenant_context("acme"):
+    ...  # a handler that dead-letters here produces an entry with tenant_id="acme"
+
+entries = await dlq.list_entries(tenant_id="acme")   # excludes entries with tenant_id=None
+entries = await dlq.list_entries()                   # no tenant filter — operator/global view
+```
+
+⚠️ **The `None`-tenant asymmetry is deliberate, not a bug**: an entry pushed
+outside any tenant context (e.g. an outbox deserialize failure at boot) has
+`tenant_id=None` and is visible only to the unscoped/global view — it never
+matches an explicit `tenant_id="acme"` filter. A `tenant_id=UNSCOPED`
+sentinel was considered and rejected as over-engineering for an admin-only
+surface. `tenant_id` was deliberately **not** made mandatory: a
+framework-level failure genuinely has no tenant.
+
+### Postgres RLS on `varco_dead_letters`
+
+```python
+# inside a reviewed Alembic revision — nothing calls this automatically
+from varco_sa.rls_framework import framework_rls_upgrade, framework_rls_downgrade
+
+def upgrade() -> None:
+    framework_rls_upgrade(op)     # both framework tables by default
+
+def downgrade() -> None:
+    framework_rls_downgrade(op)
+```
+
+`framework_rls_upgrade`/`framework_rls_downgrade`
+(`varco_sa.rls_framework`, `FRAMEWORK_RLS_TABLES = ("varco_audit_log", "varco_dead_letters")`)
+wrap `varco_sa.rls.enable_rls_ddl()` directly so the correct
+`(SELECT current_setting(..., true))` InitPlan form is always used — never a
+bare `current_setting()` call, which is not `LEAKPROOF` and silently forces
+a sequential scan on Postgres. **Nothing in varco enables this
+automatically** — paste it into your own reviewed migration, per CLAUDE.md's
+"RLS enabled by a startup hook" pitfall. See
+`technical_docs/features/multitenancy.md` for the full RLS table list.
+
+## REST admin surface
+
+Plan 009, Phase 10 (R6). `build_dlq_router(dlq, redriver=None, ...)`
+(`varco_fastapi.admin.dlq_router`) — a plain `APIRouter`, same
+`build_policy_router`/`build_tenant_router` precedent (hand-written JSON
+handlers, no service/repository generic):
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/dlq/entries` | `list_entries()` filters as query params |
+| GET | `/dlq/entries/{entry_id}` | 404 when absent; 501 on a stream backend |
+| POST | `/dlq/entries/{entry_id}/redrive` | only registered when `redriver=` is given — an absent capability doesn't appear in the OpenAPI schema |
+| POST | `/dlq/redrive` | batch; body carries filters + `dry_run` |
+| DELETE | `/dlq/entries/{entry_id}` | `delete()` |
+| DELETE | `/dlq/entries` | `delete_where()`; 501 on Kafka/NATS |
+| GET | `/dlq/stats` | `count()` + `count_by_channel()` when supported |
+
+Mount it (and the audit admin router) together via
+`mount_reliability_admin()` — the single way to expose either surface:
+
+```python
+from varco_fastapi.admin.mount import mount_reliability_admin
+
+mount_reliability_admin(
+    app,
+    dlq=dlq,
+    redriver=redriver,             # omit to hide the redrive routes entirely
+    acknowledge_bundled_admin=True,  # required — ValueError without it (RD-9)
+    server_auth=auth, admin_role="reliability-admin", prefix="/reliability",
+)
+```
+
+Mirrors Plan 007 RD-9 (the tenant control plane) exactly: this surface can
+**replay messages onto the bus** and **delete DLQ entries** — at least as
+privileged as the tenant admin — so there is deliberately **no** env var
+that mounts it, ever. `server_auth=None` mounts unauthenticated and logs one
+WARNING at mount time naming the risk.
+
 ## Pitfalls
 
 | Pitfall | Fix |
@@ -166,3 +435,8 @@ change, and `SAOutboxRepository`/`SARelayOutboxRepository` both implement
 | `max_attempts` set without a `dlq` | `ValueError` by design — refuse to configure silent data loss |
 | `AuditConsumer` never retries a transient DB error | It does by default now (`durable_delivery()`); pass `retry_policy=None` for the old fire-and-forget behaviour |
 | A DLQ implementation raises from `push()` | Contract violation — callers (relay, job runner, retry wrapper) cannot recover; fix the implementation to log+swallow |
+| `redrive(entry_id)` on Kafka/NATS | `DeadLetterNotAddressable` — use `redrive_batch()` / `--batch` instead (RD-4) |
+| Redriving an entry whose handler is still broken | It comes straight back to the DLQ — expected; use `dry_run=True` first and watch `varco.dlq.redriven{status}` |
+| `delete_where()` with no predicate | `ValueError` by design — refuses to delete the whole DLQ |
+| `list_entries(tenant_id="acme")` misses a framework-level entry | Correct — a `None`-tenant entry is never "every tenant"; use no filter for the operator/global view |
+| `mount_reliability_admin()` without `acknowledge_bundled_admin=True` | `ValueError` — bundling admin-adjacent privilege into the app pod is a deliberate, friction-gated choice |

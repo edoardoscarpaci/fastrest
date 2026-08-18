@@ -146,3 +146,78 @@ class TestRedisDLQIntegration:
         result = await dlq.pop_batch(limit=10)
         handler_names = [e.handler_name for e in result]
         assert handler_names.index("first") < handler_names.index("second")
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Plan 009, Phase 1 (R2 metrics) / Phase 2 (R3 retention) — integration
+# ════════════════════════════════════════════════════════════════════════════
+
+
+class TestRedisDLQRetentionSweepIntegration:
+    async def test_chunked_delete_where_sweep_drains_matching_entries(
+        self, dlq
+    ) -> None:
+        """Loop delete_where(..., limit=chunk) until 0 -- the chunked-sweep
+        recipe from CLAUDE.md's retention pitfall table."""
+        import asyncio
+        from datetime import datetime, timedelta, timezone
+
+        for _ in range(5):
+            await dlq.push(_make_entry())
+
+        cutoff = datetime.now(timezone.utc) + timedelta(seconds=1)
+        await asyncio.sleep(1.1)
+
+        total_deleted = 0
+        while True:
+            deleted = await dlq.delete_where(older_than=cutoff, limit=2)
+            total_deleted += deleted
+            if deleted == 0:
+                break
+
+        assert total_deleted == 5
+        assert await dlq.count() == 0
+
+
+class TestRedisDLQDepthGaugeIntegration:
+    async def test_depth_gauge_observes_real_redis_count(self, dlq) -> None:
+        """
+        The ``varco.dlq.depth`` gauge must report the real Redis entry count
+        (Plan 009, RD-3 — "depth gauge against a real Redis").
+
+        Collection is driven from a worker thread via ``asyncio.to_thread``
+        rather than inline, because that is the production topology: OTel's
+        ``PeriodicExportingMetricReader`` collects on its own thread while the
+        application's event loop — which owns the ``RedisDLQ``'s async client —
+        keeps running.  Collecting inline would instead block the very loop the
+        gauge callback needs, which no synchronous callback can ever do.
+        """
+        import asyncio
+        from unittest import mock
+
+        from opentelemetry.sdk.metrics import MeterProvider
+        from opentelemetry.sdk.metrics.export import InMemoryMetricReader
+        from varco_core.observability.reliability import install_reliability_metrics
+
+        await dlq.push(_make_entry())
+        await dlq.push(_make_entry())
+
+        reader = InMemoryMetricReader()
+        provider = MeterProvider(metric_readers=[reader])
+        with mock.patch(
+            "opentelemetry.metrics._internal.get_meter_provider", return_value=provider
+        ):
+            install_reliability_metrics(dlq=dlq, dlq_name="redis-integration")
+            data = await asyncio.to_thread(reader.get_metrics_data)
+
+        assert data is not None, (
+            "no instrument produced data — the depth gauge emitted zero "
+            "observations, i.e. count() failed inside the callback"
+        )
+        points = []
+        for rm in data.resource_metrics:
+            for sm in rm.scope_metrics:
+                for metric in sm.metrics:
+                    if metric.name == "varco.dlq.depth":
+                        points.extend(metric.data.data_points)
+        assert any(p.value == 2 for p in points), points

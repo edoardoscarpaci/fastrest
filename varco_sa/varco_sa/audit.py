@@ -58,6 +58,8 @@ Async safety:   ✅ All methods are ``async def``.
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
@@ -144,6 +146,14 @@ class AuditEntryModel(_AuditBase):
     # Optional tenant identifier — for multi-tenant deployments.
     tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
+    # Plan 009, Phase 12 (R8) — tamper-evidence hash chain. Both nullable:
+    # a table with hash_chain=False (the default) never populates them, and
+    # existing pre-Phase-12 rows on a table that later opts in have no
+    # backfilled chain (verify_chain() reports the boundary, not a break).
+    seq: Mapped[int | None] = mapped_column(nullable=True)
+    prev_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    entry_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
 
 # Expose the metadata so users can wire it into Alembic target_metadata.
 audit_metadata = _AuditBase.metadata
@@ -186,6 +196,8 @@ def _model_to_entry(row: AuditEntryModel) -> AuditEntry:
         occurred_at=occurred_at,
         correlation_id=row.correlation_id,
         tenant_id=row.tenant_id,
+        seq=row.seq,
+        prev_hash=row.prev_hash,
     )
 
 
@@ -242,12 +254,28 @@ class SAAuditRepository(AuditRepository):
         consumer.register_to(event_bus)
     """
 
-    def __init__(self, session_factory: async_sessionmaker) -> None:
+    def __init__(
+        self, session_factory: async_sessionmaker, *, hash_chain: bool = False
+    ) -> None:
         """
         Args:
             session_factory: ``async_sessionmaker`` for creating ``AsyncSession``
                              instances.  Must target the same database as the
                              rest of the application.
+            hash_chain:      Plan 009, Phase 12 (R8) — opt-in tamper-evidence.
+                             When ``True``, every ``save()`` establishes the
+                             chain link itself under a backend-level
+                             serialization guarantee: a monotone ``seq`` +
+                             ``SELECT ... ORDER BY seq DESC LIMIT 1 FOR
+                             UPDATE`` (Postgres) — this caps audit write
+                             throughput at one serialized write per record
+                             (documented cost, RD-8). SQLite (used in tests)
+                             has no row-level locking; an ``asyncio.Lock``
+                             additionally serializes concurrent ``save()``
+                             calls **within this process** so the 20-
+                             concurrent-tasks test produces one unbroken
+                             chain — this is NOT a substitute for
+                             ``FOR UPDATE`` across multiple processes.
 
         Edge cases:
             - ``session_factory`` is not type-annotated with a generic parameter
@@ -256,6 +284,14 @@ class SAAuditRepository(AuditRepository):
         """
         # session_factory is called once per operation — no shared session state.
         self._session_factory = session_factory
+        self._hash_chain = hash_chain
+        # Lazy asyncio.Lock — never created outside a running event loop.
+        self._hash_chain_lock: asyncio.Lock | None = None
+
+    def _get_hash_chain_lock(self) -> asyncio.Lock:
+        if self._hash_chain_lock is None:
+            self._hash_chain_lock = asyncio.Lock()
+        return self._hash_chain_lock
 
     @classmethod
     def _from_session(cls, session: AsyncSession) -> _SAAuditRepositoryInSession:
@@ -303,8 +339,14 @@ class SAAuditRepository(AuditRepository):
             - ``diff`` is serialized to JSON by SQLAlchemy — dict values must
               be JSON-serializable.
 
-        Async safety: ✅ Each call creates, commits, and closes its own session.
+        Async safety: ✅ Each call creates, commits, and closes its own session
+            (or, when ``hash_chain=True``, delegates to ``_save_chained()``,
+            which serializes concurrent writers — see ``__init__``).
         """
+        if self._hash_chain:
+            await self._save_chained(entry)
+            return
+
         async with self._session_factory() as session:
             # DESIGN: pg_insert with ON CONFLICT DO NOTHING for idempotency.
             # On non-Postgres dialects we fall back to a plain INSERT via
@@ -356,12 +398,93 @@ class SAAuditRepository(AuditRepository):
             entry.action,
         )
 
+    async def _save_chained(self, entry: AuditEntry) -> None:
+        """
+        Establish the hash-chain link for ``entry`` and persist it
+        (Plan 009, Phase 12 / R8) — RD-8's "chain is a repository concern".
+
+        Under a single serialized write: read the last row (``ORDER BY seq
+        DESC LIMIT 1``, ``FOR UPDATE`` on Postgres), compute
+        ``seq = last.seq + 1`` (or ``1`` for the genesis row) and
+        ``prev_hash = last.entry_hash`` (or ``None`` for genesis), stamp
+        ``entry``, compute its own ``entry_hash()``, and INSERT.
+
+        DESIGN: an ``asyncio.Lock`` in addition to ``FOR UPDATE``
+            ✅ ``FOR UPDATE`` alone is a no-op on SQLite (no row locking) —
+               the lock is what actually serializes the 20-concurrent-tasks
+               test in-process.
+            ✅ On Postgres, ``FOR UPDATE`` additionally serializes writers
+               across *processes*, which the lock cannot do.
+            ❌ Caps this repository's audit write throughput at one
+               serialized write per record, in-process AND cross-process —
+               documented cost (RD-8), opt-in via ``hash_chain=True``.
+
+        Async safety: ✅ Serialized via ``self._get_hash_chain_lock()``.
+        """
+        async with self._get_hash_chain_lock(), self._session_factory() as session:
+            stmt = select(AuditEntryModel).order_by(AuditEntryModel.seq.desc()).limit(1)
+            try:
+                stmt = stmt.with_for_update()
+                last_row = (await session.execute(stmt)).scalars().first()
+            except (
+                Exception
+            ):  # noqa: BLE001 — dialect-fallback guard, not error handling
+                # with_for_update() is a no-op/unsupported on some
+                # dialects (e.g. SQLite) — fall back to a plain read;
+                # the asyncio.Lock above is the real guard there. Any
+                # dialect-specific exception type is acceptable to catch
+                # broadly here since the fallback path is always correct.
+                await session.rollback()
+                plain_stmt = (
+                    select(AuditEntryModel)
+                    .order_by(AuditEntryModel.seq.desc())
+                    .limit(1)
+                )
+                last_row = (await session.execute(plain_stmt)).scalars().first()
+
+            next_seq = (
+                (last_row.seq + 1)
+                if (last_row is not None and last_row.seq is not None)
+                else 1
+            )
+            prev_hash = last_row.entry_hash if last_row is not None else None
+
+            chained_entry = dataclasses.replace(
+                entry, seq=next_seq, prev_hash=prev_hash
+            )
+            computed_hash = chained_entry.entry_hash()
+
+            session.add(
+                AuditEntryModel(
+                    entry_id=chained_entry.entry_id,
+                    entity_type=chained_entry.entity_type,
+                    entity_id=chained_entry.entity_id,
+                    action=chained_entry.action,
+                    actor_id=chained_entry.actor_id,
+                    diff=chained_entry.diff,
+                    occurred_at=chained_entry.occurred_at,
+                    correlation_id=chained_entry.correlation_id,
+                    tenant_id=chained_entry.tenant_id,
+                    seq=next_seq,
+                    prev_hash=prev_hash,
+                    entry_hash=computed_hash,
+                )
+            )
+            await session.commit()
+
+        _logger.debug(
+            "SAAuditRepository._save_chained: committed entry_id=%s seq=%d",
+            entry.entry_id,
+            next_seq,
+        )
+
     async def list_for_entity(
         self,
         entity_type: str,
         entity_id: str,
         *,
         limit: int = 100,
+        tenant_id: str | None = None,
     ) -> list[AuditEntry]:
         """
         Return audit entries for a specific entity, newest-first.
@@ -374,6 +497,8 @@ class SAAuditRepository(AuditRepository):
             entity_type: Entity class name to filter by (e.g. ``"Order"``).
             entity_id:   Entity primary key string to filter by.
             limit:       Maximum number of entries to return.  Default ``100``.
+            tenant_id:   Plan 009 (R4) — optional tenant filter. ``None``
+                         means no tenant filter.
 
         Returns:
             List of ``AuditEntry`` objects ordered by ``occurred_at DESC``.
@@ -398,6 +523,8 @@ class SAAuditRepository(AuditRepository):
                 .order_by(AuditEntryModel.occurred_at.desc())
                 .limit(limit)
             )
+            if tenant_id is not None:
+                stmt = stmt.where(AuditEntryModel.tenant_id == tenant_id)
             result = await session.execute(stmt)
             rows = result.scalars().all()
             entries = [_model_to_entry(row) for row in rows]
@@ -409,6 +536,102 @@ class SAAuditRepository(AuditRepository):
             len(entries),
         )
         return entries
+
+    async def list(
+        self,
+        *,
+        actor_id: str | None = None,
+        action: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        tenant_id: str | None = None,
+        correlation_id: str | None = None,
+        occurred_from: datetime | None = None,
+        occurred_to: datetime | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AuditEntry]:
+        """General-purpose filtered scan (Plan 009, Phase 10 / R6). See ABC docstring."""
+        stmt = select(AuditEntryModel).order_by(AuditEntryModel.occurred_at.desc())
+        if actor_id is not None:
+            stmt = stmt.where(AuditEntryModel.actor_id == actor_id)
+        if action is not None:
+            stmt = stmt.where(AuditEntryModel.action == action)
+        if entity_type is not None:
+            stmt = stmt.where(AuditEntryModel.entity_type == entity_type)
+        if entity_id is not None:
+            stmt = stmt.where(AuditEntryModel.entity_id == entity_id)
+        if tenant_id is not None:
+            stmt = stmt.where(AuditEntryModel.tenant_id == tenant_id)
+        if correlation_id is not None:
+            stmt = stmt.where(AuditEntryModel.correlation_id == correlation_id)
+        if occurred_from is not None:
+            stmt = stmt.where(AuditEntryModel.occurred_at >= occurred_from)
+        if occurred_to is not None:
+            stmt = stmt.where(AuditEntryModel.occurred_at <= occurred_to)
+        stmt = stmt.limit(limit).offset(offset)
+
+        async with self._session_factory() as session:
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+        return [_model_to_entry(row) for row in rows]
+
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        entity_type: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+        allow_chain_break: bool = False,
+    ) -> int:
+        """
+        Chunked-sweep-friendly bulk delete (Plan 009, Phase 2 / R3) — one
+        predicate is required.
+
+        On a ``hash_chain=True`` repository, pruning breaks the chain by
+        construction (Plan 009, Phase 12 / R8) — refuses unless
+        ``allow_chain_break=True``.
+        """
+        from sqlalchemy import delete as sa_delete
+
+        if self._hash_chain and not allow_chain_break:
+            raise ValueError(
+                "This SAAuditRepository was constructed with hash_chain=True "
+                "— delete_where() would break the tamper-evidence chain "
+                "(a deleted row is indistinguishable from a ChainGap at "
+                "verify_chain() time). Pass allow_chain_break=True to "
+                "acknowledge and proceed anyway."
+            )
+
+        if older_than is None and entity_type is None and tenant_id is None:
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/entity_type/tenant_id) — refusing to delete "
+                "every entry."
+            )
+        if limit is not None and limit < 1:
+            raise ValueError(f"delete_where limit must be ≥ 1, got {limit}.")
+
+        select_stmt = select(AuditEntryModel.entry_id)
+        if older_than is not None:
+            select_stmt = select_stmt.where(AuditEntryModel.occurred_at < older_than)
+        if entity_type is not None:
+            select_stmt = select_stmt.where(AuditEntryModel.entity_type == entity_type)
+        if tenant_id is not None:
+            select_stmt = select_stmt.where(AuditEntryModel.tenant_id == tenant_id)
+        if limit is not None:
+            select_stmt = select_stmt.limit(limit)
+
+        async with self._session_factory() as session:
+            ids = [row[0] for row in (await session.execute(select_stmt)).fetchall()]
+            if not ids:
+                return 0
+            await session.execute(
+                sa_delete(AuditEntryModel).where(AuditEntryModel.entry_id.in_(ids))
+            )
+            await session.commit()
+        return len(ids)
 
     def __repr__(self) -> str:
         return f"SAAuditRepository(session_factory={self._session_factory!r})"
@@ -482,6 +705,7 @@ class _SAAuditRepositoryInSession(AuditRepository):
         entity_id: str,
         *,
         limit: int = 100,
+        tenant_id: str | None = None,
     ) -> list[AuditEntry]:
         """
         Return audit entries using the injected session.
@@ -490,6 +714,7 @@ class _SAAuditRepositoryInSession(AuditRepository):
             entity_type: Entity class name to filter by.
             entity_id:   Entity primary key string to filter by.
             limit:       Maximum number of entries to return.
+            tenant_id:   Plan 009 (R4) — optional tenant filter.
 
         Returns:
             List of ``AuditEntry`` objects ordered by ``occurred_at DESC``.
@@ -505,6 +730,8 @@ class _SAAuditRepositoryInSession(AuditRepository):
             .order_by(AuditEntryModel.occurred_at.desc())
             .limit(limit)
         )
+        if tenant_id is not None:
+            stmt = stmt.where(AuditEntryModel.tenant_id == tenant_id)
         result = await self._session.execute(stmt)
         rows = result.scalars().all()
         return [_model_to_entry(row) for row in rows]

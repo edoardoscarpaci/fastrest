@@ -24,7 +24,9 @@ import sys
 from collections.abc import Sequence
 from importlib.metadata import entry_points
 
+from varco_core.cli import dlq as _dlq_module
 from varco_core.cli import migrate as _migrate_module
+from varco_core.cli import retention as _retention_module
 from varco_core.cli import tenant as _tenant_module
 
 
@@ -35,6 +37,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # Built in — depends only on varco_core.migration / varco_core.tenancy.
     _migrate_module.register(subparsers)
     _tenant_module.register(subparsers)
+    _dlq_module.register(subparsers)
+    _retention_module.register(subparsers)
 
     # Backend-contributed subcommands, discovered lazily so a package that
     # is not installed simply does not appear — never a hard ImportError at

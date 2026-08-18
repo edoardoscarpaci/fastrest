@@ -102,6 +102,31 @@ class TestEncryptionKeyDocument:
         doc = _make_doc(entry)
         assert doc.id == "my-kid"
 
+    def test_regression_document_has_no_kid_field_lookups_go_through_id(
+        self,
+    ) -> None:
+        """
+        User reports: ``EncryptionKeyDocument.kid == "..."`` raises
+        ``AttributeError: kid. Did you mean: 'id'?``.  Correct behaviour is
+        that there is no ``kid`` field at all — the kid IS the MongoDB ``_id``
+        (DESIGN: "kid as MongoDB _id"), so a lookup by kid is the O(1)
+        primary-key ``get()``, not a secondary-field query.
+
+        Pinning this keeps a query written against the *dataclass* field name
+        (``EncryptionKeyEntry.kid``) from silently reappearing in a
+        Docker-gated test that nobody runs.
+        """
+        assert "kid" not in EncryptionKeyDocument.model_fields
+        assert "id" in EncryptionKeyDocument.model_fields
+
+        with pytest.raises(AttributeError):
+            EncryptionKeyDocument.kid  # noqa: B018
+
+        # The entry-side name stays `kid` — only the document renames it.
+        entry = _make_entry(kid="my-kid")
+        assert entry.kid == "my-kid"
+        assert _make_doc(entry).id == "my-kid"
+
     def test_default_is_primary_true(self) -> None:
         doc = EncryptionKeyDocument(
             id="k",
@@ -530,10 +555,12 @@ class TestBeanieEncryptionKeyStoreScopeIntegration:
     ) -> None:
         await beanie_store.save(_make_entry(kid="scope-k4", tenant_id="scope-delta"))
         # Directly null the scope field on the underlying document to
-        # simulate a pre-migration row.
-        doc = await EncryptionKeyDocument.find_one(
-            EncryptionKeyDocument.kid == "scope-k4"
-        )
+        # simulate a pre-migration row.  The document has no ``kid`` field —
+        # the kid IS the MongoDB ``_id`` (see EncryptionKeyDocument's DESIGN
+        # block and TestEncryptionKeyDocument::test_id_is_kid), so the lookup
+        # goes through the primary key.
+        doc = await EncryptionKeyDocument.get("scope-k4")
+        assert doc is not None
         doc.scope = None
         await doc.save()
 

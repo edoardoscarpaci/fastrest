@@ -58,7 +58,7 @@ async def test_rls_upgrade_preserves_initplan_select_form() -> None:
     rls_upgrade(op, "orders")
 
     create_policy_stmt = next(s for s in op.executed if "CREATE POLICY" in s)
-    assert "(SELECT current_setting(" in create_policy_stmt
+    assert "(SELECT NULLIF(current_setting(" in create_policy_stmt
 
 
 async def test_rls_downgrade_renders_drop_policy_and_disable_rls() -> None:

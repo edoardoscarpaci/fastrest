@@ -177,7 +177,6 @@ from varco_fastapi.client import (
     AbstractClientMiddleware,
     AsyncVarcoClient,
     AuthForwardMiddleware,
-    ClientConfigurator,
     ClientProfile,
     ClientProtocol,
     CorrelationIdMiddleware,
@@ -194,6 +193,11 @@ from varco_fastapi.client import (
     VarcoClient,
 )
 
+# ClientConfigurator is demoted out of varco_fastapi.client's front door
+# (Plan 009, Phase 3 / C1) but stays available at the varco_fastapi
+# top-level for backward compatibility — import it from its advanced shelf.
+from varco_fastapi.client.advanced import ClientConfigurator
+
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 from varco_fastapi.lifespan import VarcoLifespan
 from varco_fastapi.migrate import MigrationLifecycle
@@ -202,7 +206,8 @@ from varco_fastapi.migrate import MigrationLifecycle
 from varco_fastapi.exceptions import add_exception_handlers
 
 # ── DI ────────────────────────────────────────────────────────────────────────
-from varco_fastapi.di import VarcoFastAPIModule, bind_clients
+from varco_fastapi.di import VarcoFastAPIModule, bind_clients, bind_clients_from
+from varco_fastapi.client.front_door import client_for, client_class_for
 
 # ── App factory ───────────────────────────────────────────────────────────────
 from varco_fastapi.app import create_varco_app
@@ -334,6 +339,9 @@ __all__ = [
     # DI
     "VarcoFastAPIModule",
     "bind_clients",
+    "bind_clients_from",
+    "client_for",
+    "client_class_for",
     # App factory
     "create_varco_app",
     # ── Composite / all-in-one deployment ──

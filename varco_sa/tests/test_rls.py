@@ -24,6 +24,8 @@ import pytest_asyncio
 
 from varco_sa.rls import enable_rls_ddl, set_tenant_local
 
+from tests.conftest import provision_rls_app_url
+
 
 # ════════════════════════════════════════════════════════════════════════════════
 # Unit tests — enable_rls_ddl() output shape (no DB required)
@@ -131,9 +133,9 @@ def pg_container():
 async def engine(pg_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    url = pg_container.get_connection_url().replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )
+    # Non-superuser role: the container's own role has BYPASSRLS and would
+    # never see the policy enforced. See conftest.provision_rls_app_url.
+    url = await provision_rls_app_url(pg_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     await eng.dispose()

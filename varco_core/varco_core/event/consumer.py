@@ -114,6 +114,30 @@ _logger = logging.getLogger(__name__)
 # ── _ListenEntry ──────────────────────────────────────────────────────────────
 
 
+class _Unset:
+    """
+    Private sentinel type for ``@listen``'s ``retry_policy=``/``dlq=``
+    (Plan 009, Phase 9 / R5, RD-7).
+
+    DESIGN: sentinel over ``None`` as the "not passed" default
+        ✅ An explicitly passed ``retry_policy=None`` (or ``dlq=None``) must
+           still mean "no retry / no DLQ, and do NOT inherit the process-wide
+           default preset" — otherwise there is no way to opt a single
+           handler *out* of a global default once one is set.
+        ✅ Omission (`_UNSET`) resolves through `register_to()`'s own
+           fallback params, then the global default preset, then nothing —
+           see `EventConsumer.register_to()`.
+        ❌ A private sentinel in a public-facing decorator signature — every
+           doc/IDE renders it as `...`; this docstring is the explanation.
+
+    Never compare with ``==`` — always ``is _UNSET`` (there is exactly one
+    instance, constructed once at module import).
+    """
+
+
+_UNSET = _Unset()
+
+
 @dataclass(frozen=True)
 class _ListenEntry:
     """
@@ -172,9 +196,15 @@ class _ListenEntry:
     priority: int = 0
     """Dispatch priority.  Higher values run first.  Defaults to ``0``."""
 
-    retry_policy: RetryPolicy | None = None
+    retry_policy: RetryPolicy | None = _UNSET  # type: ignore[assignment]
     """
     Optional retry policy for this handler.
+
+    Defaults to the private ``_UNSET`` sentinel, NOT ``None`` (Plan 009,
+    Phase 9 / R5, RD-7) — omission is distinguishable from an explicitly
+    passed ``retry_policy=None``, which must NOT inherit the process-wide
+    default ``ReliabilityPreset``. See ``_Unset``'s docstring and
+    ``EventConsumer.register_to()``'s resolution order.
 
     When set, ``register_to()`` wraps the handler so that on failure it is
     retried up to ``retry_policy.max_attempts`` times with the configured
@@ -185,9 +215,12 @@ class _ListenEntry:
     ``RetryExhaustedError`` — which propagates to the bus's error policy.
     """
 
-    dlq: AbstractDeadLetterQueue | None = None
+    dlq: AbstractDeadLetterQueue | None = _UNSET  # type: ignore[assignment]
     """
     Optional Dead Letter Queue for this handler.
+
+    Same ``_UNSET``-sentinel default and resolution rule as ``retry_policy``
+    above (Plan 009, Phase 9 / R5, RD-7).
 
     When set alongside ``retry_policy``, events that exhaust all retry
     attempts are pushed here instead of raising ``RetryExhaustedError``.
@@ -271,8 +304,8 @@ def listen(
     channel: str | Callable[[Any], str] = CHANNEL_ALL,
     filter: Callable[[Event], bool] | None = None,  # noqa: A002
     priority: int = 0,
-    retry_policy: RetryPolicy | None = None,
-    dlq: AbstractDeadLetterQueue | None = None,
+    retry_policy: RetryPolicy | None = _UNSET,  # type: ignore[assignment]
+    dlq: AbstractDeadLetterQueue | None = _UNSET,  # type: ignore[assignment]
     deduplicator: AbstractDeduplicator | None = None,
     inbox: InboxRepository | None = None,
 ) -> Callable:
@@ -598,6 +631,18 @@ def _make_retry_wrapper(
                 attempts=max_attempts,
                 first_failed_at=first_failed_at,
             )
+            # Plan 009, Phase 6 (R4) — stamp the ambient tenant, sourced from
+            # context rather than a parameter so every producer (this
+            # wrapper, OutboxRelay, the job runner) gets it for free. A
+            # framework-level failure outside any tenant_context() correctly
+            # gets tenant_id=None — it is not any one tenant's data.
+            from varco_core.service.tenant import current_tenant
+
+            tenant_id = current_tenant()
+            if tenant_id is not None:
+                import dataclasses
+
+                entry = dataclasses.replace(entry, tenant_id=tenant_id)
             await dlq.push(entry)
             _logger.info(
                 "Event routed to DLQ: entry_id=%s handler=%r channel=%r",
@@ -811,20 +856,39 @@ class EventConsumer:
                     else entry.channel  # plain string → use directly
                 )
 
-                # Apply register_to()'s instance-level retry_policy/dlq fallback
-                # (Plan 005 Phase 3, U-6) — ONLY to entries that declared
-                # neither themselves. An entry that declared its own
-                # retry_policy/dlq via @listen(...) is never overridden here.
-                effective_retry_policy = (
-                    entry.retry_policy
-                    if entry.retry_policy is not None or entry.dlq is not None
-                    else retry_policy
+                # Resolution order (Plan 009, Phase 9 / R5, RD-7 extends the
+                # pre-existing Plan 005 Phase 3 fallback with one more tier):
+                #   1. @listen(...)'s own retry_policy=/dlq= — an entry that
+                #      passed EITHER explicitly (including `=None`) is never
+                #      overridden by anything below, by design: an explicit
+                #      `retry_policy=None` must opt a handler OUT of a global
+                #      default, not silently inherit it.
+                #   2. register_to()'s own retry_policy=/dlq= params (Plan 005
+                #      Phase 3, U-6 — an instance-level fallback, unchanged).
+                #   3. The process-wide default ReliabilityPreset (Plan 009 —
+                #      defaults to ReliabilityPreset.off(), so step 3 is a
+                #      no-op unless set_default_reliability_preset() was
+                #      called; resolved HERE, at register_to() time, so a
+                #      preset set after class definition still applies).
+                entry_declared = (
+                    entry.retry_policy is not _UNSET or entry.dlq is not _UNSET
                 )
-                effective_dlq = (
-                    entry.dlq
-                    if entry.retry_policy is not None or entry.dlq is not None
-                    else dlq
-                )
+                if entry_declared:
+                    effective_retry_policy = (
+                        None if entry.retry_policy is _UNSET else entry.retry_policy
+                    )
+                    effective_dlq = None if entry.dlq is _UNSET else entry.dlq
+                elif retry_policy is not None or dlq is not None:
+                    effective_retry_policy = retry_policy
+                    effective_dlq = dlq
+                else:
+                    from varco_core.reliability.wiring import (
+                        get_default_reliability_preset,
+                    )
+
+                    _preset = get_default_reliability_preset()
+                    effective_retry_policy = _preset.retry_policy
+                    effective_dlq = _preset.dlq
 
                 # Build the wrapper stack at wiring time (not at @listen time)
                 # so the resolved channel string and bound self are available.

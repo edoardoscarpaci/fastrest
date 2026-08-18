@@ -59,10 +59,11 @@ import logging
 import sys
 from abc import ABC, abstractmethod
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import StrEnum
-from typing import Final
+from typing import ClassVar, Final
 from uuid import UUID, uuid4
 
 from providify import Singleton
@@ -195,6 +196,14 @@ class DeadLetterEntry:
     payload: bytes | None = None
     """Raw bytes when ``event`` could not be deserialized — ``None`` unless
     a relay-sourced entry's payload was unparseable."""
+
+    tenant_id: str | None = None
+    """Owning tenant, sourced from the ambient ``varco_core.tenancy.tenant_context()``
+    at push time (Plan 009, Phase 6 / R4) — never a constructor parameter a
+    caller is expected to fill in by hand. ``None`` for a framework-level
+    entry produced outside any tenant context (e.g. an outbox deserialize
+    failure at boot) — that is the correct, documented value, not a bug:
+    a framework-level failure is not any one tenant's data."""
 
     @classmethod
     def from_failure(
@@ -339,6 +348,165 @@ class AbstractDeadLetterQueue(ABC):
               Kafka consumer lag) rather than an exact count.
         """
 
+    # ── Plan 009 additions — retention (R3), redrive (R1), tenancy (R4) ────────
+    #
+    # See the ABC table in plans/009-reliability-and-service-integration.md:
+    # `supports_random_access` and `delete()` have portable defaults;
+    # `get`/`list_entries`/`delete_where`/`count_by_channel` are
+    # concrete-but-raising — no correct portable fallback exists for any of
+    # them (RD-4: a `pop_batch`-based default would be destructive).
+
+    supports_random_access: ClassVar[bool] = False
+    """Capability flag (RD-4). ``False`` (the conservative default) means the
+    backend cannot address a single entry by ``entry_id`` — a stream-shaped
+    store (Kafka/NATS) where only ``pop_batch()`` is meaningful. Backends
+    that DO support it (SA, Redis, Beanie) override this to ``True``."""
+
+    async def get(self, entry_id: UUID) -> DeadLetterEntry | None:
+        """
+        Fetch a single entry by ``entry_id`` without removing it.
+
+        Concrete-but-raising: no portable random-access implementation exists
+        — a ``pop_batch()``-based scan would be destructive on
+        ``InMemoryDeadLetterQueue`` (consume-on-pop) and would advance
+        Kafka's in-flight tracking. See ``supports_random_access``.
+
+        Returns:
+            The entry, or ``None`` if no entry with that id exists.
+
+        Raises:
+            NotImplementedError: unless overridden by a random-access backend.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support get(entry_id) — "
+            f"supports_random_access={self.supports_random_access}. "
+            "Use redrive_batch()/pop_batch() instead."
+        )
+
+    async def list_entries(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        channel: str | None = None,
+        source: DeadLetterSource | None = None,
+        tenant_id: str | None = None,
+        older_than: datetime | None = None,
+        newer_than: datetime | None = None,
+    ) -> list[DeadLetterEntry]:
+        """
+        Non-destructive, filtered read of entries — unlike ``pop_batch()``.
+
+        A REST/CLI browse surface must be able to *look* without consuming;
+        ``pop_batch()`` cannot serve that purpose on every backend (it is
+        consume-on-pop in-memory). Concrete-but-raising for the same random-
+        access reason as ``get()``.
+
+        Args:
+            limit:      Maximum entries to return.
+            offset:     Pagination offset.
+            channel:    Filter to one channel.
+            source:     Filter to one ``DeadLetterSource``.
+            tenant_id:  Filter to one tenant. ``None`` means "no tenant
+                        filter" (an operator/global view) — this is
+                        deliberately asymmetric with a ``None``-tenant entry
+                        never matching an explicit ``tenant_id=`` filter.
+            older_than: Only entries with ``last_failed_at`` before this time.
+            newer_than: Only entries with ``last_failed_at`` after this time.
+
+        Raises:
+            NotImplementedError: unless overridden by a random-access backend.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support list_entries() — "
+            f"supports_random_access={self.supports_random_access}."
+        )
+
+    async def delete(self, entry_id: UUID) -> None:
+        """
+        Delete one entry by id.
+
+        Portable default: delegates to ``ack(entry_id)`` — every backend's
+        ``ack()`` already means "never return this entry again", which is
+        exactly the storage-semantics meaning of "delete". ``ack`` is the
+        message-semantics name for the same operation; ``delete`` is the
+        storage-semantics name a retention/admin caller reaches for.
+
+        Edge cases:
+            - Unknown ``entry_id`` → no-op (inherits ``ack()``'s contract).
+        """
+        await self.ack(entry_id)
+
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        source: DeadLetterSource | Sequence[DeadLetterSource] | None = None,
+        channel: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """
+        Bulk-delete entries matching every given predicate (retention sweep).
+
+        Concrete-but-raising: any ``pop_batch()``-based default would have to
+        ``ack()`` non-matching entries just to reach matching ones — silent
+        data loss. Refusing is strictly safer than a wrong portable default.
+
+        Args:
+            older_than: Only entries with ``last_failed_at`` before this time.
+            source:     One or more ``DeadLetterSource`` values to match.
+            channel:    Match one channel.
+            tenant_id:  Match one tenant.
+            limit:      Cap on rows deleted in this call — chunk a large sweep
+                        with repeated calls (``AbstractJobStore.delete_where``'s
+                        precedent) rather than one unbounded DELETE.
+
+        Returns:
+            Number of entries deleted.
+
+        Raises:
+            NotImplementedError: unless overridden by a backend that supports
+                bulk deletion (SA, Redis, Beanie). Kafka/NATS raise naming
+                their own retention mechanism (``retention.ms`` / JetStream
+                ``MaxAge``) instead — deleting a topic/subject entry-by-entry
+                is not how those stores work.
+            ValueError: no predicate at all was given — refuses to silently
+                delete every entry (mirrors ``AbstractJobStore.delete_where``).
+        """
+        if (
+            older_than is None
+            and source is None
+            and channel is None
+            and tenant_id is None
+        ):
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/source/channel/tenant_id) — refusing to delete "
+                "every entry."
+            )
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support delete_where() — "
+            "implement it in a durable backend, or use that backend's own "
+            "retention mechanism."
+        )
+
+    async def count_by_channel(self) -> dict[str, int]:
+        """
+        Return ``{channel: unacknowledged_count}`` for every channel.
+
+        Concrete-but-raising: ``count()`` itself is already ``-1`` (an
+        approximation) on Kafka — a per-channel breakdown is not portable
+        even in principle there. Opt-in via
+        ``ReliabilityMetricsConfig(depth_by_channel=True)``.
+
+        Raises:
+            NotImplementedError: unless overridden.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support count_by_channel()."
+        )
+
 
 # ── InMemoryDeadLetterQueue ───────────────────────────────────────────────────
 
@@ -372,6 +540,10 @@ class InMemoryDeadLetterQueue(AbstractDeadLetterQueue):
         - ``ack()`` is a no-op since ``pop_batch()`` already removes entries —
           the in-memory implementation uses a simple consume-on-pop model.
     """
+
+    # In-memory is fully addressable — a plain scan over the deque, non-
+    # destructive except pop_batch() (which is documented as consume-on-pop).
+    supports_random_access = True
 
     def __init__(self, *, max_size: int = _IN_MEMORY_MAX_SIZE) -> None:
         """
@@ -501,6 +673,93 @@ class InMemoryDeadLetterQueue(AbstractDeadLetterQueue):
         """
         async with self._get_lock():
             return len(self._entries)
+
+    async def get(self, entry_id: UUID) -> DeadLetterEntry | None:
+        """Non-destructive scan of the deque for ``entry_id``."""
+        async with self._get_lock():
+            for entry in self._entries:
+                if entry.entry_id == entry_id:
+                    return entry
+        return None
+
+    async def list_entries(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        channel: str | None = None,
+        source: DeadLetterSource | None = None,
+        tenant_id: str | None = None,
+        older_than: datetime | None = None,
+        newer_than: datetime | None = None,
+    ) -> list[DeadLetterEntry]:
+        """Non-destructive, filtered, paginated read — unlike ``pop_batch()``."""
+        async with self._get_lock():
+            snapshot = list(self._entries)
+        filtered = [
+            e
+            for e in snapshot
+            if (channel is None or e.channel == channel)
+            and (source is None or e.source == source)
+            and (tenant_id is None or e.tenant_id == tenant_id)
+            and (older_than is None or e.last_failed_at < older_than)
+            and (newer_than is None or e.last_failed_at > newer_than)
+        ]
+        return filtered[offset : offset + limit]
+
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        source: DeadLetterSource | Sequence[DeadLetterSource] | None = None,
+        channel: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """Bulk delete matching entries directly from the deque."""
+        if (
+            older_than is None
+            and source is None
+            and channel is None
+            and tenant_id is None
+        ):
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/source/channel/tenant_id) — refusing to delete "
+                "every entry."
+            )
+        sources = None
+        if source is not None:
+            sources = source if isinstance(source, (list, tuple, set)) else [source]
+        async with self._get_lock():
+            to_delete: list[UUID] = []
+            for entry in self._entries:
+                if older_than is not None and entry.last_failed_at >= older_than:
+                    continue
+                if channel is not None and entry.channel != channel:
+                    continue
+                if tenant_id is not None and entry.tenant_id != tenant_id:
+                    continue
+                if sources is not None and entry.source not in sources:
+                    continue
+                to_delete.append(entry.entry_id)
+                if limit is not None and len(to_delete) >= limit:
+                    break
+            if to_delete:
+                ids = set(to_delete)
+                remaining = [e for e in self._entries if e.entry_id not in ids]
+                self._entries.clear()
+                self._entries.extend(remaining)
+        return len(to_delete)
+
+    async def count_by_channel(self) -> dict[str, int]:
+        """Return ``{channel: count}`` across all currently stored entries."""
+        async with self._get_lock():
+            snapshot = list(self._entries)
+        counts: dict[str, int] = {}
+        for entry in snapshot:
+            counts[entry.channel] = counts.get(entry.channel, 0) + 1
+        return counts
 
     def __repr__(self) -> str:
         return (

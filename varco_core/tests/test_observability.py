@@ -1094,7 +1094,7 @@ class TestCreateSpan:
                 with create_span("my.block"):
                     pass
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
 
         spans = span_exporter.get_finished_spans()
         assert spans[0].attributes.get("correlation_id") == "ctx-123"
@@ -1795,7 +1795,7 @@ class TestOtelConfigurationGlobalAttrsBootstrap:
 
         import asyncio
 
-        asyncio.get_event_loop().run_until_complete(f())
+        asyncio.run(f())
 
         spans = span_exporter.get_finished_spans()
         assert spans[0].attributes.get("k8s.pod.name") == "p"

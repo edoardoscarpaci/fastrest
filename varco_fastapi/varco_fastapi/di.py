@@ -187,6 +187,62 @@ def bind_clients(container: Any, *client_classes: type) -> None:
         container.provide(Provider(singleton=True)(_factory))
 
 
+def bind_clients_from(container: Any, *router_classes: type) -> None:
+    """
+    ``client_class_for()`` each router, then ``bind_clients()`` the results
+    (Plan 009, Phase 3 / C1).
+
+    The front-door counterpart to ``bind_clients()`` — call sites that only
+    have router classes (not hand-built ``AsyncVarcoClient`` subclasses) use
+    this instead.
+
+    Args:
+        container:       ``DIContainer`` instance to register into.
+        *router_classes: One or more ``VarcoRouter`` subclasses.
+
+    Usage::
+
+        bind_clients_from(container, OrderRouter, UserRouter)
+        orders_client = await container.aget(VarcoClient[OrderRouter])
+    """
+    from varco_fastapi.client.configurator import ClientConfigurator
+    from varco_fastapi.client.front_door import client_class_for
+
+    class _DeferredUrlConfigurator(ClientConfigurator):
+        """
+        Resolves to an empty URL rather than raising ``NotImplementedError``
+        at construction time.
+
+        ``bind_clients()``'s generated factory calls the client class with
+        zero arguments — a dynamically-built ``client_class_for()`` class has
+        no hand-authored ``__init__`` supplying a ``base_url``, unlike a
+        manually declared ``AsyncVarcoClient[R]`` subclass. Without SOME
+        configurator, ``AsyncVarcoClient.__init__`` raises ``ValueError``
+        immediately. This preserves the plan's documented "deferred error at
+        first request" contract instead: the real failure — "no base_url" —
+        surfaces on the first actual HTTP call, naming
+        ``client_for(..., base_url=)`` / (Phase 11) ``VARCO_PEER_<NAME>_URL``,
+        not at DI-resolution time.
+        """
+
+        def default_url(self) -> str:
+            return ""
+
+    # Subclass (not mutate) the memoized client_class_for() class — that
+    # class is shared with client_for(), and setting _configurator on it
+    # in place would silently change client_for()'s own no-base_url
+    # behaviour for every other caller of the same router.
+    client_classes = tuple(
+        type(
+            f"{base.__name__}Bound",
+            (base,),
+            {"_configurator": _DeferredUrlConfigurator},
+        )
+        for base in (client_class_for(r) for r in router_classes)
+    )
+    bind_clients(container, *client_classes)
+
+
 # ── VarcoFastAPIModule ────────────────────────────────────────────────────────
 
 

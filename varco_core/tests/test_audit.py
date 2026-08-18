@@ -75,6 +75,7 @@ class InMemoryAuditRepository(AuditRepository):
         entity_id: str,
         *,
         limit: int = 100,
+        tenant_id: str | None = None,
     ) -> list[AuditEntry]:
         """
         Filter entries by entity_type and entity_id, newest-first.
@@ -83,6 +84,8 @@ class InMemoryAuditRepository(AuditRepository):
             entity_type: Entity class name to filter by.
             entity_id:   Entity PK string.
             limit:       Maximum number of entries.
+            tenant_id:   Plan 009 (R4) — optional tenant filter. ``None``
+                         means "no tenant filter".
 
         Returns:
             Filtered entries ordered by ``occurred_at`` descending.
@@ -92,6 +95,8 @@ class InMemoryAuditRepository(AuditRepository):
             for e in self.entries
             if e.entity_type == entity_type and e.entity_id == entity_id
         ]
+        if tenant_id is not None:
+            filtered = [e for e in filtered if e.tenant_id == tenant_id]
         filtered.sort(key=lambda e: e.occurred_at, reverse=True)
         return filtered[:limit]
 
@@ -830,3 +835,82 @@ async def test_audit_consumer_explicit_none_retry_policy_restores_fire_and_forge
     # dispatch machinery same as today.
     await bus.publish(event, channel="varco.audit")
     await bus.drain()
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Plan 009 — Phase 2 (R3 retention), Phase 6 (R4 tenant scoping),
+# Phase 10 (R6 admin `list()`)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# RED until AuditRepository gains `delete_where` (concrete-but-raising),
+# `list()` (concrete-but-raising), and `list_for_entity(..., tenant_id=)`
+# (breaking signature change per the ABC table).
+
+
+class _BareAuditRepository(AuditRepository):
+    """Minimal ABC subclass implementing only the pre-existing abstract
+    members -- exercises the base class's own concrete-but-raising
+    defaults for delete_where()/list()."""
+
+    async def save(self, entry: AuditEntry) -> None: ...
+
+    async def list_for_entity(
+        self, entity_type, entity_id, *, limit=100, tenant_id=None
+    ):
+        return []
+
+
+class TestAuditRepositoryDeleteWhereConcreteButRaising:
+    async def test_delete_where_raises_not_implemented_by_default(self) -> None:
+        repo = _BareAuditRepository()
+        with pytest.raises(NotImplementedError):
+            await repo.delete_where(older_than=None, entity_type="Order")
+
+    async def test_delete_where_no_predicate_raises_value_error_when_implemented(
+        self,
+    ) -> None:
+        class _PredicateEnforcingAuditRepo(InMemoryAuditRepository):
+            async def delete_where(  # type: ignore[override]
+                self, *, older_than=None, entity_type=None, tenant_id=None, limit=None
+            ) -> int:
+                if older_than is None and entity_type is None and tenant_id is None:
+                    raise ValueError("delete_where() requires at least one predicate.")
+                return 0
+
+        repo = _PredicateEnforcingAuditRepo()
+        with pytest.raises(ValueError, match="predicate"):
+            await repo.delete_where()
+
+
+class TestAuditRepositoryListConcreteButRaising:
+    async def test_list_raises_not_implemented_by_default(self) -> None:
+        repo = _BareAuditRepository()
+        with pytest.raises(NotImplementedError):
+            await repo.list()
+
+
+class TestAuditRepositoryListForEntityTenantId:
+    async def test_list_for_entity_accepts_tenant_id_kwarg(self) -> None:
+        """Breaking signature change (ABC table, Plan 009): list_for_entity
+        gains a keyword-only tenant_id defaulted to None."""
+        repo = InMemoryAuditRepository()
+        await repo.save(
+            AuditEntry(
+                entity_type="Order",
+                entity_id="1",
+                action="create",
+                tenant_id="acme",
+            )
+        )
+        await repo.save(
+            AuditEntry(
+                entity_type="Order",
+                entity_id="1",
+                action="create",
+                tenant_id="other",
+            )
+        )
+
+        results = await repo.list_for_entity("Order", "1", tenant_id="acme")
+        assert len(results) == 1
+        assert results[0].tenant_id == "acme"

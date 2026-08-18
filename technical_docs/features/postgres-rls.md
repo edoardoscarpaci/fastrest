@@ -71,6 +71,30 @@ when the GUC has never been set on this connection — which is what makes "a
 session that never called `set_tenant_local()` sees zero rows" the failure
 mode, rather than every unscoped query raising a Postgres error.
 
+**`NULLIF(..., '')` around the missing-ok form — the reset-to-empty-string
+trap.** Postgres does not reset a `SET LOCAL`/`set_config(..., true)` GUC to
+`NULL` when the transaction ends — it resets it to the **empty string**.
+Without the `NULLIF` wrapper, the very next statement issued on a pooled
+connection that previously ran a tenant-scoped transaction evaluates
+`''::uuid` (or `''::text` for a `text`-cast policy) inside the InitPlan and
+**raises** (`invalid input syntax for type uuid: ""`) instead of returning
+zero rows — the opposite of "no tenant set, hide everything" and, on a
+transaction-mode pooler, indistinguishable from a real outage the moment the
+next logical caller reuses that connection. `enable_rls_ddl()` therefore
+emits:
+
+```sql
+USING (tenant_id = (SELECT NULLIF(current_setting('rls.tenant_id', true), '')::uuid))
+```
+
+`NULLIF(current_setting(...), '')` maps *both* "GUC never set on this
+connection" (missing-ok `NULL`) and "GUC was set earlier this session, then
+reset to `''` at the end of a `SET LOCAL` transaction" to the same `NULL`,
+so the comparison never matches and the query fails **closed** — zero rows,
+no crash — in either case. The wrapper stays inside the scalar subquery, so
+the InitPlan optimisation from above is unaffected; this is additive, not a
+different rewrite.
+
 ## 2. `SET LOCAL` vs `SET` — the same defect class as U-16
 
 Setting the tenant GUC has two forms with very different pooling behaviour:
@@ -255,12 +279,39 @@ async with session.begin():
 ```
 
 `enable_rls_ddl(table, *, tenant_column="tenant_id", setting="rls.tenant_id",
-policy_name=None)` returns three DDL statements in order: `ENABLE ROW LEVEL
-SECURITY`, `FORCE ROW LEVEL SECURITY` (without `FORCE`, Postgres exempts the
-table owner — often the migration/ORM role — from the policy entirely, which
-is itself a silent bypass), and `CREATE POLICY` with the InitPlan-form
-`USING`/`WITH CHECK` clause. It performs no I/O — the caller runs the
-statements inside their own Alembic revision.
+policy_name=None, cast_type="uuid")` returns three DDL statements in order:
+`ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY` (without `FORCE`,
+Postgres exempts the table owner — often the migration/ORM role — from the
+policy entirely, which is itself a silent bypass — **but see the superuser
+caveat below**, `FORCE` does not close every exemption), and `CREATE POLICY`
+with the InitPlan-form `USING`/`WITH CHECK` clause. It performs no I/O — the
+caller runs the statements inside their own Alembic revision.
+
+`cast_type` controls what Postgres type the (always-`text`) GUC value is
+cast to before comparison with `tenant_column`: default `"uuid"` matches the
+common case of a real `UUID` tenant column. **Pass `cast_type="text"` for a
+`VARCHAR`/`TEXT` tenant column** — a mismatched cast aborts the migration
+with `operator does not exist: character varying = uuid`. This is not a
+theoretical footgun: varco's own two framework tables
+(`varco_audit_log`, `varco_dead_letters`) declare `tenant_id` as
+`String(255)` (`AuditEntry.tenant_id`/`DeadLetterEntry.tenant_id` are
+`str | None`, never `UUID`), so `varco_sa.rls_framework.framework_rls_upgrade()`
+defaults to `cast_type="text"` rather than inheriting `enable_rls_ddl()`'s
+`"uuid"` default — see `varco_sa/varco_sa/rls_framework.py`. Before this
+parameter existed, `framework_rls_upgrade()` could not apply at all: every
+call aborted with the cast error above.
+
+**RLS does not stop a superuser or a `rolbypassrls` role — this is a hard
+Postgres rule, not a varco gap.** `FORCE ROW LEVEL SECURITY` only revokes
+the *table-owner* exemption; `rolbypassrls`/superuser connections bypass RLS
+**unconditionally**, `FORCE` or not. A test (or an operator) that connects
+as the database's own superuser role — the default for most local/CI
+Postgres containers — will see RLS appear to do nothing, not because the
+policy is broken but because the connecting role was never subject to it.
+Verify RLS behaviour (and write RLS integration tests) using a dedicated
+non-superuser, non-`BYPASSRLS` application role; see
+`varco_sa/tests/test_rls.py`/`test_framework_rls.py` for the fixture that
+provisions one.
 
 `set_tenant_local(session, tenant_id, *, setting="rls.tenant_id")` executes a
 single `SELECT set_config(:setting, :value, true)` — call it as the first

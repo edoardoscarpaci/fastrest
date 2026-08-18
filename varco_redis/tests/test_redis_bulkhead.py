@@ -26,6 +26,8 @@ import os
 import uuid
 
 import pytest
+from providify import Provider
+from varco_redis.config import RedisEventBusSettings
 
 pytestmark = pytest.mark.integration
 
@@ -202,6 +204,41 @@ async def test_crashed_holder_slot_reclaimed_after_ttl(redis_container) -> None:
 
 # ── Export + DI registration resolve ────────────────────────────────────────
 
+# DESIGN: module-scope @Provider + module-global settings holder
+#     ✅ providify resolves a ``@Provider``'s return annotation against
+#        ``fn.__globals__`` only.  Under PEP 563 (``from __future__ import
+#        annotations``) the annotation is the *string* ``"RedisEventBusSettings"``,
+#        so the name must be importable at module scope — a function-local
+#        ``@Provider`` (or a type imported inside the test body) raises
+#        ``TypeError: Provider '...' declares an unresolvable return type
+#        annotation``.  This is the same defect class as CLAUDE.md's
+#        "Quoted ``@Provider`` return annotation" pitfall.
+#     ✅ Mirrors the established precedent in
+#        ``varco_nats/tests/test_nats_di.py``.
+#     ❌ Needs a module-global holder because the settings value depends on the
+#        testcontainers-assigned port, which is only known at test time —
+#        acceptable: the module runs one such test.
+_container_settings: RedisEventBusSettings | None = None
+
+
+@Provider(singleton=True)
+def _redis_settings_provider() -> RedisEventBusSettings:
+    """
+    Provide the container-scoped Redis settings for the DI resolution test.
+
+    Declared at module scope so its lazy (PEP 563) return annotation resolves.
+
+    Returns:
+        The ``RedisEventBusSettings`` built by the calling test.
+
+    Raises:
+        RuntimeError: ``_container_settings`` was never assigned — the
+            provider was resolved outside the test that populates it.
+    """
+    if _container_settings is None:  # pragma: no cover - guard only
+        raise RuntimeError("_container_settings not set by the calling test")
+    return _container_settings
+
 
 async def test_export_and_di_registration_resolve(redis_container) -> None:
     """
@@ -209,21 +246,19 @@ async def test_export_and_di_registration_resolve(redis_container) -> None:
     ``varco_redis`` and the opt-in ``@Configuration`` resolves a connected
     singleton through the DI container.
     """
-    from providify import DIContainer, Provider
+    from providify import DIContainer
+
     from varco_redis import RedisBulkhead, RedisBulkheadConfiguration
-    from varco_redis.config import RedisEventBusSettings
+
+    global _container_settings
 
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    settings = RedisEventBusSettings(
+    _container_settings = RedisEventBusSettings(
         url=_redis_url(redis_container), channel_prefix=prefix
     )
 
-    @Provider(singleton=True)
-    def _settings() -> RedisEventBusSettings:
-        return settings
-
     container = DIContainer()
-    container.provide(_settings)
+    container.provide(_redis_settings_provider)
     await container.ainstall(RedisBulkheadConfiguration)
 
     resolved = await container.aget(RedisBulkhead)

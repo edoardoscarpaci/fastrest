@@ -194,3 +194,46 @@ class TestRepr:
             r = repr(dlq)
             assert "NatsDLQ" in r
             assert "started=True" in r
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Plan 009, Phase 2 (R3 retention) / Phase 4 (R1 redrive) — RD-4
+# ════════════════════════════════════════════════════════════════════════════
+#
+# RD-4: stream-backed stores (NATS JetStream) leave get/list_entries/
+# delete_where raising, with a message naming JetStream's own retention
+# mechanism (MaxAge) rather than a silent no-op.
+
+
+class TestNatsDLQRandomAccessCapabilityFlag:
+    def test_supports_random_access_is_false(self) -> None:
+        dlq = NatsDLQ(NatsEventBusSettings())
+        assert dlq.supports_random_access is False
+
+
+class TestNatsDLQDeleteWhereRaises:
+    async def test_delete_where_raises_not_implemented_naming_maxage(self) -> None:
+        dlq = NatsDLQ(NatsEventBusSettings())
+        with pytest.raises(NotImplementedError, match="MaxAge"):
+            await dlq.delete_where(older_than=datetime.now(timezone.utc))
+
+
+class TestNatsDLQGetRaises:
+    async def test_get_raises_not_implemented(self) -> None:
+        dlq = NatsDLQ(NatsEventBusSettings())
+        with pytest.raises(NotImplementedError):
+            await dlq.get(uuid4())
+
+
+class TestNatsDLQListEntriesRaises:
+    async def test_list_entries_raises_not_implemented(self) -> None:
+        dlq = NatsDLQ(NatsEventBusSettings())
+        with pytest.raises(NotImplementedError):
+            await dlq.list_entries()
+
+
+class TestNatsDLQCountByChannelRaises:
+    async def test_count_by_channel_raises_not_implemented(self) -> None:
+        dlq = NatsDLQ(NatsEventBusSettings())
+        with pytest.raises(NotImplementedError):
+            await dlq.count_by_channel()

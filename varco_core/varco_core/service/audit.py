@@ -62,8 +62,9 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from collections.abc import Sequence
 from datetime import datetime, timezone
-from typing import Any, TYPE_CHECKING
+from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from varco_core.event.audit_event import AuditEvent
@@ -137,6 +138,55 @@ class AuditEntry:
     correlation_id: str | None = None
     tenant_id: str | None = None
 
+    prev_hash: str | None = None
+    """Plan 009, Phase 12 (R8) — the previous chain entry's ``entry_hash()``.
+    ``None`` for the genesis entry (or any entry outside a chained
+    deployment — ``hash_chain=False`` is the default). Established by the
+    repository's ``save()`` under a backend-level serialization guarantee
+    (RD-8), never computed by the consumer."""
+
+    seq: int | None = None
+    """Plan 009, Phase 12 (R8) — monotone sequence number establishing total
+    order for the chain. ``None`` outside a chained deployment."""
+
+    def entry_hash(self) -> str:
+        """
+        SHA-256 over a canonical JSON encoding of this entry's chain-relevant
+        fields (Plan 009, Phase 12 / R8).
+
+        Canonical form: sorted keys, no whitespace, RFC 3339 UTC timestamps.
+        Fields hashed, in order: ``entry_id``, ``occurred_at``, ``action``,
+        ``entity_type``, ``entity_id``, ``actor_id``, ``tenant_id``,
+        ``correlation_id``, ``diff``, ``prev_hash``. The genesis entry's
+        ``prev_hash=None`` hashes as the JSON literal ``null``.
+
+        Returns:
+            Lowercase hex SHA-256 digest.
+        """
+        import hashlib
+        import json
+
+        payload = {
+            "entry_id": str(self.entry_id),
+            "occurred_at": (
+                self.occurred_at.astimezone(timezone.utc).isoformat()
+                if self.occurred_at
+                else None
+            ),
+            "action": self.action,
+            "entity_type": self.entity_type,
+            "entity_id": self.entity_id,
+            "actor_id": self.actor_id,
+            "tenant_id": self.tenant_id,
+            "correlation_id": self.correlation_id,
+            "diff": self.diff,
+            "prev_hash": self.prev_hash,
+        }
+        canonical = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), default=str
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
     @classmethod
     def from_event(cls, event: AuditEvent) -> AuditEntry:
         """
@@ -166,6 +216,23 @@ class AuditEntry:
             correlation_id=event.correlation_id,
             tenant_id=event.tenant_id,
         )
+
+
+@dataclass(frozen=True)
+class ChainGap:
+    """A missing ``seq`` in an audit hash chain — e.g. a deleted row (Phase 12)."""
+
+    expected_seq: int
+    found_seq: int | None
+
+
+@dataclass(frozen=True)
+class HashMismatch:
+    """A ``prev_hash`` that does not match the prior entry's actual hash — e.g. an edited row (Phase 12)."""
+
+    seq: int | None
+    expected_prev_hash: str | None
+    actual_prev_hash: str | None
 
 
 # ── AuditRepository ───────────────────────────────────────────────────────────
@@ -207,6 +274,7 @@ class AuditRepository(ABC):
         entity_id: str,
         *,
         limit: int = 100,
+        tenant_id: str | None = None,
     ) -> list[AuditEntry]:
         """
         Return audit entries for a specific entity, newest-first.
@@ -215,6 +283,13 @@ class AuditRepository(ABC):
             entity_type: Entity class name to filter by.
             entity_id:   Entity primary key string to filter by.
             limit:       Maximum number of entries to return.  Default ``100``.
+            tenant_id:   Plan 009 (R4) — **breaking** keyword-only addition.
+                         ``None`` (default) means no tenant filter — the
+                         pre-existing, unscoped behaviour. An out-of-tree
+                         subclass that does not accept this parameter breaks
+                         loudly (``TypeError``) at call time rather than
+                         silently ignoring the tenant filter, which is the
+                         security bug this change exists to fix.
 
         Returns:
             List of ``AuditEntry`` objects ordered by ``occurred_at DESC``.
@@ -224,6 +299,153 @@ class AuditRepository(ABC):
             - Sorting without a DB index on ``(entity_type, entity_id, occurred_at)``
               is O(N) — add an index in production schemas.
         """
+
+    async def list(
+        self,
+        *,
+        actor_id: str | None = None,
+        action: str | None = None,
+        entity_type: str | None = None,
+        entity_id: str | None = None,
+        tenant_id: str | None = None,
+        correlation_id: str | None = None,
+        occurred_from: datetime | None = None,
+        occurred_to: datetime | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[AuditEntry]:
+        """
+        General-purpose filtered scan of the audit log (Plan 009, Phase 10 / R6).
+
+        Concrete-but-raising — no portable scan primitive exists on the ABC
+        to build a default from (unlike ``list_for_entity``, which every
+        backend already indexes on ``(entity_type, entity_id)``). Drives
+        ``build_audit_router()``'s ``GET /audit/entries``.
+
+        Args:
+            actor_id, action, entity_type, entity_id, tenant_id, correlation_id:
+                Optional equality filters.
+            occurred_from, occurred_to: Optional ``occurred_at`` range.
+            limit:  Maximum entries to return.
+            offset: Pagination offset.
+
+        Raises:
+            NotImplementedError: unless overridden.
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not implement list().")
+
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        entity_type: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+        allow_chain_break: bool = False,
+    ) -> int:
+        """
+        Bulk-delete audit entries matching every given predicate (retention).
+
+        Concrete-but-raising, same reasoning as
+        ``AbstractDeadLetterQueue.delete_where`` — a destructive bulk
+        operation has no safe portable default.
+
+        Args:
+            older_than:  Only entries with ``occurred_at`` before this time.
+            entity_type: Match one entity type.
+            tenant_id:   Match one tenant.
+            limit:       Cap on rows deleted — chunk a large sweep.
+            allow_chain_break: Plan 009, Phase 12 (R8) — on a hash-chained
+                table, pruning breaks the chain by construction (a deleted
+                row is indistinguishable from a ``ChainGap`` at
+                ``verify_chain()`` time). Backends with ``hash_chain=True``
+                must raise ``ValueError`` unless this is explicitly ``True``
+                — a defaulted parameter, so a non-chained backend (or one
+                that never implemented hash-chaining at all) is unaffected.
+
+        Returns:
+            Number of entries deleted.
+
+        Raises:
+            NotImplementedError: unless overridden.
+            ValueError: no predicate at all was given, OR the backend is
+                hash-chained and ``allow_chain_break`` was not set.
+        """
+        if older_than is None and entity_type is None and tenant_id is None:
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/entity_type/tenant_id) — refusing to delete "
+                "every entry."
+            )
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement delete_where()."
+        )
+
+    @staticmethod
+    def verify_chain(
+        entries: Sequence[AuditEntry],
+    ) -> Literal[True] | list[ChainGap | HashMismatch]:
+        """
+        Verify a hash chain over already-fetched entries (Plan 009, Phase 12 / R8).
+
+        Portable default (pure, ``@staticmethod``) — pure recomputation over
+        value objects already returned by ``list()``/``list_for_entity()``,
+        correct for every backend by construction: ``entry_hash()`` is a
+        deterministic pure function of an entry's own fields.
+
+        Args:
+            entries: Entries in ``seq`` ascending order.
+
+        Returns:
+            ``True`` when the chain is fully unbroken (including the
+            vacuous empty-list case). Otherwise a non-empty list of
+            findings — ``ChainGap`` (a missing ``seq``, e.g. a deleted row)
+            and ``HashMismatch`` (a ``prev_hash`` that does not match the
+            prior entry's actual hash, e.g. an edited row) are reported as
+            distinct finding types since they are different incidents.
+        """
+        if not entries:
+            return True
+
+        # Callers commonly fetch via list()/list_for_entity(), which order
+        # newest-first for browsing — sort into seq-ascending chain order
+        # here so verify_chain() never depends on the caller's own query
+        # ordering. Entries with seq=None (unchained deployment) sort last,
+        # stably, in whatever relative order they arrived.
+        entries = sorted(
+            entries, key=lambda e: (e.seq is None, e.seq if e.seq is not None else 0)
+        )
+
+        findings: list[ChainGap | HashMismatch] = []
+        prev_entry: AuditEntry | None = None
+        prev_computed_hash: str | None = None
+
+        for entry in entries:
+            if (
+                prev_entry is not None
+                and prev_entry.seq is not None
+                and entry.seq is not None
+            ):
+                expected_seq = prev_entry.seq + 1
+                if entry.seq != expected_seq:
+                    findings.append(
+                        ChainGap(expected_seq=expected_seq, found_seq=entry.seq)
+                    )
+
+            expected_prev_hash = prev_computed_hash if prev_entry is not None else None
+            if entry.prev_hash != expected_prev_hash:
+                findings.append(
+                    HashMismatch(
+                        seq=entry.seq,
+                        expected_prev_hash=expected_prev_hash,
+                        actual_prev_hash=entry.prev_hash,
+                    )
+                )
+
+            prev_entry = entry
+            prev_computed_hash = entry.entry_hash()
+
+        return findings or True
 
 
 # ── AuditLogMixin ─────────────────────────────────────────────────────────────

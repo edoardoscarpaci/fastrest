@@ -46,6 +46,7 @@ providify DI integration::
 from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
 from varco_beanie.deduplication import BeanieDeduplicator, DeduplicationDocument
 from varco_beanie.conversation import BeanieConversationStore, ConversationTurnDocument
+from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 from varco_beanie.query.aggregation import BeanieAggregationApplicator
 from varco_beanie.di import BeanieModule, BeanieSettings, bind_repositories
 from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
@@ -91,6 +92,9 @@ __all__ = [
     # ── Outbox pattern ────────────────────────────────────────────────────────
     "OutboxDocument",
     "BeanieOutboxRepository",
+    # ── Dead letter queue ─────────────────────────────────────────────────────
+    "DeadLetterDocument",
+    "BeanieDeadLetterQueue",
     # ── Query (aggregation) ───────────────────────────────────────────────────
     "BeanieAggregationApplicator",
     # ── Saga repository ───────────────────────────────────────────────────────

@@ -30,14 +30,48 @@ def mongo_container():
 async def test_two_tenant_databases_full_read_isolation_and_drop_removes_one(
     mongo_container,
 ) -> None:
+    """
+    User-visible expectation: under ``TenantIsolation.DATABASE`` each tenant's
+    data lives in its own Mongo database, and ``deprovision(confirm_destroy=True)``
+    (the GDPR erasure primitive) drops exactly one of them.
+
+    ``BeanieDatabaseProvisioner`` takes an already-built Motor/pymongo async
+    ``client=``, never a ``connection_string=`` — the pool/registry owns client
+    construction and lifetime (same seam as ``BeanieTenantPool``).
+    """
+    from pymongo import AsyncMongoClient
     from varco_beanie.tenancy.provisioner import BeanieDatabaseProvisioner
 
-    provisioner = BeanieDatabaseProvisioner(
-        connection_string=mongo_container.get_connection_url()
-    )
+    client = AsyncMongoClient(mongo_container.get_connection_url())
+    provisioner = BeanieDatabaseProvisioner(client=client)
 
-    await provisioner.provision("acme")
-    await provisioner.provision("globex")
+    try:
+        await provisioner.provision("acme")
+        await provisioner.provision("globex")
 
-    await provisioner.deprovision("acme", confirm_destroy=True)
-    # "globex" database must remain untouched by "acme"'s dropDatabase.
+        # MongoDB creates databases lazily — write one document per tenant so
+        # both databases physically exist and the drop is observable.
+        await client["db_acme"]["orders"].insert_one({"_id": "a1", "tenant": "acme"})
+        await client["db_globex"]["orders"].insert_one(
+            {"_id": "g1", "tenant": "globex"}
+        )
+
+        names = await client.list_database_names()
+        assert "db_acme" in names
+        assert "db_globex" in names
+
+        # Full read isolation — neither tenant's collection sees the other's row.
+        assert await client["db_acme"]["orders"].find_one({"_id": "g1"}) is None
+        assert await client["db_globex"]["orders"].find_one({"_id": "a1"}) is None
+
+        await provisioner.deprovision("acme", confirm_destroy=True)
+
+        # "globex" database must remain untouched by "acme"'s dropDatabase.
+        names_after = await client.list_database_names()
+        assert "db_acme" not in names_after
+        assert "db_globex" in names_after
+        assert await client["db_globex"]["orders"].find_one({"_id": "g1"}) is not None
+    finally:
+        await client.drop_database("db_acme")
+        await client.drop_database("db_globex")
+        await client.close()

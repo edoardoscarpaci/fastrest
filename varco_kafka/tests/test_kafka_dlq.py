@@ -502,3 +502,56 @@ class TestKafkaDLQConfiguration:
             await container.ainstall(KafkaDLQConfiguration)
             dlq = await container.aget(AbstractDeadLetterQueue)
             assert isinstance(dlq, KafkaDLQ)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Plan 009, Phase 2 (R3 retention) / Phase 4 (R1 redrive) — RD-4
+# ════════════════════════════════════════════════════════════════════════════
+#
+# RD-4: stream-backed stores (Kafka) leave get/list_entries/delete_where
+# raising, with a message naming the backend's own retention mechanism
+# (retention.ms) rather than a silent no-op.
+
+
+class TestKafkaDLQRandomAccessCapabilityFlag:
+    def test_supports_random_access_is_false(
+        self, settings: KafkaEventBusSettings
+    ) -> None:
+        dlq = KafkaDLQ(settings)
+        assert dlq.supports_random_access is False
+
+
+class TestKafkaDLQDeleteWhereRaises:
+    async def test_delete_where_raises_not_implemented_naming_retention_ms(
+        self, settings: KafkaEventBusSettings
+    ) -> None:
+        dlq = KafkaDLQ(settings)
+        with pytest.raises(NotImplementedError, match="retention.ms"):
+            await dlq.delete_where(older_than=datetime.now())
+
+
+class TestKafkaDLQGetRaises:
+    async def test_get_raises_not_implemented(
+        self, settings: KafkaEventBusSettings
+    ) -> None:
+        dlq = KafkaDLQ(settings)
+        with pytest.raises(NotImplementedError):
+            await dlq.get(uuid.uuid4())
+
+
+class TestKafkaDLQListEntriesRaises:
+    async def test_list_entries_raises_not_implemented(
+        self, settings: KafkaEventBusSettings
+    ) -> None:
+        dlq = KafkaDLQ(settings)
+        with pytest.raises(NotImplementedError):
+            await dlq.list_entries()
+
+
+class TestKafkaDLQCountByChannelRaises:
+    async def test_count_by_channel_raises_not_implemented(
+        self, settings: KafkaEventBusSettings
+    ) -> None:
+        dlq = KafkaDLQ(settings)
+        with pytest.raises(NotImplementedError):
+            await dlq.count_by_channel()

@@ -125,6 +125,32 @@ async with engine.connect() as conn:
 see [Postgres RLS](postgres-rls.md) for the full guide, including why
 `(SELECT current_setting(...))` matters and the `SET`-vs-`SET LOCAL` hazard.
 
+**Framework tables — `varco_audit_log` and `varco_dead_letters` (Plan 009,
+Phase 6 / R4).** Both tables gained a `tenant_id` column in the
+`0002_dlq_audit_tenant_id` revision and are RLS-eligible the same way any
+app table is; `framework_table_names()` already includes them, so passing it
+as `framework_tables=` to `assert_rls_enabled()` covers both automatically.
+Applying RLS to them uses a dedicated one-call helper rather than the
+generic `rls_upgrade(op, "orders")` shown above, since there are two fixed
+table names to enable in one revision:
+
+```python
+from varco_sa.rls_framework import framework_rls_upgrade, framework_rls_downgrade
+
+def upgrade() -> None:
+    framework_rls_upgrade(op)     # varco_audit_log + varco_dead_letters, both by default
+
+def downgrade() -> None:
+    framework_rls_downgrade(op)
+```
+
+Same rule as every other RLS helper in this codebase: nothing calls this
+automatically — paste it into a reviewed migration. See
+`technical_docs/features/dead-letter-queues.md` and
+`technical_docs/features/database-auditing.md`'s "Multitenancy" sections for
+the `tenant_id`-stamping behaviour these tables now carry (including the
+deliberate `None`-tenant asymmetry on `varco_dead_letters`).
+
 ## Recipe 2 — strategy 3: Postgres schema-per-tenant
 
 ```python

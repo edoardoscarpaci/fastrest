@@ -389,3 +389,115 @@ def _reset_observability_state():
 See `varco_core/tests/test_observability_params.py` and
 `varco_core/tests/test_observability_global_attrs.py` for the full test suite this
 feature shipped with.
+
+---
+
+## Reliability metrics (Plan 009, Phase 1 / R2)
+
+> **Doc-location note**: the plan that shipped this section names its target
+> as `technical_docs/features/observability.md`. That file does not exist in
+> this repository — the only observability feature doc is this one. The
+> section below lives here as the closest match; if a dedicated
+> `observability.md` is ever created, move this section there and add it to
+> `mkdocs.yml`'s nav.
+
+`varco_core.observability.reliability` instruments the DLQ, outbox, audit,
+and job-lease subsystems on top of the existing `Metric`/`register_gauge`
+primitives — all `Metric(...)` instances at module level (instrument
+creation is lazy and safe, see `metric.py`).
+
+```python
+from varco_core.observability.reliability import (
+    ReliabilityMetricsConfig,
+    install_reliability_metrics,
+)
+
+install_reliability_metrics(
+    dlq=my_dlq,
+    dlq_name="orders-dlq",          # defaults to the DLQ's class name
+    outbox_repo=my_outbox_repo,
+    config=ReliabilityMetricsConfig(depth_by_channel=False),
+)
+```
+
+`install_reliability_metrics()` is **imperative, not a scanned
+`@Configuration`** — metrics need the *live* DLQ/outbox instance, which only
+the app knows, and a scanned `@Configuration` would auto-activate on
+`container.scan()` (the same "policy authorizer silently active" class of
+pitfall). `ReliabilityPreset.durable(dlq=...)` (see
+`technical_docs/features/reliability-preset.md`) calls this for you as part
+of "opt into durability once".
+
+### Metric inventory
+
+| Name | Kind | Attributes |
+|---|---|---|
+| `varco.dlq.pushed` | counter | `source`, `channel`, `status` (`ok`/`failed`) |
+| `varco.dlq.depth` | observable gauge | `dlq` (+ `channel` iff `depth_by_channel=True`) |
+| `varco.dlq.redriven` | counter | `source`, `status` |
+| `varco.outbox.published` | counter | `channel` |
+| `varco.outbox.failures` | counter | `reason` (`"deserialize"` \| `"publish"`) |
+| `varco.outbox.dead_lettered` | counter | — |
+| `varco.outbox.pending` | observable gauge | — |
+| `varco.outbox.lag_seconds` | observable gauge | now − `oldest_pending_at()` |
+| `varco.audit.writes` | counter | `action`, `entity_type`, `status` |
+| `varco.job.lease_reaps` | counter | — |
+
+**No metric attribute is `entry_id`, `event_type`, `handler_name`, or
+`tenant_id`** unless the operator explicitly opts in — `channel`/`source`
+are bounded by deployment topology, everything else risks the "metric
+series explosion" pitfall (see the main CLAUDE.md pitfall table).
+
+### `varco.dlq.depth` — global per instance, opt-in per channel (RD-3)
+
+`count()` is the only portable depth primitive and it is global — Kafka's
+`count()` returns `-1` by documented design (it cannot answer a cheap exact
+count). `varco.dlq.depth` is therefore an `ObservableGauge` over `count()`
+carrying one attribute, `dlq` (the operator-supplied instance name). **A
+negative `count()` causes the callback to emit NO observation, not `-1`**: a
+gap in a depth graph is honest; a literal `-1` would poison every alert
+threshold built on this metric.
+
+`ReliabilityMetricsConfig(depth_by_channel=True)` opts into
+`count_by_channel()` (concrete-but-raising on the ABC; implemented by
+SA/Redis/Beanie/InMemory) and emits one series per channel instead — the
+operator accepts the extra cardinality explicitly by setting this flag.
+
+### Edge cases
+
+- No `MeterProvider` configured → every call site is a no-op (OTel's own
+  no-op meter).
+- `count()` raises (broker down) → the gauge callback catches it, emits
+  nothing, and logs at DEBUG — never ERROR (a metrics callback must not
+  spam).
+- `count_pending()` raises `NotImplementedError` (an `OutboxRepository` that
+  hasn't implemented it) → the gauge self-disables after the first call with
+  **one** INFO log naming the repository class, rather than raising on every
+  poll.
+- `install_reliability_metrics()` called twice → idempotent; the second call
+  replaces the gauge callbacks instead of double-registering.
+- Every `record_*` helper (`record_dlq_push`, `record_outbox_published`,
+  `record_outbox_failure`, `record_audit_write`, `record_job_lease_reap`)
+  wraps its body in `try/except Exception: pass` — a metrics failure must
+  never break the operation it's instrumenting (the DLQ push path in
+  particular must never raise).
+
+### Alerting recipes
+
+```
+varco.dlq.depth > 0 for 5m           # a DLQ that isn't empty for 5 minutes needs a human
+varco.outbox.lag_seconds > 60        # the outbox relay is falling behind (or stalled)
+rate(varco.dlq.pushed{status="failed"}[5m]) > 0   # a DLQ backend is itself failing
+increase(varco.job.lease_reaps[15m]) > 10          # workers dying faster than expected
+```
+
+### Tests
+
+`varco_core/tests/test_reliability_metrics.py` — with `InMemoryMetricReader`:
+pushing 3 entries asserts `varco.dlq.pushed == 3` with `source="consumer"`;
+`varco.dlq.depth` observes `3`; a DLQ whose `count()` returns `-1` produces
+zero data points; `record_*` swallows a raising instrument;
+`install_reliability_metrics()` twice is idempotent; the outbox gauge
+self-disables on `NotImplementedError` and logs once.
+`varco_sa/tests/test_sa_outbox.py` covers `count_pending()`/
+`oldest_pending_at()` against SQLite.

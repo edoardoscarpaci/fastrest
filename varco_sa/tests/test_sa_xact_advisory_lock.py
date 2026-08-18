@@ -23,6 +23,8 @@ import os
 import pytest
 import pytest_asyncio
 
+from tests.conftest import asyncpg_url
+
 
 pytestmark = [
     pytest.mark.integration,
@@ -45,9 +47,7 @@ def pg_container():
 async def engine(pg_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    url = pg_container.get_connection_url().replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )
+    url = asyncpg_url(pg_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     await eng.dispose()
@@ -124,12 +124,13 @@ class TestSAXactAdvisoryLockReleaseSemantics:
 
 
 class TestSAXactAdvisoryLockAbcRoundTrip:
-    async def test_try_acquire_release_round_trips_via_abc(
-        self, session_factory
-    ) -> None:
+    async def test_try_acquire_release_round_trips_via_abc(self, engine) -> None:
         from varco_sa.advisory_lock import SAXactAdvisoryLock
 
-        lock = SAXactAdvisoryLock()
+        # The try_acquire/release ABC shape opens its OWN connection and so
+        # needs an engine; only xact(key, session) works without one. See
+        # SAXactAdvisoryLock.__init__'s documented contract.
+        lock = SAXactAdvisoryLock(engine=engine)
         handle = await lock.try_acquire("abc-key", ttl=30.0)
         assert handle is not None
         released = await lock.release("abc-key", handle.token)

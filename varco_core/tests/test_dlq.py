@@ -20,7 +20,11 @@ from datetime import datetime, timezone
 import pytest
 
 from varco_core.event import Event
-from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
+from varco_core.event.dlq import (
+    AbstractDeadLetterQueue,
+    DeadLetterEntry,
+    InMemoryDeadLetterQueue,
+)
 
 
 # ── Minimal event fixture ─────────────────────────────────────────────────────
@@ -349,3 +353,131 @@ class TestDeadLetterEntrySourceGeneralisation:
         from varco_core.event.dlq import DeadLetterSource
 
         assert DeadLetterSource.JOB == "job"
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# Plan 009 — Phase 2 (R3 retention) / Phase 4 (R1 redrive)
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until Phase 2/4 land: AbstractDeadLetterQueue gains `supports_random_access`
+# (ClassVar[bool] = False), `get`, `list_entries` (concrete-but-raising),
+# `delete` (portable default -> ack()), `delete_where`, `count_by_channel`
+# (concrete-but-raising).
+
+
+class _BareDLQ(AbstractDeadLetterQueue):
+    """A minimal ABC subclass implementing ONLY the required abstract members
+    (push/pop_batch/ack/count) — used to exercise the base class's own
+    concrete-but-raising defaults, as opposed to InMemoryDeadLetterQueue's
+    (potentially fuller) overrides."""
+
+    def __init__(self) -> None:
+        self._entries: list[DeadLetterEntry] = []
+
+    async def push(self, entry: DeadLetterEntry) -> None:
+        self._entries.append(entry)
+
+    async def pop_batch(self, *, limit: int = 10):
+        batch, self._entries = self._entries[:limit], self._entries[limit:]
+        return batch
+
+    async def ack(self, entry_id) -> None:
+        self._entries = [e for e in self._entries if e.entry_id != entry_id]
+
+    async def count(self) -> int:
+        return len(self._entries)
+
+
+class _MinimalDLQ(InMemoryDeadLetterQueue):
+    """Subclass overriding only the required abstract members — used to prove
+    the portable ``delete()`` default truly delegates to ``ack()`` rather than
+    requiring its own override."""
+
+
+class TestAbstractDeadLetterQueueSupportsRandomAccess:
+    def test_default_supports_random_access_is_false(self) -> None:
+        # RD-4: a conservative default -- an out-of-tree backend is assumed
+        # stream-shaped until it declares otherwise.
+        from varco_core.event.dlq import AbstractDeadLetterQueue
+
+        assert AbstractDeadLetterQueue.supports_random_access is False
+
+
+class TestDeleteDelegatesToAck:
+    async def test_delete_default_calls_ack(self) -> None:
+        dlq = _MinimalDLQ()
+        entry = DeadLetterEntry(
+            event=SampleEvent(),
+            channel="orders",
+            handler_name="H.h",
+            error_type="E",
+            error_message="msg",
+            attempts=1,
+        )
+        await dlq.push(entry)
+        # delete() is the portable default -> delegates to ack(); on the
+        # in-memory backend ack() is a no-op (pop_batch already consumes), so
+        # this call must simply not raise.
+        await dlq.delete(entry.entry_id)
+
+
+class TestGetConcreteButRaising:
+    async def test_get_raises_not_implemented_by_default(self) -> None:
+        dlq = _BareDLQ()
+        with pytest.raises(NotImplementedError):
+            await dlq.get(uuid.uuid4())
+
+
+class TestListEntriesConcreteButRaising:
+    async def test_list_entries_raises_not_implemented_by_default(self) -> None:
+        dlq = _BareDLQ()
+        with pytest.raises(NotImplementedError):
+            await dlq.list_entries()
+
+
+class TestCountByChannelConcreteButRaising:
+    async def test_count_by_channel_raises_not_implemented_by_default(self) -> None:
+        dlq = _BareDLQ()
+        with pytest.raises(NotImplementedError):
+            await dlq.count_by_channel()
+
+
+class TestDeleteWhereConcreteButRaising:
+    async def test_delete_where_raises_not_implemented_by_default(self) -> None:
+        dlq = _BareDLQ()
+        with pytest.raises(NotImplementedError):
+            await dlq.delete_where(older_than=datetime.now(tz=timezone.utc))
+
+    async def test_delete_where_no_predicate_raises_value_error_when_implemented(
+        self,
+    ) -> None:
+        """A backend that DOES implement delete_where() must still refuse a
+        call with no predicate at all -- this is exercised through a minimal
+        fake DLQ that reproduces the documented contract (RD ABC table)."""
+
+        class _PredicateEnforcingDLQ(InMemoryDeadLetterQueue):
+            async def delete_where(  # type: ignore[override]
+                self,
+                *,
+                older_than=None,
+                source=None,
+                channel=None,
+                tenant_id=None,
+                limit=None,
+            ) -> int:
+                if (
+                    older_than is None
+                    and source is None
+                    and channel is None
+                    and tenant_id is None
+                ):
+                    raise ValueError(
+                        "delete_where() requires at least one predicate "
+                        "(older_than/source/channel/tenant_id) — refusing to "
+                        "delete every entry."
+                    )
+                return 0
+
+        dlq = _PredicateEnforcingDLQ()
+        with pytest.raises(ValueError, match="predicate"):
+            await dlq.delete_where()

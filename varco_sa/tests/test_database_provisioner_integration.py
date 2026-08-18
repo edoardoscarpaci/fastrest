@@ -10,6 +10,8 @@ import os
 
 import pytest
 
+from tests.conftest import asyncpg_url
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
@@ -32,9 +34,7 @@ async def test_create_migrate_isolate_and_drop_two_tenant_databases(
 ) -> None:
     from varco_sa.tenancy.admin.db_provisioner import SADatabaseProvisioner
 
-    admin_dsn = pg_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
-    )
+    admin_dsn = asyncpg_url(pg_container)
     provisioner = SADatabaseProvisioner(admin_dsn=admin_dsn)
 
     await provisioner.provision("acme")

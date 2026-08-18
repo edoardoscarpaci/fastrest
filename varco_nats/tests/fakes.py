@@ -126,8 +126,21 @@ class FakeMsg:
         self._stream = stream
 
     async def ack(self) -> None:
+        """Fire-and-forget ack, mirroring nats-py's ``Msg.ack``."""
         self.acked = True
         self._remove_if_workqueue()
+
+    async def ack_sync(self, timeout: float = 1.0) -> "FakeMsg":
+        """
+        Confirming ack, mirroring nats-py's ``Msg.ack_sync``.
+
+        The real ``Msg.ack()`` only publishes to the reply subject and returns
+        before the server has processed it, so ``NatsDLQ.ack()`` must use this
+        variant to honour the "entry is removed on return" postcondition.
+        """
+        self.acked = True
+        self._remove_if_workqueue()
+        return self
 
     async def nak(self, delay: float | None = None) -> None:
         self.naked = True

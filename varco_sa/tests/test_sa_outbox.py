@@ -330,3 +330,45 @@ class TestSAOutboxFullCycle:
 
         # 4. No more pending entries.
         assert await relay_repo.get_pending() == []
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Plan 009, Phase 1 (R2 metrics) — count_pending()/oldest_pending_at()
+# ════════════════════════════════════════════════════════════════════════════
+#
+# RED until OutboxRepository/SARelayOutboxRepository gain these members
+# (concrete-but-raising on the ABC; implemented here against SQLite).
+
+
+class TestSARelayOutboxRepositoryCountPending:
+    async def test_count_pending_reflects_unpublished_entries(
+        self, relay_factory: async_sessionmaker
+    ) -> None:
+        repo = SARelayOutboxRepository(relay_factory)
+        await repo.save(_make_entry())
+        await repo.save(_make_entry())
+
+        assert await repo.count_pending() == 2
+
+    async def test_count_pending_zero_when_empty(
+        self, relay_factory: async_sessionmaker
+    ) -> None:
+        repo = SARelayOutboxRepository(relay_factory)
+        assert await repo.count_pending() == 0
+
+
+class TestSARelayOutboxRepositoryOldestPendingAt:
+    async def test_oldest_pending_at_returns_earliest_created_at(
+        self, relay_factory: async_sessionmaker
+    ) -> None:
+        repo = SARelayOutboxRepository(relay_factory)
+        await repo.save(_make_entry())
+
+        oldest = await repo.oldest_pending_at()
+        assert oldest is not None
+
+    async def test_oldest_pending_at_none_when_empty(
+        self, relay_factory: async_sessionmaker
+    ) -> None:
+        repo = SARelayOutboxRepository(relay_factory)
+        assert await repo.oldest_pending_at() is None

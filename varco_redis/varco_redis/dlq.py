@@ -128,6 +128,14 @@ _ENTRIES_SUFFIX = "dlq:entries"
 _QUEUE_SUFFIX = "dlq:queue"
 
 
+def _coerce_utc(dt: datetime | None) -> datetime | None:
+    """Coerce a naive datetime to UTC (SQLite/caller parity — see varco_sa.dlq)."""
+    if dt is None or dt.tzinfo is not None:
+        return dt
+    _logger.warning("RedisDLQ received a naive datetime filter — assuming UTC.")
+    return dt.replace(tzinfo=timezone.utc)
+
+
 # ── RedisDLQ ──────────────────────────────────────────────────────────────────
 
 
@@ -172,6 +180,9 @@ class RedisDLQ(AbstractDeadLetterQueue):
                 print(f"Failed: {entry.handler_name} — {entry.error_message}")
                 await dlq.ack(entry.entry_id)
     """
+
+    # RD-4 — Redis Hash+ZSET is addressable (unlike Kafka/NATS streams).
+    supports_random_access = True
 
     def __init__(self, settings: RedisEventBusSettings | None = None) -> None:
         """
@@ -491,6 +502,8 @@ class RedisDLQ(AbstractDeadLetterQueue):
             # Embed the event payload as a JSON string — it's already
             # self-describing (contains __event_type__).
             "event_payload": event_bytes.decode("utf-8"),
+            # Plan 009, Phase 6 (R4) — tenant scoping.
+            "tenant_id": entry.tenant_id,
         }
         return json.dumps(data).encode("utf-8")
 
@@ -537,7 +550,117 @@ class RedisDLQ(AbstractDeadLetterQueue):
             attempts=data["attempts"],
             first_failed_at=_parse_dt(data["first_failed_at"]),
             last_failed_at=_parse_dt(data["last_failed_at"]),
+            tenant_id=data.get("tenant_id"),
         )
+
+    # ── Plan 009 additions — retention (R3), redrive (R1), tenancy (R4) ────────
+
+    async def get(self, entry_id: UUID) -> DeadLetterEntry | None:
+        """Fetch one entry by id (Hash lookup) without removing it."""
+        if self._redis is None:
+            raise RuntimeError("RedisDLQ.get() called before connect().")
+        results = await self._redis.hmget(self._entries_key, str(entry_id))
+        payload = results[0] if results else None
+        if payload is None:
+            return None
+        return self._deserialize_entry(str(entry_id), payload)
+
+    async def list_entries(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        channel: str | None = None,
+        source: Any | None = None,
+        tenant_id: str | None = None,
+        older_than: datetime | None = None,
+        newer_than: datetime | None = None,
+    ) -> list[DeadLetterEntry]:
+        """
+        Non-destructive, filtered, paginated read.
+
+        Filtering is applied in Python after a full ``ZRANGE`` scan — Redis
+        has no secondary index on channel/source/tenant here. Acceptable for
+        an admin/CLI browse surface; not intended for hot-path use.
+        """
+        if self._redis is None:
+            raise RuntimeError("RedisDLQ.list_entries() called before connect().")
+        older_than = _coerce_utc(older_than)
+        newer_than = _coerce_utc(newer_than)
+        entry_id_bytes: list[bytes] = await self._redis.zrange(self._queue_key, 0, -1)
+        entry_ids = [b.decode("utf-8") for b in entry_id_bytes]
+        if not entry_ids:
+            return []
+        payloads = await self._redis.hmget(self._entries_key, *entry_ids)
+
+        entries: list[DeadLetterEntry] = []
+        for entry_id_str, payload in zip(entry_ids, payloads):
+            if payload is None:
+                continue
+            try:
+                entry = self._deserialize_entry(entry_id_str, payload)
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 — skip corrupted entries, matches pop_batch()
+                _logger.warning(
+                    "RedisDLQ.list_entries: failed to deserialize entry_id=%s: %s — skipping.",
+                    entry_id_str,
+                    exc,
+                )
+                continue
+            if channel is not None and entry.channel != channel:
+                continue
+            if source is not None and entry.source != source:
+                continue
+            if tenant_id is not None and entry.tenant_id != tenant_id:
+                continue
+            if older_than is not None and entry.last_failed_at >= older_than:
+                continue
+            if newer_than is not None and entry.last_failed_at <= newer_than:
+                continue
+            entries.append(entry)
+
+        return entries[offset : offset + limit]
+
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        source: Any | None = None,
+        channel: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """Bulk delete matching entries — one predicate is required."""
+        if (
+            older_than is None
+            and source is None
+            and channel is None
+            and tenant_id is None
+        ):
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/source/channel/tenant_id) — refusing to delete "
+                "every entry."
+            )
+        matching = await self.list_entries(
+            limit=limit or 1_000_000,
+            channel=channel,
+            source=source,
+            tenant_id=tenant_id,
+            older_than=older_than,
+        )
+        for entry in matching:
+            await self.ack(entry.entry_id)
+        return len(matching)
+
+    async def count_by_channel(self) -> dict[str, int]:
+        """Return ``{channel: count}`` via a full scan of current entries."""
+        entries = await self.list_entries(limit=1_000_000)
+        counts: dict[str, int] = {}
+        for entry in entries:
+            counts[entry.channel] = counts.get(entry.channel, 0) + 1
+        return counts
 
     def __repr__(self) -> str:
         return (

@@ -100,6 +100,10 @@ nav:
       - Schema Migrations: features/schema-migrations.md
       - Multitenancy: features/multitenancy.md
       - A2A Surface: features/a2a-surface.md
+      - Portable Service Contracts: features/portable-contracts.md
+      - Reliability Preset: features/reliability-preset.md
   - Known Issues:
       - Plan 002 Follow-ups: known-issues/plan-002-followups.md
+  - Migration Notes:
+      - "Plan 009 — Reliability & Service Integration": migrations/009-reliability-and-integration.md
   - API Reference: reference/

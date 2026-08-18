@@ -116,6 +116,9 @@ _dead_letters_table = Table(
     Column("attempts", Integer, nullable=False),
     Column("first_failed_at", DateTime(timezone=True), nullable=False),
     Column("last_failed_at", DateTime(timezone=True), nullable=False),
+    # Plan 009, Phase 6 (R4) — nullable, no backfill; None means "framework
+    # level, no owning tenant" (see DeadLetterEntry.tenant_id docstring).
+    Column("tenant_id", String(255), nullable=True),
 )
 
 # Expose metadata for Alembic integration — include in target_metadata.
@@ -157,6 +160,9 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
     Thread safety:  ✅ AsyncEngine pool is coroutine-safe; connections are per-call.
     Async safety:   ✅ All methods are ``async def``.
     """
+
+    # RD-4 — SA supports single-entry random access (unlike Kafka/NATS).
+    supports_random_access = True
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
@@ -211,6 +217,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
                 "attempts": entry.attempts,
                 "first_failed_at": entry.first_failed_at,
                 "last_failed_at": entry.last_failed_at,
+                "tenant_id": entry.tenant_id,
             }
             async with self._engine.begin() as conn:
                 await conn.execute(
@@ -288,6 +295,118 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
             )
             return int(result.scalar_one())
 
+    async def get(self, entry_id: UUID) -> DeadLetterEntry | None:
+        """Fetch one entry by id without removing it. ``None`` if absent."""
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(_dead_letters_table).where(
+                    _dead_letters_table.c.entry_id == entry_id
+                )
+            )
+            row = result.fetchone()
+        return self._row_to_entry(row) if row is not None else None
+
+    async def list_entries(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        channel: str | None = None,
+        source: DeadLetterSource | None = None,
+        tenant_id: str | None = None,
+        older_than: datetime | None = None,
+        newer_than: datetime | None = None,
+    ) -> list[DeadLetterEntry]:
+        """Non-destructive, filtered, paginated read — see ABC docstring."""
+        stmt = sa.select(_dead_letters_table).order_by(
+            _dead_letters_table.c.first_failed_at.asc()
+        )
+        if channel is not None:
+            stmt = stmt.where(_dead_letters_table.c.channel == channel)
+        if source is not None:
+            stmt = stmt.where(_dead_letters_table.c.source == source.value)
+        if tenant_id is not None:
+            stmt = stmt.where(_dead_letters_table.c.tenant_id == tenant_id)
+        if older_than is not None:
+            stmt = stmt.where(_dead_letters_table.c.last_failed_at < older_than)
+        if newer_than is not None:
+            stmt = stmt.where(_dead_letters_table.c.last_failed_at > newer_than)
+        stmt = stmt.limit(limit).offset(offset)
+        async with self._engine.connect() as conn:
+            result = await conn.execute(stmt)
+            rows = result.fetchall()
+        return [self._row_to_entry(row) for row in rows]
+
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        source: DeadLetterSource | Any = None,
+        channel: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> int:
+        """
+        Chunked-sweep-friendly bulk delete — one predicate is required.
+
+        Callers loop ``delete_where(..., limit=chunk)`` until it returns
+        ``0`` (the documented chunked-sweep recipe — each call is its own
+        short transaction, safe under a transaction-mode pooler).
+        """
+        if (
+            older_than is None
+            and source is None
+            and channel is None
+            and tenant_id is None
+        ):
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/source/channel/tenant_id) — refusing to delete "
+                "every entry."
+            )
+        if limit is not None and limit < 1:
+            raise ValueError(f"delete_where limit must be ≥ 1, got {limit}.")
+
+        select_stmt = sa.select(_dead_letters_table.c.entry_id)
+        if older_than is not None:
+            select_stmt = select_stmt.where(
+                _dead_letters_table.c.last_failed_at < older_than
+            )
+        if channel is not None:
+            select_stmt = select_stmt.where(_dead_letters_table.c.channel == channel)
+        if tenant_id is not None:
+            select_stmt = select_stmt.where(
+                _dead_letters_table.c.tenant_id == tenant_id
+            )
+        if source is not None:
+            sources = source if isinstance(source, (list, tuple, set)) else [source]
+            select_stmt = select_stmt.where(
+                _dead_letters_table.c.source.in_([s.value for s in sources])
+            )
+        if limit is not None:
+            select_stmt = select_stmt.limit(limit)
+
+        async with self._engine.begin() as conn:
+            ids = [row[0] for row in (await conn.execute(select_stmt)).fetchall()]
+            if not ids:
+                return 0
+            await conn.execute(
+                sa.delete(_dead_letters_table).where(
+                    _dead_letters_table.c.entry_id.in_(ids)
+                )
+            )
+        return len(ids)
+
+    async def count_by_channel(self) -> dict[str, int]:
+        """Return ``{channel: count}`` across all entries."""
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(_dead_letters_table.c.channel, sa.func.count()).group_by(
+                    _dead_letters_table.c.channel
+                )
+            )
+            return {row[0]: row[1] for row in result.fetchall()}
+
     def _row_to_entry(self, row: Any) -> DeadLetterEntry:
         """Convert a Core row back to a ``DeadLetterEntry`` value object."""
         event = None
@@ -316,6 +435,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
             source=DeadLetterSource(row.source),
             source_ref=row.source_ref,
             payload=payload,
+            tenant_id=row.tenant_id,
         )
 
     def __repr__(self) -> str:

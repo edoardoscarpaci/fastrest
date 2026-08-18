@@ -31,11 +31,13 @@ SAPoolSaturationCheck
 from __future__ import annotations
 
 import asyncio
+import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from tests.conftest import asyncpg_url
 from varco_core.health import HealthStatus
 from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
 from varco_sa.pool_metrics import SAPoolMetrics
@@ -325,20 +327,34 @@ async def test_pool_saturation_result_component_matches_name(sqlite_engine) -> N
 # ── Integration: real PostgreSQL ──────────────────────────────────────────────
 
 
+@pytest.fixture(scope="module")
+def pg_container():
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer("postgres:15-alpine") as pg:
+        yield pg
+
+
 @pytest.mark.integration
-async def test_integration_healthy_against_real_db() -> None:
+@pytest.mark.skipif(
+    not os.environ.get("VARCO_RUN_INTEGRATION"),
+    reason="Integration tests disabled — set VARCO_RUN_INTEGRATION=1",
+)
+async def test_integration_healthy_against_real_db(pg_container) -> None:
     """
-    Requires a running PostgreSQL accessible at DATABASE_URL env var.
-    Run with: VARCO_RUN_INTEGRATION=1 pytest -m integration
+    Health check reports HEALTHY against a real PostgreSQL.
+
+    DESIGN: testcontainers, not a DATABASE_URL fallback.
+        This test used to default to
+        ``postgresql+asyncpg://postgres:postgres@localhost/test`` when
+        ``DATABASE_URL`` was unset. The integration runner sets
+        ``VARCO_RUN_INTEGRATION=1`` but never ``DATABASE_URL``, so the test
+        ran, dialled a Postgres nobody had started, and asserted UNHEALTHY is
+        HEALTHY — a guaranteed failure rather than a meaningful check.
+        ✅ Self-contained, matching every other integration test in the repo.
+        ❌ Requires Docker — already the documented prerequisite.
     """
-    import os
-
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Set VARCO_RUN_INTEGRATION=1 to run integration tests")
-
-    url = os.environ.get(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost/test"
-    )
+    url = asyncpg_url(pg_container)
     engine = create_async_engine(url)
     try:
         check = SAHealthCheck(engine=engine, timeout=5.0)

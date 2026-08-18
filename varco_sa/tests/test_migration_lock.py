@@ -16,6 +16,8 @@ import os
 import pytest
 import pytest_asyncio
 
+from tests.conftest import asyncpg_url, create_isolated_database_url
+
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(
@@ -37,34 +39,80 @@ def pg_container():
 async def engine(pg_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    url = pg_container.get_connection_url().replace(
-        "postgresql+psycopg2://", "postgresql+asyncpg://"
-    )
+    url = asyncpg_url(pg_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     await eng.dispose()
 
 
-async def test_two_migrators_concurrent_upgrade_exactly_one_applies(engine) -> None:
+async def test_two_migrators_concurrent_upgrade_exactly_one_applies(
+    pg_container,
+) -> None:
+    """
+    Two migrators racing the same pending revisions: exactly one applies them.
+
+    DESIGN: include_framework_branch=True — the contention must be real.
+        This test previously ran with ``include_framework_branch=False``, which
+        leaves the app branch empty. ``AlembicMigrator.upgrade()`` short-
+        circuits on ``plan.is_empty`` *before* acquiring the migration lock
+        (a deliberate fast path — never take a heavyweight lock to do nothing),
+        so neither migrator ever reached the lock and the test asserted on a
+        run with no work to do. The framework branch ships 3 real revisions,
+        so both migrators now genuinely contend.
+        ✅ Without working exclusion the losing migrator runs the same DDL
+           concurrently and Postgres raises "relation already exists" — the
+           failure this test exists to catch.
+        ❌ Couples the test to the framework branch having pending revisions,
+           which is true for any fresh database by construction.
+
+    The loser may legitimately report either shape, both of which are correct
+    lock behaviour, so neither is asserted:
+      * it waited for the lock, re-planned, found nothing → applied=()
+      * it timed out, re-planned, found nothing → applied=(), skipped_locked
+    The invariant under test is that exactly ONE migrator applied revisions.
+    """
+    import sqlalchemy as sa
+    from sqlalchemy.ext.asyncio import create_async_engine
+
     from varco_sa.migration.migrator import AlembicMigrator
 
-    migrator_a = AlembicMigrator(engine, include_framework_branch=False)
-    migrator_b = AlembicMigrator(engine, include_framework_branch=False)
+    # Isolated database: this test actually applies revisions, and the
+    # alembic_version rows it stamps would break sibling tests that build a
+    # migrator with include_framework_branch=False against the same database.
+    url = await create_isolated_database_url(pg_container, "migration_lock_race")
+    engine = create_async_engine(url, echo=False)
+
+    migrator_a = AlembicMigrator(engine, include_framework_branch=True)
+    migrator_b = AlembicMigrator(engine, include_framework_branch=True)
+
+    # Sanity-check the premise: there must be work to contend over.
+    assert not (await migrator_a.plan()).is_empty
 
     report_a, report_b = await asyncio.gather(
         migrator_a.upgrade(), migrator_b.upgrade()
     )
 
     reports = [report_a, report_b]
-    skipped = [r for r in reports if r.skipped_locked]
-    applied = [r for r in reports if not r.skipped_locked]
+    did_apply = [r for r in reports if r.applied]
+    did_nothing = [r for r in reports if not r.applied]
 
-    assert len(applied) == 1
-    assert len(skipped) == 1
-    assert skipped[0].applied == ()
+    assert len(did_apply) == 1, f"expected exactly one applier, got {reports}"
+    assert len(did_nothing) == 1, f"expected exactly one no-op, got {reports}"
+
+    # Both migrators are now at head, and the DDL ran exactly once.
+    assert (await migrator_a.plan()).is_empty
+    async with engine.connect() as conn:
+        count = await conn.scalar(
+            sa.text(
+                "SELECT count(*) FROM information_schema.tables "
+                "WHERE table_name = 'varco_outbox'"
+            )
+        )
+    assert count == 1
 
     await migrator_a.close()
     await migrator_b.close()
+    await engine.dispose()
 
 
 async def test_lock_timeout_raises_when_revisions_still_pending(engine) -> None:

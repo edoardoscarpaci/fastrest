@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
     from varco_fastapi.auth.guard import RouteGuard
@@ -115,6 +115,146 @@ class ResolvedRoute:
     # Populated from _RouteEntry.requires; None means no guard.
     # Excluded from hash/compare — RouteGuard.predicate may hold callables.
     requires: RouteGuard | None = field(default=None, hash=False, compare=False)
+
+    # Plan 009, Phase 0 — resolved handler parameters, classified for client
+    # generation (path/query/body/header). Populated only for custom @route
+    # handlers (CRUD routes are typed via request_model/response_model
+    # instead — their DTOs already carry this information).
+    param_specs: tuple[ParamSpec, ...] = field(
+        default_factory=tuple, compare=False, hash=False
+    )
+
+
+# ── ParamSpec ────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ParamSpec:
+    """
+    One resolved handler parameter, classified for client generation.
+
+    Produced by ``_extract_param_specs()`` and consumed by
+    ``varco_fastapi.contract.build.build_contract()`` to build a
+    ``ParamContract`` per parameter.
+
+    Attributes:
+        name:        Parameter name as declared on the handler.
+        kind:        ``"path"`` | ``"query"`` | ``"body"`` | ``"header"``.
+        annotation:  Runtime type, or ``None`` when unresolvable (degrades to
+                     ``Any``/``dict[str, Any]`` downstream rather than raising
+                     — unless the caller opts into ``strict=True``).
+        required:    Whether the parameter has no default.
+        default:     The declared default, if any.
+        description: Human-readable description, if any.
+    """
+
+    name: str
+    kind: str
+    annotation: type | None
+    required: bool
+    default: Any = None
+    description: str | None = None
+
+
+# Parameters that never become part of a client's typed surface — framework
+# plumbing the handler may declare, all excluded from param_specs entirely.
+_EXCLUDED_PARAM_NAMES: Final[frozenset[str]] = frozenset(
+    {"self", "ctx", "auth", "context"}
+)
+
+
+def _extract_param_specs(
+    fn: Any, path_params: tuple[str, ...]
+) -> tuple[ParamSpec, ...]:
+    """
+    Classify a custom ``@route`` handler's parameters into path/query/body.
+
+    Classification rule (mirrors ``_synthesize_custom_signature``'s pass-through
+    but adds the path-vs-query-vs-body split client generation needs):
+        - name found in ``path_params``            → ``"path"``
+        - annotation is a ``pydantic.BaseModel``    → ``"body"``
+        - everything else (scalars, containers)     → ``"query"``
+        - ``Request``/``Response``/``BackgroundTasks``/params defaulting to a
+          FastAPI ``Depends(...)`` sentinel, and framework auth params
+          (``self``/``ctx``/``auth``/``context``) → excluded entirely.
+
+    Args:
+        fn:          The unbound router method (function object).
+        path_params: Path parameter names extracted from the route's path.
+
+    Returns:
+        A tuple of ``ParamSpec``, in declaration order.
+
+    Edge cases:
+        - An unresolvable (``TYPE_CHECKING``-only) forward-ref annotation
+          degrades to ``annotation=None`` — never raises here; ``strict=True``
+          at the contract-build layer is what turns this into an error.
+    """
+    import inspect
+
+    from fastapi import BackgroundTasks, Request, Response
+    from fastapi.params import Depends as DependsMarker
+
+    try:
+        import pydantic
+
+        _base_model = pydantic.BaseModel
+    except ImportError:  # pragma: no cover - pydantic is a hard dependency
+        _base_model = None
+
+    try:
+        hints = _resolve_hints_safe(fn)
+    except Exception:  # noqa: BLE001 - best-effort; fall back to raw annotations
+        hints = {}
+
+    specs: list[ParamSpec] = []
+    sig = inspect.signature(fn)
+    for name, p in sig.parameters.items():
+        if name in _EXCLUDED_PARAM_NAMES:
+            continue
+        if isinstance(p.default, DependsMarker):
+            continue
+
+        annotation = hints.get(name, p.annotation)
+        if annotation is inspect.Parameter.empty:
+            annotation = None
+        if annotation in (Request, Response, BackgroundTasks):
+            continue
+
+        required = p.default is inspect.Parameter.empty
+        default = None if required else p.default
+
+        if name in path_params:
+            kind = "path"
+        elif (
+            _base_model is not None
+            and isinstance(annotation, type)
+            and issubclass(annotation, _base_model)
+        ):
+            kind = "body"
+        else:
+            kind = "query"
+
+        specs.append(
+            ParamSpec(
+                name=name,
+                kind=kind,
+                annotation=annotation if isinstance(annotation, type) else None,
+                required=required,
+                default=default,
+            )
+        )
+    return tuple(specs)
+
+
+def _resolve_hints_safe(fn: Any) -> dict[str, Any]:
+    """Best-effort ``typing.get_type_hints`` — returns ``{}`` rather than raising."""
+    import typing
+
+    try:
+        return typing.get_type_hints(fn)
+    except Exception:  # noqa: BLE001 - unresolvable forward ref, etc.
+        return {}
 
 
 # ── Path parameter extraction ──────────────────────────────────────────────────
@@ -349,6 +489,9 @@ def introspect_routes(
                 skill_input_modes=tuple(entry.skill_input_modes or ()),
                 skill_output_modes=tuple(entry.skill_output_modes or ()),
                 requires=entry.requires,
+                param_specs=_extract_param_specs(
+                    method_obj, _extract_path_params(entry.path)
+                ),
             )
             if enabled_routes is None or attr_name in enabled_routes:
                 routes.append(route)

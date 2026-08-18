@@ -117,6 +117,7 @@ def create_varco_app(
     migrations: AbstractMigrator | Sequence[AbstractMigrator] | None = None,
     migration_settings: MigrationSettings | None = None,
     tenancy: Any | None = None,
+    reliability: Any | None = None,
     validate: bool = True,
     strict_validation: bool = False,
     openapi_url: str = "/openapi.json",
@@ -359,6 +360,24 @@ def create_varco_app(
                 "tenancy=<TenancyLifecycle> to enable it (mirrors "
                 "VARCO_MIGRATE_MODE's warn-without-migrations= behaviour)."
             )
+
+    # ── Reliability preset (Plan 009, Phase 9) ────────────────────────────────
+    # reliability=None (the default) registers nothing — byte-identical to
+    # today. Appended (not prepended) — metrics/outbox/audit wiring depends
+    # on the event bus and repositories other lifecycle components may set up.
+    if reliability is not None:
+        from varco_core.reliability import ReliabilityPreset
+        from varco_fastapi.reliability import ReliabilityLifecycle
+
+        _preset = (
+            reliability
+            if isinstance(reliability, ReliabilityPreset)
+            else ReliabilityPreset.off()
+        )
+        lifespan_components = [
+            *lifespan_components,
+            ReliabilityLifecycle(_preset, container=container),
+        ]
 
     varco_lifespan = VarcoLifespan(*lifespan_components)
 

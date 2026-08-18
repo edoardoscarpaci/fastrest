@@ -74,6 +74,7 @@ def enable_rls_ddl(
     tenant_column: str = "tenant_id",
     setting: str = "rls.tenant_id",
     policy_name: str | None = None,
+    cast_type: str = "uuid",
 ) -> list[str]:
     """
     Build the DDL statements to enable a tenant-scoped RLS policy on a table.
@@ -94,6 +95,13 @@ def enable_rls_ddl(
         setting:        The Postgres GUC name read via ``current_setting()``.
                         Default: ``"rls.tenant_id"`` — set per-transaction via
                         ``set_tenant_local()``.
+        cast_type:      Postgres type the GUC (always ``text``) is cast to
+                        before comparison with ``tenant_column``. Default:
+                        ``"uuid"``, matching the usual application table whose
+                        ``tenant_id`` is a real ``UUID`` column. Pass
+                        ``"text"`` for a ``VARCHAR``/``TEXT`` tenant column —
+                        a mismatched cast aborts the migration with
+                        ``operator does not exist: character varying = uuid``.
         policy_name:    Name for the ``CREATE POLICY`` statement. Defaults to
                         ``f"{table}_tenant_isolation"`` (with ``.`` replaced
                         by ``_`` for schema-qualified table names).
@@ -127,8 +135,34 @@ def enable_rls_ddl(
     # The naive form — USING (tenant_column = current_setting(setting)::uuid)
     # — is what causes the 150x-cliff. Never emit that form. See module
     # docstring and test_rls.py's non-negotiable regression assertion.
+    # DESIGN: cast_type is a parameter, not a hardcoded ``::uuid``.
+    #   The comparison's two sides must agree: current_setting() always
+    #   returns ``text``, so the cast has to match the *column's* declared
+    #   type. varco's own framework tables (varco_audit_log,
+    #   varco_dead_letters) declare ``tenant_id`` as ``String(255)`` because
+    #   DeadLetterEntry.tenant_id / AuditEntry.tenant_id are ``str | None`` —
+    #   not UUIDs — so a hardcoded ``::uuid`` made framework_rls_upgrade()
+    #   abort every migration that used it.
+    #   ✅ Application tables keep the ``uuid`` default — unchanged behaviour.
+    #   ✅ Framework tables get a correct, appliable policy.
+    #   ❌ A caller can still pass a cast that mismatches its own column;
+    #      Postgres raises loudly at migration-apply time, which is the same
+    #      trust model as every other raw-DDL argument in this module.
+    # DESIGN: NULLIF(..., '') around current_setting, inside the InitPlan.
+    #   Postgres resets a ``set_config(..., local => true)`` GUC to the EMPTY
+    #   STRING — not to NULL — when the transaction ends. On a pooled
+    #   connection that has served one tenant, the next unscoped query then
+    #   casts ``''`` and dies with ``invalid input syntax for type uuid: ""``
+    #   instead of the documented "RLS hides every row". NULLIF maps both
+    #   "never set" and "reset after SET LOCAL" to NULL, so the comparison
+    #   yields no rows in both cases.
+    #   ✅ Fail-closed and crash-free: an unscoped read returns zero rows.
+    #   ✅ Still a scalar subquery, so the InitPlan optimisation is intact.
+    #   ❌ An intentionally empty tenant id can no longer be matched — that
+    #      is not a valid tenant identifier in any varco code path.
     tenant_filter = (
-        f"{tenant_column} = (SELECT current_setting('{setting}', true)::uuid)"
+        f"{tenant_column} = "
+        f"(SELECT NULLIF(current_setting('{setting}', true), '')::{cast_type})"
     )
     return [
         f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY",

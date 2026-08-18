@@ -415,6 +415,103 @@ warning was not.
   the real cause — have been removed in favour of a single un-guarded
   `container.provide()` call.
 
+- **`varco-core` — the `varco.dlq.depth` gauge silently reported no data for
+  every real DLQ backend (Redis, Kafka, Beanie/Mongo, SQLAlchemy) in
+  production.** `install_reliability_metrics()`'s observable-gauge callback
+  ran the DLQ's async `count()` on a freshly created event loop instead of
+  the loop that owns the DLQ's async client, raising `got Future attached to
+  a different loop`. The gauge callback swallows exceptions by contract (it
+  must never raise), so the metric appeared to work while emitting **zero**
+  data points — including against `PeriodicExportingMetricReader`, which
+  collects from its own thread with no loop of its own. Only
+  `InMemoryDeadLetterQueue` (loop-agnostic) was ever exercised by tests,
+  which is why the defect survived. `_run_sync` now captures the owning loop
+  at `install_reliability_metrics()` time and submits via
+  `asyncio.run_coroutine_threadsafe(coro, owner).result(timeout=5.0)` when
+  called off that loop, keeping the previous fresh-loop behaviour when the
+  owner is unknown or the caller is already on the owner's own thread. See
+  `technical_docs/features/reliability-preset.md`'s pitfall table.
+
+- **`varco-beanie` — `BeanieAuditRepository(hash_chain=True)` raised
+  `CollectionWasNotInitialized` on the very first chained write.** The
+  chain's `varco_audit_seq` counter was reached via
+  `AuditSeqDocument.get_pymongo_collection()`, which silently required a
+  *second* `init_beanie(document_models=...)` registration documented
+  nowhere — contradicting `AuditSeqDocument`'s own docstring ("no separate
+  bootstrap step needed") and `technical_docs/features/database-auditing.md`,
+  which only ever documents registering `AuditDocument`. `_seq_collection()`
+  now resolves the counter from `AuditDocument`'s own, already-initialised
+  database, so registering `AuditDocument` remains the **only** required
+  step, including with `hash_chain=True`. `AuditSeqDocument` is retained
+  (exported from `varco_beanie.audit`) as schema documentation for operators
+  who want to register it deliberately for index/migration tooling.
+
+- **`varco-beanie` — `hash_chain=True`'s `verify_chain()` reported a
+  `HashMismatch` on every single link.** `AuditEntry.entry_hash()` hashes
+  `occurred_at.isoformat()` at microsecond precision, but BSON datetimes are
+  millisecond-precision — a value saved as `…121255` read back as
+  `…121000`, so the digest recomputed from a loaded entry never matched the
+  one stored at write time. A chained Beanie entry's `occurred_at` is now
+  truncated to whole milliseconds before it is both hashed and persisted, so
+  the stored value round-trips byte-exact. Fixed in the backend rather than
+  by weakening the portable hash contract — `SAAuditRepository` is
+  unaffected and continues hashing microseconds. See
+  `technical_docs/features/database-auditing.md`'s tamper-evidence section.
+
+- **`varco-sa` — Postgres RLS on the framework tables could never be applied
+  at all.** `enable_rls_ddl()` hardcoded a `::uuid` cast in the generated
+  policy, but both framework tables (`varco_audit_log`, `varco_dead_letters`)
+  declare `tenant_id` as `String(255)` — every call to
+  `varco_sa.rls_framework.framework_rls_upgrade()` aborted with `operator
+  does not exist: character varying = uuid`, and this had never been caught
+  because the only test covering it sat behind an unrelated `NameError`.
+  `enable_rls_ddl()` gains a `cast_type: str = "uuid"` parameter (application
+  tables are unaffected — the default is unchanged); `framework_rls_upgrade()`
+  now passes `cast_type="text"` to match the framework schema. **If you
+  already wrote a hand-rolled RLS revision for a `VARCHAR`/`TEXT` tenant
+  column, pass `cast_type="text"` to `enable_rls_ddl()`/`rls_upgrade()`
+  explicitly** — the default stays `"uuid"`. See
+  `technical_docs/features/postgres-rls.md`.
+
+- **`varco-sa` — an RLS-protected query could raise instead of returning
+  zero rows once a pooled connection's transaction ended.** Postgres resets
+  a `set_config(..., true)` (`SET LOCAL`-equivalent) GUC to the **empty
+  string**, not `NULL`, at `COMMIT`/`ROLLBACK`. The next unscoped statement
+  on that (possibly pooled) connection then cast `''` to the policy's target
+  type and raised (`invalid input syntax for type uuid: ""`) instead of the
+  intended fail-closed "no tenant set → zero rows" behaviour. The generated
+  policy now wraps the GUC read in `NULLIF(current_setting(...), '')`, still
+  inside the load-bearing `(SELECT ...)` InitPlan subquery — the query-planner
+  fix from the original RLS work is unchanged. See
+  `technical_docs/features/postgres-rls.md`.
+
+- **`varco-nats` — `NatsDLQ.ack()` returned before the JetStream server
+  confirmed the acknowledgement**, so a `count()` (or a redrive check)
+  immediately after `ack()` could still see the "acked" entry — observed
+  taking up to ~1 s to actually clear — and a process exiting right after
+  `ack()` could lose the ack outright, causing `DlqRedriver`'s
+  publish-then-ack policy to redeliver an already-handled dead letter.
+  `ack()` now calls nats-py's `Msg.ack_sync(timeout=2.0)` instead of the
+  fire-and-forget `Msg.ack()`; on a timeout the entry is kept in-flight and
+  retried on the next `ack()` call rather than silently dropped. `push()`
+  is unchanged — it remains fire-and-forget-safe by contract. See
+  `technical_docs/features/dead-letter-queues.md`.
+
+- **`varco-sa`, `varco-nats` — integration test/harness hygiene.** RLS
+  integration tests were unknowingly running as a Postgres superuser
+  (`rolbypassrls=True`), which bypasses RLS unconditionally regardless of
+  `FORCE ROW LEVEL SECURITY` and made every RLS assertion vacuously pass;
+  tests now provision and connect as a dedicated non-superuser role. A
+  migration-lock test asserted nothing because `AlembicMigrator.upgrade()`
+  returns before acquiring the lock when there are zero pending revisions;
+  it now creates real pending revisions against an isolated database. Seven
+  call sites hand-rolled a broken `postgresql://` → `postgresql+asyncpg://`
+  string replacement that was a no-op against testcontainers'
+  `postgresql+psycopg2://` URLs; replaced with one shared `asyncpg_url()`
+  helper plus a guard test. `scripts/integration_tests.sh` no longer treats
+  pytest's "no tests collected" exit code (5) as a failure for packages with
+  no `@pytest.mark.integration` tests yet.
+
 ### Changed
 
 - **`Serializer[Event]` is the event-serializer injection interface.** Bus
