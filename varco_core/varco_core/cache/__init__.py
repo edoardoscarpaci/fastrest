@@ -80,16 +80,16 @@ Example — composable invalidation::
 
 from __future__ import annotations
 
+from varco_core.cache.backplane import (
+    CacheBackplane,
+    InMemoryBackplane,
+    InvalidationMessage,
+)
 from varco_core.cache.base import AsyncCache, CacheBackend, InvalidationStrategy
 from varco_core.cache.config import CacheSettings
 from varco_core.cache.consumer import CacheInvalidationConsumer
 from varco_core.cache.decorator import cached
-from varco_core.cache.mixin import CacheServiceMixin
-from varco_core.cache.service import (
-    CacheInvalidated,
-    CacheInvalidationEvent,
-    CachedService,
-)
+from varco_core.cache.envelope import CacheEnvelope
 from varco_core.cache.invalidation import (
     CompositeStrategy,
     EventDrivenStrategy,
@@ -99,6 +99,15 @@ from varco_core.cache.invalidation import (
 )
 from varco_core.cache.layered import LayeredCache
 from varco_core.cache.memory import InMemoryCache, NoOpCache
+from varco_core.cache.mixin import CacheServiceMixin
+from varco_core.cache.policy import CachePolicy
+from varco_core.cache.readthrough import read_through
+from varco_core.cache.service import (
+    CachedService,
+    CacheInvalidated,
+    CacheInvalidationEvent,
+)
+from varco_core.cache.singleflight import Singleflight, SingleflightProtocol
 
 __all__ = [
     # ── Core abstractions ──────────────────────────────────────────────────────
@@ -129,4 +138,14 @@ __all__ = [
     "EventDrivenStrategy",
     # ── Event-driven invalidation consumer ─────────────────────────────────────
     "CacheInvalidationConsumer",
+    # ── Read-through core (Plan 010) ───────────────────────────────────────────
+    "CachePolicy",
+    "CacheEnvelope",
+    "Singleflight",
+    "SingleflightProtocol",
+    "read_through",
+    # ── L1 coherence backplane (Plan 010 / C1) ─────────────────────────────────
+    "CacheBackplane",
+    "InMemoryBackplane",
+    "InvalidationMessage",
 ]

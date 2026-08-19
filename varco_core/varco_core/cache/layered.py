@@ -69,13 +69,33 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
+import uuid
 from typing import Any, Literal
 
+from varco_core.cache.backplane import (
+    CacheBackplane,
+    InvalidationKind,
+    InvalidationMessage,
+)
 from varco_core.cache.base import CacheBackend
+from varco_core.observability.cache import (
+    record_backplane_dropped,
+    record_backplane_published,
+    record_backplane_received,
+    record_cache_eviction,
+    record_cache_hit,
+    record_cache_miss,
+)
 
 _logger = logging.getLogger(__name__)
 
 WriteMode = Literal["write-through", "write-around"]
+
+
+def _layer_label(index: int) -> str:
+    """Bounded layer label for metrics — 0-indexed position to ``"l1"``/``"l2"``/…."""
+    return f"l{index + 1}"
 
 
 class LayeredCache(CacheBackend):
@@ -132,6 +152,7 @@ class LayeredCache(CacheBackend):
         *layers: CacheBackend,
         write_mode: WriteMode = "write-through",
         promote_ttl: float | None = None,
+        backplane: CacheBackplane | None = None,
     ) -> None:
         """
         Args:
@@ -140,18 +161,46 @@ class LayeredCache(CacheBackend):
                         writes only to the last layer.
             promote_ttl: TTL applied when promoting a value from Ln to L1.
                          ``None`` = use L1's own default.
+            backplane:  Optional ``CacheBackplane`` (Plan 010 / C1) — a
+                        cross-node invalidation channel that keeps every
+                        pod's L1 coherent after another pod's write/delete.
+                        ``None`` (default) leaves the write path byte
+                        identical to today (a single ``asyncio.gather``).
 
         Raises:
-            ValueError: If fewer than 2 layers are given.
+            ValueError: If fewer than 2 layers are given, OR if ``backplane``
+                is given while ``promote_ttl`` is ``None`` — an unbounded L1
+                TTL behind a best-effort, fire-and-forget backplane means a
+                missed invalidation (Pub/Sub message loss on disconnect,
+                research brief 002 §3) has no bound on how long it can serve
+                stale data. Mirrors ``OutboxRelay(max_attempts=...)`` refusing
+                to run without a ``dlq=``.
         """
         if len(layers) < 2:
             raise ValueError(
                 f"LayeredCache requires at least 2 layers; got {len(layers)}. "
                 f"Use a single CacheBackend directly if you only have one."
             )
+        if backplane is not None and promote_ttl is None:
+            raise ValueError(
+                "LayeredCache(backplane=...) requires promote_ttl to be set. "
+                "A Pub/Sub backplane is best-effort — a subscriber "
+                "disconnected at publish time never receives the message "
+                "(research brief 002 §3). promote_ttl bounds how long a "
+                "missed invalidation can leave L1 stale."
+            )
         self._layers: tuple[CacheBackend, ...] = layers
         self._write_mode: WriteMode = write_mode
         self._promote_ttl = promote_ttl
+        self._backplane = backplane
+        # This node's own identity for backplane echo suppression — generated
+        # independently of `backplane.origin` (which a real transport such as
+        # RedisPubSubBackplane needs for its OWN wire-level echo filtering).
+        # A LayeredCache always echo-suppresses on ITS OWN id, which is what
+        # lets several LayeredCache "nodes" share one backplane connection
+        # object (e.g. InMemoryBackplane in tests) without misattributing
+        # messages to the wrong node.
+        self._node_id = uuid.uuid4().hex
         self._started = False
 
     # ── Properties ─────────────────────────────────────────────────────────────
@@ -181,18 +230,39 @@ class LayeredCache(CacheBackend):
                 "Call stop() first."
             )
         for layer in self._layers:
-            await layer.start()
+            # A layer MAY already be started — the multi-pod backplane
+            # pattern (Plan 010 / C1) deliberately shares one authoritative
+            # last-layer instance (e.g. an in-process "L2" standing in for a
+            # real shared Redis) across several LayeredCache "node" objects
+            # in the same test process. Starting an already-started layer is
+            # therefore tolerated as a no-op rather than raising — the layer
+            # itself is unambiguously ready either way.
+            try:
+                await layer.start()
+            except RuntimeError:
+                _logger.debug(
+                    "LayeredCache: layer %r was already started (shared layer).",
+                    layer,
+                )
+        if self._backplane is not None:
+            # Layers are ready BEFORE the backplane can push received
+            # messages into them.
+            self._backplane.subscribe(self._on_backplane_message)
+            await self._backplane.start()
         self._started = True
         _logger.debug(
-            "LayeredCache started (%d layers, mode=%s).",
+            "LayeredCache started (%d layers, mode=%s, backplane=%s).",
             len(self._layers),
             self._write_mode,
+            self._backplane is not None,
         )
 
     async def stop(self) -> None:
-        """Stop all layers in reverse order (LIFO).  Idempotent."""
+        """Stop the backplane, then all layers in reverse order (LIFO).  Idempotent."""
         if not self._started:
             return
+        if self._backplane is not None:
+            await self._backplane.stop()
         for layer in reversed(self._layers):
             await layer.stop()
         self._started = False
@@ -206,6 +276,13 @@ class LayeredCache(CacheBackend):
 
         On a hit in layer Ln (n > 1), the value is written back to all faster
         layers (L1 … L(n-1)) with ``promote_ttl``.
+
+        Each layer probed records a hit/miss tagged with its bounded
+        ``layer`` label ("l1"/"l2"/…) — a full miss therefore records one
+        miss per layer probed. This is what makes a per-layer hit ratio
+        derivable (``hits_l1 / (hits_l1 + misses_l1)``); the metrics pack
+        drops the ``layer`` attribute when ``CacheMetricsConfig.by_layer``
+        is ``False``.
 
         Args:
             key:       Cache key to look up.
@@ -221,7 +298,9 @@ class LayeredCache(CacheBackend):
         self._require_started()
         for i, layer in enumerate(self._layers):
             value = await layer.get(key, type_hint=type_hint)
+            label = _layer_label(i)
             if value is not None:
+                record_cache_hit(layer=label)
                 # Promote to faster layers if the hit was not in L1.
                 if i > 0:
                     # Write-back to all layers faster than the one we hit.
@@ -239,6 +318,7 @@ class LayeredCache(CacheBackend):
                         i,
                     )
                 return value
+            record_cache_miss(layer=label)
         return None
 
     async def set(self, key: Any, value: Any, *, ttl: float | None = None) -> None:
@@ -260,14 +340,29 @@ class LayeredCache(CacheBackend):
             RuntimeError: If the cache has not been started.
         """
         self._require_started()
-        if self._write_mode == "write-through":
-            # All layers updated concurrently.
+        if self._backplane is not None and self._write_mode == "write-through":
+            # Ordered path (design rule 2): the authoritative (last) layer
+            # MUST land before the invalidation is published, or a fast
+            # receiving node could re-read L2, see the OLD value, and
+            # re-promote it — making the staleness the backplane was meant
+            # to fix PERMANENT.  Cost: write latency goes from
+            # max(L1,L2) to L2 + max(faster layers).  Only paid when a
+            # backplane is wired — see the else branch below.
+            await self._layers[-1].set(key, value, ttl=ttl)
+            await asyncio.gather(
+                *(layer.set(key, value, ttl=ttl) for layer in self._layers[:-1]),
+                self._publish("key", str(key)),
+            )
+        elif self._write_mode == "write-through":
+            # All layers updated concurrently — untouched by backplane wiring.
             await asyncio.gather(
                 *(layer.set(key, value, ttl=ttl) for layer in self._layers)
             )
         else:
             # write-around — only the slowest (authoritative) layer is written.
             await self._layers[-1].set(key, value, ttl=ttl)
+            if self._backplane is not None:
+                await self._publish("key", str(key))
 
     async def delete(self, key: Any) -> None:
         """
@@ -280,7 +375,14 @@ class LayeredCache(CacheBackend):
             RuntimeError: If the cache has not been started.
         """
         self._require_started()
-        await asyncio.gather(*(layer.delete(key) for layer in self._layers))
+        if self._backplane is not None:
+            await self._layers[-1].delete(key)
+            await asyncio.gather(
+                *(layer.delete(key) for layer in self._layers[:-1]),
+                self._publish("key", str(key)),
+            )
+        else:
+            await asyncio.gather(*(layer.delete(key) for layer in self._layers))
 
     async def exists(self, key: Any) -> bool:
         """
@@ -311,7 +413,14 @@ class LayeredCache(CacheBackend):
             RuntimeError: If the cache has not been started.
         """
         self._require_started()
-        await asyncio.gather(*(layer.clear() for layer in self._layers))
+        if self._backplane is not None:
+            await self._layers[-1].clear()
+            await asyncio.gather(
+                *(layer.clear() for layer in self._layers[:-1]),
+                self._publish("clear", ""),
+            )
+        else:
+            await asyncio.gather(*(layer.clear() for layer in self._layers))
         _logger.debug("LayeredCache: cleared all %d layers.", len(self._layers))
 
     async def delete_prefix(self, prefix: str) -> None:
@@ -335,12 +444,80 @@ class LayeredCache(CacheBackend):
               Remaining layers may or may not have completed their deletion.
         """
         self._require_started()
-        # All layers are updated concurrently — consistent with delete() / clear().
-        await asyncio.gather(*(layer.delete_prefix(prefix) for layer in self._layers))
+        if self._backplane is not None:
+            await self._layers[-1].delete_prefix(prefix)
+            await asyncio.gather(
+                *(layer.delete_prefix(prefix) for layer in self._layers[:-1]),
+                self._publish("prefix", prefix),
+            )
+        else:
+            # All layers are updated concurrently — consistent with delete() / clear().
+            await asyncio.gather(
+                *(layer.delete_prefix(prefix) for layer in self._layers)
+            )
         _logger.debug(
             "LayeredCache: delete_prefix(%r) across %d layers.",
             prefix,
             len(self._layers),
+        )
+
+    # ── Backplane integration (Plan 010 / C1) ──────────────────────────────────
+
+    async def _publish(self, kind: InvalidationKind, payload: str) -> None:
+        """
+        Publish an invalidation message. Never raises — ``publish()``'s
+        contract (design rule 1) is enforced by the backplane implementation
+        itself; this wrapper exists only to build the message.
+        """
+        assert self._backplane is not None
+        message = InvalidationMessage(
+            kind=kind, payload=payload, origin=self._node_id, ts=time.time()
+        )
+        try:
+            await self._backplane.publish(message)
+            record_backplane_published(kind=kind)
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - publish() must never raise (design rule 1)
+            # Defense in depth — well-behaved implementations already
+            # swallow internally, but the authoritative write has already
+            # landed by the time this runs, so a misbehaving backplane must
+            # not turn a successful cache write into a raised exception.
+            record_backplane_dropped(reason="publish_failed")
+            _logger.debug("LayeredCache: backplane publish failed: %s", exc)
+
+    async def _on_backplane_message(self, message: InvalidationMessage) -> None:
+        """
+        Handle a received invalidation — evicts LOCAL layers only (design
+        rule 3: never propagate a received message to the authoritative
+        last layer, or one write would amplify into a fleet-wide L2 storm).
+        """
+        if message.origin == self._node_id:
+            # Echo suppression (design rule 4) — this node's own write,
+            # delivered back to it (see `_publish()`'s DESIGN note on why
+            # this is keyed off `self._node_id` rather than the backplane's
+            # own `origin`).
+            return
+        local_layers = self._layers[:-1]
+        if message.kind == "key":
+            await asyncio.gather(
+                *(layer.delete(message.payload) for layer in local_layers)
+            )
+        elif message.kind == "prefix":
+            await asyncio.gather(
+                *(layer.delete_prefix(message.payload) for layer in local_layers)
+            )
+        else:  # "clear"
+            await asyncio.gather(*(layer.clear() for layer in local_layers))
+        for i in range(len(local_layers)):
+            record_cache_eviction(layer=_layer_label(i), reason="backplane")
+        record_backplane_received(kind=message.kind)
+        _logger.debug(
+            "LayeredCache: received backplane %s(%r) from origin %r — evicted %d local layer(s).",
+            message.kind,
+            message.payload,
+            message.origin,
+            len(local_layers),
         )
 
     # ── Internal helpers ───────────────────────────────────────────────────────

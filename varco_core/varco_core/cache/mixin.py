@@ -147,7 +147,10 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Generic, TypeVar
 from providify import Inject, InjectMeta
 
 from varco_core.cache.base import CacheBackend
+from varco_core.cache.policy import CachePolicy
+from varco_core.cache.readthrough import read_through
 from varco_core.cache.service import CacheInvalidated
+from varco_core.cache.singleflight import Singleflight
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
 from varco_core.event.producer import AbstractEventProducer
 from varco_core.model import DomainModel
@@ -228,6 +231,13 @@ class CacheServiceMixin(
     #: Bus channel on which ``CacheInvalidated`` events are published.
     _cache_bus_channel: ClassVar[str] = "varco.cache.invalidations"
 
+    #: Optional ``CachePolicy`` (Plan 010 / C2-C4). ``None`` (default) keeps
+    #: ``get()``/``list()`` on their pre-Plan-010 bodies below — byte
+    #: identical. When set, both routes go through ``read_through()``
+    #: instead, with one ``Singleflight`` created lazily per service
+    #: **instance** (never per call — the shared-instance rule, CLAUDE.md).
+    _cache_policy: ClassVar[CachePolicy | None] = None
+
     # ── Internal key helpers ──────────────────────────────────────────────────
 
     def _cache_key(
@@ -288,6 +298,23 @@ class CacheServiceMixin(
         h = hashlib.md5(repr(params).encode(), usedforsecurity=False).hexdigest()[:12]
         return self._cache_key("list", h, tenant_id=tenant_id)
 
+    # ── Internal singleflight accessor ────────────────────────────────────────
+
+    def _get_singleflight(self) -> Singleflight:
+        """
+        Return this instance's ``Singleflight``, created lazily on first use.
+
+        One per service **instance** — never per call (shared-instance
+        rule). Created lazily (not in ``__init__``) so an
+        ``asyncio.Lock``-holding object is never constructed outside a
+        running event loop (CLAUDE.md).
+        """
+        sf = getattr(self, "_cache_singleflight", None)
+        if sf is None:
+            sf = Singleflight(name=self._cache_namespace)
+            object.__setattr__(self, "_cache_singleflight", sf)
+        return sf
+
     # ── Overridden read operations ────────────────────────────────────────────
 
     async def get(self, pk: PK, ctx: AuthContext = _ANON_CTX) -> R:
@@ -296,6 +323,12 @@ class CacheServiceMixin(
 
         The cache key includes the tenant_id from ``ctx`` so tenants never
         share cached entries for the same PK.
+
+        When ``_cache_policy`` is set (Plan 010), this routes through
+        ``read_through()`` instead of the body below — same key, same
+        semantics, plus singleflight/SWR/negative-caching per the policy.
+        When ``_cache_policy`` is ``None`` (default), the body is
+        byte-identical to pre-Plan-010 behaviour.
 
         Args:
             pk:  Entity primary key.
@@ -307,6 +340,16 @@ class CacheServiceMixin(
         # Extract tenant_id once — used for both the lookup key and the write key.
         tenant_id: str | None = ctx.metadata.get("tenant_id") if ctx else None
         key = self._cache_key("get", pk, tenant_id=tenant_id)
+
+        if self._cache_policy is not None:
+            return await read_through(
+                self._cache,
+                key,
+                lambda: super(CacheServiceMixin, self).get(pk, ctx),
+                self._cache_policy,
+                singleflight=self._get_singleflight(),
+            )
+
         hit = await self._cache.get(key)
         if hit is not None:
             _logger.debug(
@@ -343,6 +386,16 @@ class CacheServiceMixin(
         """
         tenant_id: str | None = ctx.metadata.get("tenant_id") if ctx else None
         key = self._cache_list_key(params, tenant_id=tenant_id)
+
+        if self._cache_policy is not None:
+            return await read_through(
+                self._cache,
+                key,
+                lambda: super(CacheServiceMixin, self).list(params, ctx),
+                self._cache_policy,
+                singleflight=self._get_singleflight(),
+            )
+
         hit = await self._cache.get(key)
         if hit is not None:
             _logger.debug(

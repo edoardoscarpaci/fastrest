@@ -34,6 +34,7 @@ from providify import InjectMeta, Singleton
 
 from varco_core.cache.base import CacheBackend, InvalidationStrategy
 from varco_core.cache.config import CacheSettings
+from varco_core.observability.cache import record_cache_eviction
 
 _logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ class _Entry:
     Thread safety:  ❌  Plain Python object — not thread-safe.
     """
 
-    __slots__ = ("value", "ttl", "stored_at", "tags")
+    __slots__ = ("stored_at", "tags", "ttl", "value")
 
     def __init__(
         self,
@@ -265,6 +266,7 @@ class InMemoryCache(CacheBackend):
         ):
             # Evict eagerly — return None as if the key never existed.
             del self._store[key]
+            record_cache_eviction(reason="ttl")
             _logger.debug("InMemoryCache: evicted stale key %r.", key)
             return None
 
@@ -300,6 +302,7 @@ class InMemoryCache(CacheBackend):
         if self._max_size is not None and len(self._store) > self._max_size:
             oldest_key = next(iter(self._store))
             del self._store[oldest_key]
+            record_cache_eviction(reason="capacity")
             _logger.debug(
                 "InMemoryCache: FIFO evicted oldest key %r (max_size=%d reached).",
                 oldest_key,
@@ -427,6 +430,6 @@ class InMemoryCache(CacheBackend):
 
 
 __all__ = [
-    "NoOpCache",
     "InMemoryCache",
+    "NoOpCache",
 ]

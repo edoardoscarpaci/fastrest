@@ -57,3 +57,22 @@ class TestRedisContainerValidates:
 
         assert "RedisEventBus" in implementations
         container.validate_bindings()
+
+    def test_regression_cache_backplane_bindings_also_validate(self) -> None:
+        """
+        Plan 010 (cache hardening) added ``RedisBackplaneSettings``
+        (``@Provider``) and ``RedisPubSubBackplane`` (``@Singleton``) —
+        both must be discovered by the same ``scan()`` and resolve their
+        annotations cleanly, same regression class as the two tests above.
+        """
+        container = DIContainer()
+        container.scan("varco_redis", recursive=True)
+
+        implementations = {
+            getattr(b, "implementation", None).__name__
+            for b in container._bindings
+            if getattr(b, "implementation", None) is not None
+        }
+
+        assert "RedisPubSubBackplane" in implementations
+        container.validate_bindings()

@@ -63,6 +63,43 @@ warning was not.
 
 ### Added
 
+- **Cache hardening: singleflight, L1 coherence backplane, observability,
+  stale-while-revalidate/jitter/negative caching** (Plan 010). Every default
+  reproduces pre-Plan-010 behaviour byte-for-byte — reached only by passing
+  an explicit object or keyword.
+
+  - **`varco-core`** — `varco_core.cache.policy.CachePolicy` (frozen: `ttl`,
+    `ttl_jitter`, `soft_ttl`, `negative_ttl`, `stale_if_error`,
+    `singleflight`, `refresh_mode`) and `varco_core.cache.envelope.
+    CacheEnvelope` (the wire format written only when the policy needs it)
+    drive one shared algorithm, `varco_core.cache.readthrough.
+    read_through()`. `varco_core.cache.singleflight.Singleflight` coalesces
+    concurrent misses for the same key into one recompute per process
+    (per-process only — `SingleflightProtocol` is the seam for a future
+    distributed implementation). `varco_core.cache.backplane.CacheBackplane`
+    (ABC) + `InMemoryBackplane` (test double) is the cross-node L1
+    invalidation channel for `LayeredCache(backplane=...)` — construction
+    now raises `ValueError` if `backplane` is given without `promote_ttl`
+    (bounds how long a missed, fire-and-forget invalidation can leave L1
+    stale). `varco_core.observability.cache.install_cache_metrics()` adds
+    `varco.cache.{hits,misses,evictions,duration,stampede_suppressed,
+    stale_served,backplane.published,backplane.received,backplane.dropped}`
+    — a manual install function, same shape as
+    `install_reliability_metrics()`. `@cached(policy=, singleflight=)` and
+    `CacheServiceMixin._cache_policy` are the two call sites wired through
+    `read_through()`.
+  - **`varco-redis`** — `varco_redis.backplane.RedisPubSubBackplane`, the
+    concrete Redis Pub/Sub `CacheBackplane` (RESP3 `CLIENT TRACKING` was
+    evaluated and rejected — no `redis.asyncio` support, redis-py issue
+    #3916 open with no ETA). Self-echo suppression, flush-L1-on-reconnect,
+    and two key-name-exposure opt-outs (`channel_for=`, `hash_keys=`) for
+    per-tenant-pod topologies.
+
+  See `technical_docs/features/cache-hardening.md` for the full design,
+  including the two-step rolling-deploy recipe required before enabling an
+  envelope-requiring policy field (`soft_ttl`/`negative_ttl`/
+  `stale_if_error`) against a shared L2 cache.
+
 - **Multitenancy: selectable isolation strategies, a dynamic tenant control
   plane, and global/shared scope** (Plan 007). New across four packages:
 

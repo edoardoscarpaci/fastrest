@@ -22,8 +22,11 @@ varco_core/              — Domain model, service layer, event system, resilien
   │   │                    Metric/register_gauge, OtelConfig/OtelConfiguration
   │   ├── params.py      — ParamCaptureConfig, CapturePlan/build_capture_plan, sanitize_value —
   │   │                    automatic @span parameter capture (param.<name> attributes)
-  │   └── attributes.py  — GlobalAttributes registry, wrap_instrument()/wrap_gauge_callback() —
-  │                        process-wide attrs stamped on every span + metric measurement
+  │   ├── attributes.py  — GlobalAttributes registry, wrap_instrument()/wrap_gauge_callback() —
+  │   │                    process-wide attrs stamped on every span + metric measurement
+  │   └── cache.py       — install_cache_metrics(), CacheMetricsConfig, record_cache_hit/miss/
+  │                        eviction/duration/stampede_suppressed/stale_served + backplane
+  │                        published/received/dropped counters (Plan 010 / C3)
   ├── lock.py            — AbstractDistributedLock, InMemoryLock, LockHandle
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
@@ -55,6 +58,7 @@ varco_nats/              — NATS JetStream event bus backend (nats-py)
 varco_redis/             — Redis Pub/Sub event bus + cache backend (redis.asyncio)
   ├── bus.py             — RedisEventBus(AbstractEventBus)
   ├── cache.py           — RedisCache(CacheBackend[K, V])
+  ├── backplane.py       — RedisPubSubBackplane(CacheBackplane) — LayeredCache L1 coherence (Plan 010)
   ├── lock.py            — RedisLock(AbstractDistributedLock) — SET NX PX + Lua atomic release
   ├── streams.py         — Redis streams utilities (for channels)
   ├── channel.py         — RedisChannel (pubsub or stream routing)
@@ -204,6 +208,18 @@ InvalidationStrategy (ABC)
   │             EventDrivenStrategy, CompositeStrategy
   └── Lifecycle: start(), stop() called by hosting backend
   └── Rule: Never instantiate outside backend lifecycle — may hold subscriptions
+
+LayeredCache — optional CacheBackplane (Plan 010 / C1): cross-node L1 invalidation
+  └── CacheBackplane (ABC, varco_core.cache.backplane)
+        ├── InMemoryBackplane (varco_core, test double)
+        └── RedisPubSubBackplane (varco_redis.backplane)
+  └── Rule: backplane= requires promote_ttl= (ValueError otherwise — bounded L1 staleness)
+
+read_through(cache, key, loader, policy, *, singleflight=) — varco_core.cache.readthrough (Plan 010)
+  ├── CachePolicy (frozen) — ttl/ttl_jitter/soft_ttl/negative_ttl/stale_if_error/singleflight
+  ├── CacheEnvelope — wire format written only when policy.requires_envelope
+  └── Singleflight / SingleflightProtocol — per-process stampede coalescer (C2)
+  └── Shared by: @cached(policy=, singleflight=), CacheServiceMixin._cache_policy
 
 CacheWarmer (ABC) — varco_core.cache.warming
   ├── QueryCacheWarmer(query_fn, ttl)    — calls query_fn(), populates key→value pairs
@@ -1022,6 +1038,12 @@ unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
 | `event/` | Event bus, producer, consumer, serialization | `AbstractEventBus`, `AbstractEventProducer`, `EventConsumer`, `@listen` |
 | `service/` | Domain service layer, mixins, outbox | `AsyncService`, `ValidatorServiceMixin`, `CacheServiceMixin`, `OutboxRelay` |
 | `cache/` | Cache abstraction, backends, invalidation | `AsyncCache`, `CacheBackend`, `InvalidationStrategy`, `@cached` decorator |
+| `cache/policy.py` | Read-through cache policy (Plan 010) | `CachePolicy` — ttl/ttl_jitter/soft_ttl/negative_ttl/stale_if_error/singleflight |
+| `cache/envelope.py` | Wire format for policy-driven cache entries (Plan 010) | `CacheEnvelope`, `wrap()`, `unwrap()`, `coerce()` |
+| `cache/singleflight.py` | Per-process stampede protection (Plan 010 / C2) | `Singleflight`, `SingleflightProtocol` |
+| `cache/readthrough.py` | Shared read-through algorithm for C2/C3/C4 (Plan 010) | `read_through()` |
+| `cache/backplane.py` | L1 coherence backplane ABC (Plan 010 / C1) | `CacheBackplane`, `InMemoryBackplane`, `InvalidationMessage` |
+| `observability/cache.py` | Cache metrics pack — manual install, not a scanned `@Configuration` (Plan 010 / C3) | `install_cache_metrics()`, `CacheMetricsConfig`, `record_cache_hit/miss/eviction/duration` |
 | `query/` | Query AST, parser, visitors, transformers | `QueryParams`, `FilterNode`, `ASTVisitor`, `QueryTransformer` |
 | `resilience/` | Retry, timeout, circuit breaker, rate limiting, bulkhead, hedged requests | `@retry`, `@timeout`, `@circuit_breaker`, `@rate_limit`, `@bulkhead`, `@hedge` |
 | `profiling/` | Diagnostic CPU/memory profiler; pluggable backends | `@profile`, `profiled()`, `ProfileSession`, `ProfileConfig`, `ProfileReport`, `CpuProfilerBackend`, `MemoryProfilerBackend` |

@@ -1797,7 +1797,7 @@ uv run pytest varco_redis/tests/ -m integration
 
 ## Cache System
 
-`varco_core.cache` provides a backend-agnostic async cache framework with pluggable invalidation strategies. `varco_redis` ships a Redis-backed implementation.
+`varco_core.cache` provides a backend-agnostic async cache framework with pluggable invalidation strategies. `varco_redis` ships a Redis-backed implementation. Cache hardening (`CachePolicy`) adds stampede protection / singleflight, stale-while-revalidate, TTL jitter, opt-in negative caching, a `LayeredCache` cross-node L1 coherence backplane, and a hit/miss/eviction observability pack — every default reproduces today's behaviour byte-for-byte; see [`technical_docs/features/cache-hardening.md`](technical_docs/features/cache-hardening.md).
 
 ### AsyncCache and CacheBackend
 
@@ -1848,6 +1848,11 @@ async with LayeredCache(l1, l2, promote_ttl=60) as cache:
     result = await cache.get("product:1")  # L2 hit → promoted to L1
     result = await cache.get("product:1")  # L1 hit (no Redis round-trip)
 ```
+
+In a multi-pod deployment, pass `backplane=RedisPubSubBackplane()` (`varco_redis.backplane`) so a
+write on one pod invalidates every other pod's L1 (`promote_ttl` becomes required when a backplane
+is wired). See [`technical_docs/features/cache-hardening.md`](technical_docs/features/cache-hardening.md)
+for the full design.
 
 ### Invalidation strategies
 
@@ -1934,6 +1939,17 @@ cache = InMemoryCache(strategy=TTLStrategy(300))
 @cached(cache=cache, key_fn=lambda self, user_id: f"profile:{user_id}", ttl=60)
 async def get_user_profile(self, user_id: UUID) -> UserProfile:
     return await self._repo.find_by_id(user_id)
+```
+
+Pass `policy=CachePolicy(ttl=..., singleflight=True)` (or `singleflight=True` directly) for
+stampede protection — N concurrent misses on the same key collapse into one recompute per process:
+
+```python
+from varco_core.cache import CachePolicy, cached
+
+@cached(cache, policy=CachePolicy(ttl=300.0), singleflight=True, namespace="users")
+async def get_user(user_id: int) -> dict:
+    return await db.fetch_one("SELECT * FROM users WHERE id = $1", user_id)
 ```
 
 ### CachedService wrapper

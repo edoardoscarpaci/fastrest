@@ -77,15 +77,34 @@ Both helpers are attached to the wrapper function:
 Caveats
 -------
 - ``None`` return values are NOT cached — a ``None`` result always triggers
-  a fresh call on the next access.  This prevents a missed DB row from
-  being permanently cached.
+  a fresh call on the next access, unless ``policy.negative_ttl`` is set
+  — see Plan 010 / D-4.
 - The cache must be started before the decorated function is called.  The
   decorator itself never calls ``cache.start()``.
 - Thread / async safety inherits from the underlying ``CacheBackend``.
+
+Stampede protection (Plan 010 / C2)
+------------------------------------
+Pass ``policy=`` and/or ``singleflight=True`` to coalesce concurrent misses
+for the same key into one recompute per process::
+
+    from varco_core.cache import CachePolicy, cached
+
+    @cached(_cache, policy=CachePolicy(ttl=300.0), singleflight=True, namespace="users")
+    async def get_user(user_id: int) -> dict:
+        return await db.fetch_one("SELECT * FROM users WHERE id = $1", user_id)
+
+When neither ``policy`` nor ``singleflight`` is given, the wrapper body runs
+**exactly** as it did before this plan — no ``read_through()`` call, no
+``Singleflight`` allocation.  A ``Singleflight`` is created **once per
+decorated function** at decoration time — never per call (the same
+shared-instance rule as ``CircuitBreaker``/``Bulkhead``, see CLAUDE.md).
+``wrapper.aclose()`` drains any outstanding background SWR refreshes.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import hashlib
 import logging
@@ -93,6 +112,9 @@ from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
 
 from varco_core.cache.base import CacheBackend
+from varco_core.cache.policy import CachePolicy
+from varco_core.cache.readthrough import read_through
+from varco_core.cache.singleflight import Singleflight
 
 _logger = logging.getLogger(__name__)
 
@@ -111,6 +133,8 @@ def cached(
     key: str | Callable[..., str] | None = None,
     ttl: float | None = None,
     namespace: str = "",
+    policy: CachePolicy | None = None,
+    singleflight: bool = False,
 ) -> Callable[[F], F]:
     """
     Async look-aside cache decorator.
@@ -136,6 +160,19 @@ def cached(
         namespace: Key prefix.  If omitted the function's ``__qualname__``
                    (``module.ClassName.method``) is used so keys from
                    different functions never collide.
+        policy:    Optional ``CachePolicy`` (Plan 010 / C2-C4).  When
+                   ``None`` (default) and ``singleflight=False``, the wrapper
+                   body is byte-identical to pre-Plan-010 ``@cached`` — no
+                   ``read_through()`` call at all.  When either is set, the
+                   decorator delegates to ``read_through()`` with one
+                   ``Singleflight`` created per decorated function at
+                   decoration time.  ``ttl`` is folded into
+                   ``CachePolicy(ttl=ttl)`` when ``policy`` is ``None`` but
+                   ``singleflight=True`` was requested.
+        singleflight: Coalesce concurrent misses for the same key into one
+                   recompute per process.  Requires the effective policy to
+                   have ``singleflight=True`` — passing ``singleflight=True``
+                   here sets that on the fly if ``policy`` didn't already.
 
     Returns:
         A decorated coroutine function with two extra attributes:
@@ -156,6 +193,23 @@ def cached(
 
     def decorator(func: F) -> F:
         ns = namespace or f"{func.__module__}.{func.__qualname__}"
+
+        # Resolve the effective policy ONCE at decoration time — folding
+        # `ttl`/`singleflight` in here means the hot path (wrapper body)
+        # never has to re-derive it per call.
+        effective_policy: CachePolicy | None = policy
+        if effective_policy is None and singleflight:
+            effective_policy = CachePolicy(ttl=ttl, singleflight=True)
+        elif (
+            effective_policy is not None
+            and singleflight
+            and not effective_policy.singleflight
+        ):
+            effective_policy = dataclasses.replace(effective_policy, singleflight=True)
+
+        # One Singleflight per decorated function, created at decoration
+        # time — NEVER per call (shared-instance rule, CLAUDE.md).
+        sf = Singleflight(name=ns) if effective_policy is not None else None
 
         # ── Cache resolver ────────────────────────────────────────────────────
 
@@ -186,18 +240,32 @@ def cached(
             _cache = _resolve_cache(args)
             cache_key = _build_key(args, kwargs)
 
-            cached_val = await _cache.get(cache_key)
-            if cached_val is not None:
-                _logger.debug("@cached[%s]: hit for key %r.", ns, cache_key)
-                return cached_val
+            if effective_policy is None:
+                # Byte-identical to pre-Plan-010 @cached — no read_through()
+                # call at all when neither policy= nor singleflight= is given.
+                cached_val = await _cache.get(cache_key)
+                if cached_val is not None:
+                    _logger.debug("@cached[%s]: hit for key %r.", ns, cache_key)
+                    return cached_val
 
-            _logger.debug(
-                "@cached[%s]: miss for key %r, calling function.", ns, cache_key
+                _logger.debug(
+                    "@cached[%s]: miss for key %r, calling function.", ns, cache_key
+                )
+                result = await func(*args, **kwargs)
+                if result is not None:
+                    await _cache.set(cache_key, result, ttl=ttl)
+                return result
+
+            async def loader() -> Any:
+                return await func(*args, **kwargs)
+
+            return await read_through(
+                _cache,
+                cache_key,
+                loader,
+                dataclasses.replace(effective_policy, name=effective_policy.name or ns),
+                singleflight=sf,
             )
-            result = await func(*args, **kwargs)
-            if result is not None:
-                await _cache.set(cache_key, result, ttl=ttl)
-            return result
 
         # ── Invalidation helpers (attached to wrapper) ────────────────────────
 
@@ -215,8 +283,14 @@ def cached(
             await _cache.clear()
             _logger.debug("@cached[%s]: invalidate_all() called.", ns)
 
+        async def aclose() -> None:
+            """Drain any outstanding background SWR refresh tasks (no-op if none)."""
+            if sf is not None:
+                await sf.aclose()
+
         wrapper.invalidate = invalidate  # type: ignore[attr-defined]
         wrapper.invalidate_all = invalidate_all  # type: ignore[attr-defined]
+        wrapper.aclose = aclose  # type: ignore[attr-defined]
         wrapper.__cache__ = cache  # type: ignore[attr-defined]
 
         return wrapper  # type: ignore[return-value]

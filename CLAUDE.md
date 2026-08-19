@@ -316,6 +316,23 @@ InMemoryCache  NoOpCache  RedisCache (varco_redis)  LayeredCache
 
 **Rule**: never instantiate `InvalidationStrategy` outside its backend's `start()`/`stop()` lifecycle — it may hold subscriptions or background tasks.
 
+**Stampede protection** (`varco_core.cache.singleflight`, Plan 010 / C2) — `Singleflight` coalesces
+N concurrent misses on the same key into one recompute per process; every other caller ("follower")
+`await asyncio.shield(leader_future)` so its own `@timeout`/cancellation never kills the shared
+recompute. Reached via `@cached(policy=CachePolicy(singleflight=True), singleflight=True)` or
+`CacheServiceMixin._cache_policy = CachePolicy(singleflight=True)` — `CachePolicy()` (the default)
+and `singleflight=False` are byte-identical to pre-Plan-010 behaviour. Per-process only (Decision
+D-3) — a `SingleflightProtocol` seam is left for a future distributed implementation. All four R1
+features (singleflight, L1 backplane, observability, SWR/jitter/negative caching) share one
+algorithm, `varco_core.cache.readthrough.read_through()`, because coalescing a background refresh
+while concurrently serving a stale value is one race, not two independent features. `LayeredCache(
+backplane=RedisPubSubBackplane())` (`varco_redis.backplane`) keeps every pod's L1 coherent after
+another pod's write — mandatory `promote_ttl` bounds the staleness a missed (fire-and-forget)
+invalidation can cause. `install_cache_metrics()` (`varco_core.observability.cache`) is a manual
+install function, same shape as `install_reliability_metrics()` — deliberately **not** a scanned
+`@Configuration`. See `technical_docs/features/cache-hardening.md` for the full design (Decisions
+D-1 through D-5, the write-ordering cost, the two-step envelope rollout).
+
 ### Query system (varco_core.query)
 
 The query system builds a typed AST over filter/sort/pagination parameters and applies it to backends:
@@ -1570,6 +1587,16 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **`mount_reliability_admin()` without `acknowledge_bundled_admin=True`** | `ValueError` at mount time, nothing mounted | This surface can replay bus messages and delete audit/DLQ records — at least as privileged as the tenant control plane (RD-9) | Pass it only after confirming a standalone deployment isn't justified — same rule as `mount_tenant_admin()` |
 | **Per-call breaker for a peer service** | Circuit never opens for a flaky peer | Building a fresh `PeerRegistry`/`CircuitBreaker` per request instead of reusing a singleton registry | Construct `PeerRegistry` once (module scope or a DI singleton via `bind_peers`); it caches one `CircuitBreaker` per peer *name*, never per call |
 | **`ReliabilityPreset(outbox_max_attempts=...)` without `dlq`** | `ValueError` at construction | Mirrors `OutboxRelay`'s own refusal — deleting a poison entry with nowhere durable to put it is silent data loss | Pass a `dlq=` alongside `outbox_max_attempts` |
+| **Per-call `Singleflight`** | Concurrent misses never coalesce — the loader runs once per caller, same as before | A fresh `Singleflight()` has an empty in-flight dict every call — same defect class as a per-call `CircuitBreaker`/`Bulkhead` | `@cached` creates one `Singleflight` per decorated function at decoration time; `CacheServiceMixin` creates one per service instance (lazily, on first use) — never construct one inside a request handler |
+| **Coalescing on a pre-tenant-namespaced key** | Cross-tenant data leak — two tenants' concurrent misses share one recompute and one result | `Singleflight`/`read_through()` never build or namespace keys themselves; a caller that coalesces on the raw pk instead of the final `tenant:{id}:`-prefixed key defeats tenant isolation | Always pass the final, already-namespaced cache key (the one `tenancy_cache_key()`/`CacheServiceMixin._cache_key()` produced) to `Singleflight.do()`/`read_through()` — guarded by `varco_core/tests/test_cache_singleflight_tenancy.py` |
+| **Cache metrics never appear** | Dashboards for `varco.cache.*` stay empty even though the cache is being hit | `install_cache_metrics()` (`varco_core.observability.cache`) was never called — same rule as `install_reliability_metrics()`: a manual install function, deliberately not a scanned `@Configuration` | Call `install_cache_metrics()` once at startup |
+| **`LayeredCache` in multi-pod without a backplane** | Each pod's L1 silently serves stale entries after another pod's write/delete — the shipped bug Plan 010 / C1 closes | No `backplane=` wired — the default `LayeredCache(l1, l2, promote_ttl=...)` has no cross-node invalidation channel | Wire `backplane=RedisPubSubBackplane()` (`varco_redis.backplane`) for any `LayeredCache` shared across more than one process |
+| **`LayeredCache(backplane=..., promote_ttl=None)`** | `ValueError` at construction | A Pub/Sub backplane is best-effort (message loss on subscriber disconnect); an unbounded L1 TTL behind it means a missed invalidation has no bound on how long it can serve stale data | Pass a `promote_ttl=` alongside `backplane=` — mirrors `OutboxRelay(max_attempts=...)` refusing to run without a `dlq=` |
+| **Per-call `RedisPubSubBackplane`** | Invalidations never propagate — each instance has its own listener/subscription state | Same shared-instance rule as `CircuitBreaker`/`Bulkhead`/`Singleflight` | Construct one `RedisPubSubBackplane` and pass it into every `LayeredCache` that must share coherence; let `LayeredCache.start()`/`stop()` drive its lifecycle, never call `start()`/`stop()` directly |
+| **Backplane key names visible fleet-wide** | Under a per-tenant-pod topology (`SCHEMA`/`DATABASE` isolation), every subscriber learns which tenant touched which entity id | The default `RedisPubSubBackplane` publishes one plaintext channel with raw key names (`tenant:{id}:Entity:pk`) | Use `channel_for=` (subscribe only to hosted tenants) or `hash_keys=True` (publish a key hash — degrades `delete_prefix()` invalidation to a local `clear` on receivers, documented not silent) |
+| **`soft_ttl >= ttl`** | `ValueError` at `CachePolicy` construction | A soft TTL at or beyond the hard TTL can never fire — the SWR window would be dead code | Set `soft_ttl` strictly less than `ttl` |
+| **Enabling envelope mode mid-rolling-deploy** | An **old** pod (or a pod whose policy doesn't set `soft_ttl`/`negative_ttl`/`stale_if_error`) reads a **new** pod's envelope and returns the raw `{"__varco_cache__": 1, ...}` wrapper dict to the application instead of the unwrapped value | `CacheEnvelope` is only tolerant on read in the safe direction (new pod reading old pod's legacy value) — the reverse direction is unsafe by design (D-5) | Roll out the new varco version to every pod with envelope-requiring policy fields off first, then turn them on — see the two-step deploy recipe in `technical_docs/features/cache-hardening.md` |
+| **Negative caching hiding a fixed row** | A "not found" response keeps being served long after the underlying row was created | `negative_ttl` was set longer than the operational fix loop for the missing row | Keep `negative_ttl` short (shorter than `ttl`), or invalidate explicitly (`cache.delete(key)`) when the row is created |
 
 ---
 
