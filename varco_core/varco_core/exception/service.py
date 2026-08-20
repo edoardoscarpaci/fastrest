@@ -20,11 +20,37 @@ Async safety:   ✅ Safe to raise and catch in async contexts.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class ServiceException(Exception):
-    """Base class for all service-layer exceptions."""
+    """
+    Base class for all service-layer exceptions.
+
+    Plan 011 / I1: ``message_key`` is a ``ClassVar`` (not a constructor
+    parameter) and ``error_params()`` is a method returning ``{}`` on the
+    base — deliberately, so **no ``__init__`` signature changes anywhere**.
+    Subclasses forward ``*args``/``**kwargs`` positionally to
+    ``Exception.__init__``, which accepts no keywords; a new constructor
+    keyword would be a real breaking change for every out-of-tree subclass.
+    An out-of-tree ``ServiceException`` subclass that never sets
+    ``message_key``/overrides ``error_params()`` compiles, runs, and
+    serializes byte-identically to before this plan (D-4).
+    """
+
+    #: i18n key resolved by varco_core.i18n — None means "no server-side
+    #: catalog lookup for this exception type" (byte-identical body).
+    message_key: ClassVar[str | None] = None
+
+    def error_params(self) -> dict[str, Any]:
+        """
+        Structured params for message interpolation and client-side i18n.
+
+        Deliberately excludes anything sensitive — see subclass overrides.
+        A params dict is exactly the kind of thing someone later fills with
+        ``vars(exc)``; don't.
+        """
+        return {}
 
 
 class ServiceNotFoundError(ServiceException):
@@ -74,6 +100,11 @@ class ServiceNotFoundError(ServiceException):
             *args,
             **kwargs,
         )
+
+    message_key = "varco.error.not_found"
+
+    def error_params(self) -> dict[str, Any]:
+        return {"entity": self.entity_cls.__name__, "entity_id": self.entity_id}
 
 
 class ServiceAuthorizationError(ServiceException):
@@ -130,6 +161,17 @@ class ServiceAuthorizationError(ServiceException):
             **kwargs,
         )
 
+    message_key = "varco.error.unauthorized"
+
+    def error_params(self) -> dict[str, Any]:
+        # `reason` is deliberately excluded — it is documented above as
+        # server-side-only and must never reach a client (Plan 011, the
+        # "params dict is a new exfiltration surface" risk).
+        params: dict[str, Any] = {"operation": self.operation}
+        if self.entity_cls is not None:
+            params["entity"] = self.entity_cls.__name__
+        return params
+
 
 class ServiceConflictError(ServiceException):
     """
@@ -170,6 +212,11 @@ class ServiceConflictError(ServiceException):
         """
         self.detail = detail
         super().__init__(detail, *args, **kwargs)
+
+    message_key = "varco.error.conflict"
+
+    def error_params(self) -> dict[str, Any]:
+        return {"detail": self.detail}
 
 
 class ServiceValidationError(ServiceException):
@@ -217,3 +264,11 @@ class ServiceValidationError(ServiceException):
         self.field: str | None = field
         field_part = f" (field: {field!r})" if field else ""
         super().__init__(f"Validation error{field_part}: {detail}", *args, **kwargs)
+
+    message_key = "varco.error.validation_failed"
+
+    def error_params(self) -> dict[str, Any]:
+        params: dict[str, Any] = {"detail": self.detail}
+        if self.field is not None:
+            params["field"] = self.field
+        return params

@@ -231,6 +231,60 @@ class OrderRouter(CRUDRouter[...]):
     _store_raw_token = False   # opt out for every async-offloaded route on this router
 ```
 
+## Zoned schedules (Plan 011 / T2)
+
+DST-safe wall-clock + IANA-zone scheduling for one-shot jobs, additive on
+top of everything above — see `technical_docs/features/timezone-handling.md`
+for the full policy design. Summary for this doc's audience:
+
+`Job` gains three defaulted fields next to `run_at`:
+`run_at_wall: datetime | None`, `run_at_tz: str | None`, `run_at_fold: int
+= 0`. **`run_at` is materialized, not replaced** — it keeps its exact
+current meaning as the UTC claim predicate; `(run_at_wall, run_at_tz,
+run_at_fold)` is the *intent* it was computed from. A row with
+`run_at_tz IS NULL` (every existing row) is byte-identical to today. No new
+index — the claim predicate and `ix_varco_jobs_claim` are unchanged.
+
+**RD-5 — a store must declare support.**
+`AbstractJobStore.supports_zoned_schedules: ClassVar[bool] = False` on the
+base; `SAJobStore`, `BeanieJobStore`, and the in-memory store in
+`varco_fastapi.job.store` all set it `True` and persist all three
+fields/columns. `AbstractJobRunner._prepare_zoned_job(job, store, ...)` is
+the reusable guard + materialization step every concrete `enqueue()`
+implementation is expected to call before `store.save()` — it raises
+`ValueError` naming the store class when a zone is supplied to a store that
+hasn't opted in. Two-line upgrade for a third-party store: add the three
+columns/fields, then set `supports_zoned_schedules = True`.
+
+**Wired into the shipped `JobRunner`** (Plan 011 drift-fix pass).
+`varco_fastapi.job.runner.JobRunner.enqueue(job, coro, *, run_at=, delay=,
+run_at_wall=, tz=, fold=, gap=, overlap=)` now calls
+`AbstractJobRunner._prepare_zoned_job(job, self._store, ...)` before
+`self._store.save(job)`, so the RD-5 guard runs on the standard submission
+path — a zoned schedule (`run_at_wall=`/`tz=`) targeting a store that
+hasn't declared `supports_zoned_schedules = True` raises `ValueError`
+naming the store class, and `coro` is closed first so no coroutine is
+leaked. `tz=None` (the default when the new kwargs are omitted) is a pure
+passthrough — every pre-existing `enqueue(job, coro)` call site is
+byte-identical to before. See
+`technical_docs/features/timezone-handling.md`'s T2 section for the full
+gap/overlap policy table.
+
+**`ScheduleRematerializer`** (`varco_core.job.reschedule`) is the opt-in
+recompute-on-read sweeper — pending zoned jobs inside a bounded horizon get
+`run_at` recomputed from current tzdata and written back only when changed,
+fenced with `save(expected_epoch=...)`. Default `interval=0.0` = never
+started, byte-identical to not using the feature. Operator note: pin
+`tzdata` in the sweeper's image for reproducible rematerialization
+decisions across pods. **Adopt-then-upgrade ordering** applies here exactly
+as it does to the framework-table Alembic branch above: if you're adding
+T2's three columns via a fresh revision against an existing deployment,
+land the column-adding revision first, deploy it everywhere, *then* start
+using `run_at_wall=`/`run_at_tz=` — an old pod reading a new pod's zoned row
+is safe either way (T2 has no two-step-deploy requirement, unlike Plan
+010's cache envelope), but a revision that hasn't run yet obviously can't
+persist the columns.
+
 ## Migration
 
 **One** Alembic revision for the job table
@@ -260,3 +314,5 @@ Generate the revision from `jobs_metadata` via `autogenerate`.
 | Retention sweep starves the connection pool | Chunk with `delete_where(..., limit=1000)` in a loop, not one unbounded call |
 | Raw JWT readable in the jobs table at rest | `store_raw_token=False` + authenticate callbacks with a service credential |
 | Long-running unleased job killed at `stale_threshold` although leases are enabled | Unleased RUNNING jobs are always governed by the age check, never by lease reaping — adopt `lease_ttl` on every claim to switch it to lease-based liveness, or raise `stale_threshold` |
+| `enqueue(tz=...)` raises `ValueError` naming the store class | The target `AbstractJobStore` has not opted into zoned schedules (`supports_zoned_schedules = False`, the default) — this is the RD-5 guard working as designed, not a bug | Use a store that sets `supports_zoned_schedules = True` (`SAJobStore`, `BeanieJobStore`, the in-memory store), or add the three columns/fields to a custom store and opt in |
+| `GapPolicy.SKIP` job never runs | By design — it transitions to a terminal state with `ScheduleGapError` rather than staying silently PENDING; not a bug |

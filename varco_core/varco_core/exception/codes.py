@@ -51,7 +51,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-
 # ── ErrorCode value object ────────────────────────────────────────────────────
 
 
@@ -60,17 +59,27 @@ class ErrorCode:
     """
     Immutable descriptor for a single error condition.
 
-    ``code`` is the stable i18n translation key — never change it after release.
-    ``http_status`` maps directly to an HTTP response code.
-    ``default_message`` is the English fallback used when no translator is
-    provided.
+    ``code`` is the **stable machine identifier** — never change it after
+    release (Plan 011 D-5). ``message_key`` is the **i18n translation key**
+    (e.g. ``"varco.error.not_found"``) — resolved against a
+    ``MessageCatalog`` by ``varco_core.i18n``. ``http_status`` maps directly
+    to an HTTP response code. ``default_message`` is the English fallback
+    used when no translator/catalog is provided.
 
     Attributes:
         code:            Stable string identifier, e.g. ``"FASTREST_001"``.
-                         Used as the i18n translation key.
+                         The **machine** identifier — clients may key
+                         alerting rules or translation tables off it, so it
+                         must never change after release.
         http_status:     HTTP status code to return (e.g. 404, 403, 500).
         default_message: English fallback message returned when no translator
                          is configured.
+        message_key:     The i18n key (e.g. ``"varco.error.not_found"``),
+                         trailing and defaulted so positional construction
+                         (``ErrorCode(code, http_status, default_message)``)
+                         is unaffected for any out-of-tree caller. ``None``
+                         for app-defined ``ErrorCode``s that don't opt into
+                         server-side localization.
 
     Thread safety:  ✅ frozen=True — immutable after construction.
     Async safety:   ✅ Pure value object.
@@ -95,6 +104,11 @@ class ErrorCode:
 
     # English fallback — used when no translator callable is provided
     default_message: str
+
+    # Trailing, defaulted — the i18n translation key (Plan 011 D-5). Not
+    # positional-breaking: existing ErrorCode(code, http_status, message)
+    # call sites are unaffected.
+    message_key: str | None = None
 
     def __repr__(self) -> str:
         return f"ErrorCode(code={self.code!r}, http_status={self.http_status})"
@@ -142,6 +156,7 @@ class FastrestErrorCodes(Enum):
         code="FASTREST_001",
         http_status=404,
         default_message="The requested resource was not found.",
+        message_key="varco.error.not_found",
     )
 
     # Maps to ServiceAuthorizationError → HTTP 403
@@ -149,6 +164,7 @@ class FastrestErrorCodes(Enum):
         code="FASTREST_002",
         http_status=403,
         default_message="You are not authorised to perform this action.",
+        message_key="varco.error.unauthorized",
     )
 
     # Maps to ServiceConflictError → HTTP 409
@@ -156,6 +172,7 @@ class FastrestErrorCodes(Enum):
         code="FASTREST_003",
         http_status=409,
         default_message="The operation conflicts with existing data.",
+        message_key="varco.error.conflict",
     )
 
     # Maps to ServiceValidationError → HTTP 422
@@ -163,6 +180,7 @@ class FastrestErrorCodes(Enum):
         code="FASTREST_004",
         http_status=422,
         default_message="The request data failed validation.",
+        message_key="varco.error.validation_failed",
     )
 
     # 5xx server errors ────────────────────────────────────────────────────────
@@ -172,6 +190,7 @@ class FastrestErrorCodes(Enum):
         code="FASTREST_500",
         http_status=500,
         default_message="An unexpected error occurred.",
+        message_key="varco.error.internal",
     )
 
     # ── Convenience properties ────────────────────────────────────────────────
@@ -194,9 +213,19 @@ class FastrestErrorCodes(Enum):
         return self.value.default_message
 
 
+# ── VarcoErrorCodes alias (Plan 011 D-5) ─────────────────────────────────────
+
+# A bare alias to the IDENTICAL class object — not a subclass, no
+# DeprecationWarning (same treatment as JwtUtil.SYSTEM_ISSUER in Plan 002).
+# isinstance(), identity comparison, list(...), and every existing import of
+# FastrestErrorCodes keep working unchanged because this is the same object.
+VarcoErrorCodes = FastrestErrorCodes
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
     "ErrorCode",
     "FastrestErrorCodes",
+    "VarcoErrorCodes",
 ]

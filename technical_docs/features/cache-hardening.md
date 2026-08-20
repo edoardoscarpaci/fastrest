@@ -312,9 +312,118 @@ entire cache on enable *and* on rollback, permanently doubles the key
 namespace, and bakes a wire version into every application-visible key. A
 documented two-step deploy costs one paragraph and no runtime complexity.
 
+## Bulk operations — `BulkCache`, `get_many`/`set_many`/`delete_many` (Plan 011 / C5)
+
+Closes: "a list endpoint that caches N items makes N round trips instead of
+one." Off by default in the only sense that matters here — nothing calls
+the batch path unless a caller opts in (see the `CacheServiceMixin` status
+note below).
+
+### Why a separate `BulkCache` Protocol, not new methods on `AsyncCache` (D-11)
+
+`AsyncCache` is `@runtime_checkable`, and a `runtime_checkable` Protocol's
+`isinstance()` check tests **method presence**. Adding `get_many`/
+`set_many`/`delete_many` directly to `AsyncCache` would silently flip
+`isinstance(some_third_party_cache, AsyncCache)` to `False` for every
+out-of-tree implementation that only has the original five methods — a
+worse defect than the one C5 fixes, and invisible until some unrelated code
+path's `isinstance` check breaks. So:
+
+- `AsyncCache` is **unchanged** — not one line.
+- `BulkCache` (`varco_core.cache.base`, `@runtime_checkable`) is a new,
+  additive Protocol: `get_many(keys, *, type_hint=None) -> dict`,
+  `set_many(items, *, ttl=None) -> None`, `delete_many(keys) -> None`.
+- `CacheBackend` (the ABC every shipped backend subclasses) gets the three
+  methods as **concrete, portable defaults** — loops over `get`/`set`/
+  `delete`. Every shipped backend satisfies `BulkCache` immediately,
+  correctly, at today's performance; each backend then *overrides* with its
+  native batch command as an optimization, never as a correctness fix. Same
+  "portable default vs. concrete-but-raising" discipline Plan 009 applied
+  to `AbstractDeadLetterQueue`/`AbstractJobStore` — every `BulkCache` method
+  has a correct portable default, so nothing here is concrete-but-raising.
+
+| Backend | Native override |
+|---|---|
+| `InMemoryCache` | Loop (already O(1) per key — no native batch primitive to reach for) |
+| `RedisCache` (`varco_redis`) | `MGET` for `get_many`; a pipelined `SET`/`EXPIRE` sequence for `set_many`; pipelined `DEL` for `delete_many` |
+| `MemcachedCache` (`varco_memcached`) | `get_multi`/`set_multi` (native `aiomcache` batch commands) |
+| `LayeredCache` | Per key, walking L1→Ln with the same promotion semantics as `get()` (see D-12 below for `set_many`/`delete_many`'s backplane behaviour) |
+
+### The serializer seam — reused, not reinvented
+
+`CacheBackend.__init__(self, *, serializer: Serializer[Any] | None = None)`
+reuses the **existing** `varco_core.serialization.Serializer` Protocol
+(`serialize(value) -> bytes` / `deserialize(data, type_hint=None) -> T`) —
+whose own docstring already names `JsonSerializer` for cache values as its
+motivating case. Inventing a second cache-specific serializer protocol
+would have been the "implement the same interface twice" mistake
+CLAUDE.md's pre-implementation checklist exists to catch. `serializer=None`
+(the default) preserves each backend's *exact* current behaviour:
+
+| Backend | Default serializer |
+|---|---|
+| `RedisCache` | `JsonSerializer` |
+| `MemcachedCache` | Its existing bytes codec |
+| `InMemoryCache` | `NoOpSerializer` — raw Python objects, no serialization |
+
+### D-12 — `set_many` under a `LayeredCache` backplane: N messages, not a batch verb
+
+`LayeredCache.set_many()`/`delete_many()` obey Plan 010's write-ordering
+rule verbatim — authoritative (last) layer first, then faster layers, then
+publish — and emit **one `InvalidationMessage(kind="key", ...)` per key**,
+never a new `kind="keys"` carrying a list.
+
+Rejected alternative: a batched `kind="keys"` message. ✅ one Pub/Sub
+message instead of N. ❌ Plan 010 froze `InvalidationMessage`'s wire format
+*deliberately* (D-5 there: "adding a field to it later would be a second,
+avoidable rolling-deploy hazard") — a Plan-010-era subscriber receiving
+`kind="keys"` drops it as undecodable, meaning a mixed-version fleet
+silently loses invalidations during a rolling deploy, precisely the defect
+class Plan 010 C1 exists to close. N cheap messages beat a coherence
+regression. A future batched-invalidation wire format is a deliberate,
+versioned rollout, not a drive-by addition here.
+
+### `read_through_many()` — shares `Singleflight` slots with `read_through()`
+
+```python
+from varco_core.cache.readthrough import read_through_many
+
+results = await read_through_many(cache, keys, loader, policy, singleflight=sf)
+# {key: value_or_None} — every requested key present, even ones the loader omitted
+```
+
+Same `Singleflight` **instance** as plain `read_through()` — one in-flight
+slot per key — so a bulk read and a concurrent single-key read of the same
+key coalesce with each other rather than racing. Fresh/negative hits
+resolve immediately; a soft-stale key is returned now and spawns at most
+one background refresh through the same per-key slot `read_through()` uses;
+the loader is invoked **once**, with only the keys that are actually
+missing after singleflight coalescing removes followers. RD-6/Plan 010's
+tenant rule still binds and is retested here: the coalescing key passed to
+`Singleflight` must always be the final, already-namespaced cache key.
+
+### `CacheServiceMixin._use_bulk_cache` — `list()` routes through `read_through_many()`
+
+`CacheServiceMixin._use_bulk_cache: ClassVar[bool] = False` gates whether
+`list()` takes the `BulkCache` batch path. When `True` **and** `self._cache`
+satisfies `BulkCache` (`isinstance(self._cache, BulkCache)`), `list()` calls
+`read_through_many()` with its single, already-namespaced list key instead
+of the plain `cache.get()`/`cache.set()` pair — reusing the existing C5
+batch primitive (`get_many`/`set_many`) rather than a second implementation.
+`list()` still caches its *entire* result under one hashed key (see
+`_cache_list_key()`), so today the batch path buys `read_through_many()`'s
+envelope/SWR/negative-caching/singleflight machinery for that one key rather
+than a genuine N-key round trip — a service that wants a true one-round-trip
+multi-entity batch read should call `read_through_many()` directly with its
+own per-entity keys. `False` (default) — the existing loop-shaped body runs
+verbatim, byte-identical to pre-Plan-011 behaviour (RD-1).
+
 ## Framework table & migration impact
 
-None. R1 adds no framework table, no Alembic revision, and no CLI verb. The
+None. R1 adds no framework table, no Alembic revision, and no CLI verb.
+C5 (Plan 011) adds none either — `BulkCache`'s bulk methods have no
+persistent shape of their own; they compose with whatever storage the
+underlying `CacheBackend` already has. The
 only persistent-shape change is the **value** written into an existing
 cache key when an envelope-requiring policy field is enabled — handled by
 the two-step deploy recipe above, not a schema change.
@@ -323,6 +432,8 @@ the two-step deploy recipe above, not a schema change.
 
 - `plans/010-cache-hardening-r1.md` — the authoritative plan (Design,
   Decisions, Edge cases, Risks sections).
+- `plans/011-i18n-timezone-and-cache-bulk-ops.md` — C5 (bulk ops), D-11,
+  D-12.
 - `varco_core/varco_core/cache/readthrough.py` — the one read-through
   algorithm all four features share.
 - `varco_core/varco_core/cache/singleflight.py`,

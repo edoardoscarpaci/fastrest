@@ -45,6 +45,15 @@ dependencies = [
     "psutil>=5.9",
 ]
 
+[project.optional-dependencies]
+# Plan 011 / T1 — most deployments already have system tzdata; slim
+# container images (python:*-slim, distroless, Alpine) frequently do not.
+# `zoneinfo` falls back to the PyPI `tzdata` package when the OS database is
+# absent — installed only via this extra, never a hard dependency.
+tz = [
+    "tzdata>=2024.1; sys_platform == 'win32' or sys_platform == 'linux'",
+]
+
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
 Repository = "https://github.com/edoardoscarpaci/varco/tree/main/varco_core"

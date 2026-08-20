@@ -28,13 +28,16 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from providify import InjectMeta, Singleton
 
 from varco_core.cache.base import CacheBackend, InvalidationStrategy
 from varco_core.cache.config import CacheSettings
 from varco_core.observability.cache import record_cache_eviction
+
+if TYPE_CHECKING:
+    from varco_core.serialization import Serializer
 
 _logger = logging.getLogger(__name__)
 
@@ -187,6 +190,7 @@ class InMemoryCache(CacheBackend):
             InvalidationStrategy | None, InjectMeta(optional=True)
         ] = None,
         max_size: int | None = None,
+        serializer: Serializer[Any] | None = None,
     ) -> None:
         """
         Args:
@@ -194,7 +198,12 @@ class InMemoryCache(CacheBackend):
                       (no default TTL, reads from env).
             strategy: Invalidation strategy.  ``None`` = no expiry.
             max_size: Maximum number of cached entries.  ``None`` = unbounded.
+            serializer: Accepted for D-11 interface parity — unused.
+                        ``InMemoryCache`` stores raw Python objects, no
+                        serialization step exists to plug into (its
+                        "default serializer" is effectively a no-op).
         """
+        super().__init__(serializer=serializer)
         self._settings = settings or CacheSettings()
         self._strategy = strategy
         self._max_size = max_size

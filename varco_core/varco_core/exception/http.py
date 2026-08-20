@@ -62,7 +62,10 @@ Async safety:   ✅ Synchronous — safe to call from async exception handlers.
 
 from __future__ import annotations
 
-from typing import Callable, TypeAlias
+import dataclasses
+import logging
+from collections.abc import Callable, Mapping
+from typing import Any, TypeAlias
 
 from pydantic import BaseModel
 
@@ -74,6 +77,27 @@ from varco_core.exception.service import (
     ServiceNotFoundError,
     ServiceValidationError,
 )
+from varco_core.exception.settings import ErrorEnvelopeSettings
+
+logger = logging.getLogger(__name__)
+
+#: (message_key, params) -> rendered message, or None ("no translation
+#: available" — caller falls back to default_message; a missing catalog
+#: entry can never produce an empty message). Plan 011 / I1.
+MessageResolver = Callable[[str, Mapping[str, Any]], "str | None"]
+
+
+@dataclasses.dataclass(frozen=True)
+class FieldError:
+    """One entry of ``ErrorMessage.errors`` — field-level validation detail
+    (Plan 011 D-3 item 4, the de-facto shape across Spring Boot 3,
+    ASP.NET Core ``ValidationProblemDetails``, and ``fastapi-problem-details``)."""
+
+    field: str
+    message: str
+    message_key: str | None = None
+    params: dict[str, Any] = dataclasses.field(default_factory=dict)
+
 
 # ── AnyErrorCode type alias ───────────────────────────────────────────────────
 
@@ -135,6 +159,24 @@ class ErrorMessage(BaseModel):
 
     # Optional dynamic context — not part of the translation string
     detail: str | None = None
+
+    # ── Plan 011 / I1 — the one deliberate wire delta (D-4) ──────────────────
+    # Both omitted from the serialized body when empty/None (exclude_none +
+    # the empty-dict-becomes-None normalization in error_message_for). An
+    # out-of-tree ServiceException with no message_key gets a byte-identical
+    # body — neither key ever appears.
+    message_key: str | None = None
+    params: dict[str, Any] | None = None
+
+    # Field-level validation detail — empty list is falsy so pydantic's
+    # exclude_none does not hide it; callers that never populate it get []
+    # in model_dump() unless they also pass exclude_defaults.
+    errors: list[FieldError] = []
+
+    # ── RFC 9457 members — emitted only under problem_details=True (D-3) ────
+    type: str | None = None
+    title: str | None = None
+    instance: str | None = None
 
 
 # ── Exception → ErrorCode mappings ────────────────────────────────────────────
@@ -200,19 +242,33 @@ def error_message_for(
     exc: ServiceException,
     *,
     translator: Callable[[str], str] | None = None,
+    message_resolver: MessageResolver | None = None,
+    envelope_settings: ErrorEnvelopeSettings | None = None,
 ) -> ErrorMessage:
     """
     Build an ``ErrorMessage`` from a ``ServiceException``.
 
-    Resolves the correct error code via MRO walk, optionally translates the
-    message using the code string as the translation key, and populates
-    ``detail`` with ``str(exc)`` for dynamic context.
+    Resolves the correct error code via MRO walk, resolves ``message_key``
+    (``type(exc).message_key`` → ``error_code.message_key`` → ``None``),
+    renders the message, and populates ``detail`` with ``str(exc)`` for
+    dynamic context.
 
     Args:
-        exc:        The service exception to convert.
-        translator: Optional callable mapping a code string (e.g.
-                    ``"FASTREST_001"``) to a locale-specific message.
-                    When ``None``, ``default_message`` is used.
+        exc:               The service exception to convert.
+        translator:        Superseded by ``message_resolver`` — kept working
+                            with no ``DeprecationWarning``. Receives the
+                            stable **code** string (e.g. ``"FASTREST_001"``).
+        message_resolver:  ``(message_key, params) -> rendered | None``.
+                            Returning ``None`` means "no translation
+                            available" and falls back to ``translator``/
+                            ``default_message`` — a missing catalog entry
+                            can never produce an empty message. A resolver
+                            that **raises** is swallowed (rendering an error
+                            must never itself raise) and treated as "no
+                            translation available".
+        envelope_settings:  Controls whether ``message_key``/``params`` are
+                            emitted at all (D-4's kill switch). Defaults to
+                            ``ErrorEnvelopeSettings()`` (both ``True``).
 
     Returns:
         A fully populated ``ErrorMessage`` ready for serialization.
@@ -221,9 +277,10 @@ def error_message_for(
         - ``str(exc)`` may contain internal detail (entity IDs, field names).
           Filter ``detail`` before including it in external API responses
           if the data could leak internal state.
-        - If ``translator`` raises, the exception propagates — callers should
-          handle translation failures before calling this function.
         - Empty ``str(exc)`` is normalized to ``detail=None`` for cleaner JSON.
+        - An out-of-tree ``ServiceException`` subclass with no
+          ``message_key`` gets a byte-identical body — neither
+          ``message_key`` nor ``params`` ever appears (D-4).
 
     Example::
 
@@ -231,29 +288,58 @@ def error_message_for(
         return JSONResponse(status_code=msg.http_status, content=msg.model_dump())
 
         # With i18n:
-        msg = error_message_for(exc, translator=request.state.translate)
+        msg = error_message_for(exc, message_resolver=catalog.format_message)
         return JSONResponse(status_code=msg.http_status, content=msg.model_dump())
     """
     error_code = error_code_for(exc)
+    settings = (
+        envelope_settings if envelope_settings is not None else ErrorEnvelopeSettings()
+    )
 
-    # Both FastrestErrorCodes members and ErrorCode dataclasses expose these
-    # properties — no type narrowing needed.
-    if translator is not None:
-        # translator receives the stable code string (e.g. "FASTREST_001")
-        # so the translation catalog is keyed on the code, not the message.
-        message = translator(error_code.code)
-    else:
-        message = error_code.default_message
+    # Key resolution order: type(exc).message_key -> error_code.message_key -> None.
+    message_key: str | None = getattr(type(exc), "message_key", None)
+    if message_key is None:
+        message_key = getattr(error_code, "message_key", None)
+
+    params: dict[str, Any] = (
+        exc.error_params() if isinstance(exc, ServiceException) else {}
+    )
+
+    message: str | None = None
+    if message_resolver is not None and message_key is not None:
+        try:
+            message = message_resolver(message_key, params)
+        except Exception:
+            logger.warning(
+                "message_resolver raised while rendering %s; falling back",
+                message_key,
+                exc_info=True,
+            )
+            message = None
+
+    if message is None:
+        if translator is not None:
+            # translator receives the stable code string (e.g. "FASTREST_001")
+            # so the translation catalog is keyed on the code, not the key.
+            message = translator(error_code.code)
+        else:
+            message = error_code.default_message
 
     # Normalize empty str(exc) to None — avoids {"detail": ""} in JSON output
     raw_detail = str(exc)
     detail: str | None = raw_detail if raw_detail else None
+
+    # D-4's kill switch: VARCO_ERROR_INCLUDE_MESSAGE_KEY / _INCLUDE_PARAMS.
+    emitted_message_key = message_key if settings.include_message_key else None
+    emitted_params = params if (settings.include_params and params) else None
 
     return ErrorMessage(
         code=error_code.code,
         http_status=error_code.http_status,
         message=message,
         detail=detail,
+        message_key=emitted_message_key,
+        params=emitted_params,
     )
 
 
@@ -299,6 +385,8 @@ def register_error_code(
 __all__ = [
     "AnyErrorCode",
     "ErrorMessage",
+    "FieldError",
+    "MessageResolver",
     "error_code_for",
     "error_message_for",
     "register_error_code",

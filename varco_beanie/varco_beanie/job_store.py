@@ -70,13 +70,13 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any, Sequence
+from typing import Any
 from uuid import UUID, uuid4
 
 from beanie import Document, UpdateResponse
 from pydantic import Field
-
 from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
 
@@ -209,6 +209,20 @@ class JobDocument(Document):
     request_token_hash: str | None = None
     """U-19 — sha256 hex digest of request_token."""
 
+    # ── Plan 011 (T2) — DST-safe scheduling, three additive fields ─────────
+    # D-7: run_at (above) is MATERIALIZED, not replaced. A document written
+    # by a previous version simply has these keys ABSENT — Beanie
+    # deserializes the absent keys to these defaults (None/None/0), which
+    # is precisely the "unzoned job" state. No migration required.
+    run_at_wall: datetime | None = None
+    """Naive local wall-clock time, no tzinfo. None = unzoned."""
+
+    run_at_tz: str | None = None
+    """IANA zone name. None = unzoned."""
+
+    run_at_fold: int = 0
+    """PEP 495 fold — disambiguates an ambiguous materialization."""
+
     class Settings:
         """Beanie collection configuration."""
 
@@ -303,6 +317,9 @@ def _job_to_doc(job: Job) -> JobDocument:
         request_issuer=job.request_issuer,
         request_subject=job.request_subject,
         request_token_hash=job.request_token_hash,
+        run_at_wall=job.run_at_wall,
+        run_at_tz=job.run_at_tz,
+        run_at_fold=job.run_at_fold,
     )
 
 
@@ -353,6 +370,12 @@ def _doc_to_job(doc: JobDocument) -> Job:
         request_issuer=doc.request_issuer,
         request_subject=doc.request_subject,
         request_token_hash=doc.request_token_hash,
+        # getattr() default — a pre-Plan-011 document loaded via a stale
+        # cached class or a raw find() bypassing JobDocument's own default
+        # resolution still deserializes cleanly to the unzoned state.
+        run_at_wall=getattr(doc, "run_at_wall", None),
+        run_at_tz=getattr(doc, "run_at_tz", None),
+        run_at_fold=getattr(doc, "run_at_fold", 0) or 0,
     )
 
 
@@ -413,6 +436,10 @@ class BeanieJobStore(AbstractJobStore):
         await store.save(job)
         claimed = await store.try_claim(job.job_id)
     """
+
+    #: Plan 011 / RD-5 — BeanieJobStore persists run_at_wall/run_at_tz/
+    #: run_at_fold as real JobDocument fields (see JobDocument above).
+    supports_zoned_schedules = True
 
     # ── AbstractJobStore implementation ───────────────────────────────────────
 
@@ -542,6 +569,29 @@ class BeanieJobStore(AbstractJobStore):
             len(jobs),
         )
         return jobs
+
+    async def list_pending_zoned(
+        self,
+        before: datetime,
+        *,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Native override (Plan 011 T2) — a real Mongo query
+        (``status == PENDING AND run_at_tz != None AND run_at < before``)
+        instead of the portable ``list_by_status`` + in-Python-filter
+        default.
+        """
+        docs = (
+            await JobDocument.find(
+                JobDocument.status == JobStatus.PENDING.value,
+                JobDocument.run_at_tz is not None,
+                JobDocument.run_at is not None and JobDocument.run_at < before,
+            )
+            .limit(limit)
+            .to_list()
+        )
+        return [_doc_to_job(d) for d in docs]
 
     async def delete(self, job_id: UUID) -> None:
         """

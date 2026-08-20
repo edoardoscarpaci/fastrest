@@ -48,6 +48,7 @@ from varco_core.event.dlq import (
 )
 from varco_core.job.base import AbstractJobRunner, AbstractJobStore, Job, JobStatus
 from varco_core.resilience.retry import RetryPolicy
+from varco_core.tz.schedule import GapPolicy, OverlapPolicy
 from varco_fastapi.job.response import JobProgressEvent
 from varco_core.event import AbstractEventBus
 from providify import Inject, Instance, Singleton
@@ -286,7 +287,19 @@ class JobRunner(AbstractJobRunner):
         self._tasks.clear()
         logger.info("JobRunner stopped")
 
-    async def enqueue(self, job: Job, coro: Coroutine[Any, Any, Any]) -> None:
+    async def enqueue(
+        self,
+        job: Job,
+        coro: Coroutine[Any, Any, Any],
+        *,
+        run_at: datetime | None = None,
+        delay: timedelta | None = None,
+        run_at_wall: datetime | None = None,
+        tz: str | None = None,
+        fold: int = 0,
+        gap: GapPolicy = GapPolicy.NEXT_VALID,
+        overlap: OverlapPolicy = OverlapPolicy.FIRST,
+    ) -> None:
         """
         Persist ``job`` to the store as PENDING, then schedule the coroutine.
 
@@ -297,14 +310,35 @@ class JobRunner(AbstractJobRunner):
         between persistence and execution.
 
         Steps:
-        1. ``self._store.save(job)`` — PENDING record written first.
-        2. ``self.submit(job.job_id, coro)`` — asyncio.Task scheduled.
+        1. ``_prepare_zoned_job(job, self._store, ...)`` — Plan 005 Phase 4
+           ``run_at``/``delay`` resolution, plus the Plan 011 / RD-5 T2 guard
+           and materialization when ``run_at_wall``/``tz`` is supplied (a
+           ``None`` ``tz`` — the default — is a pure passthrough, so the
+           byte-identical-by-default contract holds).
+        2. ``self._store.save(job)`` — PENDING record written first.
+        3. ``self.submit(job.job_id, coro)`` — asyncio.Task scheduled.
 
         Args:
             job:  A ``Job`` in PENDING state to persist and execute.
             coro: The coroutine to run in the background.
+            run_at: Earliest UTC time this job is eligible to be claimed.
+                Mutually exclusive with ``delay`` and with
+                ``run_at_wall``/``tz``.
+            delay: Convenience alternative to ``run_at`` — resolved to
+                ``now + delay``. Mutually exclusive with ``run_at``.
+            run_at_wall: Naive local wall-clock time — the T2 zoned
+                scheduling path. Mutually exclusive with ``run_at``/``delay``.
+            tz: IANA zone name for ``run_at_wall``. Required RD-5 guard:
+                raises ``ValueError`` naming ``type(self._store).__name__``
+                when the store has not declared
+                ``supports_zoned_schedules = True``.
+            fold: PEP 495 fold, forwarded to ``resolve_zoned``.
+            gap: ``GapPolicy`` forwarded to ``resolve_zoned``.
+            overlap: ``OverlapPolicy`` forwarded to ``resolve_zoned``.
 
         Raises:
+            ValueError: Conflicting time arguments, or a zoned schedule
+                targeting a store without T2 support (RD-5).
             Exception: Any store-specific error from ``store.save()``
                 propagates to the caller; ``coro`` is closed first so no
                 coroutine is leaked.
@@ -316,6 +350,27 @@ class JobRunner(AbstractJobRunner):
             - Process crashes after save but before task starts → job stays PENDING.
               JobPoller will transition it to FAILED on next recovery pass.
         """
+        if run_at is not None and delay is not None:
+            coro.close()
+            raise ValueError("enqueue() received both run_at= and delay=")
+        if delay is not None:
+            run_at = datetime.now(timezone.utc) + delay
+
+        try:
+            job = self._prepare_zoned_job(
+                job,
+                self._store,
+                run_at=run_at,
+                run_at_wall=run_at_wall,
+                tz=tz,
+                fold=fold,
+                gap=gap,
+                overlap=overlap,
+            )
+        except Exception:
+            coro.close()
+            raise
+
         try:
             # Persist BEFORE creating the task — crash-safe ordering
             await self._store.save(job)

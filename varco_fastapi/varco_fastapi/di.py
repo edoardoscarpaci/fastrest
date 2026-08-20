@@ -55,6 +55,25 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+from providify import Configuration, Provider, Singleton
+
+# ── Plan 011 — i18n / timezone default bindings ─────────────────────────
+from varco_core.context.defaults import NullTenantDefaults, TenantDefaultsProvider
+
+# Event producer types — also needed by setup_event_producer() for the same reason.
+from varco_core.event.base import AbstractEventBus
+from varco_core.event.producer import AbstractEventProducer, BusEventProducer
+from varco_core.i18n.catalog import MessageCatalog, NullMessageCatalog
+from varco_core.i18n.settings import I18nSettings
+from varco_core.job.serializer import DefaultTaskSerializer, TaskSerializer
+from varco_core.job.task import TaskRegistry
+
+# JWT claim-transform config types (Plan 002 Phase 2 step 20) — module-level
+# import for the same get_type_hints() reason documented above.
+from varco_core.jwt.transform.config import JwtTransformConfig, JwtTransformSettings
+from varco_core.jwt.transform.registry import ClaimTransformerRegistry
+from varco_core.tz.settings import TimezoneSettings
+
 # ── Module-level imports for DI type resolution ───────────────────────────────
 # These must live at module scope because ``from __future__ import annotations``
 # turns all annotations into strings.  When providify calls
@@ -72,21 +91,7 @@ from varco_fastapi.context import (
     get_request_context,
 )
 from varco_fastapi.middleware.cors import CORSConfig
-from varco_core.job.task import TaskRegistry
-from varco_core.job.serializer import DefaultTaskSerializer, TaskSerializer
-
-# Event producer types — also needed by setup_event_producer() for the same reason.
-from varco_core.event.base import AbstractEventBus
-from varco_core.event.producer import AbstractEventProducer, BusEventProducer
-
 from varco_fastapi.middleware.profiling import ProfilingSettings
-from providify import Configuration, Provider, Singleton
-
-# JWT claim-transform config types (Plan 002 Phase 2 step 20) — module-level
-# import for the same get_type_hints() reason documented above.
-from varco_core.jwt.transform.config import JwtTransformConfig, JwtTransformSettings
-from varco_core.jwt.transform.registry import ClaimTransformerRegistry
-
 
 # ── Singleton stamps for varco_core classes (no providify dep there) ──────────
 # varco_core must stay providify-free — apply scope decorators here, once, at
@@ -141,7 +146,7 @@ def bind_clients(container: Any, *client_classes: type) -> None:
     Thread safety:  ✅ Registration happens at bootstrap; no concurrent access.
     Async safety:   ✅ No I/O during registration.
     """
-    from varco_fastapi.client.base import AsyncVarcoClient  # noqa: PLC0415
+    from varco_fastapi.client.base import AsyncVarcoClient
 
     for client_cls in client_classes:
         router_cls = getattr(client_cls, "_router_class", None)
@@ -371,6 +376,40 @@ class VarcoFastAPIModule:
         """
         return TaskRegistry()
 
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
+    def i18n_settings(self) -> I18nSettings:
+        """
+        ``I18nSettings`` from ``VARCO_I18N_*`` env vars — off by default
+        (Plan 011, RD-1's I2 row).
+
+        ⚠️ ``@Provider``, never ``@Singleton`` — pydantic ``BaseSettings``
+        takes ``**values``; same rule as ``jwt_transform_settings`` above.
+        """
+        return I18nSettings()
+
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
+    def timezone_settings(self) -> TimezoneSettings:
+        """``TimezoneSettings`` from ``VARCO_TZ_*`` env vars — off by default."""
+        return TimezoneSettings()
+
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
+    def message_catalog(self) -> MessageCatalog:
+        """
+        Framework-default ``MessageCatalog`` binding — ``NullMessageCatalog``
+        (zero I/O, ``get_message`` always ``None``). Lowest priority so any
+        app-provided catalog (``DictMessageCatalog``, ``GettextMessageCatalog``,
+        or a custom implementation) wins regardless of registration order.
+        """
+        return NullMessageCatalog()
+
+    @Provider(singleton=True, priority=-sys.maxsize - 1)
+    def tenant_defaults_provider(self) -> TenantDefaultsProvider:
+        """
+        Framework-default ``TenantDefaultsProvider`` binding —
+        ``NullTenantDefaults`` (RD-2's zero-I/O default).
+        """
+        return NullTenantDefaults()
+
     @Provider(priority=-sys.maxsize - 1)
     def request_context(self) -> RequestContext:
         """
@@ -449,7 +488,7 @@ def create_varco_container(*packages: str) -> Any:
     Async safety:   ✅ No async operations — scanning is synchronous.
     """
     try:
-        from providify import DIContainer  # noqa: PLC0415
+        from providify import DIContainer
     except ImportError:
         return None
 
@@ -658,7 +697,7 @@ def bootstrap(
     Async safety:   ✅ No I/O during installation; providers are called lazily.
     """
     try:
-        from providify import DIContainer  # noqa: PLC0415
+        from providify import DIContainer
     except ImportError:
         return None
 
@@ -703,7 +742,7 @@ def bind_mcp_adapter(*args: Any, **kwargs: Any) -> None:
 
     See ``varco_fastapi.router.mcp.bind_mcp_adapter`` for full documentation.
     """
-    from varco_fastapi.router.mcp import bind_mcp_adapter as _impl  # noqa: PLC0415
+    from varco_fastapi.router.mcp import bind_mcp_adapter as _impl
 
     return _impl(*args, **kwargs)
 
@@ -716,6 +755,6 @@ def bind_skill_adapter(*args: Any, **kwargs: Any) -> None:
 
     See ``varco_fastapi.router.skill.bind_skill_adapter`` for full documentation.
     """
-    from varco_fastapi.router.skill import bind_skill_adapter as _impl  # noqa: PLC0415
+    from varco_fastapi.router.skill import bind_skill_adapter as _impl
 
     return _impl(*args, **kwargs)

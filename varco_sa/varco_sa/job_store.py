@@ -54,8 +54,9 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any, Sequence
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -71,9 +72,9 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
-
 from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
@@ -125,6 +126,13 @@ _jobs_table = Table(
     Column("request_issuer", String(255), nullable=True),
     Column("request_subject", String(255), nullable=True),
     Column("request_token_hash", String(64), nullable=True),
+    # ── Plan 011 (T2) — DST-safe scheduling, three additive columns ────────
+    # D-7: run_at (above) is MATERIALIZED, not replaced — these three are
+    # the *intent*. NO new index: the claim predicate is unchanged, so
+    # ix_varco_jobs_claim above is still the right one.
+    Column("run_at_wall", DateTime(timezone=False), nullable=True),
+    Column("run_at_tz", String(64), nullable=True),
+    Column("run_at_fold", Integer, nullable=False, server_default="0"),
     # ⚠️ Note there is currently no index at all on ``status`` — the three
     # indexes below are a free performance fix riding this migration.
     Index("ix_varco_jobs_claim", "status", "run_at", "created_at"),
@@ -201,6 +209,9 @@ def _job_to_row(job: Job) -> dict[str, Any]:
         "request_issuer": job.request_issuer,
         "request_subject": job.request_subject,
         "request_token_hash": job.request_token_hash,
+        "run_at_wall": job.run_at_wall,
+        "run_at_tz": job.run_at_tz,
+        "run_at_fold": job.run_at_fold,
     }
 
 
@@ -265,6 +276,9 @@ def _row_to_job(row: Any) -> Job:
         request_issuer=row.request_issuer,
         request_subject=row.request_subject,
         request_token_hash=row.request_token_hash,
+        run_at_wall=row.run_at_wall,
+        run_at_tz=row.run_at_tz,
+        run_at_fold=row.run_at_fold if row.run_at_fold is not None else 0,
     )
 
 
@@ -310,6 +324,10 @@ class SAJobStore(AbstractJobStore):
         await store.save(job)
         claimed = await store.try_claim(job.job_id)
     """
+
+    #: Plan 011 / RD-5 — SAJobStore persists run_at_wall/run_at_tz/
+    #: run_at_fold as real columns (see _jobs_table above).
+    supports_zoned_schedules = True
 
     def __init__(self, engine: AsyncEngine) -> None:
         """
@@ -440,6 +458,32 @@ class SAJobStore(AbstractJobStore):
             len(jobs),
         )
         return jobs
+
+    async def list_pending_zoned(
+        self,
+        before: datetime,
+        *,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Native override (Plan 011 T2) — real
+        ``WHERE run_at_tz IS NOT NULL AND run_at < :before LIMIT :limit``
+        instead of the portable ``list_by_status`` + in-Python-filter
+        default. No new index — the claim predicate (and its index) is
+        unchanged; this query rides the existing ``run_at`` column.
+        """
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                sa.select(_jobs_table)
+                .where(
+                    _jobs_table.c.status == JobStatus.PENDING.value,
+                    _jobs_table.c.run_at_tz.is_not(None),
+                    _jobs_table.c.run_at < before,
+                )
+                .limit(limit)
+            )
+            rows = result.fetchall()
+        return [_row_to_job(r) for r in rows]
 
     async def delete(self, job_id: UUID) -> None:
         """

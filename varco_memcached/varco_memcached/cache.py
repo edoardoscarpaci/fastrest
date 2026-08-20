@@ -48,15 +48,14 @@ Async safety:   ✅  All public methods are ``async def``.
 """
 
 from __future__ import annotations
-import sys
+
 import logging
+import sys
 from typing import Any
 
 import aiomcache
-from pydantic_settings import SettingsConfigDict
-
 from providify import Configuration, Inject, PreDestroy, Provider
-
+from pydantic_settings import SettingsConfigDict
 from varco_core.cache.base import CacheBackend, InvalidationStrategy
 from varco_core.cache.config import CacheSettings
 from varco_core.serialization import JsonSerializer, Serializer
@@ -302,7 +301,7 @@ class MemcachedCache(CacheBackend):
 
         try:
             return self._serializer.deserialize(raw, type_hint)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _logger.warning(
                 "MemcachedCache: failed to deserialise key %r: %s",
                 key,
@@ -367,6 +366,77 @@ class MemcachedCache(CacheBackend):
         await self._client.delete(self._settings.memcached_key(key))  # type: ignore[union-attr]
         # Remove from the local registry — if not present, discard is a no-op.
         self._key_registry.discard(str(key))
+
+    # ── Bulk operations (Plan 011 C5) — native aiomcache batch commands ──────
+
+    @staticmethod
+    def _validate_mc_key(mc_key: bytes, *, original: Any) -> None:
+        """
+        Surface Memcached's key restrictions (≤ 250 bytes, no whitespace/
+        control characters) as a legible ``ValueError`` naming the
+        offending key, rather than a silent partial write mid-batch
+        (step 74).
+        """
+        if len(mc_key) > 250:
+            raise ValueError(
+                f"MemcachedCache: key {original!r} encodes to {len(mc_key)} "
+                "bytes, exceeding Memcached's 250-byte key limit."
+            )
+        if any(b <= 0x20 or b == 0x7F for b in mc_key):
+            raise ValueError(
+                f"MemcachedCache: key {original!r} contains whitespace or a "
+                "control character, which Memcached does not permit."
+            )
+
+    async def get_many(
+        self, keys: list[Any], *, type_hint: type | None = None
+    ) -> dict[Any, Any]:
+        """Native ``multi_get`` — one round trip for every key."""
+        self._require_started()
+        if not keys:
+            return {}
+        mc_keys = [self._settings.memcached_key(k) for k in keys]
+        raws = await self._client.multi_get(*mc_keys)  # type: ignore[union-attr]
+        result: dict[Any, Any] = {}
+        for key, raw in zip(keys, raws):
+            if raw is None:
+                continue
+            try:
+                result[key] = self._serializer.deserialize(raw, type_hint)
+            except Exception as exc:
+                _logger.warning(
+                    "MemcachedCache: failed to deserialize key %r in " "get_many(): %s",
+                    key,
+                    exc,
+                    exc_info=True,
+                )
+        return result
+
+    async def set_many(
+        self, items: dict[Any, Any], *, ttl: float | None = None
+    ) -> None:
+        """
+        Bulk store. ``aiomcache`` has no native multi-set command, so this
+        loops over ``set()`` — the DEFAULT SERIALIZER reproduces
+        ``set()``'s exact bytes codec (asserted by the test suite). Every
+        key is validated (250-byte / illegal-character limits) BEFORE any
+        write starts, so a bad key in the batch never produces a silent
+        partial write.
+        """
+        self._require_started()
+        if not items:
+            return
+        for key in items:
+            self._validate_mc_key(self._settings.memcached_key(key), original=key)
+        for key, value in items.items():
+            await self.set(key, value, ttl=ttl)
+
+    async def delete_many(self, keys: list[Any]) -> None:
+        """Bulk delete — loops over ``delete()`` (``aiomcache`` has no
+        native multi-delete command)."""
+        self._require_started()
+        for key in keys:
+            await self.delete(key)
 
     async def exists(self, key: Any) -> bool:
         """
@@ -589,7 +659,7 @@ class MemcachedCacheConfiguration:
 
 
 __all__ = [
-    "MemcachedCacheSettings",
     "MemcachedCache",
     "MemcachedCacheConfiguration",
+    "MemcachedCacheSettings",
 ]

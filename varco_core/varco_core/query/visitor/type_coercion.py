@@ -16,13 +16,19 @@ Async safety:   ✅ All methods are synchronous.
 from __future__ import annotations
 
 import json
+import logging
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Iterable
+from datetime import timezone as dt_timezone
+from typing import Any
 
 from varco_core.exception.query import CoercionError
+from varco_core.query.policy import DatetimeCoercionPolicy
 from varco_core.query.type import AndNode, ComparisonNode, NotNode, Operation, OrNode
 from varco_core.query.visitor.walking import BinaryWalkingVisitor
+
+logger = logging.getLogger(__name__)
 
 
 # ── Value-object holding a field's type + coercer ─────────────────────────────
@@ -76,34 +82,93 @@ def coerce_boolean(value: Any) -> bool:
         raise CoercionError(f"Failed to coerce {value!r} to bool") from exc
 
 
-def coerce_datetime(value: Any) -> datetime:
+def coerce_datetime(
+    value: Any, *, policy: DatetimeCoercionPolicy | None = None
+) -> datetime:
     """
-    Coerce ``value`` to ``datetime``.
+    Coerce ``value`` to ``datetime`` — T3's declared timezone contract
+    (Plan 011 D-10).
 
     Accepts ISO-8601 strings (``datetime.fromisoformat``) and native
-    ``datetime`` objects.
+    ``datetime`` objects. **Invariant: convert the bound, never the
+    column** — this function only ever attaches ``tzinfo`` to the returned
+    Python value; it never generates SQL, and in particular never converts the *column*
+    (that would defeat the index — D-10 rule 2; convert the bound only).
 
     Args:
         value: Raw input to coerce.
+        policy: ``DatetimeCoercionPolicy`` controlling how a **naive**
+            result is interpreted. ``None`` (default) — byte-identical to
+            pre-Plan-011 behaviour: the naive value is returned exactly as
+            ``fromisoformat`` produced it.
 
     Returns:
-        Coerced ``datetime``.
+        Coerced ``datetime``. An already-aware input is returned verbatim
+        under **every** policy — an explicit offset always wins.
 
     Raises:
         CoercionError: Value is not a string or ``datetime``, or ISO parse fails.
+        ValueError: ``value`` carries an RFC 9557 bracketed zone suffix
+            (e.g. ``"...+02:00[Europe/Paris]"``) — **no parser ships**
+            (D-9); use an RFC 3339 offset or a separate ``tz=`` field.
     """
     if isinstance(value, datetime):
         return value
     if isinstance(value, str):
+        if value.endswith("]") and "[" in value:
+            raise ValueError(
+                f"Cannot coerce {value!r} to datetime — RFC 9557 bracketed "
+                "timezone suffixes are not supported (no parser ships, "
+                "Plan 011 D-9). Use an RFC 3339 offset with an explicit "
+                "numeric offset, or pass the zone as a separate tz= field."
+            )
         try:
-            return datetime.fromisoformat(value)
+            parsed = datetime.fromisoformat(value)
         except ValueError as exc:
             raise CoercionError(
                 f"Failed to coerce {value!r} to datetime — expected ISO-8601 format"
             ) from exc
+        return _apply_datetime_policy(parsed, policy)
     raise CoercionError(
         f"Cannot coerce {value!r} (type={type(value).__name__}) to datetime"
     )
+
+
+def _apply_datetime_policy(
+    parsed: datetime, policy: DatetimeCoercionPolicy | None
+) -> datetime:
+    """Interpret a NAIVE ``parsed`` value under ``policy``. An already-aware
+    ``parsed`` (explicit offset present) always wins — no policy applied."""
+    if parsed.tzinfo is not None:
+        return parsed
+    if policy is None or policy.assume == "naive":
+        return parsed
+
+    assume = policy.assume
+    if assume == "context":
+        from varco_core.context.request import current_timezone
+
+        zone = current_timezone()
+        if zone is None:
+            if policy.log_naive:
+                logger.debug(
+                    "coerce_datetime: assume='context' but no ambient timezone "
+                    "resolved for %r; falling back to UTC",
+                    parsed,
+                )
+            return parsed.replace(tzinfo=dt_timezone.utc)
+        if policy.log_naive:
+            logger.debug(
+                "coerce_datetime: interpreting naive %r under ambient timezone %s",
+                parsed,
+                zone,
+            )
+        return parsed.replace(tzinfo=zone)
+
+    # assume == "utc"
+    if policy.log_naive:
+        logger.debug("coerce_datetime: interpreting naive %r as UTC", parsed)
+    return parsed.replace(tzinfo=dt_timezone.utc)
 
 
 def coerce_float(value: Any) -> float:

@@ -242,6 +242,109 @@ filterable/`group by`-able as a metric **label** — every key in the registry b
 every metric series it touches. See `technical_docs/features/observability-attributes.md` for
 the full decision table, the PII section, and the Kubernetes Downward-API recipe.
 
+### Ambient request context (varco_core.context, Plan 011 / X1)
+
+`AmbientVar[T]` (`context/ambient.py`) is the generic request-scoped ambient-value primitive —
+a ~70-line generic over `contextvars.ContextVar[T | None]` with `.get()`/`.scope(value)` (sync
+`@contextmanager`)/`.ascope(value)` (`@asynccontextmanager`), always token-reset in `finally`.
+It is the *generalization* of `tenant_context()` (`service/tenant.py`) and `correlation_context()`
+(`tracing.py`), which are **not** rewritten onto it — they stay exactly as they are; this module
+documents them as the precedent it generalizes. `RequestContext` (`context/request.py`,
+`@dataclass(frozen=True)`, `locale`/`timezone`/`extras`) is the **one** aggregate ambient value I2
+and T1 both build on, held in a single `AmbientVar[RequestContext]` — one middleware pass, one
+token, one reset, instead of two independent `ContextVar`s with two reset orders to get right.
+`request_context(locale=, timezone=)` **merges** onto the enclosing context — setting a locale
+never blanks an already-resolved timezone. `resolve_precedence(candidates: Sequence[tuple[str, T |
+None]])` (`context/precedence.py`) is the one "first non-`None` wins" helper both I2's
+`resolve_locale()` and T1's `resolve_timezone()` are thin consumers of — explicit `(source, value)`
+pairs (not an `or`-chain, which would skip a legitimate falsy value) and returns *which* source won
+(`Resolved.source`), turning "why did this user get German?" into one DEBUG log line.
+
+**Rule: `RequestContext` never holds the tenant.** `current_tenant()` (`service/tenant.py`) stays
+the single source of truth for "who is the tenant" — `TenantAwareService`, RLS, `tenancy_cache_key()`,
+the DLQ tenant stamp, and the audit trail all read it directly. Composition with the tenant is by
+*ordering* (`TenantResolutionMiddleware` runs before `LocalizationMiddleware`), never by
+containment — see the pitfall table below.
+
+**Note on `ContextVar` construction**: module-scope `ContextVar()` construction (as `AmbientVar`
+does internally, and as `_request_context` does at `context/request.py` module scope) is
+**correct**, not an exception to the lazy-`asyncio.Lock` rule — PEP 567 requires a `ContextVar` be
+created once, typically at module scope, to behave correctly across `asyncio` tasks.
+`ContextVar()` construction has no running-event-loop requirement, unlike `asyncio.Lock()`.
+
+### Internationalization (varco_core.i18n, Plan 011 / I2)
+
+Off by default (`I18nSettings.enabled=False`) — no catalog constructed, no middleware, no `.mo`
+read, no `Content-Language` header. `MessageCatalog` (ABC): `get_message(key, locale) -> str |
+None` (abstract) + `format_message()` (concrete default: `str.format_map` with a
+`__missing__`-tolerant mapping, so a missing interpolation param leaves `{name}` visible instead of
+raising inside the error-rendering path). Three implementations: `NullMessageCatalog` (the DI
+default, zero I/O), `DictMessageCatalog` (in-memory, tests/small apps), `GettextMessageCatalog`
+(production default — stdlib `gettext` only, **zero new runtime dependency**; `.mo` loading is
+blocking file I/O and happens in `start()`, never lazily on the first request). **No process-global
+`activate()`** — the locale lives only in X1's `ContextVar`; a `GettextMessageCatalog` is immutable
+after `start()` and every lookup takes `locale` explicitly (avoids Flask-Babel's `force_locale`
+cross-request leak, issue #117). Precedence chain (thin `resolve_precedence()` consumer):
+`?lang= -> user_profile -> tenant_default -> Accept-Language -> fallback` — deliberately puts
+`?lang=` before a stored profile (an explicit per-request override must not be overruled by a
+stale stored value), a documented deviation from the design brief's ordering. `Accept-Language`
+negotiation is a hand-rolled RFC 4647 §3.4 Lookup (`varco_core.i18n.negotiation`) — no standard
+Python library implements Lookup. `RD-2`'s `TenantDefaultsProvider` Protocol (`context/defaults.py`)
+resolves per-tenant locale/timezone defaults **without** a `varco_tenants` schema change; ships
+`NullTenantDefaults` (zero I/O) and `StaticTenantDefaults`. `localization_cache_key(base,
+locale=True)` (`i18n/cache_key.py`) fails closed (`RuntimeError`) with no ambient locale — locale
+is never an implicit cache-key component (RD-6), same rule as `tenancy_cache_key()`. See
+`technical_docs/features/i18n-and-localization.md` and `technical_docs/features/
+error-taxonomy-and-i18n.md`.
+
+### Timezones (varco_core.tz, Plan 011 / T1 / T2 / T3)
+
+Off by default (`TimezoneSettings.enabled=False`) — no resolution, `current_timezone()` is `None`,
+storage is unaffected. **varco never changes what it stores** — everything is still written
+aware-UTC; T1 is a rendering/interpretation layer only (`to_user_tz()`, `now_local()`).
+Five-source precedence chain: `?tz= -> X-Timezone header -> user_profile -> tenant_default ->
+fallback`, every candidate validated via `validate_iana_zone()` before entering the chain (an
+invalid zone falls through with one WARNING, never raises). `TimezoneSettings.default_timezone` is
+validated **at startup** — a missing tzdata database (common on slim/distroless images) raises a
+legible error naming `pip install tzdata` / `pip install "varco-core[tz]"` (the plan's only new
+dependency anywhere, and optional). T2 (DST-safe one-shot scheduling) and T3 (query-layer datetime
+coercion) are covered under Background jobs / Query system below. RFC 9557 (IXDTF) is an
+**output-only** format (`varco_core.tz.format.format_rfc9557`) — no parser ships (no
+production-ready Python implementation exists); an input carrying a bracket zone suffix is
+rejected by the coercer with a legible error. See `technical_docs/features/timezone-handling.md`.
+
+### Error taxonomy — `message_key`, `params`, i18n (varco_core.exception, Plan 011 / I1)
+
+Every built-in `ServiceException` now carries a `message_key: ClassVar[str | None]` (e.g.
+`varco.error.not_found`) alongside its existing stable `code` (e.g. `FASTREST_001`) — **`code` is
+the machine identifier, `message_key` is the i18n key**; a prior docstring claiming `code` itself
+was the i18n key was wrong and is corrected. `error_params()` (default `{}`) returns structured
+interpolation data — treat it as a **new exfiltration surface**: `ServiceAuthorizationError`
+deliberately excludes `reason` from its params, and any override must apply the same scrutiny,
+never `vars(exc)`. `VarcoErrorCodes = FastrestErrorCodes` is a bare alias to the identical enum
+object (not a subclass, no `DeprecationWarning`) — the backlog's `VARCO_XXXX` naming does not exist
+and the codes are **not renamed**; renaming a value whose entire contract is stability is exactly
+the change that contract forbids (see the pitfall table). `error_message_for(exc,
+message_resolver=, envelope_settings=)` is the seam a `MessageCatalog` plugs into —
+`message_resolver: (message_key, params) -> str | None`, `None`/an exception means "no
+translation", falling back to `translator`/`default_message`. **Wired into both shipped HTTP
+error paths** (Plan 011 drift-fix pass) — `add_exception_handlers()`/`_make_error_response()` and
+`ErrorMiddleware` both accept `message_catalog=`/`set_content_language=`, read
+`request.state.varco_request_context` (the RD-3 mirror `LocalizationMiddleware` sets), and — when
+a catalog is supplied and a locale was resolved — pass `message_resolver=catalog.format_message`
+into `error_message_for()` and set the response's `Content-Language` header themselves;
+`create_varco_app()` wires `message_catalog=` automatically from its resolved `MessageCatalog`
+when I18n is enabled. With no `message_catalog=` (i18n disabled, the default), both paths are
+byte-identical to before this fix — `message_key`/`params` still appear on error bodies but the
+rendered `message` text stays `default_message`. **D-4 — the one deliberate wire delta**:
+`ErrorEnvelopeSettings(include_message_key=True, include_params=True)` (defaults **on**, unlike
+every other item in this plan) adds up to two keys to a built-in exception's JSON body;
+`VARCO_ERROR_INCLUDE_MESSAGE_KEY=false` / `VARCO_ERROR_INCLUDE_PARAMS=false` restores the exact
+pre-plan body. An out-of-tree exception with no `message_key` set is unaffected regardless. RFC
+9457 `application/problem+json` (`ErrorEnvelopeSettings(problem_details=True)`) is an **opt-in**
+additive mode, never the default media type. See
+`technical_docs/features/error-taxonomy-and-i18n.md`.
+
 ### Profiling (varco_core.profiling)
 
 Diagnostic CPU + memory profiler. Complements the aggregate OTel observability layer
@@ -333,6 +436,28 @@ install function, same shape as `install_reliability_metrics()` — deliberately
 `@Configuration`. See `technical_docs/features/cache-hardening.md` for the full design (Decisions
 D-1 through D-5, the write-ordering cost, the two-step envelope rollout).
 
+**Bulk operations** (`BulkCache`, Plan 011 / C5) — a **separate**, additive `runtime_checkable`
+Protocol (`get_many`/`set_many`/`delete_many`), never new methods on `AsyncCache` itself (D-11) —
+adding them there would silently flip `isinstance(third_party_cache, AsyncCache)` to `False` for
+every out-of-tree implementation, since a `runtime_checkable` Protocol's `isinstance()` tests
+method presence. `CacheBackend` gets the three methods as concrete, portable loop-over-`get`/
+`set`/`delete` defaults, so every shipped backend satisfies `BulkCache` immediately; `RedisCache`/
+`MemcachedCache` override with native `MGET`/`get_multi` as an optimization only.
+`CacheBackend(serializer=...)` reuses the existing `varco_core.serialization.Serializer` Protocol
+— never a second cache-specific serializer. `read_through_many()` (`varco_core.cache.readthrough`)
+shares the **same** `Singleflight` instance/slots as `read_through()`, so a bulk read and a
+single read of the same key coalesce with each other. `LayeredCache.set_many()`/`delete_many()`
+under a backplane publish **N per-key** `InvalidationMessage(kind="key")` messages, never a batched
+`kind="keys"` (D-12) — Plan 010 froze that wire format deliberately, and a mixed-version fleet
+would silently drop a batched message. `CacheServiceMixin._use_bulk_cache = True` (opt-in,
+default `False`) routes `list()`'s single, already-namespaced list key through
+`read_through_many()` (reusing `get_many`/`set_many` instead of a second implementation) when
+`self._cache` satisfies `BulkCache` — `list()` still caches its whole result under one key, so
+this buys the envelope/SWR/negative-caching/singleflight machinery for that key rather than a
+true N-key batch read; call `read_through_many()` directly with your own per-entity keys for a
+genuine multi-entity round trip. See `technical_docs/features/cache-hardening.md`'s "Bulk
+operations" section.
+
 ### Query system (varco_core.query)
 
 The query system builds a typed AST over filter/sort/pagination parameters and applies it to backends:
@@ -350,6 +475,21 @@ QueryApplicator      → attaches filter + sort + pagination to a backend query
 ```
 
 All AST nodes are `@dataclass(frozen=True)` — immutable, hashable, safe to cache. `QueryTransformer` wires the full pipeline in one call. The SQLAlchemy applicator lives in `varco_core.query.applicator.sqlalchemy` (not in `varco_sa`) so the query system stays backend-agnostic.
+
+**Datetime coercion contract** (`varco_core.query.policy.DatetimeCoercionPolicy`, Plan 011 / T3) —
+`assume: Literal["naive", "utc", "context"] = "naive"` declares how `coerce_datetime()` interprets
+a **naive** input; an already-aware value (an explicit offset) always wins under every policy, and
+the coercer only ever attaches `tzinfo` to the returned value — it never emits `AT TIME ZONE` SQL
+(that would defeat the index). `"naive"` (default) is byte-identical to pre-Plan-011 behaviour;
+`"utc"` is the **recommended** setting for `TIMESTAMPTZ` columns (not the default, because
+`asyncpg` rejects an aware datetime against a `TIMESTAMP WITHOUT TIME ZONE` column — turning
+`"utc"` on for a naive-column app would break a working query); `"context"` reads
+`current_timezone()` (opt-in — no mainstream framework does this by default). ⚠️ `policy=` is
+wired into the free function `coerce_datetime()` only — `ASTTypeCoercion`
+(`varco_core.query.visitor.type_coercion`), the visitor `QueryTransformer` actually drives, has no
+`policy=` parameter and calls its registered coercer with no policy at all, so every datetime
+field coerced through the AST path is always `"naive"` regardless of any `DatetimeCoercionPolicy`
+you construct. See `technical_docs/features/timezone-handling.md`'s T3 section.
 
 ### Transactional Outbox (varco_core.service.outbox)
 
@@ -395,6 +535,32 @@ are concrete-but-raising on the ABC (no correct fallback for a lease exists);
 retention primitive — refuses to run with no predicate at all (`ValueError`).
 See `technical_docs/features/job-scheduling-and-leases.md` for the TTL/heartbeat
 sizing formula, the retry-binding decision table, and the retention recipe.
+
+**Zoned schedules — DST-safe one-shot scheduling** (Plan 011 / T2) — `Job` gains three additive,
+defaulted fields: `run_at_wall: datetime | None`, `run_at_tz: str | None`, `run_at_fold: int = 0`.
+**`run_at` is materialized, not replaced** — it keeps its exact current meaning as the UTC claim
+predicate; the three new fields are the *intent* it was computed from. `run_at_tz IS NULL` (every
+existing row) is byte-identical to today; no new index. `AbstractJobStore.
+supports_zoned_schedules: ClassVar[bool] = False` — `SAJobStore`/`BeanieJobStore`/the in-memory
+store all opt in and persist the columns/fields. `AbstractJobRunner._prepare_zoned_job(job, store,
+run_at_wall=, tz=, fold=, gap=, overlap=)` is the concrete RD-5 guard + materialization helper on
+the ABC, raising `ValueError` naming the store class when a zone targets a store that hasn't
+declared support. **Wired into the shipped `JobRunner`** (Plan 011 drift-fix pass) —
+`varco_fastapi.job.runner.JobRunner.enqueue(job, coro, *, run_at=, delay=, run_at_wall=, tz=,
+fold=, gap=, overlap=)` calls `_prepare_zoned_job()` before `self._store.save(job)`, so the RD-5
+guard runs on the standard submission path; `tz=None` (the default) is a pure passthrough, so
+every pre-existing `enqueue(job, coro)` call site is byte-identical to before. Constructing a
+`Job` with the three fields set directly (materializing `run_at` via
+`varco_core.tz.schedule.resolve_zoned()` yourself) and calling `store.save()` still works and
+still bypasses the guard — nothing requires going through `enqueue()`.
+`varco_core.tz.schedule.resolve_zoned(wall, zone, gap=GapPolicy.NEXT_VALID,
+overlap=OverlapPolicy.FIRST)` resolves DST gaps/overlaps with no `dateutil` dependency — default
+`NEXT_VALID` (not brief 004's recommended `SKIP`) because "skip" on a one-shot job means silent
+data loss, the same class of defect `OutboxRelay(max_attempts=)` refuses without a `dlq=`.
+`ScheduleRematerializer` (`varco_core.job.reschedule`, `interval=0.0` default = never started) is
+the opt-in recompute-on-read sweeper, fenced with `save(expected_epoch=)`. See
+`technical_docs/features/job-scheduling-and-leases.md`'s "Zoned schedules" section and
+`technical_docs/features/timezone-handling.md`'s T2 section.
 
 ### Database auditing (varco_core.service.audit)
 
@@ -1597,6 +1763,17 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 | **`soft_ttl >= ttl`** | `ValueError` at `CachePolicy` construction | A soft TTL at or beyond the hard TTL can never fire — the SWR window would be dead code | Set `soft_ttl` strictly less than `ttl` |
 | **Enabling envelope mode mid-rolling-deploy** | An **old** pod (or a pod whose policy doesn't set `soft_ttl`/`negative_ttl`/`stale_if_error`) reads a **new** pod's envelope and returns the raw `{"__varco_cache__": 1, ...}` wrapper dict to the application instead of the unwrapped value | `CacheEnvelope` is only tolerant on read in the safe direction (new pod reading old pod's legacy value) — the reverse direction is unsafe by design (D-5) | Roll out the new varco version to every pod with envelope-requiring policy fields off first, then turn them on — see the two-step deploy recipe in `technical_docs/features/cache-hardening.md` |
 | **Negative caching hiding a fixed row** | A "not found" response keeps being served long after the underlying row was created | `negative_ttl` was set longer than the operational fix loop for the missing row | Keep `negative_ttl` short (shorter than `ttl`), or invalidate explicitly (`cache.delete(key)`) when the row is created |
+| **Error body gained `message_key`/`params` after upgrade** | An exact-equality assertion on an error response body fails after a version bump | Plan 011 / D-4 — the one deliberate wire delta: built-in varco exceptions now emit `message_key` (`varco.error.not_found`) and non-empty `params` as extension members. An out-of-tree `ServiceException` with no `message_key` is unaffected | Assert on the keys you care about instead of the whole dict, or restore the exact pre-plan body with `VARCO_ERROR_INCLUDE_MESSAGE_KEY=false` / `VARCO_ERROR_INCLUDE_PARAMS=false` |
+| **`tenant_id` expected in `RequestContext`** | `AttributeError`, or two disagreeing answers to "who is the tenant" | `RequestContext` deliberately holds only `locale`/`timezone`/`extras` (Plan 011 / D-6) — `TenantAwareService`, RLS, `tenancy_cache_key()`, the DLQ stamp and the audit trail all read `current_tenant()`, and a second source of truth is how they diverge | Call `current_tenant()`; compose by *ordering* (`LocalizationMiddleware` is the innermost built-in layer, so any app-supplied `TenantResolutionMiddleware` via `extra_middleware=` always dispatches first), never by containment |
+| **Localized response cached and served to the wrong locale** | A `fr` body is returned to an `en` client | The cache key did not mention the locale — the i18n analogue of the cross-tenant cache leak, and easier to hit because localization is applied at render time, far from the cache call | Cache the **unlocalized** representation and localize at render time; where the cached artifact is itself localized, build the key with `localization_cache_key(base, locale=True)`, which fails closed (`RuntimeError`) with no ambient locale, exactly like `tenancy_cache_key()` |
+| **Error response not localized although i18n is enabled** | A 404/500 body is in English (and has no `Content-Language` header) despite I18n being enabled and `?lang=fr` set | `create_varco_app()` only wires `message_catalog=` into the error paths when a `MessageCatalog` was actually resolved (`i18n.enabled=True` **and** a container was passed) — with no catalog bound, both `_make_error_response()`/`add_exception_handlers()` and `ErrorMiddleware` are byte-identical to before this fix: `message_key`/`params` still appear, but `message` stays `default_message` | Confirm `create_varco_app(container=..., i18n=I18nSettings(enabled=True))` and that a `MessageCatalog` (e.g. `GettextMessageCatalog`) is actually bound in the container; if you built a custom exception handler yourself, pass `message_catalog=`/`set_content_language=` explicitly — see `technical_docs/features/error-taxonomy-and-i18n.md`'s `message_resolver` section |
+| **`enqueue(tz=...)` raises `ValueError` naming the store class** | A zoned-schedule `enqueue()` call fails at the store name instead of scheduling the job | Plan 011 / RD-5's `_prepare_zoned_job()` guard, now wired into the shipped `varco_fastapi.job.runner.JobRunner.enqueue()`, refuses a zoned schedule (`run_at_wall=`/`tz=`) targeting a store whose `supports_zoned_schedules` is `False` (the default) | Use a store that opts in (`SAJobStore`, `BeanieJobStore`, the in-memory store), or add the three columns/fields to a custom store and set `supports_zoned_schedules = True` |
+| **`assume="utc"` breaks a working datetime filter** | `asyncpg` raises on a query that worked before the policy was changed | asyncpg rejects an **aware** datetime against a `TIMESTAMP WITHOUT TIME ZONE` column — which is exactly why `"naive"` (today's behaviour) is the default and `"utc"` is only the *recommendation* (Plan 011 / D-10) | Migrate the column to `TIMESTAMPTZ`, or leave the policy at `"naive"` and have clients send an explicit offset (`2026-01-01T00:00:00Z`) — an explicit offset wins under every policy |
+| **`DatetimeCoercionPolicy(assume="utc")` has no effect on a `?field__gte=` filter** | The naive-string bound is still returned naive despite a policy being configured | `ASTTypeCoercion` (the visitor `QueryTransformer` drives) has no `policy=` parameter — only the free function `coerce_datetime(value, policy=...)` honours it | Call `coerce_datetime(value, policy=my_policy)` directly, or register a field-specific coercer via `TypeCoercionRegistry.register_field()` with `functools.partial(coerce_datetime, policy=my_policy)` |
+| **`?lang=xx` silently ignored** | No 400, the response comes back in the fallback locale | `xx` is not in `I18nSettings.supported_locales` — by design, an unsupported explicit override falls through to the next precedence source rather than erroring | Add the locale to `supported_locales`, or expect the fallthrough — this is deliberate, not a bug |
+| **`Content-Language` header missing** | I18n appears to do nothing on an otherwise-working response | `I18nSettings.enabled=False` (the default), or `set_content_language=False` | Set `VARCO_I18N_ENABLED=true` (and check `set_content_language`) |
+| **tzdata absent in a slim image** | `ValueError` at `TimezoneSettings`/`I18nSettings`-adjacent startup naming a zone that "could not be resolved" | `python:*-slim`/distroless/Alpine images often ship no `/usr/share/zoneinfo` | `pip install tzdata` or `pip install "varco-core[tz]"` |
+| **Adding a bulk method directly to `AsyncCache`** | `isinstance(third_party_cache, AsyncCache)` silently starts returning `False` for out-of-tree caches | `AsyncCache` is `runtime_checkable` — `isinstance()` tests method presence, so any new method changes what satisfies it | Add to `BulkCache` instead (Plan 011 / D-11) — `AsyncCache` stays byte-for-byte unchanged |
 
 ---
 
@@ -1609,9 +1786,32 @@ Am I adding a new capability?
 │
 ├─ Cache feature (new invalidation strategy, new backend)?
 │  └─ → varco_core.cache (ABC) + varco_redis/sa (impl)
+│     ↳ a bulk/batch capability? → BulkCache with a portable CacheBackend
+│       default, NEVER a new method on AsyncCache (breaks isinstance() for
+│       out-of-tree caches, Plan 011 D-11)
 │
 ├─ Query filtering (new comparison operator, new visitor)?
 │  └─ → varco_core.query (parser + visitor) + varco_core.query.applicator.sqlalchemy
+│
+├─ Request-scoped ambient value (locale, timezone, anything else per-request)?
+│  └─ → varco_core.context (AmbientVar + RequestContext + resolve_precedence)
+│     ↳ tenant? → NO, use current_tenant() — never add it to RequestContext
+│     ↳ HTTP resolution? → varco_fastapi.middleware.LocalizationMiddleware
+│       (one middleware, two independent toggles — RD-3)
+│
+├─ Internationalization / localized output?
+│  └─ → varco_core.i18n (MessageCatalog ABC + negotiation)
+│     ↳ a new catalog format (ICU, MF2, Fluent)? → implement the ABC, do
+│       NOT add a runtime dependency to varco_core
+│     ↳ translatable entity data? → app side, a Non-goal (RD-7)
+│
+├─ Timezone / scheduling?
+│  └─ → varco_core.tz
+│     ↳ per-request user zone? → tz/resolve.py
+│     ↳ DST-safe one-shot schedule? → tz/schedule.py + the three Job
+│       columns (D-7)
+│     ↳ recurring/RRULE? → Non-goal — a future Schedule entity that
+│       produces Job rows exactly like these
 │
 ├─ Resilience pattern (new retry/timeout/breaker variant)?
 │  └─ → varco_core.resilience (decorator + config)

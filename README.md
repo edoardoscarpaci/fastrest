@@ -82,6 +82,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Built-in authorizers](#built-in-authorizers)
   - [BaseAuthorizer](#baseauthorizer)
 - [Error codes & HTTP mapping](#error-codes--http-mapping)
+- [Internationalization, Timezones, and Bulk Cache Ops](#internationalization-timezones-and-bulk-cache-ops)
 - [Correlation ID / Tracing](#correlation-id--tracing)
 - [Multi-tenancy (DB-level)](#multi-tenancy-db-level)
 - [Query System](#query-system)
@@ -837,10 +838,15 @@ app = FastAPI()
 @app.exception_handler(ServiceException)
 async def service_error_handler(request: Request, exc: ServiceException):
     msg = error_message_for(exc)
-    # msg.model_dump() → {"code": "FASTREST_001", "http_status": 404,
+    # msg.model_dump(exclude_none=True) → {"code": "FASTREST_001", "http_status": 404,
     #                      "message": "The requested resource was not found.",
-    #                      "detail": "Post with pk=42 not found."}
-    return JSONResponse(status_code=msg.http_status, content=msg.model_dump())
+    #                      "detail": "Post with pk=42 not found.",
+    #                      "message_key": "varco.error.not_found",
+    #                      "params": {"entity": "Post", "entity_id": "42"}}
+    # message_key/params are new (a built-in exception only — see
+    # technical_docs/features/error-taxonomy-and-i18n.md); an out-of-tree
+    # ServiceException with no message_key gets a byte-identical body.
+    return JSONResponse(status_code=msg.http_status, content=msg.model_dump(exclude_none=True))
 ```
 
 ### i18n support
@@ -870,6 +876,35 @@ register_error_code(
     ErrorCode("APP_001", 429, "Request quota exceeded."),
 )
 ```
+
+---
+
+## Internationalization, Timezones, and Bulk Cache Ops
+
+Three off-by-default features (nothing below changes behaviour until you opt
+in) — each linked doc has the full design, decision rationale, and known
+limitations:
+
+- **Internationalization** — `MessageCatalog` (stdlib `gettext`-backed by
+  default, zero new runtime dependency), an `Accept-Language`/`?lang=`
+  negotiation chain, and request-scoped locale via `varco_core.context`.
+  `create_varco_app(i18n=I18nSettings(enabled=True, supported_locales=("en",
+  "fr")))`. See
+  [`technical_docs/features/i18n-and-localization.md`](technical_docs/features/i18n-and-localization.md).
+- **Timezones & DST-safe scheduling** — per-request timezone resolution
+  (`?tz=`/`X-Timezone`), a documented DST gap/overlap policy for one-shot
+  scheduled jobs (`Job.run_at_wall`/`run_at_tz`), and a declared (not
+  accidental) timezone contract for query-layer datetime filters
+  (`DatetimeCoercionPolicy`). `pip install "varco-core[tz]"` on slim/
+  distroless images. See
+  [`technical_docs/features/timezone-handling.md`](technical_docs/features/timezone-handling.md).
+- **Bulk cache operations** — `BulkCache` (`get_many`/`set_many`/
+  `delete_many`), a separate Protocol from `AsyncCache` so out-of-tree cache
+  implementations never silently stop satisfying `isinstance()`, with
+  portable loop-based defaults and native `MGET`/`get_multi` overrides in
+  `varco_redis`/`varco_memcached`. See
+  [`technical_docs/features/cache-hardening.md`](technical_docs/features/cache-hardening.md)'s
+  "Bulk operations" section.
 
 ---
 

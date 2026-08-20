@@ -54,9 +54,26 @@ from varco_core.exception.service import (
 )
 from varco_core.exception.query import QueryException
 from varco_core.exception.http import error_message_for
+from varco_core.i18n.catalog import MessageCatalog
 from varco_core.tracing import current_correlation_id
 
 _logger = logging.getLogger(__name__)
+
+
+def _locale_from_request(request: Request) -> str | None:
+    """
+    Read the resolved locale from ``request.state.varco_request_context``.
+
+    See the matching helper/docstring in ``varco_fastapi.exceptions`` —
+    ``ErrorMiddleware`` sits OUTSIDE ``LocalizationMiddleware`` (RD-3), so by
+    the time an exception reaches here the ambient ``ContextVar`` has
+    already been reset; ``request.state`` is the only place the resolved
+    locale is still reachable.
+    """
+    ctx = getattr(request.state, "varco_request_context", None)
+    if ctx is None:
+        return None
+    return getattr(ctx, "locale", None)
 
 
 class ErrorMiddleware(BaseHTTPMiddleware):
@@ -103,10 +120,17 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         *,
         debug: bool = False,
         include_trace_id: bool = True,
+        message_catalog: MessageCatalog | None = None,
+        set_content_language: bool = True,
     ) -> None:
         super().__init__(app)
         self._debug = debug
         self._include_trace_id = include_trace_id
+        # Plan 011 / RD-3 — see _locale_from_request()/_service_error_response()
+        # below. None (default) reproduces pre-fix behaviour exactly: no
+        # localization, no Content-Language header on the error path.
+        self._message_catalog = message_catalog
+        self._set_content_language = set_content_language
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -164,7 +188,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
                         },
                     )
                 if isinstance(inner, ServiceException):
-                    return self._service_error_response(inner)
+                    return self._service_error_response(inner, request)
                 if isinstance(inner, QueryException):
                     return JSONResponse(
                         status_code=400,
@@ -212,7 +236,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
                 },
             )
         except ServiceException as exc:
-            return self._service_error_response(exc)
+            return self._service_error_response(exc, request)
         except QueryException as exc:
             return JSONResponse(
                 status_code=400,
@@ -224,10 +248,29 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         except Exception as exc:  # noqa: BLE001
             return self._internal_error_response(exc)
 
-    def _service_error_response(self, exc: ServiceException) -> JSONResponse:
-        """Map a ``ServiceException`` to the correct HTTP status code and body."""
+    def _service_error_response(
+        self, exc: ServiceException, request: Request
+    ) -> JSONResponse:
+        """
+        Map a ``ServiceException`` to the correct HTTP status code and body.
+
+        Plan 011 / RD-3: reads ``request.state.varco_request_context`` (see
+        ``_locale_from_request()`` above) — this middleware sits OUTSIDE
+        ``LocalizationMiddleware``, so the ``ContextVar`` itself is already
+        reset by the time an exception reaches here. With no
+        ``message_catalog`` wired (the default) or no locale resolved, this
+        is byte-identical to before this fix.
+        """
+        locale = _locale_from_request(request)
+        message_resolver = None
+        if self._message_catalog is not None and locale is not None:
+            catalog = self._message_catalog
+
+            def message_resolver(key: str, params: dict[str, Any]) -> str | None:
+                return catalog.format_message(key, locale, params)
+
         try:
-            msg = error_message_for(exc)
+            msg = error_message_for(exc, message_resolver=message_resolver)
             status_code = msg.http_status
             body: dict[str, Any] = {
                 "code": msg.code,
@@ -248,7 +291,10 @@ class ErrorMiddleware(BaseHTTPMiddleware):
             if cid:
                 body["correlation_id"] = cid
 
-        return JSONResponse(status_code=status_code, content=body)
+        response = JSONResponse(status_code=status_code, content=body)
+        if self._set_content_language and locale:
+            response.headers["Content-Language"] = locale
+        return response
 
     def _internal_error_response(self, exc: Exception) -> JSONResponse:
         """Map an unexpected exception to 500 with a sanitized error body."""

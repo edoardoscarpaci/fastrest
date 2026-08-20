@@ -146,15 +146,15 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Generic, TypeVar
 
 from providify import Inject, InjectMeta
 
-from varco_core.cache.base import CacheBackend
+from varco_core.cache.base import BulkCache, CacheBackend
 from varco_core.cache.policy import CachePolicy
-from varco_core.cache.readthrough import read_through
+from varco_core.cache.readthrough import read_through, read_through_many
 from varco_core.cache.service import CacheInvalidated
 from varco_core.cache.singleflight import Singleflight
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
 from varco_core.event.producer import AbstractEventProducer
 from varco_core.model import DomainModel
-from varco_core.service.base import AsyncService, _ANON_CTX
+from varco_core.service.base import _ANON_CTX, AsyncService
 from varco_core.service.mixin import ServiceMixin
 
 if TYPE_CHECKING:
@@ -237,6 +237,13 @@ class CacheServiceMixin(
     #: instead, with one ``Singleflight`` created lazily per service
     #: **instance** (never per call — the shared-instance rule, CLAUDE.md).
     _cache_policy: ClassVar[CachePolicy | None] = None
+
+    #: Plan 011 / C5 opt-in — ``list()`` takes the batch (``BulkCache``)
+    #: path only when this is ``True`` **and** ``self._cache`` satisfies
+    #: ``BulkCache`` (``isinstance(self._cache, BulkCache)``). ``False``
+    #: (default) — the existing loop-shaped body above runs verbatim,
+    #: byte-identical to pre-Plan-011 behaviour (RD-1).
+    _use_bulk_cache: ClassVar[bool] = False
 
     # ── Internal key helpers ──────────────────────────────────────────────────
 
@@ -386,6 +393,32 @@ class CacheServiceMixin(
         """
         tenant_id: str | None = ctx.metadata.get("tenant_id") if ctx else None
         key = self._cache_list_key(params, tenant_id=tenant_id)
+
+        # Plan 011 / C5 — the batch (BulkCache) path. Opt-in only
+        # (_use_bulk_cache defaults False): with the flag left at its
+        # default, or against a cache that does not satisfy BulkCache, this
+        # branch is never taken and the bodies below run byte-identically
+        # to pre-Plan-011 behaviour (RD-1).
+        if self._use_bulk_cache and isinstance(self._cache, BulkCache):
+
+            async def _batch_loader(missing_keys: list[str]) -> dict[str, Any]:
+                # Only one key is ever requested here (list() caches its
+                # whole result under one hashed key — see _cache_list_key);
+                # read_through_many() is reused rather than building a
+                # second batch implementation (CLAUDE.md pre-implementation
+                # checklist).
+                value = await super(CacheServiceMixin, self).list(params, ctx)
+                return {k: value for k in missing_keys}
+
+            policy = self._cache_policy or CachePolicy(ttl=self._cache_ttl)
+            result_map = await read_through_many(
+                self._cache,
+                [key],
+                _batch_loader,
+                policy,
+                singleflight=self._get_singleflight(),
+            )
+            return result_map[key]
 
         if self._cache_policy is not None:
             return await read_through(
@@ -561,7 +594,7 @@ class CacheServiceMixin(
                 ),
                 channel=self._cache_bus_channel,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _logger.warning(
                 "CacheServiceMixin[%s]: failed to publish CacheInvalidated: %s",
                 self._cache_namespace,

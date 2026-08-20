@@ -47,12 +47,11 @@ from __future__ import annotations
 
 import abc
 import logging
-from typing import TYPE_CHECKING, Any, TypeVar
-
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:
     from varco_core.cache.warming import CacheWarmer
+    from varco_core.serialization import Serializer
 
 _logger = logging.getLogger(__name__)
 
@@ -173,6 +172,56 @@ class AsyncCache(Protocol[K, V]):  # type: ignore[misc]
         ...
 
 
+# ── BulkCache Protocol (Plan 011 C5 / D-11) ───────────────────────────────────
+
+
+@runtime_checkable
+class BulkCache(Protocol[K, V]):  # type: ignore[misc]
+    """
+    Structural protocol for **batch** get/set/delete — a SEPARATE Protocol
+    from ``AsyncCache``, deliberately (Plan 011 D-11).
+
+    DESIGN: a separate ``BulkCache`` Protocol, not new methods on ``AsyncCache``
+        ✅ ``AsyncCache`` stays completely unchanged — not one line — so
+           every out-of-tree implementation keeps satisfying it exactly as
+           before.
+        ✅ ``BulkCache`` is additive: every shipped ``CacheBackend``
+           satisfies it immediately via the portable loop-based defaults
+           below, with zero migration required.
+        ❌ Rejected alternative — adding ``get_many``/``set_many``/
+           ``delete_many`` directly to ``AsyncCache``: ``AsyncCache`` is
+           ``runtime_checkable``, and a ``runtime_checkable`` Protocol's
+           ``isinstance()`` check tests METHOD PRESENCE, so this would
+           silently flip ``isinstance(some_third_party_cache, AsyncCache)``
+           to ``False`` for every out-of-tree implementation that only has
+           the original five methods — a worse, action-at-a-distance defect
+           than the one this Protocol fixes. Rejected.
+
+    Thread safety:  ❌  Not thread-safe.
+    Async safety:   ✅  All methods are coroutines.
+    """
+
+    async def get_many(
+        self, keys: list[K], *, type_hint: type | None = None
+    ) -> dict[K, V]:
+        """Return a ``{key: value}`` dict for every key that was a hit.
+        A missing/expired key is simply absent from the result — never
+        present with a ``None`` value (mirrors ``get()``'s per-key miss
+        semantics)."""
+        ...
+
+    async def set_many(self, items: dict[K, V], *, ttl: float | None = None) -> None:
+        """Store every ``(key, value)`` pair in ``items``. ``ttl`` applies
+        uniformly to every key in this call, same as ``set()``'s
+        ``ttl=``."""
+        ...
+
+    async def delete_many(self, keys: list[K]) -> None:
+        """Remove every key in ``keys``. Idempotent per key, same as
+        ``delete()``."""
+        ...
+
+
 # ── CacheBackend ABC ───────────────────────────────────────────────────────────
 
 
@@ -201,6 +250,21 @@ class CacheBackend(abc.ABC):
         async with MyBackend(settings) as backend:
             await backend.set("key", value)
     """
+
+    def __init__(self, *, serializer: Serializer[Any] | None = None) -> None:
+        """
+        Args:
+            serializer: Reuses ``varco_core.serialization.Serializer``
+                (Plan 011 D-11) rather than a second cache-specific
+                protocol. ``None`` (default) — each backend's own default
+                preserves its EXACT current behaviour (``RedisCache`` ->
+                ``JsonSerializer``, ``MemcachedCache`` -> its current bytes
+                codec, ``InMemoryCache`` -> raw Python objects / no
+                serialization). Subclasses that accept their own
+                ``serializer=`` kwarg should forward it here via
+                ``super().__init__(serializer=serializer)``.
+        """
+        self._serializer = serializer
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -314,7 +378,7 @@ class CacheBackend(abc.ABC):
         await self._run_warmers()
         return self
 
-    async def __aexit__(self, *_: Any) -> None:
+    async def __aexit__(self, *_: object) -> None:
         # Reset the started flag before stop() so that a subsequent add_warmer()
         # call (before the next __aenter__) is allowed — supports restart scenarios.
         object.__setattr__(self, "_backend_started", False)
@@ -356,6 +420,37 @@ class CacheBackend(abc.ABC):
         Edge cases:
             - An empty ``prefix`` is equivalent to ``clear()``.
         """
+
+    # ── Bulk operations (Plan 011 C5) — concrete portable defaults ──────────
+    # Loops over get/set/delete: correct with today's exact per-key
+    # semantics and performance for any existing backend, and satisfies
+    # BulkCache immediately. Backends override with a native batch command
+    # (MGET/pipelined SET, get_multi/set_multi) as an OPTIMIZATION, never as
+    # a correctness fix — see varco_redis.cache / varco_memcached.cache.
+
+    async def get_many(
+        self, keys: list[Any], *, type_hint: type | None = None
+    ) -> dict[Any, Any]:
+        """Portable default: loop over ``get()``. A miss is simply absent
+        from the result dict."""
+        result: dict[Any, Any] = {}
+        for key in keys:
+            value = await self.get(key, type_hint=type_hint)
+            if value is not None:
+                result[key] = value
+        return result
+
+    async def set_many(
+        self, items: dict[Any, Any], *, ttl: float | None = None
+    ) -> None:
+        """Portable default: loop over ``set()``."""
+        for key, value in items.items():
+            await self.set(key, value, ttl=ttl)
+
+    async def delete_many(self, keys: list[Any]) -> None:
+        """Portable default: loop over ``delete()``."""
+        for key in keys:
+            await self.delete(key)
 
 
 # ── InvalidationStrategy ABC ───────────────────────────────────────────────────
@@ -433,6 +528,7 @@ class InvalidationStrategy(abc.ABC):
 
 __all__ = [
     "AsyncCache",
+    "BulkCache",
     "CacheBackend",
     "InvalidationStrategy",
 ]

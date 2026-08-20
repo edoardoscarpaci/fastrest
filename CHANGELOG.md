@@ -63,6 +63,94 @@ warning was not.
 
 ### Added
 
+- **Internationalization, timezones, and cache bulk operations** (Plan 011).
+  Every item is off by default, reached only by an explicit setting/object —
+  with one deliberate exception, called out below.
+
+  - **`varco-core`** — `varco_core.context` (X1): `AmbientVar[T]` (the
+    generic ambient-value primitive `tenant_context()`/
+    `correlation_context()` already implemented independently) +
+    `RequestContext` (one aggregate `locale`/`timezone`/`extras` value,
+    merge-on-nest semantics) + `resolve_precedence()` (the "first non-`None`
+    wins, with source attribution" helper I2/T1 both consume). Tenant is
+    deliberately absent from `RequestContext` — `current_tenant()` stays the
+    single source of truth. `varco_core.i18n` (I2): `MessageCatalog` ABC +
+    `NullMessageCatalog`/`DictMessageCatalog`/`GettextMessageCatalog`
+    (stdlib `gettext` only, zero new runtime dependency), a hand-rolled RFC
+    4647 §3.4 Lookup negotiator, and a five-source locale precedence chain
+    (`?lang=` → user profile → tenant default → `Accept-Language` →
+    fallback). `varco_core.tz` (T1/T2/T3): `resolve_timezone()`
+    (`?tz=`/`X-Timezone`/user profile/tenant default/fallback),
+    `resolve_zoned()` (DST gap/overlap detection with no `dateutil`
+    dependency — defaults `GapPolicy.NEXT_VALID`/`OverlapPolicy.FIRST`),
+    `format_rfc9557()` (output-only — no parser ships), and
+    `DatetimeCoercionPolicy` (`assume="naive"` by default, `"utc"`
+    recommended, `"context"` opt-in) for the query layer.
+    `varco_core.context.defaults.TenantDefaultsProvider` resolves per-tenant
+    locale/timezone defaults **without** a `varco_tenants` schema change.
+    `Job` gains three additive fields (`run_at_wall`/`run_at_tz`/
+    `run_at_fold`) — `run_at` keeps its exact current meaning as the
+    materialized UTC claim predicate; `AbstractJobStore.
+    supports_zoned_schedules: ClassVar[bool] = False` is the RD-5 opt-in
+    gate a store must declare before a zoned schedule may target it.
+    `varco_core.job.reschedule.ScheduleRematerializer` is the opt-in
+    recompute-on-read sweeper (`interval=0.0` default = never started).
+    Every built-in `ServiceException` gains a `message_key: ClassVar[str |
+    None]` (e.g. `varco.error.not_found`) and an `error_params()` method —
+    `code` stays the stable machine identifier, `message_key` is the new
+    i18n key; `VarcoErrorCodes = FastrestErrorCodes` is a bare alias to the
+    same enum object (the backlog's `VARCO_XXXX` naming does not exist and
+    the codes are **not** renamed). `varco_core.cache.base.BulkCache`
+    (`get_many`/`set_many`/`delete_many`) is a **separate**
+    `runtime_checkable` Protocol from `AsyncCache` (adding methods to
+    `AsyncCache` itself would silently break `isinstance()` for out-of-tree
+    caches); `CacheBackend` ships concrete, portable loop-based defaults, so
+    every existing backend satisfies `BulkCache` immediately.
+    `CacheBackend(serializer=)` reuses the existing
+    `varco_core.serialization.Serializer` Protocol. `read_through_many()`
+    shares `Singleflight` slots with `read_through()`.
+  - **`varco-fastapi`** — `varco_fastapi.middleware.localization.
+    LocalizationMiddleware` resolves locale and/or timezone in one ASGI
+    pass with two independent toggles; `create_varco_app(i18n=, timezone=)`
+    (both typed `Any | None`, resolved via `isinstance()` — not
+    type-checked keywords) wires it plus an opt-in `I18nLifecycle` that
+    starts/stops the DI-bound `MessageCatalog`. Default DI bindings:
+    `NullMessageCatalog`, `NullTenantDefaults`, off-by-default
+    `I18nSettings`/`TimezoneSettings`.
+  - **`varco-sa` / `varco-beanie`** — `SAJobStore`/`BeanieJobStore` persist
+    the three zoned-schedule columns/fields and set
+    `supports_zoned_schedules = True`; `SAJobStore.list_pending_zoned()` is
+    a native, indexed override of the portable default.
+  - **`varco-redis` / `varco-memcached`** — native `MGET`/pipelined-`SET`
+    and `get_multi`/`set_multi` overrides of `BulkCache`'s portable
+    defaults.
+
+  ⚠️ **The one deliberate exception to "off by default" (D-4)**: a
+  built-in `ServiceException`'s JSON error body now includes up to two new
+  keys, `message_key` and `params`, **by default** — an out-of-tree
+  exception with no `message_key` set is unaffected (byte-identical body).
+  **Rollback:** `VARCO_ERROR_INCLUDE_MESSAGE_KEY=false` /
+  `VARCO_ERROR_INCLUDE_PARAMS=false` restores the exact pre-plan body.
+
+  ⚠️ **Known gaps, not yet wired end-to-end** (see the linked feature docs
+  for detail): the `message_resolver=` seam `error_message_for()` exposes
+  is not called by either shipped HTTP error-rendering path, so a built-in
+  error's `message` text is never actually catalog-localized today, and an
+  error response never carries `Content-Language`; `DatetimeCoercionPolicy`
+  is honoured by `coerce_datetime()` directly but not by the AST visitor
+  the query pipeline actually drives (`ASTTypeCoercion`); the shipped
+  `JobRunner.enqueue()` was not extended with the new zoned-schedule
+  keyword arguments (construct the `Job` with `run_at_wall`/`run_at_tz` set
+  directly); and `CacheServiceMixin._use_bulk_cache` is a flag with no
+  reader — `list()` does not yet take the `BulkCache` batch path.
+
+  See `technical_docs/features/i18n-and-localization.md`,
+  `technical_docs/features/timezone-handling.md`,
+  `technical_docs/features/error-taxonomy-and-i18n.md`, and
+  `technical_docs/features/cache-hardening.md`'s "Bulk operations" /
+  `technical_docs/features/job-scheduling-and-leases.md`'s "Zoned
+  schedules" sections.
+
 - **Cache hardening: singleflight, L1 coherence backplane, observability,
   stale-while-revalidate/jitter/negative caching** (Plan 010). Every default
   reproduces pre-Plan-010 behaviour byte-for-byte — reached only by passing
@@ -548,6 +636,56 @@ warning was not.
   helper plus a guard test. `scripts/integration_tests.sh` no longer treats
   pytest's "no tests collected" exit code (5) as a failure for packages with
   no `@pytest.mark.integration` tests yet.
+
+- **`varco-fastapi` — DST-safe zoned job scheduling (T2) is now reachable
+  from the shipped `JobRunner`.** `JobRunner.enqueue()` gains `run_at=`,
+  `delay=`, `run_at_wall=`, `tz=`, `fold=`, `gap=`, `overlap=` kwargs and
+  routes through `AbstractJobRunner._prepare_zoned_job()` (the RD-5 guard)
+  before `store.save()`. Previously this guard was documented but dead
+  code — the only way to use a zoned schedule was to construct a `Job`
+  with `run_at_wall`/`run_at_tz`/`run_at_fold` set directly and bypass
+  `enqueue()` entirely, silently skipping the RD-5 refusal for stores that
+  never opted into `supports_zoned_schedules`. Callers who never pass the
+  new kwargs see no change — `tz=None` is a pure passthrough. See
+  `technical_docs/features/job-scheduling-and-leases.md`'s "Zoned
+  schedules" section.
+
+- **`varco-core` — `CacheServiceMixin._use_bulk_cache` now has an effect.**
+  `list()` checks `self._use_bulk_cache and isinstance(self._cache,
+  BulkCache)` and, when both hold, routes through `read_through_many()`
+  (the existing C5 batch primitive) instead of a plain `cache.get()`/
+  `cache.set()` pair. Note this still caches the entire list-query result
+  under one hashed key — it is not a genuine per-item N-key batch read; a
+  caller wanting a true multi-entity batch read should call
+  `read_through_many()` directly with its own per-entity keys.
+  `_use_bulk_cache=False` (the default) is unchanged. See
+  `technical_docs/features/cache-hardening.md`'s "Bulk operations"
+  section.
+
+- **`varco-fastapi` — `create_varco_app(i18n=, timezone=)` now validates
+  its argument types instead of silently discarding a wrong one.** The
+  parameters are retyped from `Any | None` to `I18nSettings | None` /
+  `TimezoneSettings | None`, and the previous `isinstance(...) else
+  <default>` fallback — which silently swallowed a wrong-type value and
+  fell back to the disabled default with no warning — is removed. A
+  wrong-type argument now fails loudly (e.g. `AttributeError` on the first
+  `.enabled` access) instead of producing a silently-disabled feature that
+  looks like a configuration bug somewhere else.
+
+- **`varco-fastapi` — error responses are now actually localized when
+  i18n is enabled.** `add_exception_handlers()` and `ErrorMiddleware` both
+  gained `message_catalog=`/`set_content_language=` parameters — wired
+  automatically by `create_varco_app()` from its resolved `MessageCatalog`
+  — and now read `request.state.varco_request_context` (the RD-3 mirror
+  set by `LocalizationMiddleware`) to render the error `message` via
+  `catalog.format_message()` and set the `Content-Language` response
+  header. Previously `message_key`/`params` appeared on error bodies but
+  the rendered `message` text was always the untranslated
+  `default_message`, regardless of the resolved locale or a bound
+  catalog — this was a documented gap, now closed. With no
+  `message_catalog=` supplied (i18n disabled, the default), behaviour is
+  unchanged. See `technical_docs/features/error-taxonomy-and-i18n.md` and
+  `technical_docs/features/i18n-and-localization.md`.
 
 ### Changed
 

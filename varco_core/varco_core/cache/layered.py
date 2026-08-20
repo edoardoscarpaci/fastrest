@@ -384,6 +384,86 @@ class LayeredCache(CacheBackend):
         else:
             await asyncio.gather(*(layer.delete(key) for layer in self._layers))
 
+    # ── Bulk operations (Plan 011 C5 / D-12) ─────────────────────────────────
+    # Obeys Plan 010 rule 2 verbatim: authoritative (last) layer first, then
+    # faster layers, then publish — same ordering as set()/delete() above.
+    # D-12: N per-key `kind="key"` backplane messages, never a batched
+    # `kind="keys"` — a Plan-010-era subscriber must keep decoding every
+    # message in a mixed-version fleet (see the DESIGN block below).
+
+    async def get_many(
+        self, keys: list[Any], *, type_hint: type | None = None
+    ) -> dict[Any, Any]:
+        """
+        Bulk read walking L1 -> Ln, per key — a key hit at L1 short-circuits;
+        a key only found deeper is promoted back to faster layers (same
+        promotion semantics as ``get()``, just batched per key).
+        """
+        self._require_started()
+        result: dict[Any, Any] = {}
+        for key in keys:
+            value = await self.get(key, type_hint=type_hint)
+            if value is not None:
+                result[key] = value
+        return result
+
+    async def set_many(
+        self, items: dict[Any, Any], *, ttl: float | None = None
+    ) -> None:
+        """
+        Bulk write. ``set_many({})`` is a no-op — no round trip, no
+        backplane message (RD-1's edge case: empty input never touches the
+        backplane).
+        """
+        self._require_started()
+        if not items:
+            return
+        keys = list(items.keys())
+        if self._backplane is not None and self._write_mode == "write-through":
+            # Authoritative (last) layer first — see set()'s DESIGN note.
+            await asyncio.gather(
+                *(self._layers[-1].set(k, v, ttl=ttl) for k, v in items.items())
+            )
+            await asyncio.gather(
+                *(
+                    layer.set(k, v, ttl=ttl)
+                    for layer in self._layers[:-1]
+                    for k, v in items.items()
+                ),
+                *(self._publish("key", str(k)) for k in keys),
+            )
+        elif self._write_mode == "write-through":
+            await asyncio.gather(
+                *(
+                    layer.set(k, v, ttl=ttl)
+                    for layer in self._layers
+                    for k, v in items.items()
+                )
+            )
+        else:
+            # write-around — only the slowest (authoritative) layer.
+            await asyncio.gather(
+                *(self._layers[-1].set(k, v, ttl=ttl) for k, v in items.items())
+            )
+            if self._backplane is not None:
+                await asyncio.gather(*(self._publish("key", str(k)) for k in keys))
+
+    async def delete_many(self, keys: list[Any]) -> None:
+        """Bulk delete from ALL layers. ``delete_many([])`` is a no-op."""
+        self._require_started()
+        if not keys:
+            return
+        if self._backplane is not None:
+            await asyncio.gather(*(self._layers[-1].delete(k) for k in keys))
+            await asyncio.gather(
+                *(layer.delete(k) for layer in self._layers[:-1] for k in keys),
+                *(self._publish("key", str(k)) for k in keys),
+            )
+        else:
+            await asyncio.gather(
+                *(layer.delete(k) for layer in self._layers for k in keys)
+            )
+
     async def exists(self, key: Any) -> bool:
         """
         Return ``True`` if ``key`` is present (and not invalidated) in ANY layer.

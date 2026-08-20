@@ -45,6 +45,7 @@ Async safety:   ✅ Fully ``async def``.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
@@ -306,4 +307,222 @@ async def _store(cache: AsyncCache, key: str, value: Any, policy: CachePolicy) -
     await cache.set(key, wrap(env), ttl=backend_ttl)
 
 
-__all__ = ["read_through"]
+# ── read_through_many (Plan 011 C5 / D-12) ────────────────────────────────────
+
+BatchLoader = Callable[["list[str]"], Awaitable["dict[str, Any]"]]
+
+
+async def read_through_many(
+    cache: AsyncCache,
+    keys: list[str],
+    loader: BatchLoader,
+    policy: CachePolicy,
+    *,
+    type_hint: type | None = None,
+    singleflight: SingleflightProtocol | None = None,
+) -> dict[str, Any]:
+    """
+    Bulk counterpart of ``read_through`` — one round trip for the cache hits,
+    ONE batched ``loader(missing_keys)`` call for the misses this call
+    leads, sharing the SAME ``Singleflight`` instance/slots per key with
+    plain ``read_through`` (a bulk read and a single read of the same key
+    coalesce with each other rather than racing).
+
+    Algorithm:
+        1. ``get_many(keys)`` when ``cache`` satisfies ``BulkCache``, else a
+           loop over ``get()`` — envelope-aware per key exactly like
+           ``read_through``.
+        2. fresh / negative-hit keys are resolved immediately.
+        3. soft-stale keys are returned NOW and each spawns (at most) one
+           background refresh through the SAME per-key ``Singleflight``
+           slot ``read_through`` uses.
+        4. Remaining (missing / hard-expired) keys are the ``missing`` set.
+           With no ``singleflight``, ``loader(missing)`` is called directly,
+           once. With a ``singleflight``, each missing key is offered to
+           ``singleflight.do(key, ...)`` — a key that is a follower of a
+           concurrent ``read_through()``/``read_through_many()`` call for
+           the SAME key never triggers the batch loader; the batch loader
+           fires (once) lazily, only if at least one key in this call's
+           ``missing`` set actually wins leadership.
+        5. Fresh values are wrapped + written back with ``set_many`` when
+           available, else a loop over ``set()``.
+
+    Args:
+        cache: A started cache backend.
+        keys: The final, already-namespaced cache keys.
+        loader: ``async def loader(missing_keys: list[str]) -> dict[str, Any]``
+            — a key ABSENT from the returned dict resolves to ``None`` and is
+            negative-cached iff ``policy.negative_ttl`` is set (same per-key
+            rule as ``read_through``).
+        policy: Same ``CachePolicy`` semantics as ``read_through``.
+        type_hint: Forwarded per key, same meaning as ``read_through``.
+        singleflight: Optional coalescer — required for cross-call
+            coalescing to have any effect; the coalescing key passed to it
+            is always the final, already-namespaced key (Plan 010's tenant
+            rule, retested for the bulk path).
+
+    Returns:
+        ``{key: value_or_None}`` — every requested key is present in the
+        result (unlike the loader's own return dict, which may omit
+        misses).
+
+    Raises:
+        Exception: Whatever ``loader()`` raises, propagated after every
+            offered key's ``Singleflight`` slot (if any) has been cleared.
+    """
+    if not keys:
+        return {}
+
+    from varco_core.cache.base import BulkCache
+
+    now = time.time()
+    get_type_hint = None if policy.requires_envelope else type_hint
+
+    if isinstance(cache, BulkCache):
+        raw_map = await cache.get_many(keys, type_hint=get_type_hint)
+    else:
+        raw_map = {}
+        for k in keys:
+            v = await cache.get(k, type_hint=get_type_hint)
+            if v is not None:
+                raw_map[k] = v
+
+    result: dict[str, Any] = {}
+    missing: list[str] = []
+
+    for k in keys:
+        raw = raw_map.get(k)
+        env = unwrap(raw) if raw is not None else None
+
+        if raw is not None and env is None:
+            record_cache_hit(cache=policy.name, kind="positive")
+            result[k] = raw
+            continue
+
+        if env is not None:
+            if env.is_negative:
+                if env.hard_expires_at is None or now < env.hard_expires_at:
+                    record_cache_hit(cache=policy.name, kind="negative")
+                    result[k] = None
+                    continue
+                # expired negative entry — fall through to recompute below.
+            else:
+                hard_expired = (
+                    env.hard_expires_at is not None and now >= env.hard_expires_at
+                )
+                if not hard_expired:
+                    value = coerce(env.value, type_hint)
+                    soft_expired = (
+                        env.soft_expires_at is not None and now >= env.soft_expires_at
+                    )
+                    if soft_expired:
+                        record_cache_hit(cache=policy.name, kind="stale")
+                        record_cache_stale_served(cache=policy.name, reason="soft_ttl")
+                        if singleflight is not None:
+
+                            async def _refresh(k: str = k) -> Any:
+                                return await _load_one_and_store(
+                                    cache, k, loader, policy
+                                )
+
+                            singleflight.spawn_refresh(k, _refresh)
+                        result[k] = value
+                        continue
+                    record_cache_hit(cache=policy.name, kind="positive")
+                    result[k] = value
+                    continue
+        missing.append(k)
+
+    if not missing:
+        return result
+
+    record_cache_miss(cache=policy.name)
+
+    if singleflight is None or not policy.singleflight:
+        batch = await loader(missing)
+        to_store: dict[str, Any] = {}
+        for k in missing:
+            value = batch.get(k)
+            result[k] = value
+            to_store[k] = value
+        await _store_many(cache, to_store, policy)
+        return result
+
+    # Singleflight path — the batch call is created LAZILY, and only if at
+    # least one key in `missing` actually wins leadership; a key that
+    # becomes a follower of a concurrent single-key read_through() call
+    # never triggers it. Uses a plain lock + cached-result/-error dict
+    # rather than a shared asyncio.Task/Future — deliberately, to avoid
+    # asyncio's "exception was never retrieved" warning when multiple led
+    # keys await the same batch outcome (a Future/Task's exception must be
+    # retrieved exactly via .exception()/await from EVERY holder or asyncio
+    # logs a warning at GC time; a manually re-raised cached exception has
+    # no such bookkeeping).
+    batch_lock = asyncio.Lock()
+    shared: dict[str, Any] = {}
+
+    async def _get_batch() -> dict[str, Any]:
+        async with batch_lock:
+            if "result" not in shared and "error" not in shared:
+                try:
+                    shared["result"] = await loader(missing)
+                except BaseException as exc:  # noqa: BLE001
+                    shared["error"] = exc
+            if "error" in shared:
+                raise shared["error"]
+            return shared["result"]
+
+    async def _wrapper(k: str) -> Any:
+        batch = await _get_batch()
+        value = batch.get(k)
+        await _store(cache, k, value, policy)
+        return value
+
+    outcomes = await asyncio.gather(
+        *(singleflight.do(k, (lambda k=k: _wrapper(k))) for k in missing),
+        return_exceptions=True,
+    )
+    for outcome in outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome
+    for k, (value, is_leader) in zip(missing, outcomes):
+        if not is_leader:
+            record_stampede_suppressed(cache=policy.name)
+        result[k] = value
+    return result
+
+
+async def _load_one_and_store(
+    cache: AsyncCache, key: str, loader: BatchLoader, policy: CachePolicy
+) -> Any:
+    batch = await loader([key])
+    value = batch.get(key)
+    await _store(cache, key, value, policy)
+    return value
+
+
+async def _store_many(
+    cache: AsyncCache, items: dict[str, Any], policy: CachePolicy
+) -> None:
+    """Write every ``(key, value)`` pair per ``policy`` — uses ``set_many``
+    when available, else a loop over ``_store`` (per-key ``set``)."""
+    from varco_core.cache.base import BulkCache
+
+    if not policy.requires_envelope:
+        to_set = {k: v for k, v in items.items() if v is not None}
+        if not to_set:
+            return
+        if isinstance(cache, BulkCache):
+            await cache.set_many(to_set, ttl=policy.effective_ttl())
+        else:
+            for k, v in to_set.items():
+                await cache.set(k, v, ttl=policy.effective_ttl())
+        return
+
+    # Envelope mode — TTLs differ per key (negative vs positive), so store
+    # one at a time even when BulkCache is available.
+    for k, v in items.items():
+        await _store(cache, k, v, policy)
+
+
+__all__ = ["read_through", "read_through_many"]

@@ -48,32 +48,73 @@ Sub-package layout
 
 from __future__ import annotations
 
-# ── Domain layer ───────────────────────────────────────────────────────────────
-from varco_core.exception.repository import StaleEntityError
-from varco_core.mapper import AbstractMapper
-from varco_core.migrator import (
-    DomainMigrator,
-    MigrationError,
-    MigrationPlan,  # noqa: F401
-    StepSpec,  # noqa: F401
+# ── Auth helpers ─────────────────────────────────────────────────────────────────
+from varco_core.auth.helpers import (
+    GrantBasedAuthorizer,
+    OwnershipAuthorizer,
+    RoleBasedAuthorizer,
 )
-from varco_core.model import (
-    AuditedDomainModel,
-    DomainModel,
-    SoftDeleteAuditedDomainModel,
-    SoftDeleteDomainModel,
-    SoftDeleteMixin,
-    TenantAuditedDomainModel,
-    TenantDomainModel,
-    TenantMixin,
-    TenantVersionedDomainModel,
-    VersionedDomainModel,
-    cast_raw,
+
+# ── Authority layer ─────────────────────────────────────────────────────────────
+from varco_core.authority import (
+    AuthorityError,
+    AuthoritySource,
+    AuthorizationConfig,
+    IssuerNotFoundError,
+    JwtAuthority,
+    KeyLoadError,
+    MultiKeyAuthority,
+    TrustedIssuerEntry,
+    TrustedIssuerRegistry,
+    UnknownKidError,
 )
-from varco_core.providers import RepositoryProvider
-from varco_core.registry import DomainModelRegistry, register
-from varco_core.repository import AsyncRepository
-from varco_core.uow import AsyncUnitOfWork
+
+# ── Cache system ────────────────────────────────────────────────────────────────
+from varco_core.cache import (
+    AsyncCache,
+    CacheBackend,
+    CachedService,
+    CacheInvalidated,
+    CacheInvalidationConsumer,
+    CacheInvalidationEvent,
+    CacheServiceMixin,
+    CacheSettings,
+    CompositeStrategy,
+    ExplicitStrategy,
+    InMemoryCache,
+    InvalidationStrategy,
+    LayeredCache,
+    NoOpCache,
+    TaggedStrategy,
+    TTLStrategy,
+    cached,
+)
+
+# ── Settings base ───────────────────────────────────────────────────────────────
+from varco_core.config import VarcoSettings
+from varco_core.connection import (
+    BasicAuthConfig,
+    ConnectionSettings,
+    OAuth2Config,
+    SaslConfig,
+    SSLConfig,
+)
+
+# ── Ambient request context (Plan 011 X1) ────────────────────────────────────
+from varco_core.context import (
+    AmbientVar,
+    NullTenantDefaults,
+    RequestContext,
+    Resolved,
+    StaticTenantDefaults,
+    TenantDefaultsProvider,
+    TenantLocalizationDefaults,
+    current_locale,
+    current_request_context,
+    current_timezone,
+    request_context,
+    resolve_precedence,
+)
 
 # ── DTO layer ──────────────────────────────────────────────────────────────────
 from varco_core.dto import (
@@ -92,43 +133,6 @@ from varco_core.dto.pagination import (
     SortCursorField,
     paged_response,
 )
-
-# ── Query system ───────────────────────────────────────────────────────────────
-from varco_core.query.builder import QueryBuilder
-from varco_core.query.params import QueryParams
-from varco_core.query.parser import QueryParser
-from varco_core.query.type import Operation, SortField, SortOrder
-
-# ── Multi-tenancy ───────────────────────────────────────────────────────────────
-from varco_core.service.tenant import (
-    TenantAwareService,
-    TenantUoWProvider,
-    current_tenant,
-    tenant_context,
-)
-
-# ── Soft delete ─────────────────────────────────────────────────────────────────
-from varco_core.service.soft_delete import SoftDeleteService
-
-# ── Service type aliases and protocols ──────────────────────────────────────────
-from varco_core.service.types import Assembler, ServiceProtocol
-
-# ── Validation layer ─────────────────────────────────────────────────────────────
-from varco_core.validation import (
-    VALID,
-    CompositeValidator,
-    DomainModelValidator,
-    ValidationError,
-    ValidationResult,
-    Validator,
-)
-from varco_core.service.validation import ValidatorServiceMixin
-
-# ── Settings base ───────────────────────────────────────────────────────────────
-from varco_core.config import VarcoSettings
-
-# ── Serialization ────────────────────────────────────────────────────────────────
-from varco_core.serialization import JsonSerializer, NoOpSerializer, Serializer
 
 # ── Event system ────────────────────────────────────────────────────────────────
 from varco_core.event import (
@@ -157,67 +161,21 @@ from varco_core.event import (
     listen,
 )
 
-# ── Resilience patterns ──────────────────────────────────────────────────────────
-from varco_core.resilience import (
-    CallTimeoutError,
-    CircuitBreaker,
-    CircuitBreakerConfig,
-    CircuitOpenError,
-    CircuitState,
-    RetryExhaustedError,
-    RetryPolicy,
-    circuit_breaker,
-    retry,
-    timeout,
+# ── Error codes and HTTP error mapping ──────────────────────────────────────────
+from varco_core.exception.codes import ErrorCode, FastrestErrorCodes, VarcoErrorCodes
+from varco_core.exception.http import (
+    AnyErrorCode,
+    ErrorMessage,
+    FieldError,
+    MessageResolver,
+    error_code_for,
+    error_message_for,
+    register_error_code,
 )
 
-# ── Cache system ────────────────────────────────────────────────────────────────
-from varco_core.cache import (
-    AsyncCache,
-    CacheBackend,
-    CacheInvalidated,
-    CacheInvalidationConsumer,
-    CacheInvalidationEvent,
-    CacheServiceMixin,
-    CacheSettings,
-    CachedService,
-    CompositeStrategy,
-    ExplicitStrategy,
-    InMemoryCache,
-    InvalidationStrategy,
-    LayeredCache,
-    NoOpCache,
-    TTLStrategy,
-    TaggedStrategy,
-    cached,
-)
-
-# ── Tracing / correlation ID ────────────────────────────────────────────────────
-from varco_core.tracing import (
-    CorrelationIdFilter,
-    correlation_context,
-    current_correlation_id,
-    generate_correlation_id,
-)
-
-# ── OpenTelemetry observability ──────────────────────────────────────────────────
-from varco_core.observability import (
-    CounterConfig,
-    HistogramConfig,
-    Metric,
-    MetricKind,
-    OtelConfig,
-    OtelConfiguration,
-    SpanConfig,
-    TracingServiceMixin,
-    counter,
-    create_counter,
-    create_histogram,
-    create_span,
-    histogram,
-    register_gauge,
-    span,
-)
+# ── Domain layer ───────────────────────────────────────────────────────────────
+from varco_core.exception.repository import StaleEntityError
+from varco_core.exception.settings import ErrorEnvelopeSettings
 
 # ── Health probes ────────────────────────────────────────────────────────────────
 from varco_core.health import (
@@ -227,28 +185,28 @@ from varco_core.health import (
     HealthStatus,
 )
 
-# ── Auth helpers ─────────────────────────────────────────────────────────────────
-from varco_core.auth.helpers import (
-    GrantBasedAuthorizer,
-    OwnershipAuthorizer,
-    RoleBasedAuthorizer,
+# ── Job layer ────────────────────────────────────────────────────────────────────
+from varco_core.job import (
+    AbstractJobRunner,
+    AbstractJobStore,
+    Job,
+    JobStatus,
+    auth_context_from_snapshot,
+    auth_context_to_snapshot,
 )
 
-# ── Error codes and HTTP error mapping ──────────────────────────────────────────
-from varco_core.exception.codes import ErrorCode, FastrestErrorCodes
-from varco_core.exception.http import (
-    AnyErrorCode,
-    ErrorMessage,
-    error_code_for,
-    error_message_for,
-    register_error_code,
+# ── JWK layer ──────────────────────────────────────────────────────────────────
+from varco_core.jwk import (
+    JsonWebKey,
+    JsonWebKeySet,
+    JwkBuilder,
 )
 
 # ── JWT layer ──────────────────────────────────────────────────────────────────
 from varco_core.jwt import (
-    SYSTEM_ISSUER,
     IDENTITY,
     PROFILE_METADATA_KEY,
+    SYSTEM_ISSUER,
     CanonicalClaim,
     ClaimMapping,
     ClaimPath,
@@ -275,44 +233,7 @@ from varco_core.jwt import (
     resolve_claim_transformer,
     resolve_token_profile,
 )
-
-# ── JWK layer ──────────────────────────────────────────────────────────────────
-from varco_core.jwk import (
-    JsonWebKey,
-    JsonWebKeySet,
-    JwkBuilder,
-)
-
-# ── Job layer ────────────────────────────────────────────────────────────────────
-from varco_core.job import (
-    AbstractJobRunner,
-    AbstractJobStore,
-    Job,
-    JobStatus,
-    auth_context_from_snapshot,
-    auth_context_to_snapshot,
-)
-
-# ── Authority layer ─────────────────────────────────────────────────────────────
-from varco_core.authority import (
-    AuthorizationConfig,
-    AuthorityError,
-    AuthoritySource,
-    IssuerNotFoundError,
-    JwtAuthority,
-    KeyLoadError,
-    MultiKeyAuthority,
-    TrustedIssuerEntry,
-    TrustedIssuerRegistry,
-    UnknownKidError,
-)
-from varco_core.connection import (
-    BasicAuthConfig,
-    ConnectionSettings,
-    OAuth2Config,
-    SaslConfig,
-    SSLConfig,
-)
+from varco_core.mapper import AbstractMapper
 
 # NOTE: varco_core.migrator (DomainMigrator — data/field migration for
 # domain models) already owns the top-level names "MigrationError" and
@@ -333,6 +254,85 @@ from varco_core.migration import (
     PendingMigrationsError,
     Revision,
 )
+from varco_core.migrator import (
+    DomainMigrator,
+    MigrationError,
+    MigrationPlan,  # noqa: F401
+    StepSpec,  # noqa: F401
+)
+from varco_core.model import (
+    AuditedDomainModel,
+    DomainModel,
+    SoftDeleteAuditedDomainModel,
+    SoftDeleteDomainModel,
+    SoftDeleteMixin,
+    TenantAuditedDomainModel,
+    TenantDomainModel,
+    TenantMixin,
+    TenantVersionedDomainModel,
+    VersionedDomainModel,
+    cast_raw,
+)
+
+# ── OpenTelemetry observability ──────────────────────────────────────────────────
+from varco_core.observability import (
+    CounterConfig,
+    HistogramConfig,
+    Metric,
+    MetricKind,
+    OtelConfig,
+    OtelConfiguration,
+    SpanConfig,
+    TracingServiceMixin,
+    counter,
+    create_counter,
+    create_histogram,
+    create_span,
+    histogram,
+    register_gauge,
+    span,
+)
+from varco_core.providers import RepositoryProvider
+
+# ── Query system ───────────────────────────────────────────────────────────────
+from varco_core.query.builder import QueryBuilder
+from varco_core.query.params import QueryParams
+from varco_core.query.parser import QueryParser
+from varco_core.query.type import Operation, SortField, SortOrder
+from varco_core.registry import DomainModelRegistry, register
+from varco_core.repository import AsyncRepository
+
+# ── Resilience patterns ──────────────────────────────────────────────────────────
+from varco_core.resilience import (
+    CallTimeoutError,
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitOpenError,
+    CircuitState,
+    RetryExhaustedError,
+    RetryPolicy,
+    circuit_breaker,
+    retry,
+    timeout,
+)
+
+# ── Serialization ────────────────────────────────────────────────────────────────
+from varco_core.serialization import JsonSerializer, NoOpSerializer, Serializer
+
+# ── Soft delete ─────────────────────────────────────────────────────────────────
+from varco_core.service.soft_delete import SoftDeleteService
+
+# ── Multi-tenancy ───────────────────────────────────────────────────────────────
+from varco_core.service.tenant import (
+    TenantAwareService,
+    TenantUoWProvider,
+    current_tenant,
+    tenant_context,
+)
+
+# ── Service type aliases and protocols ──────────────────────────────────────────
+from varco_core.service.types import Assembler, ServiceProtocol
+from varco_core.service.validation import ValidatorServiceMixin
 
 # ── Multitenancy (Plan 007) ─────────────────────────────────────────────────
 # Grep-checked for collisions against every existing top-level name before
@@ -355,7 +355,39 @@ from varco_core.tenancy import (
     TenantStatus,
 )
 
+# ── Tracing / correlation ID ────────────────────────────────────────────────────
+from varco_core.tracing import (
+    CorrelationIdFilter,
+    correlation_context,
+    current_correlation_id,
+    generate_correlation_id,
+)
+from varco_core.uow import AsyncUnitOfWork
+
+# ── Validation layer ─────────────────────────────────────────────────────────────
+from varco_core.validation import (
+    VALID,
+    CompositeValidator,
+    DomainModelValidator,
+    ValidationError,
+    ValidationResult,
+    Validator,
+)
+
 __all__ = [
+    # ── Ambient request context (Plan 011 X1) ──────────────────────────────────
+    "AmbientVar",
+    "Resolved",
+    "resolve_precedence",
+    "RequestContext",
+    "current_request_context",
+    "current_locale",
+    "current_timezone",
+    "request_context",
+    "TenantDefaultsProvider",
+    "TenantLocalizationDefaults",
+    "NullTenantDefaults",
+    "StaticTenantDefaults",
     # ── Domain base ────────────────────────────────────────────────────────────
     "DomainModel",
     "AuditedDomainModel",
@@ -464,7 +496,6 @@ __all__ = [
     "JsonEventSerializer",
     "InMemoryDeadLetterQueue",
     "InMemoryEventBus",
-    "JsonEventSerializer",
     "NoopEventProducer",
     "Subscription",
     "listen",
@@ -520,7 +551,11 @@ __all__ = [
     "AnyErrorCode",
     "ErrorCode",
     "FastrestErrorCodes",
+    "VarcoErrorCodes",
     "ErrorMessage",
+    "FieldError",
+    "MessageResolver",
+    "ErrorEnvelopeSettings",
     "error_code_for",
     "error_message_for",
     "register_error_code",

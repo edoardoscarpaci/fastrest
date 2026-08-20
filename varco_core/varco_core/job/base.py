@@ -65,11 +65,14 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 from abc import ABC, abstractmethod
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
-from typing import Any, Coroutine, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID, uuid4
+
+from varco_core.tz.schedule import GapPolicy, OverlapPolicy, resolve_zoned
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext
@@ -250,6 +253,26 @@ class Job:
     """U-17 §1 — earliest time this job is eligible to be claimed. ``None``
     (default) claims immediately, exactly as today. The predicate uses the
     **database's** ``now()``, not the worker's clock — see ``claim_next``."""
+
+    # ── Plan 011 (T2): DST-safe scheduling — three additive columns ─────────
+    # D-7: `run_at` is MATERIALIZED, not replaced. These three fields are the
+    # *intent*; `run_at` above remains the *materialization* of that intent
+    # under the tzdata available when resolve_zoned() computed it. A row with
+    # run_at_tz IS NULL is byte-identical to today in every respect — the
+    # claim predicate never reads these fields.
+    run_at_wall: datetime | None = None
+    """Naive local wall-clock time, no tzinfo. ``None`` (default) — this job
+    has no zoned schedule; `run_at` (if set) is a plain UTC instant, exactly
+    as before this plan."""
+
+    run_at_tz: str | None = None
+    """IANA zone name, e.g. ``"America/New_York"``. ``None`` (default) means
+    unzoned. A store must declare ``supports_zoned_schedules = True`` before
+    a caller may enqueue a job with this set (RD-5)."""
+
+    run_at_fold: int = 0
+    """PEP 495 fold — disambiguates a materialization that landed on an
+    ambiguous (fall-back overlap) wall-clock time. ``0`` by default."""
 
     attempt: int = 0
     """U-17 §3 — number of times this job has been attempted so far
@@ -647,6 +670,14 @@ class AbstractJobStore(ABC):
     Async safety:   ✅ All methods are ``async def``.
     """
 
+    #: RD-5 (Plan 011 T2) — a store must DECLARE zoned-schedule support
+    #: before ``AbstractJobRunner.enqueue(tz=...)`` may target it. ``False``
+    #: on the ABC means every out-of-tree store is unaffected until its
+    #: author opts in — failing closed at enqueue turns a silent
+    #: degradation (columns dropped, DST safety quietly absent) into a
+    #: named ``ValueError`` at enqueue time instead.
+    supports_zoned_schedules: ClassVar[bool] = False
+
     @abstractmethod
     async def save(self, job: Job, *, expected_epoch: int | None = None) -> None:
         """
@@ -962,6 +993,43 @@ class AbstractJobStore(ABC):
                 deleted += 1
         return deleted
 
+    async def list_pending_zoned(
+        self,
+        before: datetime,
+        *,
+        limit: int = 100,
+    ) -> list[Job]:
+        """
+        Return PENDING jobs with a zoned schedule (``run_at_tz IS NOT
+        NULL``) whose ``run_at`` is before ``before`` (Plan 011 T2 —
+        ``ScheduleRematerializer``'s query).
+
+        Portable default over ``list_by_status(PENDING)`` + an in-Python
+        filter — a correct (if unindexed) fallback genuinely exists here,
+        unlike ``renew()``/``reap_expired_leases()`` below, so this is
+        concrete rather than raising. ``SAJobStore`` overrides with a real
+        ``WHERE run_at_tz IS NOT NULL AND run_at < :before LIMIT :limit``.
+
+        Args:
+            before: Only jobs whose ``run_at`` is strictly before this are
+                returned — bounds the sweep to jobs "about to fire" rather
+                than re-materializing years-out schedules on every pass.
+            limit: Maximum number of jobs to return.
+
+        Returns:
+            Matching jobs, unordered.
+        """
+        candidates = await self.list_by_status(
+            JobStatus.PENDING, limit=max(limit, 1000)
+        )
+        return [
+            job
+            for job in candidates
+            if job.run_at_tz is not None
+            and job.run_at is not None
+            and job.run_at < before
+        ][:limit]
+
     async def renew(
         self,
         job_id: UUID,
@@ -1071,11 +1139,16 @@ class AbstractJobRunner(ABC):
     @abstractmethod
     async def enqueue(
         self,
-        job: "Job",
+        job: Job,
         coro: Coroutine[Any, Any, Any],
         *,
         run_at: datetime | None = None,
         delay: timedelta | None = None,
+        run_at_wall: datetime | None = None,
+        tz: str | None = None,
+        fold: int = 0,
+        gap: GapPolicy = GapPolicy.NEXT_VALID,
+        overlap: OverlapPolicy = OverlapPolicy.FIRST,
     ) -> None:
         """
         Persist ``job`` to the store as PENDING, then schedule ``coro`` for
@@ -1115,6 +1188,88 @@ class AbstractJobRunner(ABC):
 
         Async safety:   ✅ Returns after scheduling; does not wait for completion.
         """
+
+    @staticmethod
+    def _prepare_zoned_job(
+        job: Job,
+        store: AbstractJobStore,
+        *,
+        run_at: datetime | None = None,
+        run_at_wall: datetime | None = None,
+        tz: str | None = None,
+        fold: int = 0,
+        gap: GapPolicy = GapPolicy.NEXT_VALID,
+        overlap: GapPolicy = OverlapPolicy.FIRST,
+    ) -> Job:
+        """
+        Concrete, reusable RD-5 guard + T2 materialization step every
+        concrete ``enqueue()`` implementation calls before ``store.save()``.
+
+        Plan 011 / RD-5: refuses (``ValueError`` naming the store class)
+        when ``tz`` is supplied but ``store.supports_zoned_schedules`` is
+        ``False`` — turns a silent degradation (an explicit-column store
+        would otherwise silently drop ``run_at_wall``/``run_at_tz``) into a
+        named, startup/enqueue-time error.
+
+        Args:
+            job: The job to prepare (its ``run_at``/``run_at_wall``/
+                ``run_at_tz``/``run_at_fold`` fields are NOT read — only
+                ``run_at``/``run_at_wall``/``tz``/``fold``/``gap``/
+                ``overlap`` kwargs below drive materialization).
+            store: The target ``AbstractJobStore`` — its
+                ``supports_zoned_schedules`` is the RD-5 gate.
+            run_at: A plain (already-UTC) claim time. Mutually exclusive
+                with ``run_at_wall``/``tz``.
+            run_at_wall: Naive local wall-clock time — the T2 zoned path.
+            tz: IANA zone name for ``run_at_wall``.
+            fold: PEP 495 fold, forwarded to ``resolve_zoned``.
+            gap: ``GapPolicy`` forwarded to ``resolve_zoned``.
+            overlap: ``OverlapPolicy`` forwarded to ``resolve_zoned``.
+
+        Returns:
+            ``job`` with ``run_at``/``run_at_wall``/``run_at_tz``/
+            ``run_at_fold`` populated (via ``dataclasses.replace`` — ``Job``
+            is frozen).
+
+        Raises:
+            ValueError: Both ``run_at`` and ``run_at_wall``/``tz`` were
+                supplied; or ``tz`` was supplied but
+                ``store.supports_zoned_schedules`` is ``False``.
+        """
+        if run_at is not None and (run_at_wall is not None or tz is not None):
+            raise ValueError(
+                "enqueue() received both run_at= and run_at_wall=/tz= — "
+                "these are mutually exclusive (D-7: run_at is the "
+                "materialization, run_at_wall/tz is the intent)."
+            )
+
+        if tz is None:
+            if run_at is not None:
+                return dataclasses.replace(job, run_at=run_at)
+            return job
+
+        if not store.supports_zoned_schedules:
+            raise ValueError(
+                f"{type(store).__name__} does not declare "
+                "supports_zoned_schedules = True — refusing to enqueue a "
+                "zoned schedule (RD-5). Persist run_at_wall/run_at_tz/"
+                "run_at_fold in your store, then set "
+                "supports_zoned_schedules = True."
+            )
+
+        from zoneinfo import ZoneInfo
+
+        zone = ZoneInfo(tz)
+        materialized = resolve_zoned(
+            run_at_wall, zone, fold=fold, gap=gap, overlap=overlap
+        ).astimezone(timezone.utc)
+        return dataclasses.replace(
+            job,
+            run_at=materialized,
+            run_at_wall=run_at_wall,
+            run_at_tz=tz,
+            run_at_fold=fold,
+        )
 
     @abstractmethod
     async def submit(
@@ -1185,7 +1340,7 @@ class AbstractJobRunner(ABC):
     @abstractmethod
     async def enqueue_task(
         self,
-        task: "VarcoTask",
+        task: VarcoTask,
         *args: Any,
         callback_url: str | None = None,
         auth_snapshot: dict[str, Any] | None = None,
@@ -1233,7 +1388,7 @@ class AbstractJobRunner(ABC):
         """
 
     @abstractmethod
-    async def recover(self, registry: "TaskRegistry") -> int:
+    async def recover(self, registry: TaskRegistry) -> int:
         """
         Re-submit all PENDING jobs that have a ``task_payload`` using ``try_claim()``.
 
@@ -1288,12 +1443,12 @@ class AbstractJobRunner(ABC):
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
+    "AbstractJobRunner",
+    "AbstractJobStore",
     "Job",
     "JobStatus",
-    "AbstractJobStore",
-    "AbstractJobRunner",
-    "auth_context_to_snapshot",
     "auth_context_from_snapshot",
+    "auth_context_to_snapshot",
 ]
 
 # VarcoTask / TaskRegistry are defined in task.py (same package) to avoid a

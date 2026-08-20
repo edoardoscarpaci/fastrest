@@ -74,11 +74,14 @@ Async safety:   ✅ No async operations — route registration is synchronous.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
+from varco_core.i18n.settings import I18nSettings
 from varco_core.migration.base import AbstractMigrator
 from varco_core.migration.settings import MigrationSettings
+from varco_core.tz.settings import TimezoneSettings
 
 from varco_fastapi.validation import validate_container_bindings, validate_router_class
 
@@ -118,6 +121,8 @@ def create_varco_app(
     migration_settings: MigrationSettings | None = None,
     tenancy: Any | None = None,
     reliability: Any | None = None,
+    i18n: I18nSettings | None = None,
+    timezone: TimezoneSettings | None = None,
     validate: bool = True,
     strict_validation: bool = False,
     openapi_url: str = "/openapi.json",
@@ -248,13 +253,13 @@ def create_varco_app(
         - 🔍 FastAPI lifespan: https://fastapi.tiangolo.com/advanced/events/
         - 🔍 Starlette middleware: https://www.starlette.io/middleware/
     """
-    from fastapi import FastAPI  # noqa: PLC0415
+    from fastapi import FastAPI
 
-    from varco_fastapi.exceptions import add_exception_handlers  # noqa: PLC0415
-    from varco_fastapi.lifespan import VarcoLifespan  # noqa: PLC0415
-    from varco_fastapi.middleware.cors import CORSConfig, install_cors  # noqa: PLC0415
-    from varco_fastapi.middleware.error import ErrorMiddleware  # noqa: PLC0415
-    from varco_fastapi.middleware.tracing import TracingMiddleware  # noqa: PLC0415
+    from varco_fastapi.exceptions import add_exception_handlers
+    from varco_fastapi.lifespan import VarcoLifespan
+    from varco_fastapi.middleware.cors import CORSConfig, install_cors
+    from varco_fastapi.middleware.error import ErrorMiddleware
+    from varco_fastapi.middleware.tracing import TracingMiddleware
 
     # ── Step 0: Configure JWT claim-transform / token-profile globals ────────
     # Runs before routers are built so any router-level auth wiring already
@@ -263,7 +268,7 @@ def create_varco_app(
     if configure_jwt:
         from varco_core.jwt.transform.runtime import (
             configure_jwt_from_env,
-        )  # noqa: PLC0415
+        )
 
         configure_jwt_from_env()
 
@@ -272,11 +277,11 @@ def create_varco_app(
     # middleware stack is built so TracingMiddleware/@span/@counter/@histogram
     # all see the final state on the very first request.
     if global_attributes is not None:
-        from varco_core.observability import set_global_attributes  # noqa: PLC0415
+        from varco_core.observability import set_global_attributes
 
         set_global_attributes(global_attributes)
     if capture_params is not None:
-        from varco_core.observability import set_capture_enabled  # noqa: PLC0415
+        from varco_core.observability import set_capture_enabled
 
         set_capture_enabled(capture_params)
 
@@ -367,6 +372,7 @@ def create_varco_app(
     # on the event bus and repositories other lifecycle components may set up.
     if reliability is not None:
         from varco_core.reliability import ReliabilityPreset
+
         from varco_fastapi.reliability import ReliabilityLifecycle
 
         _preset = (
@@ -378,6 +384,46 @@ def create_varco_app(
             *lifespan_components,
             ReliabilityLifecycle(_preset, container=container),
         ]
+
+    # ── Localization / timezone (Plan 011) — resolve settings + optional
+    # MessageCatalog lifecycle BEFORE VarcoLifespan is constructed (mirrors
+    # the tenancy/reliability sections above — appending to
+    # lifespan_components after VarcoLifespan(*lifespan_components) has
+    # already run would silently never start the catalog).
+    # DRIFT FIX (item 3): i18n=/timezone= are now typed I18nSettings | None /
+    # TimezoneSettings | None (not Any | None) so a wrong type is a
+    # type-checker error at the call site. The former `isinstance(...)
+    # else <default>` fallback silently swallowed a typo'd/wrong-type
+    # argument (e.g. a dict, or the other settings class) by discarding it
+    # and constructing defaults instead — the caller's mistake produced no
+    # error, just unexpectedly-disabled i18n/timezone. `None` (the
+    # documented default sentinel) is the only value that still resolves to
+    # defaults; anything else is used as given, so a genuinely wrong type
+    # now fails fast with an AttributeError on `.enabled` instead of being
+    # silently discarded.
+    _resolved_i18n_settings = i18n if i18n is not None else I18nSettings()
+    _resolved_timezone_settings = (
+        timezone if timezone is not None else TimezoneSettings()
+    )
+    # RD-3 (drift item 4): resolved once here and threaded into BOTH
+    # add_exception_handlers() and ErrorMiddleware below, so the error path
+    # actually localizes message_key/params via request.state.varco_request_context
+    # (set by LocalizationMiddleware) instead of the seam existing but never
+    # being wired. None with i18n disabled — byte-identical to before.
+    _catalog: Any | None = None
+    if _resolved_i18n_settings.enabled and container is not None:
+        from varco_core.i18n.catalog import MessageCatalog
+
+        from varco_fastapi.i18n import I18nLifecycle
+
+        try:
+            _catalog = container.get(MessageCatalog)
+        except (
+            Exception
+        ):  # noqa: BLE001 — no catalog bound; NullMessageCatalog-equivalent
+            _catalog = None
+        if _catalog is not None:
+            lifespan_components = [*lifespan_components, I18nLifecycle(_catalog)]
 
     varco_lifespan = VarcoLifespan(*lifespan_components)
 
@@ -398,7 +444,11 @@ def create_varco_app(
     )
 
     # ── Step 6: Exception handlers ────────────────────────────────────────────
-    add_exception_handlers(app)
+    add_exception_handlers(
+        app,
+        message_catalog=_catalog,
+        set_content_language=_resolved_i18n_settings.set_content_language,
+    )
 
     # ── Step 7: Apply middleware stack ────────────────────────────────────────
     # Starlette executes add_middleware() in reverse order — last added = outermost.
@@ -410,6 +460,24 @@ def create_varco_app(
     # Only one request profiled at a time; concurrent requests pass through unprofiled.
     if enable_profiling:
         _try_add_profiling_middleware(app)
+
+    # LocalizationMiddleware (Plan 011, RD-3) — resolves locale (I2) and/or
+    # timezone (T1) into one merged RequestContext. i18n=None / timezone=None
+    # (the defaults) register nothing — byte-identical to today. Placed close
+    # to the route handler (just outside ProfilingMiddleware), matching
+    # CLAUDE.md's documented request order "... -> [TenantResolution] ->
+    # [Localization] -> handler": it must be added (and therefore end up
+    # innermost relative to) any TenantResolutionMiddleware an app wires via
+    # extra_middleware=, so current_tenant() is already populated by the time
+    # the tenant-default precedence step runs.
+    if _resolved_i18n_settings.enabled or _resolved_timezone_settings.enabled:
+        from varco_fastapi.middleware.localization import LocalizationMiddleware
+
+        app.add_middleware(
+            LocalizationMiddleware,
+            i18n_settings=_resolved_i18n_settings,
+            timezone_settings=_resolved_timezone_settings,
+        )
 
     # RequestContextMiddleware (populates auth ContextVars)
     if container is not None:
@@ -426,7 +494,7 @@ def create_varco_app(
     # in the final execution order.
     if enable_metrics:
         try:
-            from varco_fastapi.middleware.metrics import (  # noqa: PLC0415
+            from varco_fastapi.middleware.metrics import (
                 MetricsMiddleware,
             )
 
@@ -442,7 +510,7 @@ def create_varco_app(
         try:
             from varco_fastapi.middleware.logging import (
                 RequestLoggingMiddleware,
-            )  # noqa: PLC0415
+            )
 
             app.add_middleware(RequestLoggingMiddleware)
         except ImportError:
@@ -450,7 +518,11 @@ def create_varco_app(
 
     # Error (exception → JSON response) — must wrap tracing so errors are traced
     if enable_error_middleware:
-        app.add_middleware(ErrorMiddleware)
+        app.add_middleware(
+            ErrorMiddleware,
+            message_catalog=_catalog,
+            set_content_language=_resolved_i18n_settings.set_content_language,
+        )
 
     # Extra middleware from caller (added before CORS = inside ErrorMiddleware)
     for mw_entry in reversed(extra_middleware or []):
@@ -554,7 +626,7 @@ def _scan_routers(
     Async safety:   ✅ No async operations.
     """
     try:
-        from varco_fastapi.router.base import VarcoRouter  # noqa: PLC0415
+        from varco_fastapi.router.base import VarcoRouter
     except ImportError:
         return []
 
@@ -671,7 +743,7 @@ def _try_resolve_component(
     Async safety:   ✅ No async operations.
     """
     try:
-        import importlib  # noqa: PLC0415
+        import importlib
 
         # Step 1: scan the module so its @Singleton / @Component classes are
         # registered.  This is a no-op if the module was already scanned.
@@ -706,8 +778,8 @@ def _try_add_request_context_middleware(app: Any, container: Any) -> None:
         container: The ``DIContainer``.
     """
     try:
-        from varco_fastapi.auth.server_auth import AbstractServerAuth  # noqa: PLC0415
         from varco_fastapi import RequestContextMiddleware
+        from varco_fastapi.auth.server_auth import AbstractServerAuth
 
         server_auth = container.get(AbstractServerAuth)
         app.add_middleware(RequestContextMiddleware, server_auth=server_auth)
@@ -716,7 +788,7 @@ def _try_add_request_context_middleware(app: Any, container: Any) -> None:
         try:
             from varco_fastapi.middleware.request_context import (
                 RequestContextMiddleware,
-            )  # noqa: PLC0415
+            )
 
             app.add_middleware(RequestContextMiddleware)
         except Exception:  # noqa: BLE001
@@ -735,7 +807,7 @@ def _try_add_profiling_middleware(app: Any) -> None:
         app: The ``FastAPI`` instance.
     """
     try:
-        from varco_fastapi.middleware.profiling import (  # noqa: PLC0415
+        from varco_fastapi.middleware.profiling import (
             ProfilingMiddleware,
             ProfilingSettings,
         )
@@ -759,7 +831,7 @@ def _resolve_cors(container: Any) -> Any:
     Returns:
         A ``CORSConfig`` instance.
     """
-    from varco_fastapi.middleware.cors import CORSConfig  # noqa: PLC0415
+    from varco_fastapi.middleware.cors import CORSConfig
 
     try:
         return container.get(CORSConfig)
@@ -828,7 +900,7 @@ def _mount_health_router(app: Any, container: Any | None) -> None:
         container: The ``DIContainer`` (may be ``None``).
     """
     try:
-        from varco_fastapi.router.health import HealthRouter  # noqa: PLC0415
+        from varco_fastapi.router.health import HealthRouter
 
         health_router = HealthRouter().build_router()
         app.include_router(health_router)
@@ -860,7 +932,7 @@ def _mount_metrics_router(app: Any) -> None:
           surfaces immediately rather than silently failing.
     """
     try:
-        from varco_fastapi.router.metrics import MetricsRouter  # noqa: PLC0415
+        from varco_fastapi.router.metrics import MetricsRouter
 
         app.include_router(MetricsRouter().build_router())
         _logger.debug("_mount_metrics_router: MetricsRouter mounted at /metrics.")

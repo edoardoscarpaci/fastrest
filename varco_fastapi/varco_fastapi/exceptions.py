@@ -37,7 +37,6 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-
 from varco_core.exception.http import error_message_for
 from varco_core.exception.service import (
     ServiceAuthorizationError,
@@ -46,23 +45,89 @@ from varco_core.exception.service import (
     ServiceNotFoundError,
     ServiceValidationError,
 )
+from varco_core.exception.settings import ErrorEnvelopeSettings
+from varco_core.i18n.catalog import MessageCatalog
 from varco_core.tracing import current_correlation_id
 
 _logger = logging.getLogger(__name__)
 
 
-def _make_error_response(exc: ServiceException) -> JSONResponse:
+def _locale_from_request(request: Request | None) -> str | None:
+    """
+    Read the resolved locale from ``request.state.varco_request_context``.
+
+    RD-3: ``LocalizationMiddleware`` sets this ``request.state`` mirror
+    specifically because, for a raised exception, the ambient ``ContextVar``
+    is already reset (via that middleware's own ``finally``) by the time an
+    outer error-rendering path runs — ``request.state`` is the only place
+    the resolved ``RequestContext`` is still reachable here.
+
+    Returns:
+        The resolved locale, or ``None`` when no ``LocalizationMiddleware``
+        ran (i18n disabled) or it resolved no locale (T1-only / i18n off).
+    """
+    if request is None:
+        return None
+    ctx = getattr(request.state, "varco_request_context", None)
+    if ctx is None:
+        return None
+    return getattr(ctx, "locale", None)
+
+
+def _make_error_response(
+    exc: ServiceException,
+    *,
+    request: Request | None = None,
+    message_catalog: MessageCatalog | None = None,
+    set_content_language: bool = True,
+) -> JSONResponse:
     """
     Build a structured JSON error response from a ``ServiceException``.
 
+    Honours ``ErrorEnvelopeSettings`` (``VARCO_ERROR_*`` env vars, read fresh
+    on every call — never cached — so a test/deployment can flip the D-4
+    kill switch or the D-3 ``problem_details`` flag without a process
+    restart): ``message_key``/``params`` on every built-in exception body
+    (D-4), and the RFC 9457 ``type``/``title``/``detail``/``instance``
+    members + ``application/problem+json`` media type when
+    ``problem_details=True`` (D-3).
+
+    Plan 011 / RD-3: when ``request`` carries a resolved locale
+    (``request.state.varco_request_context.locale``, set by
+    ``LocalizationMiddleware``) and a ``message_catalog`` is supplied, the
+    ``message`` is rendered via ``message_catalog.format_message(key,
+    locale, params)`` and the response gets a ``Content-Language`` header.
+    With no locale resolved (i18n disabled or unresolved) or no catalog
+    wired, this is a no-op — ``error_message_for()`` falls back to
+    ``default_message`` exactly as before this fix.
+
     Args:
-        exc: The service exception to format.
+        exc:                  The service exception to format.
+        request:               The originating request, if available — used
+                               only to read the RD-3 locale mirror.
+        message_catalog:       Catalog to render ``message_key`` through, if
+                               any. ``None`` (default) reproduces pre-fix
+                               behaviour exactly.
+        set_content_language: Whether to set the ``Content-Language``
+                               response header when a locale was resolved —
+                               mirrors ``I18nSettings.set_content_language``.
 
     Returns:
         A ``JSONResponse`` with the correct HTTP status and body.
     """
+    settings = ErrorEnvelopeSettings()
+    media_type = "application/json"
+    locale = _locale_from_request(request)
+    message_resolver = None
+    if message_catalog is not None and locale is not None:
+
+        def message_resolver(key: str, params: dict[str, Any]) -> str | None:
+            return message_catalog.format_message(key, locale, params)
+
     try:
-        msg = error_message_for(exc)
+        msg = error_message_for(
+            exc, envelope_settings=settings, message_resolver=message_resolver
+        )
         status_code = msg.http_status
         body: dict[str, Any] = {
             "code": msg.code,
@@ -77,6 +142,18 @@ def _make_error_response(exc: ServiceException) -> JSONResponse:
         # existing test asserts the absence of a "detail" key here.
         if msg.detail:
             body["detail"] = msg.detail
+        if msg.message_key is not None:
+            body["message_key"] = msg.message_key
+        if msg.params:
+            body["params"] = msg.params
+
+        if settings.problem_details:
+            media_type = "application/problem+json"
+            base = settings.problem_type_base or "about:blank"
+            body["type"] = f"{base}{msg.message_key}" if msg.message_key else base
+            body["title"] = msg.message
+            body["status"] = status_code
+            body["instance"] = None
     except Exception:  # noqa: BLE001
         # Fallback for exceptions not registered with error_code_for
         status_code = _FALLBACK_STATUS.get(type(exc).__mro__[0], 500)
@@ -86,7 +163,12 @@ def _make_error_response(exc: ServiceException) -> JSONResponse:
     if cid:
         body["correlation_id"] = cid
 
-    return JSONResponse(status_code=status_code, content=body)
+    response = JSONResponse(
+        status_code=status_code, content=body, media_type=media_type
+    )
+    if set_content_language and locale:
+        response.headers["Content-Language"] = locale
+    return response
 
 
 _FALLBACK_STATUS: dict[type, int] = {
@@ -98,7 +180,12 @@ _FALLBACK_STATUS: dict[type, int] = {
 }
 
 
-def add_exception_handlers(app: FastAPI) -> None:
+def add_exception_handlers(
+    app: FastAPI,
+    *,
+    message_catalog: MessageCatalog | None = None,
+    set_content_language: bool = True,
+) -> None:
     """
     Register varco exception handlers on a FastAPI application.
 
@@ -109,11 +196,27 @@ def add_exception_handlers(app: FastAPI) -> None:
     - ``ServiceValidationError``    → 422
     - ``ServiceException``          → 500 (catch-all for unknown service errors)
 
-    All responses use the structured body format from ``error_message_for()``:
-    ``{"code": "VARCO_XXXX", "message": "...", "correlation_id": "..."}``.
+    All responses use the structured body format from ``error_message_for()``,
+    e.g. ``{"code": "FASTREST_001", "message": "The requested resource was
+    not found.", "message_key": "varco.error.not_found", "correlation_id":
+    "..."}`` (``code`` is the stable machine identifier — see D-5; it is not
+    "VARCO_XXXX", and it is never renamed after release).
 
     Args:
-        app: The ``FastAPI`` application to register handlers on.
+        app:                   The ``FastAPI`` application to register handlers on.
+        message_catalog:       Plan 011 / RD-3 — optional ``MessageCatalog``.
+                               When supplied, each handler reads
+                               ``request.state.varco_request_context``
+                               (set by ``LocalizationMiddleware``) and, if a
+                               locale was resolved, renders the error
+                               ``message`` via
+                               ``message_catalog.format_message(message_key,
+                               locale, params)`` and sets a
+                               ``Content-Language`` response header. ``None``
+                               (default) reproduces pre-fix behaviour exactly
+                               — no localization, no header.
+        set_content_language:  Mirrors ``I18nSettings.set_content_language``
+                               for the error path specifically.
 
     Edge cases:
         - Handlers are registered in order from most-specific to least-specific
@@ -121,26 +224,38 @@ def add_exception_handlers(app: FastAPI) -> None:
           dispatches to the most specific handler first.
         - Does NOT register a handler for ``HTTPException`` — FastAPI's built-in
           handler already handles those correctly.
+        - No ``LocalizationMiddleware`` in the stack (i18n disabled) →
+          ``request.state.varco_request_context`` is absent →
+          ``_locale_from_request()`` returns ``None`` → identical to
+          ``message_catalog=None``.
 
     Thread safety:  ✅ Safe to call at startup before requests begin.
     Async safety:   ✅ Handlers are ``async def``.
     """
 
+    def _respond(exc: ServiceException, request: Request) -> JSONResponse:
+        return _make_error_response(
+            exc,
+            request=request,
+            message_catalog=message_catalog,
+            set_content_language=set_content_language,
+        )
+
     @app.exception_handler(ServiceNotFoundError)
     async def not_found_handler(request: Request, exc: ServiceNotFoundError):
-        return _make_error_response(exc)
+        return _respond(exc, request)
 
     @app.exception_handler(ServiceAuthorizationError)
     async def auth_error_handler(request: Request, exc: ServiceAuthorizationError):
-        return _make_error_response(exc)
+        return _respond(exc, request)
 
     @app.exception_handler(ServiceConflictError)
     async def conflict_handler(request: Request, exc: ServiceConflictError):
-        return _make_error_response(exc)
+        return _respond(exc, request)
 
     @app.exception_handler(ServiceValidationError)
     async def validation_handler(request: Request, exc: ServiceValidationError):
-        return _make_error_response(exc)
+        return _respond(exc, request)
 
     @app.exception_handler(ServiceException)
     async def service_exception_handler(request: Request, exc: ServiceException):
@@ -150,7 +265,7 @@ def add_exception_handlers(app: FastAPI) -> None:
             exc,
             exc_info=True,
         )
-        return _make_error_response(exc)
+        return _respond(exc, request)
 
 
 __all__ = [

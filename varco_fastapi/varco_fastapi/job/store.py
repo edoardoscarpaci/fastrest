@@ -28,12 +28,12 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import sys
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Sequence
 from uuid import UUID
 
-from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from providify import Singleton
+from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 
 
 @Singleton(priority=-sys.maxsize - 1)  # MIN_INT as priority
@@ -54,6 +54,11 @@ class InMemoryJobStore(AbstractJobStore):
           in insertion order (dict preserves insertion order in Python 3.7+)
         - Concurrent saves to the same job_id → last write wins (lock-protected)
     """
+
+    #: Plan 011 / RD-5 — InMemoryJobStore persists run_at_wall/run_at_tz/
+    #: run_at_fold verbatim (plain dict of the whole Job), so it declares
+    #: zoned-schedule support unconditionally.
+    supports_zoned_schedules = True
 
     def __init__(self) -> None:
         # Jobs stored by UUID — dict preserves insertion order (Python 3.7+)

@@ -45,11 +45,9 @@ import sys
 from typing import Any
 
 import redis.asyncio as aioredis
+from providify import Configuration, Inject, PreDestroy, Provider
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-
-from providify import Configuration, Inject, PreDestroy, Provider
-
 from varco_core.cache.base import CacheBackend, InvalidationStrategy
 from varco_core.cache.config import CacheSettings
 from varco_core.cache.layered import LayeredCache
@@ -258,7 +256,7 @@ class RedisCache(CacheBackend):
 
         try:
             return self._serializer.deserialize(raw, type_hint)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             _logger.warning(
                 "RedisCache: failed to deserialize key %r: %s", key, exc, exc_info=True
             )
@@ -309,6 +307,71 @@ class RedisCache(CacheBackend):
         """
         self._require_started()
         await self._redis.delete(self._settings.redis_key(key))  # type: ignore[union-attr]
+
+    # ── Bulk operations (Plan 011 C5) — native Redis batch commands ──────────
+
+    async def get_many(
+        self, keys: list[Any], *, type_hint: type | None = None
+    ) -> dict[Any, Any]:
+        """
+        Native ``MGET`` — one round trip for every key.
+
+        Args:
+            keys: Logical cache keys.
+            type_hint: Forwarded to the serializer's ``deserialize()``.
+
+        Returns:
+            ``{key: value}`` for every hit; a miss/deserialize-failure key
+            is simply absent (mirrors ``get()``'s per-key semantics).
+        """
+        self._require_started()
+        if not keys:
+            return {}
+        redis_keys = [self._settings.redis_key(k) for k in keys]
+        raws = await self._redis.mget(redis_keys)  # type: ignore[union-attr]
+        result: dict[Any, Any] = {}
+        for key, raw in zip(keys, raws):
+            if raw is None:
+                continue
+            try:
+                result[key] = self._serializer.deserialize(raw, type_hint)
+            except Exception as exc:
+                _logger.warning(
+                    "RedisCache: failed to deserialize key %r in get_many(): %s",
+                    key,
+                    exc,
+                    exc_info=True,
+                )
+        return result
+
+    async def set_many(
+        self, items: dict[Any, Any], *, ttl: float | None = None
+    ) -> None:
+        """
+        Pipelined ``SET``/``SETEX`` — one round trip for every key via a
+        Redis pipeline (``ttl`` applies uniformly, same as ``set()``).
+        """
+        self._require_started()
+        if not items:
+            return
+        effective_ttl = ttl if ttl is not None else self._settings.default_ttl
+        pipe = self._redis.pipeline()  # type: ignore[union-attr]
+        for key, value in items.items():
+            redis_key = self._settings.redis_key(key)
+            data = self._serializer.serialize(value)
+            if effective_ttl is not None:
+                pipe.setex(redis_key, int(effective_ttl), data)
+            else:
+                pipe.set(redis_key, data)
+        await pipe.execute()
+
+    async def delete_many(self, keys: list[Any]) -> None:
+        """``UNLINK`` (non-blocking delete) for every key in one call."""
+        self._require_started()
+        if not keys:
+            return
+        redis_keys = [self._settings.redis_key(k) for k in keys]
+        await self._redis.unlink(*redis_keys)  # type: ignore[union-attr]
 
     async def exists(self, key: Any) -> bool:
         """
@@ -744,9 +807,9 @@ class RedisLayeredCacheConfiguration:
 
 
 __all__ = [
-    "RedisCacheSettings",
+    "LayeredCacheSettings",
     "RedisCache",
     "RedisCacheConfiguration",
-    "LayeredCacheSettings",
+    "RedisCacheSettings",
     "RedisLayeredCacheConfiguration",
 ]

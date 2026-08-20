@@ -195,13 +195,27 @@ Rule: BulkServiceMixin.create_many() authorizes once (type-level); delete_many()
 
 ```
 AsyncCache[K, V] (Protocol, runtime_checkable)
-  └── Methods: get, set, delete, clear, has, get_many, set_many
+  └── Methods: get, set, delete, exists, clear, delete_prefix
+  └── ⚠️ Deliberately UNCHANGED by Plan 011 C5 — see BulkCache below (D-11)
+
+BulkCache[K, V] (Protocol, runtime_checkable — Plan 011 / C5 / D-11)
+  └── Methods: get_many, set_many, delete_many
+  └── A SEPARATE Protocol from AsyncCache — adding these methods to AsyncCache
+      itself would silently flip isinstance(third_party_cache, AsyncCache) to
+      False for every out-of-tree implementation
 
 CacheBackend[K, V] (ABC, extends AsyncCache)
   ├── Abstract: _get(key), _set(key, value), _delete(key), _clear()
   ├── Concrete: InMemoryCache, NoOpCache, RedisCache (varco_redis), LayeredCache
   ├── Lifecycle: __aenter__, __aexit__, start(), stop()
-  └── Warming hook: add_warmer(warmer) → runs warmers in __aenter__ after start()
+  ├── Warming hook: add_warmer(warmer) → runs warmers in __aenter__ after start()
+  ├── serializer= (Plan 011) — reuses varco_core.serialization.Serializer,
+  │   never a second cache-specific protocol; None default preserves each
+  │   backend's exact current behaviour (RedisCache→JsonSerializer,
+  │   MemcachedCache→its bytes codec, InMemoryCache→raw objects)
+  └── Concrete portable get_many/set_many/delete_many (Plan 011) — loops
+      over get/set/delete; every shipped backend satisfies BulkCache
+      immediately; RedisCache/MemcachedCache override with MGET/get_multi
 
 InvalidationStrategy (ABC)
   ├── Concrete: TTLStrategy, ExplicitStrategy, TaggedStrategy
@@ -220,6 +234,14 @@ read_through(cache, key, loader, policy, *, singleflight=) — varco_core.cache.
   ├── CacheEnvelope — wire format written only when policy.requires_envelope
   └── Singleflight / SingleflightProtocol — per-process stampede coalescer (C2)
   └── Shared by: @cached(policy=, singleflight=), CacheServiceMixin._cache_policy
+
+read_through_many(cache, keys, loader, policy, *, singleflight=) — Plan 011 / C5 / D-12
+  ├── Uses cache.get_many/set_many when cache satisfies BulkCache, else loops
+  ├── Shares the SAME Singleflight instance/slots as read_through() — a bulk
+  │   read and a single read of the same key coalesce rather than race
+  └── CacheServiceMixin._use_bulk_cache = True (opt-in) routes list()'s single,
+      already-namespaced list key through this — still one key per list call,
+      not a genuine N-key batch read (see cache-hardening.md "Bulk operations")
 
 CacheWarmer (ABC) — varco_core.cache.warming
   ├── QueryCacheWarmer(query_fn, ttl)    — calls query_fn(), populates key→value pairs
@@ -606,15 +628,23 @@ AbstractJobStore (ABC) — varco_core.job.base
   │     (concrete default: list_by_status(PENDING) + try_claim loop — correct, slower)
   ├── renew(job_id, *, owner_id, epoch, lease_ttl) → Job | None
   │     (concrete-but-raises NotImplementedError by default — no correct lease fallback)
-  └── reap_expired_leases(*, now=, limit=100) → list[Job]
-        (concrete-but-raises NotImplementedError by default; RUNNING → PENDING, epoch+1)
+  ├── reap_expired_leases(*, now=, limit=100) → list[Job]
+  │     (concrete-but-raises NotImplementedError by default; RUNNING → PENDING, epoch+1)
+  ├── supports_zoned_schedules: ClassVar[bool] = False  (Plan 011 / RD-5 — a store must
+  │     declare this before AbstractJobRunner.enqueue(tz=...) may target it)
+  └── list_pending_zoned(before, *, limit=100) → list[Job]  (Plan 011 / T2
+        — portable default: list_by_status(PENDING) + in-Python filter;
+        SAJobStore overrides with a real WHERE run_at_tz IS NOT NULL clause)
 
 Job (frozen dataclass): job_id, status, created_at, started_at, completed_at,
                         result (bytes), error, callback_url, auth_snapshot, request_token,
                         metadata, task_payload (TaskPayload | None),
                         run_at, attempt, max_attempts, owner_id, lease_expires_at, lease_epoch,
                         expires_at, request_issuer, request_subject, request_token_hash,
-                        store_raw_token: bool = True  (Plan 005 Phases 4 & 6 — all defaulted)
+                        store_raw_token: bool = True,  (Plan 005 Phases 4 & 6 — all defaulted)
+                        run_at_wall: datetime | None = None,   (Plan 011 / T2 — the INTENT;
+                        run_at_tz: str | None = None,           run_at above stays the
+                        run_at_fold: int = 0                    MATERIALIZATION, D-7)
   ├── Transition helpers: as_running(), as_completed(result), as_failed(error), as_cancelled(),
   │                       as_retry(next_run_at), as_dead(error)
   ├── request_token: discouraged (Plan 005 Phase 6, U-19) — docstring-only, no
@@ -663,10 +693,17 @@ Rule: save() has upsert semantics — always safe to call on terminal jobs (COMP
 Rule: delete_where() with no predicate at all raises ValueError — chunk large sweeps with
       limit= in a loop until it returns 0 (avoids pinning a pooled connection; Plan 005 Phase 6)
 
-AbstractJobRunner (ABC) — enqueue(job, coro, *, run_at=None, delay=None) mutually exclusive
+AbstractJobRunner (ABC) — enqueue(job, coro, *, run_at=None, delay=None,
+  run_at_wall=None, tz=None, fold=0, gap=GapPolicy.NEXT_VALID,
+  overlap=OverlapPolicy.FIRST) — abstract signature declares the Plan 011 T2
+  kwargs; _prepare_zoned_job(job, store, ...) is the concrete RD-5 guard +
+  materialization static helper every concrete enqueue() is expected to call.
   ├── JobRunner (varco_fastapi) — retry_policy=/dlq= (Plan 005 Phase 4): failure with
   │     attempt+1 < max_attempts → Job.as_retry(); attempts exhausted → as_dead()+DLQ push
   │     when dlq wired, else as_failed() (today's exact behaviour when both are None)
+  │     enqueue(job, coro, *, run_at=, delay=, run_at_wall=, tz=, fold=, gap=, overlap=) —
+  │     extended with the T2 kwargs (Plan 011 drift-fix pass) and calls _prepare_zoned_job()
+  │     before store.save(); tz=None (default) is a pure passthrough
   └── enqueue_task(..., store_raw_token: bool = True) (Plan 005 Phase 6, U-19)
         — forwarded to Job(); False clears request_token via __post_init__, so
           _fire_callback()'s Authorization: Bearer forwarding is skipped (callback
@@ -1059,7 +1096,28 @@ unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
 | `cache/warming.py` | Cache pre-warming strategies | `CacheWarmer`, `QueryCacheWarmer`, `SnapshotCacheWarmer`, `CompositeWarmer` |
 | `query/aggregation.py` | Aggregation query AST + SA applicator | `AggregationFunc`, `AggregationExpression`, `AggregationQuery`, `SQLAlchemyAggregationApplicator` |
 | `exception/` | Exception hierarchy | `RepositoryException`, `ServiceException`, `QueryException` |
+| `exception/settings.py` | D-4's kill switch (Plan 011 / I1) | `ErrorEnvelopeSettings` |
 | `providers.py` | DI container | `DIContainer` |
+| `context/` | Ambient request-scoped values — X1 (Plan 011) | `AmbientVar[T]`, `RequestContext`, `resolve_precedence()`, `Resolved`, `TenantDefaultsProvider`, `NullTenantDefaults`, `StaticTenantDefaults` |
+| `context/ambient.py` | Generic `ContextVar[T \| None]` wrapper | `AmbientVar[T]` |
+| `context/precedence.py` | Shared "first non-`None` wins" helper for I2/T1 | `resolve_precedence()`, `Resolved[T]` |
+| `context/request.py` | The one aggregate ambient value I2/T1 build on | `RequestContext`, `current_request_context()`, `current_locale()`, `current_timezone()`, `request_context()`, `arequest_context()` |
+| `context/defaults.py` | RD-2 — per-tenant locale/tz defaults, no `varco_tenants` schema change | `TenantLocalizationDefaults`, `TenantDefaultsProvider`, `NullTenantDefaults`, `StaticTenantDefaults` |
+| `i18n/` | I2 (Plan 011) — message catalog + negotiation | `MessageCatalog`, `NullMessageCatalog`, `DictMessageCatalog`, `GettextMessageCatalog`, `I18nSettings` |
+| `i18n/catalog.py` | Catalog ABC + null/dict implementations | `MessageCatalog`, `NullMessageCatalog`, `DictMessageCatalog` |
+| `i18n/gettext_catalog.py` | Production-default catalog — stdlib `gettext` only | `GettextMessageCatalog` |
+| `i18n/negotiation.py` | Hand-rolled RFC 4647 §3.4 Lookup | `parse_accept_language()`, `negotiate_locale()` |
+| `i18n/resolve.py` | I2's five-source precedence chain | `resolve_locale()` |
+| `i18n/settings.py` | Off-by-default I18n settings | `I18nSettings` |
+| `i18n/cache_key.py` | RD-6 — locale never an implicit cache-key component | `localization_cache_key()` |
+| `tz/` | T1/T2/T3 (Plan 011) — timezone resolution + DST-safe scheduling | `validate_iana_zone()`, `TimezoneSettings`, `resolve_timezone()`, `resolve_zoned()`, `format_rfc9557()` |
+| `tz/zones.py` | Shared "is this a real IANA zone" gate | `validate_iana_zone()` |
+| `tz/settings.py` | Off-by-default timezone settings, startup-validated | `TimezoneSettings` |
+| `tz/resolve.py` | T1's five-source precedence chain + rendering helpers | `resolve_timezone()`, `to_user_tz()`, `now_local()` |
+| `tz/schedule.py` | D-8 — DST gap/overlap detection + resolution, no `dateutil` | `GapPolicy`, `OverlapPolicy`, `ScheduleGapError`, `datetime_exists()`, `datetime_ambiguous()`, `resolve_zoned()` |
+| `tz/format.py` | D-9 — RFC 9557 output-only formatting | `format_rfc9557()` |
+| `job/reschedule.py` | T2's opt-in recompute-on-read sweeper | `ScheduleRematerializer` |
+| `query/policy.py` | T3's declared datetime coercion contract | `DatetimeCoercionPolicy` |
 
 ---
 
@@ -1576,6 +1634,21 @@ params for list routes.
 **Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=1.0`). The adapter is
 constructible without the extra — `to_mcp_server()` and `mount()` raise `ImportError`
 with a clear install message if the SDK is absent.
+
+**Localization / timezone middleware** (`varco_fastapi.middleware.localization`,
+`varco_fastapi.i18n` — Plan 011): `LocalizationMiddleware` resolves locale (I2) and/or
+timezone (T1) in one ASGI pass, gated by two independent settings
+(`I18nSettings.enabled`/`TimezoneSettings.enabled`); with both off it is not added to the
+stack. `create_varco_app(i18n=, timezone=)` — both typed `Any | None`, resolved via
+`isinstance()` checks against `I18nSettings`/`TimezoneSettings`, **not** type-checked
+keyword parameters; pass anything else and it silently falls back to default settings.
+`I18nLifecycle` (`varco_fastapi.i18n`) starts/stops the DI-resolved `MessageCatalog` around
+`VarcoLifespan`, only when i18n is enabled and a non-`None` catalog is found.
+`LocalizationMiddleware` is the innermost built-in layer (added earliest, dispatches last),
+so any app-supplied `TenantResolutionMiddleware` via `extra_middleware=` always dispatches
+before it — see `technical_docs/features/timezone-handling.md`'s "Wiring" section for the
+full verified request-order diagram and the `request.state` mirror's current (unread)
+status on the error path.
 
 ---
 
