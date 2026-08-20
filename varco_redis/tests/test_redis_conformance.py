@@ -16,6 +16,7 @@ from __future__ import annotations
 import pytest
 import redis.asyncio as aioredis
 
+from varco_core.cache.invalidation import TTLStrategy
 from varco_core.cache.layered import LayeredCache
 from varco_core.cache.memory import InMemoryCache
 from varco_redis.bus import RedisEventBus
@@ -53,22 +54,6 @@ class TestRedisCacheConformance(CacheBackendConformance):
         async with RedisCache(RedisCacheSettings(url=redis_url)) as cache:
             yield cache
 
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: RedisCache.set(ttl=) (varco_redis/varco_redis/cache.py:283-290) "
-            "truncates a sub-second float ttl to int() before passing it to "
-            "SETEX — ttl=0.05 becomes 0, and Redis's SETEX rejects a 0 (or "
-            "negative) expire time with 'invalid expire time in setex command', "
-            "raising instead of storing a very-short-lived entry. "
-            "CacheBackend.set()'s ttl: float | None contract implies sub-second "
-            "precision is valid. See BACKLOG.md. Not fixed here per Plan 012 "
-            "Non-goals (no production code changes)."
-        ),
-        strict=True,
-    )
-    async def test_ttl_expiry(self, cache) -> None:  # type: ignore[override]
-        await super().test_ttl_expiry(cache)
-
 
 class TestRedisJobStoreConformance(JobStoreConformance):
     @pytest.fixture
@@ -78,21 +63,6 @@ class TestRedisJobStoreConformance(JobStoreConformance):
             yield RedisJobStore(client)
         finally:
             await client.aclose()
-
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: RedisJobStore.try_claim() grants a non-zero lease_epoch (lease "
-            "support advertised) but RedisJobStore.save() has no expected_epoch= "
-            "parameter at all — TypeError: unexpected keyword argument "
-            "'expected_epoch', instead of fencing a stale write with "
-            "StaleLeaseError as AbstractJobStore.save() documents. See "
-            "BACKLOG.md. Not fixed here per Plan 012 Non-goals (no production "
-            "code changes)."
-        ),
-        strict=True,
-    )
-    async def test_save_with_stale_expected_epoch_raises(self, store) -> None:  # type: ignore[override]
-        await super().test_save_with_stale_expected_epoch_raises(store)
 
 
 class TestRedisDLQConformance(DeadLetterQueueConformance):
@@ -106,24 +76,20 @@ class TestLayeredCacheConformance(CacheBackendConformance):
     """
     ``LayeredCache`` conformance with a real L2 (Step 27's TODO) —
     ``InMemoryCache`` as L1, real ``RedisCache`` as L2.
+
+    L1 is given a ``TTLStrategy`` — per ``InMemoryCache``'s own contract
+    ("If strategy is None, should_invalidate() is never called — entries
+    persist until delete() or clear()"), a strategy-less L1 never expires
+    a ttl-bearing entry on its own; only L2 (Redis, which enforces TTL
+    natively) would. Without this, ``test_ttl_expiry`` would keep failing
+    post-KI-3 for a second, unrelated reason (a mis-configured fixture, not
+    a RedisCache bug) — L1 would keep serving the value forever regardless
+    of L2's real expiry.
     """
 
     @pytest.fixture
     async def cache(self, redis_url: str):
-        l1 = InMemoryCache()
+        l1 = InMemoryCache(strategy=TTLStrategy())
         l2 = RedisCache(RedisCacheSettings(url=redis_url))
         async with LayeredCache(l1, l2, promote_ttl=30.0) as cache:
             yield cache
-
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: RedisCache.set(ttl=) truncates a sub-second float ttl to "
-            "int() before passing it to SETEX (see KI-3 in BACKLOG.md) — the "
-            "same underlying issue as TestRedisCacheConformance.test_ttl_expiry, "
-            "inherited here because LayeredCache's L2 is a real RedisCache. "
-            "Not fixed here per Plan 012 Non-goals (no production code changes)."
-        ),
-        strict=True,
-    )
-    async def test_ttl_expiry(self, cache) -> None:  # type: ignore[override]
-        await super().test_ttl_expiry(cache)

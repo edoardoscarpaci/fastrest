@@ -103,6 +103,7 @@ from __future__ import annotations
 import sys
 import json
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -112,7 +113,11 @@ from aiokafka.structs import TopicPartition
 
 from providify import Configuration, Inject, Provider
 
-from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
+from varco_core.event.dlq import (
+    AbstractDeadLetterQueue,
+    DeadLetterEntry,
+    DeadLetterSource,
+)
 from varco_core.event.serializer import JsonEventSerializer
 from varco_kafka.config import KafkaEventBusSettings
 
@@ -516,14 +521,46 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         )
         return -1
 
-    async def delete_where(self, **_kwargs: Any) -> int:
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        source: DeadLetterSource | Sequence[DeadLetterSource] | None = None,
+        channel: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> int:
         """
         Always raises — Kafka has no per-message delete.
 
+        WHY: the ABC's contract (``varco_core.event.dlq.AbstractDeadLetterQueue
+        .delete_where``) requires the "no predicate at all" refusal to be
+        checked BEFORE any backend-specific "not supported" refusal — a
+        caller passing no predicate must always get ``ValueError`` regardless
+        of whether the backend can support arbitrary predicate deletion at
+        all. The previous ``**_kwargs: Any`` signature swallowed every
+        predicate unconditionally and always raised ``NotImplementedError``,
+        so a no-predicate call never reached that check — every other
+        backend (SA, Redis, Beanie) got it right, only Kafka skipped it.
+
         Raises:
-            NotImplementedError: naming ``retention.ms`` (the topic-level
-                retention setting) as the correct mechanism (RD-4).
+            ValueError: no predicate at all was given — refuses to silently
+                imply "delete every entry" (mirrors the ABC / SA / Redis).
+            NotImplementedError: at least one predicate was given, naming
+                ``retention.ms`` (the topic-level retention setting) as the
+                correct mechanism (RD-4).
         """
+        if (
+            older_than is None
+            and source is None
+            and channel is None
+            and tenant_id is None
+        ):
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/source/channel/tenant_id) — refusing to delete "
+                "every entry."
+            )
         raise NotImplementedError(
             "KafkaDLQ does not support delete_where() — Kafka topics are not "
             "randomly deletable. Configure the DLQ topic's retention.ms "

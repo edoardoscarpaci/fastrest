@@ -266,7 +266,8 @@ class RedisCache(CacheBackend):
         """
         Serialize and store ``value`` in Redis under ``key``.
 
-        Uses Redis SETEX when ``ttl`` is provided, otherwise SET (no expiry).
+        Uses Redis PSETEX (millisecond precision) when ``ttl`` is provided,
+        otherwise SET (no expiry).
 
         Args:
             key:   Logical cache key.
@@ -283,10 +284,26 @@ class RedisCache(CacheBackend):
         data = self._serializer.serialize(value)
 
         if effective_ttl is not None:
-            # SETEX — Redis natively expires the key after effective_ttl seconds.
-            await self._redis.setex(  # type: ignore[union-attr]
+            # PSETEX (not SETEX) — CacheBackend.set()'s `ttl: float | None`
+            # contract promises sub-second precision (e.g. ttl=0.05). SETEX
+            # only accepts a whole-second expire time, so `int(effective_ttl)`
+            # truncated any sub-second ttl to 0 and Redis's SETEX rejects a
+            # 0/negative expire time outright (KI-3). PSETEX takes milliseconds,
+            # preserving fractional-second ttls; round (not int-truncate) so
+            # e.g. 0.05s -> 50ms instead of 0ms.
+            ms = round(effective_ttl * 1000)
+            if ms <= 0:
+                # A ttl that rounds to <=0ms is already-expired intent — Redis
+                # rejects a non-positive expire time on PSETEX/SETEX alike, so
+                # surface that clearly rather than silently storing forever.
+                raise ValueError(
+                    f"RedisCache.set(): ttl={effective_ttl!r} rounds to "
+                    f"{ms}ms, which Redis rejects as an expire time. Use a "
+                    f"positive ttl or ttl=None for no expiry."
+                )
+            await self._redis.psetex(  # type: ignore[union-attr]
                 redis_key,
-                int(effective_ttl),
+                ms,
                 data,
             )
         else:
@@ -348,19 +365,30 @@ class RedisCache(CacheBackend):
         self, items: dict[Any, Any], *, ttl: float | None = None
     ) -> None:
         """
-        Pipelined ``SET``/``SETEX`` — one round trip for every key via a
+        Pipelined ``SET``/``PSETEX`` — one round trip for every key via a
         Redis pipeline (``ttl`` applies uniformly, same as ``set()``).
         """
         self._require_started()
         if not items:
             return
         effective_ttl = ttl if ttl is not None else self._settings.default_ttl
+        ms: int | None = None
+        if effective_ttl is not None:
+            # Same KI-3 fix as set(): millisecond precision via PSETEX, not
+            # SETEX's whole-second int(effective_ttl) truncation.
+            ms = round(effective_ttl * 1000)
+            if ms <= 0:
+                raise ValueError(
+                    f"RedisCache.set_many(): ttl={effective_ttl!r} rounds to "
+                    f"{ms}ms, which Redis rejects as an expire time. Use a "
+                    f"positive ttl or ttl=None for no expiry."
+                )
         pipe = self._redis.pipeline()  # type: ignore[union-attr]
         for key, value in items.items():
             redis_key = self._settings.redis_key(key)
             data = self._serializer.serialize(value)
-            if effective_ttl is not None:
-                pipe.setex(redis_key, int(effective_ttl), data)
+            if ms is not None:
+                pipe.psetex(redis_key, ms, data)
             else:
                 pipe.set(redis_key, data)
         await pipe.execute()

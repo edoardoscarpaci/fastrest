@@ -160,27 +160,16 @@ async def test_abac_enforcement_persisted(casbin_db_url: str) -> None:
         assert await engine.enforce(non_owner_req) is False
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG: CasbinPolicyEngine.enforce() (varco_casbin/varco_casbin/engine.py) "
-        "always wraps subject/object in _AttrStr (a str subclass with a custom "
-        "__new__(cls, value, attrs) so the same value works for both string and "
-        "ABAC matchers), even for the plain RBAC preset. _AttrStr has no "
-        "__deepcopy__/__reduce__, so once one has been threaded into Casbin's "
-        "internal role-manager/model state via an enforce() call, a later "
-        "reload() -> casbin's load_policy() -> copy.deepcopy(self.model) raises "
-        "'TypeError: _AttrStr.__new__() missing 1 required positional argument: "
-        "attrs' — copy.deepcopy's default __newobj__ reconstruction only passes "
-        "the str value, not the extra 'attrs' argument the custom __new__ "
-        "requires. See BACKLOG.md. Not fixed here per Plan 012 Non-goals (no "
-        "production code changes)."
-    ),
-    strict=True,
-)
 async def test_two_engines_share_database_writer_reader(casbin_db_url: str) -> None:
     """A writer and a reader engine sharing one DB: reader.reload() sees the
     writer's change (CLAUDE.md's per-external-dependency shared-singleton
-    rule, verified against real infrastructure)."""
+    rule, verified against real infrastructure).
+
+    Regression test for KI-8 (BACKLOG.md): _AttrStr previously had no
+    __reduce__, so once an _AttrStr had been threaded into Casbin's internal
+    model/role-manager state via a prior enforce() call, this reload() (->
+    casbin's load_policy() -> copy.deepcopy(self.model)) raised TypeError.
+    Fixed by _AttrStr.__reduce__ in varco_casbin/engine.py."""
     settings = CasbinSettings(
         model_preset="rbac",
         adapter="sqlalchemy",

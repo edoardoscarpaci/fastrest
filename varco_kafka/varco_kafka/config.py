@@ -73,9 +73,17 @@ class KafkaDeliverySemantics(str, enum.Enum):
                     the commit but before the handler runs loses the message.
                     Lowest overhead; no duplicates, possible message loss.
 
-    AT_LEAST_ONCE — Offsets committed after successful dispatch (default).
-                    A crash between dispatch and commit causes re-delivery.
-                    Standard Kafka behavior; duplicates possible.
+    AT_LEAST_ONCE — Offsets committed manually after successful dispatch
+                    (default).  A crash — or a raised handler exception —
+                    between dispatch and commit leaves the offset
+                    uncommitted, causing re-delivery to a fresh consumer in
+                    the same ``group_id``.  Standard Kafka behavior;
+                    duplicates possible.  NOTE: aiokafka's own periodic
+                    auto-commit is never used for this mode (see
+                    ``enable_auto_commit`` below) — it advances the
+                    committed offset on a fixed timer independent of
+                    handler success, which silently violates this
+                    contract.
 
     EXACTLY_ONCE  — Dispatch and offset commit are wrapped in a Kafka
                     transaction (``send_offsets_to_transaction``).  Requires a
@@ -128,10 +136,20 @@ class KafkaEventBusSettings(EventBusSettings):
                               ``"earliest"`` replays from the start; ``"latest"``
                               (default) skips past messages already in the topic.
                               Env var: ``VARCO_KAFKA_AUTO_OFFSET_RESET``.
-        enable_auto_commit:   Auto-commit offsets after delivery.
-                              Ignored when ``delivery_semantics`` is not
-                              ``AT_LEAST_ONCE`` — the bus overrides commit
-                              behaviour for the other two modes.
+        enable_auto_commit:   Retained for backward compatibility only —
+                              ``KafkaEventBus`` always disables aiokafka's
+                              built-in periodic auto-commit and commits
+                              offsets manually itself (before dispatch for
+                              ``AT_MOST_ONCE``, after successful dispatch for
+                              ``AT_LEAST_ONCE``, inside the transaction for
+                              ``EXACTLY_ONCE``).  aiokafka's auto-commit
+                              fires on a fixed timer regardless of handler
+                              success, which would silently violate the
+                              "committed after successful dispatch" contract
+                              documented on ``KafkaDeliverySemantics``.
+                              This field no longer changes bus behaviour;
+                              it is deprecated and may be removed in a
+                              future release.
                               Env var: ``VARCO_KAFKA_ENABLE_AUTO_COMMIT``.
         delivery_semantics:   Delivery guarantee level.  Default
                               ``AT_LEAST_ONCE``.  Set to ``EXACTLY_ONCE`` for

@@ -29,6 +29,9 @@ Key differences from RedisCache
   trip and deserialisation is skipped (raw bytes are returned by ``get``).
 - **TTL is ``exptime``** (int, seconds).  ``0`` means no expiry (different from
   Redis ``SET`` without TTL — ``0`` is Memcached's equivalent of "never expire").
+  A positive sub-second ``ttl`` is rounded UP to ``1`` (the smallest
+  expressible non-zero ``exptime``) rather than truncated down to ``0`` —
+  the protocol has no finer granularity, unlike Redis's ``PSETEX`` (KI-5).
 
 DESIGN: in-process key registry for clear()
     ✅ Safe for single-process apps — ``clear()`` only removes our own keys.
@@ -50,6 +53,7 @@ Async safety:   ✅  All public methods are ``async def``.
 from __future__ import annotations
 
 import logging
+import math
 import sys
 from typing import Any
 
@@ -332,16 +336,32 @@ class MemcachedCache(CacheBackend):
 
         Edge cases:
             - ``exptime=0`` in Memcached means "no expiry", not "expire immediately"
-              (unlike some other caches).  Passing ``ttl=0`` here is treated
+              (unlike some other caches).  ``ttl=None``/``ttl<=0`` is treated
               as no-expiry — it will NOT evict immediately.
+            - Unlike ``RedisCache`` (KI-3, ``PSETEX`` takes milliseconds), the
+              Memcached wire protocol's ``exptime`` is genuinely whole-seconds
+              only — there is no finer-grained command to switch to. A
+              positive but sub-1-second ``ttl`` (e.g. ``0.05``) is rounded UP
+              to the smallest expressible non-zero ``exptime`` (``1``) rather
+              than truncated DOWN to ``0``. Truncating down previously made
+              the entry NEVER expire (``0`` = no-expiry is a distinct value,
+              not "expire immediately") — silently wrong in the opposite
+              direction of KI-3's Redis fix, and worse: no error, just a
+              cache entry that outlives its intended lifetime forever (KI-5).
         """
         self._require_started()
         mc_key = self._settings.memcached_key(key)
         effective_ttl = ttl if ttl is not None else self._settings.default_ttl
 
-        # Memcached exptime is an int in seconds; 0 = no expiry.
-        # Cast to int — float TTLs are truncated, matching Redis behaviour.
-        exptime = int(effective_ttl) if effective_ttl is not None else 0
+        # Memcached exptime is an int in seconds; 0 = no expiry. Round UP
+        # (never truncate down to 0) so any positive ttl — including a
+        # sub-second one — expires within its requested window instead of
+        # silently living forever. A ttl of None/<=0 stays no-expiry,
+        # unchanged from before this fix.
+        if effective_ttl is not None and effective_ttl > 0:
+            exptime = math.ceil(effective_ttl)
+        else:
+            exptime = 0
 
         data = self._serializer.serialize(value)
         await self._client.set(mc_key, data, exptime=exptime)  # type: ignore[union-attr]

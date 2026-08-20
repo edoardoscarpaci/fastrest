@@ -59,20 +59,3 @@ class TestBeanieDeadLetterQueueConformance(DeadLetterQueueConformance):
         finally:
             await client.drop_database(db_name)
             client.close()
-
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: BeanieDeadLetterQueue.count_by_channel() (varco_beanie/"
-            "varco_beanie/dlq.py:316) does `await DeadLetterDocument.aggregate("
-            "pipeline).to_list()`, which under the installed beanie/motor "
-            "version combination raises `TypeError: object "
-            "AsyncIOMotorLatentCommandCursor can't be used in 'await' "
-            "expression` — beanie's `to_list()` -> `get_cursor()` now returns "
-            "the pymongo aggregate() cursor directly rather than a coroutine. "
-            "See BACKLOG.md. Not fixed here per Plan 012 Non-goals (no "
-            "production code changes)."
-        ),
-        strict=True,
-    )
-    async def test_count_by_channel_no_predicate_refuses_or_raises(self, dlq) -> None:  # type: ignore[override]
-        await super().test_count_by_channel_no_predicate_refuses_or_raises(dlq)

@@ -45,6 +45,7 @@ Async safety:   ✅ All methods are ``async def``.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import sys
 from collections.abc import Sequence
@@ -311,9 +312,26 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
         return int(result.deleted_count) if result is not None else len(ids)
 
     async def count_by_channel(self) -> dict[str, int]:
-        """Return ``{channel: count}`` via an aggregation pipeline."""
+        """Return ``{channel: count}`` via an aggregation pipeline.
+
+        WHY: ``beanie``'s ``AggregationQuery.get_cursor()`` unconditionally
+        ``await``s the underlying collection's ``aggregate()`` call, but the
+        installed motor version's ``AsyncIOMotorCollection.aggregate()``
+        returns its (already-async-iterable) cursor synchronously rather
+        than as a coroutine — ``await``ing it raises ``TypeError: object
+        AsyncIOMotorLatentCommandCursor can't be used in 'await'
+        expression``. Drive the pymongo/motor collection directly instead
+        of routing through ``Document.aggregate().to_list()`` to sidestep
+        beanie's incompatible cursor plumbing, while still tolerating a
+        driver whose ``aggregate()`` *does* return a coroutine (pymongo's
+        native async API) so this keeps working across driver versions.
+        """
         pipeline = [{"$group": {"_id": "$channel", "count": {"$sum": 1}}}]
-        results = await DeadLetterDocument.aggregate(pipeline).to_list()
+        collection = DeadLetterDocument.get_pymongo_collection()
+        cursor = collection.aggregate(pipeline)
+        if inspect.isawaitable(cursor):
+            cursor = await cursor
+        results = [doc async for doc in cursor]
         return {r["_id"]: r["count"] for r in results}
 
     def _doc_to_entry(self, doc: DeadLetterDocument) -> DeadLetterEntry:

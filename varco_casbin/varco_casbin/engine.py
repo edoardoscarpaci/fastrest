@@ -62,7 +62,20 @@ class _AttrStr(str):
           add it to ``RequestMapper.object_attr_excludes`` if it does.
         - Missing attributes raise ``AttributeError`` exactly like a normal
           object — an ABAC matcher referencing an absent field fails closed.
+        - ``__reduce__`` makes this class safe under ``copy.deepcopy``
+          (Casbin's ``load_policy()`` deepcopies ``self.model`` internally,
+          and once an ``_AttrStr`` has been threaded into the model/role-
+          manager state via a prior ``enforce()`` call, an uninformed
+          deepcopy would try to reconstruct it via ``cls(value)`` — missing
+          the required ``attrs`` argument).  A field named literally
+          ``"_attrs"`` would collide with the internal stash used for this
+          and be overwritten; as with the method-name collision above, this
+          is expected to be vanishingly rare for real domain field names.
     """
+
+    # Declared (not assigned) so mypy recognizes the object.__setattr__ below
+    # as populating a known instance attribute rather than an arbitrary one.
+    _attrs: dict[str, Any]
 
     # str is immutable, so attribute values must be attached in __new__ where
     # the instance already exists; __init__ would also work but __new__ keeps
@@ -73,7 +86,23 @@ class _AttrStr(str):
             # object.__setattr__ bypasses any __setattr__ override and works
             # on the (otherwise immutable) str subclass instance dict.
             object.__setattr__(obj, key, val)
+        # Stash the original attrs mapping too (not just the individual
+        # attributes copied onto __dict__) so __reduce__ can reconstruct an
+        # equivalent instance without having to reverse-engineer __dict__.
+        object.__setattr__(obj, "_attrs", dict(attrs))
         return obj
+
+    def __reduce__(self) -> tuple[type[_AttrStr], tuple[str, dict[str, Any]]]:
+        # WHY: copy.deepcopy's default reconstruction for a str subclass
+        # calls `cls.__new__(cls, value)` — passing only the wrapped string,
+        # never the extra `attrs` kwarg this class's __new__ requires. Casbin
+        # calls copy.deepcopy(self.model) inside load_policy(), and once an
+        # _AttrStr has been threaded into the model/role-manager state via a
+        # prior enforce() call, an uninformed deepcopy raises `TypeError:
+        # _AttrStr.__new__() missing 1 required positional argument: 'attrs'`.
+        # __reduce__ tells copy/pickle to call `_AttrStr(str(self), attrs)`
+        # instead, restoring both the string value and the attribute bag.
+        return (self.__class__, (str(self), self._attrs))
 
 
 @Singleton(priority=-sys.maxsize, qualifier="casbin")

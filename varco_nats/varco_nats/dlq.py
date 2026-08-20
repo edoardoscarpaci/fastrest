@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -93,7 +94,11 @@ from nats.js.errors import NotFoundError
 
 from providify import Configuration, Inject, Provider
 
-from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
+from varco_core.event.dlq import (
+    AbstractDeadLetterQueue,
+    DeadLetterEntry,
+    DeadLetterSource,
+)
 from varco_core.event.serializer import JsonEventSerializer
 from varco_nats.config import NatsEventBusSettings
 
@@ -502,14 +507,47 @@ class NatsDLQ(AbstractDeadLetterQueue):
             return 0
         return int(info.state.messages)
 
-    async def delete_where(self, **_kwargs: Any) -> int:
+    async def delete_where(
+        self,
+        *,
+        older_than: datetime | None = None,
+        source: DeadLetterSource | Sequence[DeadLetterSource] | None = None,
+        channel: str | None = None,
+        tenant_id: str | None = None,
+        limit: int | None = None,
+    ) -> int:
         """
         Always raises — JetStream has no per-message delete by predicate.
 
+        WHY the no-predicate check runs first: the ABC's contract
+        (``AbstractDeadLetterQueue.delete_where``) requires refusing an
+        unbounded "delete everything" call with ``ValueError`` *before* a
+        backend gets to say whether it supports predicate-based deletion at
+        all — a backend that skips straight to ``NotImplementedError``
+        regardless of arguments silently masks the "no predicate given"
+        footgun the ABC exists to catch. This mirrors the sibling fix in
+        ``KafkaDLQ`` (KI-2) — same class of ABC-contract deviation.
+
         Raises:
-            NotImplementedError: naming ``MaxAge`` (the stream-level retention
-                setting) as the correct mechanism (RD-4).
+            ValueError: no predicate at all was given — refuses to silently
+                delete every entry (checked before the backend-support check,
+                per the ABC contract).
+            NotImplementedError: a predicate was given, naming ``MaxAge``
+                (the stream-level retention setting) as the correct
+                mechanism (RD-4) — JetStream streams are not randomly
+                deletable.
         """
+        if (
+            older_than is None
+            and source is None
+            and channel is None
+            and tenant_id is None
+        ):
+            raise ValueError(
+                "delete_where() requires at least one predicate "
+                "(older_than/source/channel/tenant_id) — refusing to delete "
+                "every entry."
+            )
         raise NotImplementedError(
             "NatsDLQ does not support delete_where() — JetStream streams are "
             "not randomly deletable. Configure the DLQ stream's MaxAge "

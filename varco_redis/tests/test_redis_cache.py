@@ -6,13 +6,13 @@ All tests mock ``redis.asyncio`` — no real Redis instance required.
 A ``FakeRedis`` test double replaces ``aioredis.from_url()`` via
 ``unittest.mock.patch``, providing an in-memory dict-backed implementation
 that mirrors the Redis commands used by ``RedisCache`` (``get``, ``set``,
-``setex``, ``delete``, ``exists``, ``scan``).
+``psetex``, ``delete``, ``exists``, ``scan``).
 
 Sections
 --------
 - ``RedisCacheSettings``   — defaults, redis_key(), frozen, env prefix
 - ``RedisCache`` lifecycle — start/stop, double-start guard, context manager
-- ``RedisCache`` set/get   — round-trip, TTL (setex), no-TTL (set), prefix
+- ``RedisCache`` set/get   — round-trip, TTL (psetex, ms precision — KI-3), no-TTL (set), prefix
 - ``RedisCache`` delete    — removes key; idempotent
 - ``RedisCache`` exists    — true/false; strategy gate
 - ``RedisCache`` clear     — SCAN + DEL pattern matching key_prefix
@@ -37,14 +37,16 @@ class FakeRedis:
     """
     In-memory Redis fake.
 
-    Supports: get, set, setex, delete, exists, scan, aclose.
+    Supports: get, set, psetex, delete, exists, scan, aclose.
     Does NOT implement real TTL expiry — tests that need TTL expiry use
     real Redis via the integration test suite.
     """
 
     def __init__(self) -> None:
         self._store: dict[str, bytes] = {}
-        self._ttls: dict[str, int] = {}
+        # Milliseconds — RedisCache.set() uses PSETEX (KI-3: SETEX's
+        # whole-second precision truncated sub-second ttl values to 0).
+        self._ttls_ms: dict[str, int] = {}
 
     async def get(self, key: str) -> bytes | None:
         return self._store.get(key)
@@ -52,9 +54,9 @@ class FakeRedis:
     async def set(self, key: str, value: bytes) -> None:
         self._store[key] = value
 
-    async def setex(self, key: str, ttl: int, value: bytes) -> None:
+    async def psetex(self, key: str, ttl_ms: int, value: bytes) -> None:
         self._store[key] = value
-        self._ttls[key] = ttl
+        self._ttls_ms[key] = ttl_ms
 
     async def delete(self, *keys: str) -> int:
         count = 0
@@ -196,18 +198,26 @@ class TestRedisCacheSetGet:
     async def test_get_missing_returns_none(self, cache: RedisCache) -> None:
         assert await cache.get("missing") is None
 
-    async def test_set_with_ttl_uses_setex(
+    async def test_set_with_ttl_uses_psetex(
         self, cache: RedisCache, fake_redis: FakeRedis
     ) -> None:
         await cache.set("k", "v", ttl=120)
-        assert "k" in fake_redis._ttls
-        assert fake_redis._ttls["k"] == 120
+        assert "k" in fake_redis._ttls_ms
+        assert fake_redis._ttls_ms["k"] == 120_000
 
-    async def test_set_without_ttl_uses_set_not_setex(
+    async def test_set_with_subsecond_ttl_preserves_precision(
+        self, cache: RedisCache, fake_redis: FakeRedis
+    ) -> None:
+        # Regression for KI-3: a sub-second ttl must not truncate to 0ms
+        # (int(0.05) == 0, which real Redis's SETEX rejects outright).
+        await cache.set("k", "v", ttl=0.05)
+        assert fake_redis._ttls_ms["k"] == 50
+
+    async def test_set_without_ttl_uses_set_not_psetex(
         self, cache: RedisCache, fake_redis: FakeRedis
     ) -> None:
         await cache.set("k", "v")
-        assert "k" not in fake_redis._ttls
+        assert "k" not in fake_redis._ttls_ms
 
     async def test_key_prefix_applied_in_storage(self, fake_redis: FakeRedis) -> None:
         settings = RedisCacheSettings(url="redis://fake:6379/0", key_prefix="myapp:")
@@ -223,7 +233,7 @@ class TestRedisCacheSetGet:
             mock_aioredis.from_url.return_value = fake_redis
             async with RedisCache(settings) as cache:
                 await cache.set("k", "v")
-                assert fake_redis._ttls.get("k") == 60
+                assert fake_redis._ttls_ms.get("k") == 60_000
 
 
 # ── RedisCache delete ────────────────────────────────────────────────────────────

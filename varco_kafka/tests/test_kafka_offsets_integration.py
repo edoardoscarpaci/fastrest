@@ -115,20 +115,6 @@ async def test_fresh_group_id_rereads_from_configured_offset_reset(
     assert sorted(received) == ["0", "1", "2"]
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG: KafkaEventBus's default settings (enable_auto_commit=True) rely on "
-        "aiokafka's own periodic auto-commit, which commits the fetched position on "
-        "a timer independent of handler success/failure — NOT 'after successful "
-        "dispatch' as varco_kafka/varco_kafka/config.py documents for the default "
-        "AT_LEAST_ONCE delivery guarantee (config.py:76-77, bus.py:111-113). "
-        "Observed: a message whose handler raised is never redelivered to a fresh "
-        "consumer in the same group_id — the offset silently advanced past a "
-        "failed message. See BACKLOG.md. Not fixed here per Plan 012 Non-goals "
-        "(no production code changes)."
-    ),
-    strict=True,
-)
 async def test_redelivery_after_failed_handler_does_not_silently_advance_offset(
     kafka_bootstrap: str,
 ) -> None:

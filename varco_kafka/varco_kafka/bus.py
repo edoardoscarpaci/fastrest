@@ -108,8 +108,11 @@ class KafkaEventBus(AbstractEventBus):
     Controlled by ``KafkaEventBusSettings.delivery_semantics``:
 
     ``AT_LEAST_ONCE`` (default)
-        Auto-commit enabled.  Offsets committed after dispatch.  On crash,
-        the message is redelivered — handlers may see duplicates.
+        Offsets committed manually, once per message, after dispatch
+        succeeds.  On crash — or a raised handler exception — before the
+        commit, the offset stays uncommitted and the message is redelivered
+        to a fresh consumer in the same ``group_id`` — handlers may see
+        duplicates, but never silently miss a message whose handler failed.
 
     ``AT_MOST_ONCE``
         Offsets committed manually **before** dispatch.  A crash between
@@ -267,23 +270,35 @@ class KafkaEventBus(AbstractEventBus):
 
         # Consumer options differ per semantics:
         #   AT_MOST_ONCE  → auto_commit=False (we commit manually before dispatch)
-        #   AT_LEAST_ONCE → auto_commit per settings (default True)
+        #   AT_LEAST_ONCE → auto_commit=False (we commit manually AFTER dispatch —
+        #                   see the WHY note below)
         #   EXACTLY_ONCE  → auto_commit=False + read_committed isolation
+        #
+        # WHY AT_LEAST_ONCE no longer honours `enable_auto_commit=True`:
+        # aiokafka's own auto-commit advances the committed offset on a fixed
+        # timer (`auto_commit_interval_ms`), independent of whether the local
+        # handler dispatch for that message succeeded.  That violates the
+        # documented "committed after successful dispatch" contract for
+        # AT_LEAST_ONCE (see the class docstring above and
+        # `KafkaDeliverySemantics.AT_LEAST_ONCE`'s docstring) — a message
+        # whose handler raised could still have its offset silently advanced
+        # by the timer, so it would never be redelivered.  We therefore always
+        # disable aiokafka's auto-commit for this bus and commit manually,
+        # once per message, only after `_chain()` returns without raising
+        # (see `_consume_loop` below).  `enable_auto_commit` is kept on
+        # `KafkaEventBusSettings` for backward-compat / documentation purposes
+        # only — it no longer changes consumer behaviour.
         if semantics == KafkaDeliverySemantics.EXACTLY_ONCE:
             consumer_kwargs = {
                 "isolation_level": "read_committed",
                 "enable_auto_commit": False,
                 **self._config.consumer_kwargs,
             }
-        elif semantics == KafkaDeliverySemantics.AT_MOST_ONCE:
+        else:
+            # AT_MOST_ONCE and AT_LEAST_ONCE both commit manually — only the
+            # ordering relative to dispatch differs (see _consume_loop).
             consumer_kwargs = {
                 "enable_auto_commit": False,
-                **self._config.consumer_kwargs,
-            }
-        else:
-            # AT_LEAST_ONCE — honour the config value (default True).
-            consumer_kwargs = {
-                "enable_auto_commit": self._config.enable_auto_commit,
                 **self._config.consumer_kwargs,
             }
 
@@ -475,8 +490,11 @@ class KafkaEventBus(AbstractEventBus):
         Semantics-specific behaviour:
 
         ``AT_LEAST_ONCE`` (default)
-            Auto-commit handles offset progression.  On error, the message
-            is logged and skipped (no retry at the bus level).
+            Offset committed manually **after** successful dispatch.  If the
+            handler chain raises, the offset is left uncommitted — the
+            message is logged and skipped at the bus level (no retry here),
+            but a fresh consumer in the same ``group_id`` will still receive
+            it because the offset never advanced.
 
         ``AT_MOST_ONCE``
             Offset committed manually **before** dispatch via
@@ -522,8 +540,14 @@ class KafkaEventBus(AbstractEventBus):
                             )
 
                     else:
-                        # AT_LEAST_ONCE — auto-commit handles progression.
+                        # AT_LEAST_ONCE — commit AFTER successful dispatch.
+                        # If _chain() raises, control jumps straight to the
+                        # `except Exception` block below and commit() is
+                        # never reached — the offset stays uncommitted so a
+                        # fresh consumer in this group_id redelivers the
+                        # message (see the WHY note in start()).
                         await self._chain(event, channel)
+                        await self._consumer.commit()
 
                 except asyncio.CancelledError:
                     raise

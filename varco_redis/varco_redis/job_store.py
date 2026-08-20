@@ -67,7 +67,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Sequence, TYPE_CHECKING
 from uuid import UUID
 
-from varco_core.job.base import AbstractJobStore, Job, JobStatus
+from redis.exceptions import WatchError
+
+from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
 
 if TYPE_CHECKING:
@@ -248,7 +250,7 @@ class RedisJobStore(AbstractJobStore):
 
     # ── AbstractJobStore implementation ───────────────────────────────────────
 
-    async def save(self, job: Job) -> None:
+    async def save(self, job: Job, *, expected_epoch: int | None = None) -> None:
         """
         Persist or update a job (upsert semantics).
 
@@ -263,10 +265,70 @@ class RedisJobStore(AbstractJobStore):
 
         Args:
             job: The ``Job`` to persist.
+            expected_epoch: Fencing token (Plan 005 Phase 4, U-11 §3).
+                ``None`` (default) — no fencing check, the plain GET-then-SET
+                path below, byte-identical to pre-fencing behaviour. When
+                supplied, the epoch-check-then-write is done inside a
+                ``WATCH``/``MULTI``/``EXEC`` transaction on the job key so a
+                stalled worker that resumes after being reaped cannot race a
+                concurrent claim/renew between the check and the write — the
+                same atomicity requirement ``try_claim()``'s docstring
+                documents for Redis (WATCH + MULTI).
 
-        Async safety: ✅ All awaits are independent — no shared lock needed.
+        Raises:
+            StaleLeaseError: ``expected_epoch`` is supplied and does not
+                match the stored ``lease_epoch`` (or the row does not
+                exist), including when a concurrent writer touched the job
+                key between the check and the write (``WatchError``).
+
+        Async safety: ✅ The unfenced path's awaits are independent — no
+            shared lock needed. The fenced path uses a client-side
+            transaction (``WATCH``) — safe to call concurrently; only one
+            of two racing fenced saves for the same key can win.
         """
         job_key = self._job_key(job.job_id)
+
+        if expected_epoch is not None:
+            async with self._client.pipeline(transaction=True) as pipe:
+                await pipe.watch(job_key)
+                existing_raw = await pipe.get(job_key)
+                current_job = (
+                    _json_to_job(existing_raw) if existing_raw is not None else None
+                )
+                if current_job is None or current_job.lease_epoch != expected_epoch:
+                    await pipe.reset()
+                    raise StaleLeaseError(
+                        f"save() refused for job {job.job_id}: expected_epoch="
+                        f"{expected_epoch} does not match stored lease_epoch "
+                        f"({current_job.lease_epoch if current_job is not None else 'row not found'})."
+                    )
+                old_status = current_job.status
+                pipe.multi()
+                pipe.set(job_key, _job_to_json(job))
+                if old_status != job.status:
+                    pipe.zrem(self._status_key(old_status), str(job.job_id))
+                score = job.created_at.timestamp()
+                pipe.zadd(self._status_key(job.status), {str(job.job_id): score})
+                try:
+                    await pipe.execute()
+                except WatchError as exc:
+                    # Another writer touched the job key between our epoch
+                    # check and the write — this caller no longer has a
+                    # guarantee its epoch is still current. Fail closed,
+                    # exactly like a directly-detected stale epoch.
+                    raise StaleLeaseError(
+                        f"save() refused for job {job.job_id}: expected_epoch="
+                        f"{expected_epoch} — a concurrent write raced this "
+                        "fenced save (WATCH detected a change)."
+                    ) from exc
+
+            _logger.debug(
+                "RedisJobStore.save: job_id=%s status=%s expected_epoch=%s",
+                job.job_id,
+                job.status,
+                expected_epoch,
+            )
+            return
 
         # Read the existing value to detect status changes (for index cleanup).
         existing_raw = await self._client.get(job_key)

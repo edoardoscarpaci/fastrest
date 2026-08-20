@@ -181,10 +181,24 @@ async def test_at_least_once_producer_has_no_transactional_id(
     await bus.stop()
 
 
-async def test_at_least_once_consumer_uses_auto_commit(
+async def test_at_least_once_consumer_disables_aiokafka_auto_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """AT_LEAST_ONCE consumer must have enable_auto_commit=True (default)."""
+    """
+    Regression test: AT_LEAST_ONCE must NOT rely on aiokafka's own periodic
+    auto-commit.
+
+    User reports: a message whose ``@listen`` handler raised was silently
+    never redelivered to a fresh consumer in the same ``group_id`` — the
+    committed offset had advanced past it anyway.  Root cause: aiokafka's
+    ``enable_auto_commit=True`` commits the fetched position on a fixed
+    timer, independent of whether the local handler dispatch succeeded —
+    not "committed after successful dispatch" as documented for
+    ``AT_LEAST_ONCE``.  Correct behaviour: the bus always disables
+    aiokafka's built-in auto-commit and commits manually itself, once per
+    message, only after dispatch succeeds (see
+    ``test_at_least_once_commits_only_after_successful_dispatch`` below).
+    """
     created: list[FakeConsumer] = []
 
     def _make_consumer(**kw: Any) -> FakeConsumer:
@@ -198,9 +212,85 @@ async def test_at_least_once_consumer_uses_auto_commit(
     bus = KafkaEventBus(_settings(KafkaDeliverySemantics.AT_LEAST_ONCE))
     await bus.start()
 
-    assert created[0].kwargs.get("enable_auto_commit") is True
+    assert created[0].kwargs.get("enable_auto_commit") is False
     assert created[0].kwargs.get("isolation_level") is None
     await bus.stop()
+
+
+async def test_at_least_once_commits_only_after_successful_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AT_LEAST_ONCE consumer must commit AFTER dispatch, and only on success."""
+    order: list[str] = []
+    fake_consumer = FakeConsumer()
+    fake_consumer.queue("payments", PaymentEvent(amount=50.0))
+
+    original_commit = fake_consumer.commit
+
+    async def _tracking_commit() -> None:
+        order.append("commit")
+        await original_commit()
+
+    fake_consumer.commit = _tracking_commit  # type: ignore[method-assign]
+
+    received: list[Event] = []
+
+    async def _handler(event: Event) -> None:
+        order.append("dispatch")
+        received.append(event)
+
+    monkeypatch.setattr("varco_kafka.bus.AIOKafkaProducer", FakeProducer)
+    monkeypatch.setattr("varco_kafka.bus.AIOKafkaConsumer", lambda **kw: fake_consumer)
+
+    bus = KafkaEventBus(_settings(KafkaDeliverySemantics.AT_LEAST_ONCE))
+    await bus.start()
+    bus.subscribe(PaymentEvent, _handler, channel="payments")
+
+    try:
+        await asyncio.wait_for(asyncio.shield(bus._consumer_task), timeout=0.1)
+    except (asyncio.TimeoutError, asyncio.CancelledError):
+        pass
+
+    await bus.stop()
+
+    assert order[:2] == [
+        "dispatch",
+        "commit",
+    ], "commit must happen after dispatch in AT_LEAST_ONCE mode"
+    assert fake_consumer.commits == 1
+
+
+async def test_at_least_once_does_not_commit_when_handler_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    A raised handler exception must leave the offset uncommitted, so a
+    fresh consumer in the same group_id redelivers the message.
+    """
+    fake_consumer = FakeConsumer()
+    fake_consumer.queue("payments", PaymentEvent(amount=50.0))
+
+    async def _failing_handler(event: Event) -> None:
+        raise RuntimeError("simulated handler failure")
+
+    monkeypatch.setattr("varco_kafka.bus.AIOKafkaProducer", FakeProducer)
+    monkeypatch.setattr("varco_kafka.bus.AIOKafkaConsumer", lambda **kw: fake_consumer)
+
+    bus = KafkaEventBus(_settings(KafkaDeliverySemantics.AT_LEAST_ONCE))
+    await bus.start()
+    bus.subscribe(PaymentEvent, _failing_handler, channel="payments")
+
+    try:
+        await asyncio.wait_for(asyncio.shield(bus._consumer_task), timeout=0.1)
+    except (asyncio.TimeoutError, asyncio.CancelledError):
+        pass
+
+    await bus.stop()
+
+    assert fake_consumer.commits == 0, (
+        "offset must not be committed when the handler raised — "
+        "otherwise the message is silently lost, never redelivered"
+    )
 
 
 async def test_at_least_once_publish_no_transaction(

@@ -72,19 +72,14 @@ class TestKafkaDLQConformance(DeadLetterQueueConformance):
         ) as dlq:
             yield dlq
 
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: KafkaDLQ.delete_where() (varco_kafka/varco_kafka/dlq.py:519-531) "
-            "always raises NotImplementedError, even with NO predicate given — it "
-            "never reaches the 'no predicate at all -> ValueError' check the ABC "
-            "documents (varco_core/varco_core/event/dlq.py:440-489, 'Raises: "
-            "ValueError: no predicate at all was given'). See BACKLOG.md. Not "
-            "fixed here per Plan 012 Non-goals (no production code changes)."
-        ),
-        strict=True,
-    )
-    async def test_delete_where_no_predicate_raises(self, dlq) -> None:  # type: ignore[override]
-        await super().test_delete_where_no_predicate_raises(dlq)
+    # test_regression_kafka_dlq_delete_where_no_predicate: KafkaDLQ.delete_where()
+    # (varco_kafka/varco_kafka/dlq.py) used to always raise NotImplementedError,
+    # even with NO predicate given — it never reached the "no predicate at all
+    # -> ValueError" check the ABC documents (varco_core/varco_core/event/
+    # dlq.py, "Raises: ValueError: no predicate at all was given"). Fixed by
+    # checking for the no-predicate case first, mirroring SA/Redis. The base
+    # class's test_delete_where_no_predicate_raises now runs unmodified
+    # (inherited, no override needed) and passes.
 
     # NOTE for the implementer: KafkaDLQ.count() is documented
     # (varco_kafka/varco_kafka/dlq.py) to always return -1 (no AdminClient

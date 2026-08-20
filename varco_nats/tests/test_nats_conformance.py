@@ -53,16 +53,10 @@ class TestNatsDLQConformance(DeadLetterQueueConformance):
         ) as dlq:
             yield dlq
 
-    @pytest.mark.xfail(
-        reason=(
-            "BUG: NatsDLQ.delete_where() (varco_nats/varco_nats/dlq.py:504-516) "
-            "always raises NotImplementedError, even with NO predicate given — "
-            "it never reaches the 'no predicate at all -> ValueError' check the "
-            "ABC documents (varco_core/varco_core/event/dlq.py:440-489). Same "
-            "class of deviation as KI-2 (KafkaDLQ). See BACKLOG.md. Not fixed "
-            "here per Plan 012 Non-goals (no production code changes)."
-        ),
-        strict=True,
-    )
     async def test_delete_where_no_predicate_raises(self, dlq) -> None:  # type: ignore[override]
+        # Regression test for KI-7: NatsDLQ.delete_where() previously raised
+        # NotImplementedError unconditionally, never reaching the ABC's
+        # "no predicate at all -> ValueError" check. Fixed in
+        # varco_nats/varco_nats/dlq.py — the no-predicate check now runs
+        # before the backend-support NotImplementedError.
         await super().test_delete_where_no_predicate_raises(dlq)

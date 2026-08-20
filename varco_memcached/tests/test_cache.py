@@ -220,6 +220,45 @@ class TestMemcachedCacheSetGet:
         mc_key = settings.memcached_key("k")
         assert fake_mc._exptime.get(mc_key) == 0
 
+    async def test_set_with_subsecond_ttl_rounds_up_to_one(
+        self,
+        cache: MemcachedCache,
+        fake_mc: FakeMemcached,
+        settings: MemcachedCacheSettings,
+    ) -> None:
+        # KI-5 regression: a positive but sub-1-second ttl must round UP to
+        # the smallest expressible non-zero exptime (1), never truncate
+        # DOWN to 0 — 0 means "no expiry" in the Memcached protocol, so
+        # truncating would make the entry live forever instead of expiring
+        # almost immediately.
+        await cache.set("k", "v", ttl=0.05)
+        mc_key = settings.memcached_key("k")
+        assert fake_mc._exptime.get(mc_key) == 1
+
+    async def test_set_with_fractional_ttl_above_one_rounds_up(
+        self,
+        cache: MemcachedCache,
+        fake_mc: FakeMemcached,
+        settings: MemcachedCacheSettings,
+    ) -> None:
+        # A fractional ttl above 1s also rounds up (never down) so the
+        # entry never expires earlier than the caller requested.
+        await cache.set("k", "v", ttl=1.2)
+        mc_key = settings.memcached_key("k")
+        assert fake_mc._exptime.get(mc_key) == 2
+
+    async def test_set_with_zero_ttl_still_means_no_expiry(
+        self,
+        cache: MemcachedCache,
+        fake_mc: FakeMemcached,
+        settings: MemcachedCacheSettings,
+    ) -> None:
+        # Explicit ttl=0 is unchanged by the KI-5 fix — it stays the
+        # documented "no expiry" sentinel, not "expire immediately".
+        await cache.set("k", "v", ttl=0)
+        mc_key = settings.memcached_key("k")
+        assert fake_mc._exptime.get(mc_key) == 0
+
     async def test_default_ttl_from_settings(self, fake_mc: FakeMemcached) -> None:
         settings = MemcachedCacheSettings(host="fake-mc", port=11211, default_ttl=60.0)
         with patch("varco_memcached.cache.aiomcache.Client", return_value=fake_mc):
