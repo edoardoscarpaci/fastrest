@@ -327,12 +327,8 @@ async def test_pool_saturation_result_component_matches_name(sqlite_engine) -> N
 # ── Integration: real PostgreSQL ──────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def pg_container():
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:15-alpine") as pg:
-        yield pg
+# pg_container (module-scoped) was replaced by the session-scoped
+# postgres_container fixture in tests/conftest.py (Plan 012 / RT1, Step 6/9).
 
 
 @pytest.mark.integration
@@ -340,7 +336,7 @@ def pg_container():
     not os.environ.get("VARCO_RUN_INTEGRATION"),
     reason="Integration tests disabled — set VARCO_RUN_INTEGRATION=1",
 )
-async def test_integration_healthy_against_real_db(pg_container) -> None:
+async def test_integration_healthy_against_real_db(postgres_container) -> None:
     """
     Health check reports HEALTHY against a real PostgreSQL.
 
@@ -354,7 +350,7 @@ async def test_integration_healthy_against_real_db(pg_container) -> None:
         ✅ Self-contained, matching every other integration test in the repo.
         ❌ Requires Docker — already the documented prerequisite.
     """
-    url = asyncpg_url(pg_container)
+    url = asyncpg_url(postgres_container)
     engine = create_async_engine(url)
     try:
         check = SAHealthCheck(engine=engine, timeout=5.0)

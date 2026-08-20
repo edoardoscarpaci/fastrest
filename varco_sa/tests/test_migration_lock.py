@@ -27,26 +27,23 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module")
-def pg_container():
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:15-alpine") as pg:
-        yield pg
+# The local, module-scoped pg_container fixture was replaced by the
+# session-scoped postgres_container fixture in tests/conftest.py
+# (Plan 012 / RT1, Step 6/9).
 
 
 @pytest_asyncio.fixture
-async def engine(pg_container):
+async def engine(postgres_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    url = asyncpg_url(pg_container)
+    url = asyncpg_url(postgres_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     await eng.dispose()
 
 
 async def test_two_migrators_concurrent_upgrade_exactly_one_applies(
-    pg_container,
+    postgres_container,
 ) -> None:
     """
     Two migrators racing the same pending revisions: exactly one applies them.
@@ -79,7 +76,7 @@ async def test_two_migrators_concurrent_upgrade_exactly_one_applies(
     # Isolated database: this test actually applies revisions, and the
     # alembic_version rows it stamps would break sibling tests that build a
     # migrator with include_framework_branch=False against the same database.
-    url = await create_isolated_database_url(pg_container, "migration_lock_race")
+    url = await create_isolated_database_url(postgres_container, "migration_lock_race")
     engine = create_async_engine(url, echo=False)
 
     migrator_a = AlembicMigrator(engine, include_framework_branch=True)

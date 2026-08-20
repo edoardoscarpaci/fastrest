@@ -278,24 +278,27 @@ class TestBeanieDeduplicatorIntegration:
     """
 
     @pytest.fixture
-    async def mongo_dedup(self):
-        """Spin up a MongoDB container, run init_beanie, yield a deduplicator."""
-        try:
-            from testcontainers.mongodb import MongoDbContainer
-        except ImportError:
-            pytest.skip("testcontainers[mongodb] not installed")
+    async def mongo_dedup(self, mongo_url: str):
+        """Against the shared session-scoped MongoDB container
+        (tests/conftest.py, Plan 012 / RT1, Step 6/7), run init_beanie and
+        yield a deduplicator. Unique per-test database name (Step 8)."""
+        import uuid
 
         from beanie import init_beanie
         from pymongo import AsyncMongoClient
 
-        with MongoDbContainer("mongo:6.0") as mongo:
-            client = AsyncMongoClient(mongo.get_connection_url())
-            db = client["test_dedup"]
-            await init_beanie(
-                database=db,
-                document_models=[DeduplicationDocument],
-            )
+        db_name = f"test_dedup_{uuid.uuid4().hex[:8]}"
+        client = AsyncMongoClient(mongo_url)
+        db = client[db_name]
+        await init_beanie(
+            database=db,
+            document_models=[DeduplicationDocument],
+        )
+        try:
             yield BeanieDeduplicator()
+        finally:
+            await client.drop_database(db_name)
+            await client.close()
 
     async def test_round_trip(self, mongo_dedup: BeanieDeduplicator) -> None:
         """is_duplicate False → mark_seen → is_duplicate True."""

@@ -21,19 +21,15 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module")
-def mongo_container():
-    from testcontainers.mongodb import MongoDbContainer
-
-    with MongoDbContainer("mongo:7") as mongo:
-        yield mongo
+# mongo_container (module-scoped) was replaced by the session-scoped
+# mongo_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6/7).
 
 
 @pytest_asyncio.fixture
-async def db(mongo_container):
+async def db(mongo_url: str):
     from motor.motor_asyncio import AsyncIOMotorClient
 
-    client = AsyncIOMotorClient(mongo_container.get_connection_url())
+    client = AsyncIOMotorClient(mongo_url)
     database = client["varco_migration_lock_test"]
     yield database
     await client.drop_database("varco_migration_lock_test")

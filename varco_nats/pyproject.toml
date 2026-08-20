@@ -52,9 +52,9 @@ dev = [
     # testcontainers spins up a real NATS broker via Docker for integration
     # tests.  Marked with @pytest.mark.integration and skipped by default —
     # run with: pytest -m integration
-    # The generic DockerContainer is used (no nats extra) so `uv sync` never
-    # fails on a missing testcontainers extra.
-    "testcontainers>=4.0",
+    # testcontainers.nats.NatsContainer is first-party since v4.3.0 and pulls
+    # zero additional dependencies.
+    "testcontainers[nats]>=4.3",
 ]
 
 [build-system]
@@ -67,6 +67,7 @@ packages = ["varco_nats"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: real NATS broker required (disabled by default — use -m integration)",
 ]

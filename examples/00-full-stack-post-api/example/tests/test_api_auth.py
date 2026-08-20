@@ -215,24 +215,28 @@ async def test_me_returns_bob_identity(
 
 
 @pytest.mark.integration
-async def test_me_with_garbage_token_is_anonymous(client: httpx.AsyncClient) -> None:
+async def test_me_with_garbage_token_returns_401(client: httpx.AsyncClient) -> None:
     """
-    ``GET /auth/me`` with a malformed Bearer token returns anonymous.
+    ``GET /auth/me`` with a malformed Bearer token returns 401, not
+    anonymous.
 
-    ``JwtBearerAuth`` is configured with ``required=False`` in ``create_app()``
-    so a verification failure falls back to an anonymous context rather than
-    returning 401.
-
-    Edge cases:
-        - A valid JWT from a different issuer (not in TrustedIssuerRegistry)
-          would also be treated as anonymous, not 401.
+    Corrected expectation (Plan 012 / RT8, Step 34): ``JwtBearerAuth``'s
+    ``required=False`` only provides the anonymous fallback when the
+    ``Authorization`` header is ABSENT — see
+    ``varco_fastapi/varco_fastapi/auth/server_auth.py``'s ``JwtBearerAuth.
+    __call__`` docstring, which documents "Raises: HTTPException 401: Token
+    missing (when required), expired, invalid...", unconditionally, not
+    gated on ``required``. A *present* but malformed/invalid/expired token
+    always raises 401, regardless of ``required=False``. This test
+    previously asserted the opposite (a stale expectation, not a
+    verified-against-the-implementation one) and was corrected here rather
+    than in production code, per Plan 012's Non-goals.
     """
     resp = await client.get(
         "/auth/me",
         headers={"Authorization": "Bearer this-is-not-a-jwt"},
     )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["anonymous"] is True
+    assert resp.status_code == 401, resp.text
 
 
 # ── Anonymous access tests ────────────────────────────────────────────────────
@@ -251,23 +255,26 @@ async def test_anonymous_can_list_posts(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.integration
-async def test_anonymous_cannot_create_post_returns_403(
+async def test_anonymous_can_create_post_with_null_author(
     client: httpx.AsyncClient,
 ) -> None:
     """
-    ``POST /v1/posts`` without authentication returns 403.
+    ``POST /v1/posts`` without authentication succeeds with ``author_id=None``.
 
-    Exercises:
-    - PostAuthorizer rejects anonymous CREATE.
-    - ErrorMiddleware maps ``ServiceAuthorizationError`` → 403.
+    Corrected expectation (Plan 012 / RT8, Step 34): ``PostAuthorizer``'s own
+    docstring (``example/authorizer.py``) documents "anonymous | create |
+    post created with author_id=None" as the intentional policy — anonymous
+    create is allowed, only anonymous UPDATE/DELETE are rejected (403). This
+    test previously asserted the opposite (a stale expectation predating the
+    documented policy) and was corrected here rather than in production
+    code, per Plan 012's Non-goals.
     """
     resp = await client.post(
         "/v1/posts",
-        json={"title": "Anon create attempt", "body": "Should fail"},
+        json={"title": "Anon create attempt", "body": "Should succeed"},
     )
-    assert (
-        resp.status_code == 403
-    ), f"Expected 403 for anonymous create, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["author_id"] is None
 
 
 @pytest.mark.integration

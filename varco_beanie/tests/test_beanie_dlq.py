@@ -98,22 +98,26 @@ class TestBeanieDIBindingHealth:
 @pytest.mark.integration
 class TestBeanieDeadLetterQueueIntegration:
     @pytest.fixture
-    async def dlq(self):
-        try:
-            from testcontainers.mongodb import MongoDbContainer
-        except ImportError:
-            pytest.skip("testcontainers[mongodb] not installed")
+    async def dlq(self, mongo_url: str):
+        # The local per-test MongoDbContainer was replaced by the shared
+        # session-scoped mongo_url fixture (tests/conftest.py, Plan 012 /
+        # RT1, Step 6/7) — unique per-test database name (Step 8).
+        import uuid
 
         from beanie import init_beanie
         from pymongo import AsyncMongoClient
 
         from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 
-        with MongoDbContainer("mongo:6.0") as mongo:
-            client = AsyncMongoClient(mongo.get_connection_url())
-            db = client["test_beanie_dlq"]
-            await init_beanie(database=db, document_models=[DeadLetterDocument])
+        db_name = f"test_beanie_dlq_{uuid.uuid4().hex[:8]}"
+        client = AsyncMongoClient(mongo_url)
+        db = client[db_name]
+        await init_beanie(database=db, document_models=[DeadLetterDocument])
+        try:
             yield BeanieDeadLetterQueue()
+        finally:
+            await client.drop_database(db_name)
+            await client.close()
 
     async def test_push_pop_ack_count_round_trip(self, dlq) -> None:
         entry = _entry()

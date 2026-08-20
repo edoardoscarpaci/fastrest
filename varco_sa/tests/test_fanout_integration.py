@@ -19,16 +19,12 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module")
-def pg_container():
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:15-alpine") as pg:
-        yield pg
+# pg_container (module-scoped) was replaced by the session-scoped
+# postgres_container fixture in tests/conftest.py (Plan 012 / RT1, Step 6/9).
 
 
 async def test_tenant_a_outbox_entry_published_tenant_b_relay_never_sees_it(
-    pg_container,
+    postgres_container,
 ) -> None:
     from varco_core.event.memory import InMemoryEventBus
     from varco_core.tenancy.fanout import TenantFanoutSupervisor

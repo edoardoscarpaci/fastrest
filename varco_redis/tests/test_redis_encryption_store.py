@@ -517,21 +517,15 @@ class TestRedisEncryptionKeyStoreIntegration:
     - Connection pool behaviour and error propagation.
     """
 
-    @pytest.fixture(scope="class")
-    def redis_container(self):
-        from testcontainers.redis import RedisContainer
-
-        with RedisContainer() as r:
-            yield r
+    # The local, class-scoped redis_container fixture was replaced by the
+    # session-scoped redis_url fixture in tests/conftest.py (Plan 012 / RT1,
+    # Step 6).
 
     @pytest_asyncio.fixture
-    async def real_store(self, redis_container):
+    async def real_store(self, redis_url: str):
         import redis.asyncio as aioredis
 
-        host = redis_container.get_container_host_ip()
-        port = redis_container.get_exposed_port(6379)
-        url = f"redis://{host}:{port}/0"
-        client = aioredis.from_url(url, decode_responses=False)
+        client = aioredis.from_url(redis_url, decode_responses=False)
         store = RedisEncryptionKeyStore(client, prefix=f"test:{id(self)}")
         yield store
         # Flush only our test namespace

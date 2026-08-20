@@ -22,9 +22,57 @@ Async safety:   ✅ — no async code involved in this fixture
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock
 
 import pytest
+
+# ── Session-scoped MongoDB container (Plan 012 / RT1, Steps 7-8) ──────────────
+#
+# ``mongo_url`` starts a single MongoDB container ONCE per test session,
+# replacing the per-file ``MongoDbContainer`` fixtures previously scattered
+# across ~10 test files.
+#
+# Per-test namespacing rule: the container is shared, so every test must use
+# its own uniquely-named database (e.g. ``f"test_{uuid4().hex[:8]}"``) via
+# ``AsyncIOMotorClient(mongo_url)[db_name]`` / ``init_beanie(database=...)``.
+# A test that needs a pristine server (e.g. asserting on the full list of
+# databases) must declare its own function-scoped ``mongo_container_fresh``
+# fixture instead.
+#
+# ``VARCO_TEST_MONGO_URL`` overrides the container entirely (Open Question 1)
+# — when set, no container is started; the value is used as-is and reported
+# via ``request.config.stash``, never silently falling back to a container.
+
+
+@pytest.fixture(scope="session")
+def mongo_url(request: pytest.FixtureRequest) -> str:
+    """
+    Session-scoped MongoDB connection URL — real container or override.
+
+    See the module docstring for the per-test namespacing rule and the
+    ``VARCO_TEST_MONGO_URL`` override contract.
+
+    Yields:
+        A ``mongodb://`` connection URL for the shared server.
+    """
+    if not os.environ.get("VARCO_RUN_INTEGRATION"):
+        pytest.skip(
+            "Integration tests disabled — set VARCO_RUN_INTEGRATION=1 or use -m integration"
+        )
+
+    override = os.environ.get("VARCO_TEST_MONGO_URL")
+    if override:
+        request.config.stash.setdefault("varco_test_overrides", []).append(
+            ("mongo", override)
+        )
+        yield override
+        return
+
+    from testcontainers.mongodb import MongoDbContainer  # noqa: PLC0415
+
+    with MongoDbContainer("mongo:7") as container:
+        yield container.get_connection_url()
 
 
 @pytest.fixture(autouse=True)

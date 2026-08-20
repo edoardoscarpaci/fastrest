@@ -22,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from collections.abc import Iterator
 
 import pytest
 
@@ -51,36 +50,17 @@ class IntegrationOrderEvent(Event):
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def nats_server() -> Iterator[str]:
-    """
-    Start a NATS server with JetStream enabled and yield its connection URL.
-
-    Uses the generic ``DockerContainer`` (no testcontainers extra) running the
-    official ``nats`` image with the ``-js`` flag to enable JetStream.
-    """
-    from testcontainers.core.container import DockerContainer
-    from testcontainers.core.waiting_utils import wait_for_logs
-
-    container = (
-        DockerContainer("nats:2.10-alpine").with_command("-js").with_exposed_ports(4222)
-    )
-    container.start()
-    try:
-        # The NATS server logs this line once it is accepting connections.
-        wait_for_logs(container, "Server is ready", timeout=30)
-        host = container.get_container_host_ip()
-        port = container.get_exposed_port(4222)
-        yield f"nats://{host}:{port}"
-    finally:
-        container.stop()
+# nats_server was previously a local, module-scoped generic-DockerContainer
+# fixture (Plan 012 / RT2, Step 12). It has been replaced by the session-scoped
+# ``nats_url`` fixture in tests/conftest.py, which uses the first-party
+# testcontainers.nats.NatsContainer and is shared across the whole package.
 
 
 # ── Event bus end-to-end ──────────────────────────────────────────────────────
 
 
 class TestNatsEventBusIntegration:
-    async def test_publish_subscribe_round_trip(self, nats_server: str) -> None:
+    async def test_publish_subscribe_round_trip(self, nats_url: str) -> None:
         from varco_nats import NatsEventBus, NatsEventBusSettings
 
         received: list[Event] = []
@@ -91,7 +71,7 @@ class TestNatsEventBusIntegration:
         # Unique stream/subject prefix per run so reruns never collide.
         run_id = uuid.uuid4().hex[:8]
         config = NatsEventBusSettings(
-            servers=nats_server,
+            servers=nats_url,
             stream_name=f"it-events-{run_id}",
             subject_prefix=f"it{run_id}",
             durable_name=f"it-durable-{run_id}",
@@ -119,12 +99,12 @@ class TestNatsEventBusIntegration:
 
 
 class TestNatsDLQIntegration:
-    async def test_push_pop_ack_round_trip(self, nats_server: str) -> None:
+    async def test_push_pop_ack_round_trip(self, nats_url: str) -> None:
         from varco_nats import NatsDLQ, NatsEventBusSettings
 
         run_id = uuid.uuid4().hex[:8]
         config = NatsEventBusSettings(
-            servers=nats_server,
+            servers=nats_url,
             stream_name=f"it-events-{run_id}",
             subject_prefix=f"it{run_id}",
         )

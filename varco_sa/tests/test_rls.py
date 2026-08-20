@@ -121,21 +121,17 @@ pytestmark_integration = [
 ]
 
 
-@pytest.fixture(scope="module")
-def pg_container():
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:15-alpine") as pg:
-        yield pg
+# pg_container (module-scoped) was replaced by the session-scoped
+# postgres_container fixture in tests/conftest.py (Plan 012 / RT1, Step 6/9).
 
 
 @pytest_asyncio.fixture
-async def engine(pg_container):
+async def engine(postgres_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
     # Non-superuser role: the container's own role has BYPASSRLS and would
     # never see the policy enforced. See conftest.provision_rls_app_url.
-    url = await provision_rls_app_url(pg_container)
+    url = await provision_rls_app_url(postgres_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     await eng.dispose()

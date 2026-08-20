@@ -66,6 +66,7 @@ packages = ["varco_beanie"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: real MongoDB instance required (disabled by default — use -m integration)",
 ]

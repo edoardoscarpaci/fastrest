@@ -135,28 +135,20 @@ def test_repr_contains_timeout() -> None:
 
 
 @pytest.mark.integration
-async def test_integration_healthy_against_real_mongodb() -> None:
+async def test_integration_healthy_against_real_mongodb(mongo_url: str) -> None:
     """
-    Spins up a real MongoDB via testcontainers and verifies the health check
-    reports HEALTHY with a non-negative latency.
+    Against the shared session-scoped MongoDB container (tests/conftest.py,
+    Plan 012 / RT1, Step 6/7), verifies the health check reports HEALTHY
+    with a non-negative latency.
     Run with: VARCO_RUN_INTEGRATION=1 pytest -m integration
     """
-    import os
-
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Set VARCO_RUN_INTEGRATION=1 to run integration tests")
-
     from pymongo import AsyncMongoClient
-    from testcontainers.mongodb import MongoDbContainer
 
-    # Use testcontainers so the test is self-contained — no pre-running MongoDB needed.
-    with MongoDbContainer() as mongo:
-        url = mongo.get_connection_url()
-        client: AsyncMongoClient = AsyncMongoClient(url)
-        try:
-            check = _make_check(client, timeout=5.0)
-            result = await check.check()
-        finally:
-            await client.aclose()
+    client: AsyncMongoClient = AsyncMongoClient(mongo_url)
+    try:
+        check = _make_check(client, timeout=5.0)
+        result = await check.check()
+    finally:
+        await client.aclose()
     assert result.status is HealthStatus.HEALTHY
     assert result.latency_ms is not None

@@ -732,24 +732,18 @@ class TestRedisStreamDLQIntegration:
         pytest -m integration tests/test_stream_dlq.py
     """
 
-    @pytest.fixture(scope="class")
-    def redis_container(self):
-        """Start a real Redis container for the test class."""
-        from testcontainers.redis import RedisContainer  # noqa: PLC0415
-
-        with RedisContainer() as redis:
-            yield redis
+    # The local, class-scoped redis_container fixture was replaced by the
+    # session-scoped redis_url fixture in tests/conftest.py (Plan 012 / RT1,
+    # Step 6).
 
     @pytest.fixture
-    async def real_dlq(self, redis_container: Any) -> RedisStreamDLQ:
-        """Connected ``RedisStreamDLQ`` backed by the testcontainers Redis instance."""
+    async def real_dlq(self, redis_url: str) -> RedisStreamDLQ:
+        """Connected ``RedisStreamDLQ`` backed by the shared session-scoped
+        Redis container."""
         # Unique prefix per test run to prevent cross-test interference.
         prefix = f"inttest:{uuid.uuid4().hex[:8]}:"
-        host = redis_container.get_container_host_ip()
-        port = redis_container.get_exposed_port(6379)
-        url = f"redis://{host}:{port}/0"
 
-        settings = RedisEventBusSettings(url=url, channel_prefix=prefix)
+        settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
         async with RedisStreamDLQ(settings) as dlq:
             yield dlq
 

@@ -39,28 +39,21 @@ if not os.environ.get("VARCO_RUN_INTEGRATION"):
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def redis_container():
-    """Start a Redis instance for the integration test module."""
-    from testcontainers.redis import RedisContainer
-
-    with RedisContainer() as redis:
-        yield redis
+# redis_container (module-scoped) was replaced by the session-scoped
+# redis_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
-async def lock(redis_container):
-    """Connected ``RedisLock`` backed by the testcontainers Redis instance."""
+async def lock(redis_url: str):
+    """Connected ``RedisLock`` backed by the shared session-scoped Redis
+    container."""
     from varco_redis.config import RedisEventBusSettings
     from varco_redis.lock import RedisLock
 
     # Unique channel prefix per test run — prevents cross-test key collisions.
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    url = f"redis://{host}:{port}/0"
 
-    settings = RedisEventBusSettings(url=url, channel_prefix=prefix)
+    settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     async with RedisLock(settings=settings) as lock:
         yield lock
 

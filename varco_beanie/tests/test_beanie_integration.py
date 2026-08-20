@@ -62,25 +62,15 @@ class Post:
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def mongo_container():
-    """
-    Start a MongoDB instance for the integration test module.
-
-    Uses ``testcontainers.mongodb.MongoDbContainer`` to spin up a real
-    MongoDB server.  Shared across all tests in the module (``scope="module"``)
-    to avoid per-test startup overhead (~3-5s per container).
-    """
-    from testcontainers.mongodb import MongoDbContainer  # noqa: PLC0415
-
-    with MongoDbContainer() as mongo:
-        yield mongo
+# mongo_container (module-scoped) was replaced by the session-scoped
+# mongo_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6/7).
 
 
 @pytest.fixture
-async def beanie_init(mongo_container):
+async def beanie_init(mongo_url: str):
     """
-    Initialise Beanie ODM against the testcontainers MongoDB instance.
+    Initialise Beanie ODM against the shared session-scoped MongoDB
+    container.
 
     Creates a fresh database per test function via a unique name — ensures
     full isolation between tests without restarting the container.
@@ -91,7 +81,7 @@ async def beanie_init(mongo_container):
 
     # Unique DB name per test — full isolation without container restarts.
     db_name = f"test_{uuid.uuid4().hex[:8]}"
-    connection_string = mongo_container.get_connection_url()
+    connection_string = mongo_url
 
     class PostDocument(Document):
         """Beanie document mirroring the Post domain model."""

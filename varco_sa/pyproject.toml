@@ -32,6 +32,8 @@ Issues     = "https://github.com/edoardoscarpaci/varco/issues"
 
 [tool.uv.sources]
 varco-core = { workspace = true }
+# Dev-only, test-time sibling (see the varco-redis dev-group entry above).
+varco-redis = { workspace = true }
 
 [project.optional-dependencies]
 # Install with: uv sync --extra postgresql
@@ -47,6 +49,19 @@ dev = [
     "pytest-asyncio>=0.24",
     "aiosqlite>=0.20",
     "alembic>=1.13",
+    # C-8: tests/conftest.py:90-127, tests/test_rls.py, tests/test_migration_lock.py and
+    # ~10 other files use PostgresContainer + postgresql+asyncpg:// DSNs but this dev
+    # group previously declared neither dependency — both only resolved because a
+    # sibling package's dev group leaked into the shared workspace venv. Declare them
+    # explicitly so `uv sync --package varco-sa` in isolation doesn't break 10 test files.
+    "testcontainers[postgres]>=4.0",
+    "asyncpg>=0.29",
+    # Plan 012 / RT7, Step 28: test_outbox_chaos_integration.py drives a real
+    # OutboxRelay against a real broker (Redis) alongside real Postgres to
+    # prove durability under a mid-drain broker restart. Dev-only, test-time
+    # — varco_sa/varco_sa/** never imports varco_redis.
+    "varco-redis",
+    "testcontainers[redis]>=4.0",
 ]
 
 [project.entry-points."varco.commands"]
@@ -68,6 +83,7 @@ packages = ["varco_sa"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: requires external services (Docker); skipped by default — use -m integration to run",
 ]

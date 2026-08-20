@@ -37,19 +37,15 @@ if not os.environ.get("VARCO_RUN_INTEGRATION"):
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def redis_container():
-    """Start a Redis instance for the integration test module."""
-    from testcontainers.redis import RedisContainer
-
-    with RedisContainer() as redis:
-        yield redis
+# redis_container (module-scoped) was replaced by the session-scoped
+# redis_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
-async def limiter(redis_container):
+async def limiter(redis_url: str):
     """
-    Connected ``RedisRateLimiter`` backed by the testcontainers Redis instance.
+    Connected ``RedisRateLimiter`` backed by the shared session-scoped Redis
+    container.
 
     Uses a unique key prefix per test to prevent cross-test interference.
     """
@@ -58,12 +54,9 @@ async def limiter(redis_container):
     from varco_redis.rate_limit import RedisRateLimiter
 
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    url = f"redis://{host}:{port}/0"
 
     cfg = RateLimitConfig(rate=5, period=2.0)
-    settings = RedisEventBusSettings(url=url, channel_prefix=prefix)
+    settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     async with RedisRateLimiter(cfg, settings=settings) as lim:
         yield lim
 
@@ -198,17 +191,14 @@ async def test_rate_limit_decorator_with_redis_limiter(limiter) -> None:
     assert exc_info.value.key == "decorated-key"
 
 
-async def test_repr_shows_connection_state(redis_container) -> None:
+async def test_repr_shows_connection_state(redis_url: str) -> None:
     from varco_core.resilience.rate_limit import RateLimitConfig
     from varco_redis.config import RedisEventBusSettings
     from varco_redis.rate_limit import RedisRateLimiter
 
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    url = f"redis://{host}:{port}/0"
-
     lim = RedisRateLimiter(
-        RateLimitConfig(rate=5, period=1.0), settings=RedisEventBusSettings(url=url)
+        RateLimitConfig(rate=5, period=1.0),
+        settings=RedisEventBusSettings(url=redis_url),
     )
     assert "connected=False" in repr(lim)
     await lim.connect()

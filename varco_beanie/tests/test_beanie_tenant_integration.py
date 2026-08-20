@@ -19,16 +19,12 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module")
-def mongo_container():
-    from testcontainers.mongodb import MongoDbContainer
-
-    with MongoDbContainer("mongo:6") as mongo:
-        yield mongo
+# mongo_container (module-scoped) was replaced by the session-scoped
+# mongo_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6/7).
 
 
 async def test_two_tenant_databases_full_read_isolation_and_drop_removes_one(
-    mongo_container,
+    mongo_url: str,
 ) -> None:
     """
     User-visible expectation: under ``TenantIsolation.DATABASE`` each tenant's
@@ -42,7 +38,7 @@ async def test_two_tenant_databases_full_read_isolation_and_drop_removes_one(
     from pymongo import AsyncMongoClient
     from varco_beanie.tenancy.provisioner import BeanieDatabaseProvisioner
 
-    client = AsyncMongoClient(mongo_container.get_connection_url())
+    client = AsyncMongoClient(mongo_url)
     provisioner = BeanieDatabaseProvisioner(client=client)
 
     try:

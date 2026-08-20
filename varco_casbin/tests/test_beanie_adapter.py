@@ -30,8 +30,6 @@ from varco_casbin.config import CasbinSettings
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-pytestmark_integration = pytest.mark.integration
-
 
 def _settings(**kwargs) -> CasbinSettings:
     """Build a ``CasbinSettings`` for adapter='beanie' with sensible defaults."""
@@ -326,33 +324,25 @@ def test_rule_document_str_ptype_only_when_all_fields_empty() -> None:
 # ── Integration tests ─────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def mongo_url() -> str:
-    """
-    Start a throw-away MongoDB container and yield the base connection URL.
+# mongo_url (module-scoped, local) was replaced by the session-scoped
+# mongo_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6/7) — that
+# fixture yields the bare connection URL with no ``authSource``, so this
+# file appends it itself via ``mongo_url_with_auth`` below.
+#
+# testcontainers returns ``mongodb://test:test@host:port``.  The ``test``
+# user is created against the ``admin`` database (superuser), so any
+# connection to a non-``test`` database must include ``?authSource=admin``
+# to authenticate correctly. ``BeanieAdapter.create_table()`` appends
+# ``/{db_name}?authSource=admin`` to this base URL.
 
-    testcontainers returns ``mongodb://test:test@host:port``.  The ``test``
-    user is created against the ``admin`` database (superuser), so any
-    connection to a non-``test`` database must include ``?authSource=admin``
-    to authenticate correctly.  Tests use this base URL and append their own
-    database path — each test appends ``/db_name?authSource=admin`` via
-    ``CasbinSettings(db_url=..., db_name=...)``.
 
-    Note: We yield just the host portion (including credentials) without a
-    database path so that ``BeanieAdapter.create_table()`` can append
-    ``/{db_name}?authSource=admin`` correctly.
-    """
-    MongoDbContainer = pytest.importorskip("testcontainers.mongodb").MongoDbContainer
-    with MongoDbContainer("mongo:7") as mongo:
-        raw_url: str = mongo.get_connection_url()
-        # raw_url is "mongodb://test:test@localhost:PORT" — append authSource
-        # so the test user (whose credentials live in the admin db) can access
-        # any database on this container.
-        yield f"{raw_url}?authSource=admin"
+@pytest.fixture
+def mongo_url_with_auth(mongo_url: str) -> str:
+    return f"{mongo_url}?authSource=admin"
 
 
 @pytest.mark.integration
-async def test_full_round_trip(mongo_url: str) -> None:
+async def test_full_round_trip(mongo_url_with_auth: str) -> None:
     """
     Integration: create_table → add_policy → load_policy → enforce →
     remove_policy → reload → no longer enforced.
@@ -364,7 +354,7 @@ async def test_full_round_trip(mongo_url: str) -> None:
     settings = CasbinSettings(
         model_preset="rbac",
         adapter="beanie",
-        db_url=mongo_url,
+        db_url=mongo_url_with_auth,
         db_name="test_casbin_roundtrip",
     )
 
@@ -392,7 +382,7 @@ async def test_full_round_trip(mongo_url: str) -> None:
 
 
 @pytest.mark.integration
-async def test_persistence_across_engine_restart(mongo_url: str) -> None:
+async def test_persistence_across_engine_restart(mongo_url_with_auth: str) -> None:
     """
     Integration: rules written through one engine survive a full restart.
     """
@@ -403,7 +393,7 @@ async def test_persistence_across_engine_restart(mongo_url: str) -> None:
     settings = CasbinSettings(
         model_preset="rbac",
         adapter="beanie",
-        db_url=mongo_url,
+        db_url=mongo_url_with_auth,
         # Separate DB from the round-trip test to avoid interference.
         db_name="test_casbin_restart",
     )

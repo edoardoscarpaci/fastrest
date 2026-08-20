@@ -150,22 +150,27 @@ class TestBeanieAuditChainBsonPrecision:
 @pytest.mark.integration
 class TestBeanieAuditChainIntegration:
     @pytest.fixture
-    async def chained_repo(self):
-        try:
-            from testcontainers.mongodb import MongoDbContainer
-        except ImportError:
-            pytest.skip("testcontainers[mongodb] not installed")
+    async def chained_repo(self, mongo_url: str):
+        # The local per-test MongoDbContainer was replaced by the shared
+        # session-scoped mongo_url fixture (tests/conftest.py, Plan 012 /
+        # RT1, Step 6/7) — per-test namespacing rule: a unique database name
+        # per test, dropped on teardown.
+        import uuid
 
         from beanie import init_beanie
         from pymongo import AsyncMongoClient
 
         from varco_beanie.audit import AuditDocument, BeanieAuditRepository
 
-        with MongoDbContainer("mongo:6.0") as mongo:
-            client = AsyncMongoClient(mongo.get_connection_url())
-            db = client["test_beanie_audit_chain"]
-            await init_beanie(database=db, document_models=[AuditDocument])
+        db_name = f"test_beanie_audit_chain_{uuid.uuid4().hex[:8]}"
+        client = AsyncMongoClient(mongo_url)
+        db = client[db_name]
+        await init_beanie(database=db, document_models=[AuditDocument])
+        try:
             yield BeanieAuditRepository(hash_chain=True)
+        finally:
+            await client.drop_database(db_name)
+            await client.close()
 
     async def test_sequential_saves_produce_a_verifiable_chain(
         self, chained_repo

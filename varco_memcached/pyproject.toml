@@ -43,7 +43,7 @@ dev = [
     "pytest-asyncio>=0.24",
     # testcontainers[memcached] spins up a real Memcached instance via Docker for
     # integration tests.  Marked @pytest.mark.integration — run with: pytest -m integration
-    "testcontainers>=4.0",
+    "testcontainers[memcached]>=4.4",
 ]
 
 [build-system]
@@ -56,6 +56,7 @@ packages = ["varco_memcached"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: real Memcached instance required (disabled by default — use -m integration)",
 ]

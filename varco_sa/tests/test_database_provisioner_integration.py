@@ -21,20 +21,16 @@ pytestmark = [
 ]
 
 
-@pytest.fixture(scope="module")
-def pg_container():
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:15-alpine") as pg:
-        yield pg
+# pg_container (module-scoped) was replaced by the session-scoped
+# postgres_container fixture in tests/conftest.py (Plan 012 / RT1, Step 6/9).
 
 
 async def test_create_migrate_isolate_and_drop_two_tenant_databases(
-    pg_container,
+    postgres_container,
 ) -> None:
     from varco_sa.tenancy.admin.db_provisioner import SADatabaseProvisioner
 
-    admin_dsn = asyncpg_url(pg_container)
+    admin_dsn = asyncpg_url(postgres_container)
     provisioner = SADatabaseProvisioner(admin_dsn=admin_dsn)
 
     await provisioner.provision("acme")

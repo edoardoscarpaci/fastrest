@@ -62,10 +62,24 @@ Issues     = "https://github.com/edoardoscarpaci/varco/issues"
 [project.scripts]
 varco = "varco_core.cli.main:main"
 
+[tool.uv.sources]
+# varco-fastapi is a dev-only, test-time dependency (see the comment below) — this
+# does not create a runtime/published dependency cycle: varco_core's own
+# [project] dependencies never reference it, and varco_core/varco_core/** never
+# imports it. Same rationale as varco_fastapi's dev-group dependency on varco-sa
+# (Step 35 of plans/012-r3-reliability-and-regression-proofing.md).
+varco-fastapi = { workspace = true }
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    # tests/test_conformance_inmemory.py imports InMemoryJobStore from
+    # varco_fastapi.job.store to exercise the shared JobStoreConformance suite
+    # against the in-process job store — the only concrete AbstractJobStore
+    # implementation that lives outside a container-requiring backend package.
+    # Dev-only: never a runtime/published dependency of varco_core.
+    "varco-fastapi",
 ]
 
 [build-system]
@@ -78,6 +92,7 @@ packages = ["varco_core"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: requires external services (Docker); skipped by default — use -m integration to run",
 ]

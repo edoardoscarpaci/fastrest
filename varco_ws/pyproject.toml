@@ -35,6 +35,14 @@ varco-core = { workspace = true }
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24",
+    # RT4: real WebSocket/SSE integration harness — a small FastAPI app served by
+    # uvicorn on an ephemeral port, driven by real websockets/httpx clients.
+    # No testcontainers entry: WebSocketEventBus/SSEEventBus are in-process buses
+    # whose "real service" is a locally-bound uvicorn server, not a container.
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.28",
+    "websockets>=13.0",
 ]
 
 [build-system]
@@ -47,6 +55,13 @@ packages = ["varco_ws"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
+# running_server (tests/conftest.py) starts a background uvicorn task and is consumed
+# by both fixture-scoped setup and function-scoped tests; without pinning the loop
+# scope to "session" uvicorn's task runs in a different event loop than the
+# websockets/httpx clients making requests, and requests never complete.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 markers      = [
     "integration: requires external services (Docker); skipped by default — use -m integration to run",
 ]

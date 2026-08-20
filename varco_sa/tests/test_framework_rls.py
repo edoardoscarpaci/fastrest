@@ -90,19 +90,15 @@ pytestmark_integration = [
 ]
 
 
-@pytest.fixture(scope="module")
-def _pg_container():
-    from testcontainers.postgres import PostgresContainer
-
-    with PostgresContainer("postgres:15-alpine") as pg:
-        yield pg
+# _pg_container (module-scoped) was replaced by the session-scoped
+# postgres_container fixture in tests/conftest.py (Plan 012 / RT1, Step 6/9).
 
 
 @pytest.fixture
-async def _pg_engine(_pg_container):
+async def _pg_engine(postgres_container):
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    url = await provision_rls_app_url(_pg_container)
+    url = await provision_rls_app_url(postgres_container)
     eng = create_async_engine(url, echo=False)
     yield eng
     # The container is module-scoped, so the framework tables (fixed names,

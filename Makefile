@@ -8,7 +8,14 @@
 #   make type-check       — mypy (all packages)
 #   make test             — unit tests (all packages)
 #   make test PKG=varco_core — unit tests for one package
-#   make integration-test — integration tests (requires Docker)
+#   make integration-test — integration tests (requires Docker; honors any
+#                            VARCO_TEST_*_URL override present in the shell)
+#   make integration-test PKG=varco_redis — integration tests for one package
+#   make integration-test-clean — integration tests, guaranteed clean-room
+#                            (unsets every VARCO_TEST_*_URL override first)
+#   Nothing under `make integration-test*` runs in CI, by design — see
+#   BACKLOG.md:50-56 and the Non-goals section of
+#   plans/012-r3-reliability-and-regression-proofing.md.
 #   make build            — build wheels for all packages
 #   make build PKG=varco_redis — build one package
 #   make publish          — publish all dist/* to PyPI (requires UV_PUBLISH_TOKEN)
@@ -64,7 +71,12 @@ help:
 	@echo "  make type-check              mypy (all packages)"
 	@echo "  make test                    unit tests (all packages)"
 	@echo "  make test PKG=varco_core     unit tests (one package)"
-	@echo "  make integration-test        integration tests (requires Docker)"
+	@echo "  make integration-test        integration tests (requires Docker; honors"
+	@echo "                                VARCO_TEST_*_URL overrides if set)"
+	@echo "  make integration-test PKG=varco_redis  integration tests (one package)"
+	@echo "  make integration-test-clean  integration tests, clean-room (unsets every"
+	@echo "                                VARCO_TEST_*_URL override first)"
+	@echo "                                — nothing here runs in CI by design"
 	@echo "  make build                   build wheels + sdists (all packages)"
 	@echo "  make build PKG=varco_redis   build one package"
 	@echo "  make publish                 publish dist/* to PyPI"
@@ -106,12 +118,33 @@ test:
 	)
 
 # ── Integration tests ─────────────────────────────────────────────────────────
+# `integration-test` honors any VARCO_TEST_*_URL override present in the
+# environment (see scripts/integration_tests.sh's header and Open Question 1
+# in plans/012-r3-reliability-and-regression-proofing.md). Nothing here runs
+# in CI by design — .github/workflows/integration.yml is intentionally inert
+# (BACKLOG.md:50-56).
 .PHONY: integration-test
 integration-test:
 	@if [ -n "$(PKG)" ]; then \
 		bash scripts/integration_tests.sh $(PKG); \
 	else \
 		bash scripts/integration_tests.sh; \
+	fi
+
+# `integration-test-clean` is the guaranteed clean-room entry point: every
+# VARCO_TEST_*_URL override name is explicitly unset first, so the run always
+# exercises fresh testcontainers-managed brokers/databases regardless of what
+# is set in the calling shell.
+.PHONY: integration-test-clean
+integration-test-clean:
+	@if [ -n "$(PKG)" ]; then \
+		env -u VARCO_TEST_REDIS_URL -u VARCO_TEST_MONGO_URL -u VARCO_TEST_POSTGRES_URL \
+			-u VARCO_TEST_KAFKA_URL -u VARCO_TEST_MEMCACHED_URL -u VARCO_TEST_NATS_URL \
+			bash scripts/integration_tests.sh $(PKG); \
+	else \
+		env -u VARCO_TEST_REDIS_URL -u VARCO_TEST_MONGO_URL -u VARCO_TEST_POSTGRES_URL \
+			-u VARCO_TEST_KAFKA_URL -u VARCO_TEST_MEMCACHED_URL -u VARCO_TEST_NATS_URL \
+			bash scripts/integration_tests.sh; \
 	fi
 
 # ── Build ─────────────────────────────────────────────────────────────────────

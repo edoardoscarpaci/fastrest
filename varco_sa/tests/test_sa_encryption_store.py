@@ -334,18 +334,15 @@ class TestSAEncryptionKeyStoreIntegration:
     - Real connection pool behaviour under concurrent writes.
     """
 
-    @pytest.fixture(scope="class")
-    def pg_container(self):
-        """Start a PostgreSQL container for the integration test class."""
-        from testcontainers.postgres import PostgresContainer
-
-        with PostgresContainer("postgres:15-alpine") as pg:
-            yield pg
+    # pg_container (class-scoped) was replaced by the session-scoped
+    # postgres_container fixture in tests/conftest.py (Plan 012 / RT1,
+    # Step 6/9).
 
     @pytest_asyncio.fixture
-    async def pg_store(self, pg_container):
-        """``SAEncryptionKeyStore`` backed by a real PostgreSQL instance."""
-        url = asyncpg_url(pg_container)
+    async def pg_store(self, postgres_container):
+        """``SAEncryptionKeyStore`` backed by the shared session-scoped
+        PostgreSQL container."""
+        url = asyncpg_url(postgres_container)
         e = create_async_engine(url, echo=False)
         store = SAEncryptionKeyStore(e)
         await store.ensure_table()

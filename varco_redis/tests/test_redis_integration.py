@@ -48,31 +48,18 @@ class IntegrationRedisEvent(Event):
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def redis_container():
-    """
-    Start a Redis instance for the integration test module.
-
-    Uses ``testcontainers.redis.RedisContainer`` to spin up a real server.
-    Shared across all tests in the module (``scope="module"``) to avoid
-    per-test startup overhead (~2s per container).
-    """
-    from testcontainers.redis import RedisContainer  # noqa: PLC0415
-
-    with RedisContainer() as redis:
-        yield redis
+# redis_container (module-scoped) was replaced by the session-scoped
+# redis_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
-async def bus(redis_container):
+async def bus(redis_url: str):
     """
-    ``RedisEventBus`` connected to the testcontainers Redis instance.
+    ``RedisEventBus`` connected to the shared session-scoped Redis container.
     """
     from varco_redis import RedisEventBus, RedisEventBusSettings  # noqa: PLC0415
 
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    config = RedisEventBusSettings(url=f"redis://{host}:{port}/0")
+    config = RedisEventBusSettings(url=redis_url)
 
     async with RedisEventBus(config) as b:
         yield b

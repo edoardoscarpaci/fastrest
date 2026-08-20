@@ -301,25 +301,19 @@ def test_name_property() -> None:
 
 
 @pytest.mark.integration
-async def test_integration_healthy_against_real_memcached() -> None:
+async def test_integration_healthy_against_real_memcached(
+    memcached_host_port: tuple[str, int],
+) -> None:
     """
-    Spins up a real Memcached via testcontainers and verifies the health check
+    Against the shared session-scoped Memcached container
+    (tests/conftest.py, Plan 012 / RT1, Step 6), verifies the health check
     reports HEALTHY with a non-negative latency.
     Run with: VARCO_RUN_INTEGRATION=1 pytest -m integration
     """
-    import os
-
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Set VARCO_RUN_INTEGRATION=1 to run integration tests")
-
-    from testcontainers.memcached import MemcachedContainer
-
-    with MemcachedContainer() as mc:
-        host = mc.get_container_host_ip()
-        port = int(mc.get_exposed_port(11211))
-        settings = MemcachedCacheSettings(host=host, port=port)
-        check = MemcachedHealthCheck(settings, timeout=5.0)
-        result = await check.check()
+    host, port = memcached_host_port
+    settings = MemcachedCacheSettings(host=host, port=port)
+    check = MemcachedHealthCheck(settings, timeout=5.0)
+    result = await check.check()
 
     assert result.status is HealthStatus.HEALTHY
     assert result.latency_ms is not None and result.latency_ms >= 0.0

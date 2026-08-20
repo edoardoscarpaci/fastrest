@@ -63,6 +63,7 @@ packages = ["varco_kafka"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: real Kafka broker required (disabled by default — use -m integration)",
 ]

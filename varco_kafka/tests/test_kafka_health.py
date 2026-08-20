@@ -262,30 +262,21 @@ def test_regression_settings_is_positional_and_timeout_keyword_only() -> None:
 
 
 @pytest.mark.integration
-async def test_integration_healthy_against_real_kafka() -> None:
+async def test_integration_healthy_against_real_kafka(kafka_bootstrap: str) -> None:
     """
-    Spins up a real Kafka via testcontainers and verifies the health check
-    reports HEALTHY with a non-negative latency.
+    Against the shared session-scoped Kafka broker (tests/conftest.py,
+    Plan 012 / RT1, Step 6), verifies the health check reports HEALTHY with
+    a non-negative latency.
     Run with: VARCO_RUN_INTEGRATION=1 pytest -m integration
     """
-    import os
-
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Set VARCO_RUN_INTEGRATION=1 to run integration tests")
-
-    from testcontainers.kafka import KafkaContainer
-
-    # Use testcontainers so the test is self-contained — no pre-running Kafka needed.
-    with KafkaContainer() as kafka:
-        bootstrap = kafka.get_bootstrap_server()
-        # KafkaHealthCheck takes the injected KafkaEventBusSettings object,
-        # never a bare bootstrap_servers string — same shape every unit test
-        # above uses.  The old `bootstrap_servers=` kwarg predates the
-        # settings-object constructor (varco_core.connection settings pattern)
-        # and only survived here because this test never ran without Docker.
-        check = KafkaHealthCheck(
-            KafkaEventBusSettings(bootstrap_servers=bootstrap), timeout=10.0
-        )
-        result = await check.check()
+    # KafkaHealthCheck takes the injected KafkaEventBusSettings object,
+    # never a bare bootstrap_servers string — same shape every unit test
+    # above uses.  The old `bootstrap_servers=` kwarg predates the
+    # settings-object constructor (varco_core.connection settings pattern)
+    # and only survived here because this test never ran without Docker.
+    check = KafkaHealthCheck(
+        KafkaEventBusSettings(bootstrap_servers=kafka_bootstrap), timeout=10.0
+    )
+    result = await check.check()
     assert result.status is HealthStatus.HEALTHY
     assert result.latency_ms is not None

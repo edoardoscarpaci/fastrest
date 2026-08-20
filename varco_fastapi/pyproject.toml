@@ -78,6 +78,9 @@ Issues     = "https://github.com/edoardoscarpaci/varco/issues"
 # Resolve workspace siblings from the monorepo instead of PyPI.
 varco-core = { workspace = true }
 varco-ws   = { workspace = true }
+# Dev-only, test-time sibling — see the varco-sa dev-group entry below for why
+# this does not violate "varco_fastapi imports only varco_core.migration".
+varco-sa   = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -91,6 +94,15 @@ dev = [
     "anyio>=4.0",
     # cryptography for JWT auth tests
     "cryptography>=42.0",
+    # tests/test_app_migrations_integration.py exercises MigrationLifecycle against a
+    # real AlembicMigrator + Postgres to prove the varco_core.migration contract end to
+    # end. varco_fastapi/varco_fastapi/** still imports ONLY varco_core.migration at
+    # runtime (the layer rule in CLAUDE.md) — this is a dev-group, test-only
+    # dependency, never a [project] dependency, and never reaches the wheel.
+    "varco-sa",
+    "alembic>=1.13",
+    "asyncpg>=0.29",
+    "testcontainers[postgres]>=4.0",
 ]
 
 [build-system]

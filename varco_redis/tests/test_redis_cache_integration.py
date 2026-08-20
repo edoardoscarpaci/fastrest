@@ -50,22 +50,9 @@ if not os.environ.get("VARCO_RUN_INTEGRATION"):
     )
 
 
-# ── Redis container fixture ─────────────────────────────────────────────────────
-
-
-@pytest.fixture(scope="module")
-def redis_container():
-    from testcontainers.redis import RedisContainer  # noqa: PLC0415
-
-    with RedisContainer() as r:
-        yield r
-
-
-@pytest.fixture
-def redis_url(redis_container) -> str:
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    return f"redis://{host}:{port}/0"
+# The local redis_container + redis_url fixtures were replaced by the
+# session-scoped redis_url fixture in tests/conftest.py (Plan 012 / RT1,
+# Step 6) — same fixture name, so no call-site changes are needed below.
 
 
 # ── Helper: tiny fake service ───────────────────────────────────────────────────

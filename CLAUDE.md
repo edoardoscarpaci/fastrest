@@ -1644,6 +1644,55 @@ All code in this repo follows the **coding-practice** skill. Key non-obvious rul
 - `InMemoryDeadLetterQueue` is the standard DLQ for unit tests.
 - If a timing-sensitive test becomes flaky, increase its sleep margin rather than marking it xfail.
 
+**Shared, session-scoped integration containers** (Plan 012 / RT1) — each package's
+`tests/conftest.py` exposes ONE session-scoped fixture per external service (`redis_url`,
+`mongo_url`, `postgres_url` + `postgres_container`, `kafka_bootstrap`, `memcached_host_port`,
+`nats_url`), started once per test session instead of once per test file. **Per-test namespacing
+rule**: because the container is shared, every test must confine itself to a key/topic/stream/
+database/schema name it owns exclusively (a `uuid4().hex[:8]` run id is the established
+convention) — never assume the server starts empty. A test that genuinely needs a pristine
+server declares its own function-scoped `*_container_fresh` fixture instead, paying the full
+container-boot cost explicitly and rarely.
+
+**`VARCO_TEST_<SERVICE>_URL` override contract** (Open Question 1) — each session-scoped
+fixture honors a namespaced override (`VARCO_TEST_REDIS_URL`, `VARCO_TEST_POSTGRES_URL`, …): when
+set, no container is started and the value is used as-is, reported via `request.config.stash` and
+in `scripts/integration_tests.sh`'s summary as "NOT a clean-room run". Bare names
+(`REDIS_URL`/`DATABASE_URL`/…) are deliberately **never** honored — a developer with an unrelated
+`DATABASE_URL` exported in their shell must never silently run destructive tests (schema
+creates/drops) against their own dev database. `make integration-test-clean` unsets every
+`VARCO_TEST_*` name first, guaranteeing fresh containers regardless of the calling shell's
+environment.
+
+**Conformance suite opt-in** (`testkit/varco_conformance`, Plan 012 / RT6) — a shared,
+never-packaged suite of behavioral contract tests, one module per `varco_core` ABC
+(`event_bus.py`, `cache.py`, `job_store.py`, `dlq.py`). Reached via one `pythonpath =
+["../testkit"]` line in a package's `[tool.pytest.ini_options]`; a backend opts in with a thin
+subclass overriding the abstract fixture:
+
+```python
+from varco_conformance.event_bus import EventBusConformance
+
+class TestRedisEventBusConformance(EventBusConformance):
+    @pytest.fixture
+    async def bus(self, redis_url: str):
+        async with RedisEventBus(RedisEventBusSettings(url=redis_url)) as bus:
+            yield bus
+```
+
+The base classes are deliberately not named `Test*` — pytest never collects them standalone, so
+an unimplemented fixture fails loudly (`NotImplementedError`) instead of silently passing.
+`varco_core/tests/test_conformance_inmemory.py` runs the same four suites against every
+in-process implementation with no Docker required — the fast feedback loop.
+
+**A conformance failure that reveals a genuine backend ABC-contract violation becomes
+`@pytest.mark.xfail(reason="BUG: ...", strict=True)` plus a one-line BACKLOG.md entry — never an
+in-place production-code fix.** `strict=True` means the xfail itself fails loudly if the
+underlying bug is ever fixed, so the marker doesn't silently rot. See BACKLOG.md's "Known issues
+found while implementing Plan 012" table for the accumulated findings (e.g. `RedisCache`/
+`MemcachedCache` truncating a sub-second `ttl` to `int()`, `KafkaDLQ`/`NatsDLQ.delete_where()`
+never reaching the ABC's "no predicate → `ValueError`" check).
+
 ---
 
 ## Common Pitfalls & How to Avoid Them

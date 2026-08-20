@@ -436,35 +436,30 @@ class TestBeanieIndexGuardCheck:
 
 
 @pytest.mark.integration
-async def test_integration_guard_against_real_mongodb() -> None:
+async def test_integration_guard_against_real_mongodb(mongo_url: str) -> None:
     """
-    Spins up a real MongoDB via testcontainers and verifies that BeanieIndexGuard
-    reports no drift when the expected indexes are present.
+    Against the shared session-scoped MongoDB container (tests/conftest.py,
+    Plan 012 / RT1, Step 6/7), verifies that BeanieIndexGuard reports no
+    drift when the expected indexes are present.
     Run with: VARCO_RUN_INTEGRATION=1 pytest -m integration
     """
-    import os
-
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Set VARCO_RUN_INTEGRATION=1 to run integration tests")
+    import uuid
 
     from pymongo import AsyncMongoClient
-    from testcontainers.mongodb import MongoDbContainer
 
-    # Use testcontainers so the test is self-contained — no pre-running MongoDB needed.
     # Beanie 2.x dropped motor in favour of pymongo's own async client.
-    with MongoDbContainer() as mongo:
-        url = mongo.get_connection_url()
-        client: AsyncMongoClient = AsyncMongoClient(url)
+    client: AsyncMongoClient = AsyncMongoClient(mongo_url)
 
-        # Create the test collection and ensure expected indexes exist.
-        db = client["varco_test_ig"]
-        await db["users_ig"].create_index("email", unique=True)
-        await db["users_ig"].create_index("name")
+    # Unique per-test database name (Step 8's per-test namespacing rule).
+    db_name = f"varco_test_ig_{uuid.uuid4().hex[:8]}"
+    db = client[db_name]
+    await db["users_ig"].create_index("email", unique=True)
+    await db["users_ig"].create_index("name")
 
-        try:
-            guard = BeanieIndexGuard(_User)
-            report = await guard.report(db)
-            assert report.has_drift is False
-        finally:
-            await db["users_ig"].drop()
-            await client.aclose()
+    try:
+        guard = BeanieIndexGuard(_User)
+        report = await guard.report(db)
+        assert report.has_drift is False
+    finally:
+        await client.drop_database(db_name)
+        await client.aclose()

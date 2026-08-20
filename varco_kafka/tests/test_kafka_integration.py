@@ -52,25 +52,14 @@ class IntegrationOrderEvent(Event):
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def kafka_container():
-    """
-    Start a Kafka broker for the integration test module.
-
-    Uses ``testcontainers.kafka.KafkaContainer`` to spin up a real broker.
-    Shared across all tests in the module (``scope="module"``) to avoid
-    per-test startup overhead (~5s per container).
-    """
-    from testcontainers.kafka import KafkaContainer  # noqa: PLC0415
-
-    with KafkaContainer() as kafka:
-        yield kafka
+# kafka_container (module-scoped) was replaced by the session-scoped
+# kafka_bootstrap fixture in tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
-async def bus(kafka_container):
+async def bus(kafka_bootstrap: str):
     """
-    ``KafkaEventBus`` connected to the testcontainers Kafka broker.
+    ``KafkaEventBus`` connected to the shared session-scoped Kafka broker.
 
     Creates a fresh consumer group per test to avoid offset interference
     between tests.
@@ -80,7 +69,7 @@ async def bus(kafka_container):
     from varco_kafka import KafkaEventBus, KafkaEventBusSettings  # noqa: PLC0415
 
     config = KafkaEventBusSettings(
-        bootstrap_servers=kafka_container.get_bootstrap_server(),
+        bootstrap_servers=kafka_bootstrap,
         # Unique group ID per test — avoids cross-test offset sharing.
         group_id=f"test-{uuid.uuid4().hex[:8]}",
         # earliest — so consumers see messages published before they subscribe.
@@ -91,9 +80,10 @@ async def bus(kafka_container):
 
 
 @pytest.fixture
-async def channel_manager(kafka_container):
+async def channel_manager(kafka_bootstrap: str):
     """
-    ``KafkaChannelManager`` connected to the testcontainers Kafka broker.
+    ``KafkaChannelManager`` connected to the shared session-scoped Kafka
+    broker.
 
     Used by integration tests that need to pre-create topics before subscribing.
     Admin operations live here — not on the bus — so credentials stay separate.
@@ -104,7 +94,7 @@ async def channel_manager(kafka_container):
     )  # noqa: PLC0415
 
     settings = KafkaChannelManagerSettings(
-        bootstrap_servers=kafka_container.get_bootstrap_server(),
+        bootstrap_servers=kafka_bootstrap,
     )
     async with KafkaChannelManager(settings) as m:
         yield m

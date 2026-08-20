@@ -18,6 +18,7 @@ DESIGN: fresh DeclarativeBase per test
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pytest
@@ -26,6 +27,71 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 
 from varco_sa.factory import SAModelFactory
+
+# ── Session-scoped Postgres container (Plan 012 / RT1, Steps 7 & 9) ───────────
+#
+# `postgres_container`/`postgres_url` are started ONCE per test session and
+# shared across every integration test in this package — a Postgres container
+# previously started (module-scoped) in ~10 separate test files.
+#
+# Per-test namespacing rule: because the container is shared, every test that
+# reads or writes rows must confine itself to a name it owns exclusively —
+# a fresh schema (`create_isolated_database_url`), a uniquely-named database,
+# or a `uuid4().hex[:8]`-suffixed table/role name. A test that needs a
+# genuinely pristine server (e.g. asserting on `pg_stat_activity` globally)
+# must declare its own function-scoped `postgres_container_fresh` fixture
+# instead of relying on this shared one.
+#
+# `VARCO_TEST_POSTGRES_URL` overrides the container entirely (Open Question 1).
+# When set, the value is used as-is and reported via `request.config.stash`
+# rather than silently falling back to a container on a dead endpoint.
+
+
+@pytest.fixture(scope="session")
+def postgres_container() -> Any:
+    """
+    Session-scoped real Postgres container (or ``None`` under an override).
+
+    Honors ``VARCO_TEST_POSTGRES_URL`` — when set, no container is started
+    and this fixture yields ``None`` (callers needing the raw handle, e.g.
+    RT7's chaos tests, must not run under an override).
+
+    Yields:
+        A started ``testcontainers.postgres.PostgresContainer``, or ``None``
+        when ``VARCO_TEST_POSTGRES_URL`` is set.
+    """
+    if not os.environ.get("VARCO_RUN_INTEGRATION"):
+        pytest.skip(
+            "Integration tests disabled — set VARCO_RUN_INTEGRATION=1 or use -m integration"
+        )
+    if os.environ.get("VARCO_TEST_POSTGRES_URL"):
+        yield None
+        return
+
+    from testcontainers.postgres import PostgresContainer  # noqa: PLC0415
+
+    with PostgresContainer("postgres:16-alpine") as container:
+        yield container
+
+
+@pytest.fixture(scope="session")
+def postgres_url(request: pytest.FixtureRequest, postgres_container: Any) -> str:
+    """
+    Session-scoped asyncpg DSN for the shared Postgres container.
+
+    See the module-level docstring above for the per-test namespacing rule
+    and the ``VARCO_TEST_POSTGRES_URL`` override contract.
+
+    Returns:
+        A DSN beginning with ``postgresql+asyncpg://``.
+    """
+    override = os.environ.get("VARCO_TEST_POSTGRES_URL")
+    if override:
+        request.config.stash.setdefault("varco_test_overrides", []).append(
+            ("postgres", override)
+        )
+        return override
+    return asyncpg_url(postgres_container)
 
 
 @pytest.fixture

@@ -180,25 +180,13 @@ def test_repr_contains_url() -> None:
 
 
 @pytest.mark.integration
-async def test_integration_healthy_against_real_redis() -> None:
+async def test_integration_healthy_against_real_redis(redis_url: str) -> None:
     """
-    Spins up a real Redis via testcontainers and verifies the health check
-    reports HEALTHY with a non-negative latency.
+    Against the shared session-scoped Redis container (tests/conftest.py),
+    verifies the health check reports HEALTHY with a non-negative latency.
     Run with: VARCO_RUN_INTEGRATION=1 pytest -m integration
     """
-    import os
-
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Set VARCO_RUN_INTEGRATION=1 to run integration tests")
-
-    from testcontainers.redis import RedisContainer
-
-    # Use testcontainers so the test is self-contained — no pre-running Redis needed.
-    with RedisContainer() as redis:
-        host = redis.get_container_host_ip()
-        port = redis.get_exposed_port(6379)
-        url = f"redis://{host}:{port}/0"
-        check = RedisHealthCheck(RedisEventBusSettings(url=url), timeout=5.0)
-        result = await check.check()
+    check = RedisHealthCheck(RedisEventBusSettings(url=redis_url), timeout=5.0)
+    result = await check.check()
     assert result.status is HealthStatus.HEALTHY
     assert result.latency_ms is not None and result.latency_ms >= 0.0

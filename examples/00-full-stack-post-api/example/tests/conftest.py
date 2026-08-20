@@ -207,10 +207,19 @@ async def running_server(
     prev_db = os.environ.get("DATABASE_URL")
     prev_redis = os.environ.get("VARCO_REDIS_URL")
     prev_redis_cache = os.environ.get("VARCO_REDIS_CACHE_URL")
+    prev_jwt_allow_any_audience = os.environ.get("VARCO_JWT_ALLOW_ANY_AUDIENCE")
 
     os.environ["DATABASE_URL"] = db_url
     os.environ["VARCO_REDIS_URL"] = redis_url
     os.environ["VARCO_REDIS_CACHE_URL"] = redis_url
+    # example/app.py constructs JwtBearerAuth(registry=..., required=False)
+    # with no audience=. Since Plan 005 Phase 2, JwtBearerAuth() refuses to
+    # construct with ValueError unless an audience is configured (a
+    # deliberate breaking security default — CLAUDE.md's VARCO_JWT_* table).
+    # This demo app has no single-audience concept to enforce, so opt out
+    # via the documented escape hatch rather than pick an arbitrary audience
+    # value the example's JWTs would then have to carry.
+    os.environ["VARCO_JWT_ALLOW_ANY_AUDIENCE"] = "true"
 
     _logger.info("E2E: DATABASE_URL=%s", db_url)
     _logger.info("E2E: VARCO_REDIS_URL=%s", redis_url)
@@ -272,6 +281,7 @@ async def running_server(
             ("DATABASE_URL", prev_db),
             ("VARCO_REDIS_URL", prev_redis),
             ("VARCO_REDIS_CACHE_URL", prev_redis_cache),
+            ("VARCO_JWT_ALLOW_ANY_AUDIENCE", prev_jwt_allow_any_audience),
         ]:
             if prev is None:
                 os.environ.pop(key, None)

@@ -341,16 +341,11 @@ class TestBeanieEncryptionKeyStoreIntegration:
     - ``list_tenants()`` deduplication across real documents.
     """
 
-    @pytest.fixture(scope="class")
-    def mongo_container(self):
-        """Start a MongoDB container for the integration test class."""
-        from testcontainers.mongodb import MongoDbContainer
-
-        with MongoDbContainer() as mongo:
-            yield mongo
+    # mongo_container (class-scoped) was replaced by the session-scoped
+    # mongo_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6/7).
 
     @pytest_asyncio.fixture
-    async def beanie_store(self, mongo_container):
+    async def beanie_store(self, mongo_url: str):
         """
         Initialise Beanie with ``EncryptionKeyDocument`` and return a
         fresh ``BeanieEncryptionKeyStore``.
@@ -361,8 +356,7 @@ class TestBeanieEncryptionKeyStoreIntegration:
         from pymongo import AsyncMongoClient
 
         db_name = f"test_enc_{uuid.uuid4().hex[:8]}"
-        connection_string = mongo_container.get_connection_url()
-        client = AsyncMongoClient(connection_string)
+        client = AsyncMongoClient(mongo_url)
 
         await init_beanie(
             database=client[db_name],
@@ -499,21 +493,16 @@ class TestBeanieEncryptionKeyStoreScopeMethodsExist:
 class TestBeanieEncryptionKeyStoreScopeIntegration:
     """Real-MongoDB round-trips for the scope dimension and tombstones."""
 
-    @pytest.fixture(scope="class")
-    def mongo_container(self):
-        from testcontainers.mongodb import MongoDbContainer
-
-        with MongoDbContainer() as mongo:
-            yield mongo
+    # mongo_container (class-scoped) was replaced by the session-scoped
+    # mongo_url fixture in tests/conftest.py (Plan 012 / RT1, Step 6/7).
 
     @pytest_asyncio.fixture
-    async def beanie_store(self, mongo_container):
+    async def beanie_store(self, mongo_url: str):
         from beanie import init_beanie
         from pymongo import AsyncMongoClient
 
         db_name = f"test_enc_scope_{uuid.uuid4().hex[:8]}"
-        connection_string = mongo_container.get_connection_url()
-        client = AsyncMongoClient(connection_string)
+        client = AsyncMongoClient(mongo_url)
 
         await init_beanie(
             database=client[db_name],

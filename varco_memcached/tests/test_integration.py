@@ -27,48 +27,31 @@ import asyncio
 
 import pytest
 
-# testcontainers ships MemcachedContainer which uses a TCP socket probe to wait
-# for readiness — more reliable than log-based waiting since memcached:alpine
-# logs nothing on startup.
-from testcontainers.memcached import MemcachedContainer
-
 from varco_memcached.cache import MemcachedCache, MemcachedCacheSettings
 
 
 # ── Fixture: real Memcached via Docker ──────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def memcached_container():
-    """
-    Start a Memcached Docker container for the duration of this test module.
-
-    Uses ``testcontainers.memcached.MemcachedContainer`` which waits for
-    readiness via a TCP socket probe — memcached:alpine emits no startup logs,
-    so log-based waiting would always time out.
-
-    Yields:
-        The running ``MemcachedContainer`` instance.
-    """
-    with MemcachedContainer() as container:
-        yield container
+# memcached_container (module-scoped) was replaced by the session-scoped
+# memcached_host_port fixture in tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
 def memcached_settings(
-    memcached_container: MemcachedContainer,
+    memcached_host_port: tuple[str, int],
 ) -> MemcachedCacheSettings:
     """
-    ``MemcachedCacheSettings`` pointing at the Docker-managed Memcached container.
+    ``MemcachedCacheSettings`` pointing at the shared session-scoped
+    Memcached container.
 
     Args:
-        memcached_container: The running container fixture.
+        memcached_host_port: ``(host, port)`` from the shared fixture.
 
     Returns:
         Settings with the dynamic host/port assigned by Docker.
     """
-    host = memcached_container.get_container_host_ip()
-    port = int(memcached_container.get_exposed_port(11211))
+    host, port = memcached_host_port
     return MemcachedCacheSettings(
         host=host,
         port=port,

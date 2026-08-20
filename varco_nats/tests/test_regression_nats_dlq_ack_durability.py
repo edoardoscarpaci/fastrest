@@ -16,6 +16,9 @@ JetStream server: count was 1 immediately after ``ack()`` and 0 one second
 later.  Beyond the failing assertion this breaks ``DlqRedriver``'s
 publish-then-ack policy — a process exiting right after ``ack()`` returns can
 lose the ack entirely and redeliver the dead letter.
+
+Plan 012 / RT2, Step 13 audit note: fully fake-backed (``_FakeMsg`` below) —
+no real NATS broker required.
 """
 
 from __future__ import annotations

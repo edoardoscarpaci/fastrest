@@ -37,31 +37,21 @@ if not os.environ.get("VARCO_RUN_INTEGRATION"):
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def kafka_container():
-    """
-    Start a Kafka broker for the integration test module.
-
-    Shared across all tests in the module (``scope="module"``) to avoid
-    per-test startup overhead (~5s per container).
-    """
-    from testcontainers.kafka import KafkaContainer
-
-    with KafkaContainer() as kafka:
-        yield kafka
+# kafka_container (module-scoped) was replaced by the session-scoped
+# kafka_bootstrap fixture in tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
-async def manager(kafka_container):
+async def manager(kafka_bootstrap: str):
     """
-    ``KafkaChannelManager`` connected to the testcontainers Kafka broker.
+    ``KafkaChannelManager`` connected to the shared session-scoped Kafka
+    broker.
 
     Yields a started manager; stops on teardown.
     """
     from varco_kafka.channel import KafkaChannelManager, KafkaChannelManagerSettings
 
-    bootstrap = kafka_container.get_bootstrap_server()
-    settings = KafkaChannelManagerSettings(bootstrap_servers=bootstrap)
+    settings = KafkaChannelManagerSettings(bootstrap_servers=kafka_bootstrap)
     async with KafkaChannelManager(settings) as m:
         yield m
 

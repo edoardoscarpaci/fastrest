@@ -41,23 +41,13 @@ if not os.environ.get("VARCO_RUN_INTEGRATION"):
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
-@pytest.fixture(scope="module")
-def redis_container():
-    """Start a Redis instance for the integration test module."""
-    from testcontainers.redis import RedisContainer
-
-    with RedisContainer() as redis:
-        yield redis
-
-
-def _redis_url(redis_container) -> str:
-    host = redis_container.get_container_host_ip()
-    port = redis_container.get_exposed_port(6379)
-    return f"redis://{host}:{port}/0"
+# The old local redis_container (module-scoped) fixture and _redis_url()
+# helper were replaced by the session-scoped redis_url fixture in
+# tests/conftest.py (Plan 012 / RT1, Step 6).
 
 
 @pytest.fixture
-async def bulkhead(redis_container):
+async def bulkhead(redis_url):
     """
     Connected ``RedisBulkhead`` (max_concurrent=3, fail-fast) backed by the
     testcontainers Redis instance.  Uses a unique key prefix + name per test
@@ -68,9 +58,7 @@ async def bulkhead(redis_container):
     from varco_redis.config import RedisEventBusSettings
 
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    settings = RedisEventBusSettings(
-        url=_redis_url(redis_container), channel_prefix=prefix
-    )
+    settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     cfg = BulkheadConfig(max_concurrent=3, max_wait=0.0)
     async with RedisBulkhead(
         cfg, settings=settings, name=f"bh-{uuid.uuid4().hex[:8]}"
@@ -114,7 +102,7 @@ async def test_nplus1_concurrent_acquirers_the_extra_one_fails_fast(bulkhead) ->
 
 
 async def test_nplus1_concurrent_acquirers_waits_when_max_wait_positive(
-    redis_container,
+    redis_url,
 ) -> None:
     """
     With ``max_wait > 0``, the (N+1)th acquirer waits for a slot to free up
@@ -125,9 +113,7 @@ async def test_nplus1_concurrent_acquirers_waits_when_max_wait_positive(
     from varco_redis.config import RedisEventBusSettings
 
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    settings = RedisEventBusSettings(
-        url=_redis_url(redis_container), channel_prefix=prefix
-    )
+    settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     cfg = BulkheadConfig(max_concurrent=2, max_wait=2.0)
 
     async with RedisBulkhead(
@@ -162,7 +148,7 @@ async def test_nplus1_concurrent_acquirers_waits_when_max_wait_positive(
 # ── Crashed-holder reclaim via slot_ttl ─────────────────────────────────────
 
 
-async def test_crashed_holder_slot_reclaimed_after_ttl(redis_container) -> None:
+async def test_crashed_holder_slot_reclaimed_after_ttl(redis_url) -> None:
     """
     A holder that acquires a slot and never releases (simulating a crash)
     has its slot reclaimed once ``slot_ttl`` seconds elapse — a subsequent
@@ -173,9 +159,7 @@ async def test_crashed_holder_slot_reclaimed_after_ttl(redis_container) -> None:
     from varco_redis.config import RedisEventBusSettings
 
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    settings = RedisEventBusSettings(
-        url=_redis_url(redis_container), channel_prefix=prefix
-    )
+    settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     cfg = BulkheadConfig(max_concurrent=1, max_wait=0.0)
 
     async with RedisBulkhead(
@@ -240,7 +224,7 @@ def _redis_settings_provider() -> RedisEventBusSettings:
     return _container_settings
 
 
-async def test_export_and_di_registration_resolve(redis_container) -> None:
+async def test_export_and_di_registration_resolve(redis_url) -> None:
     """
     ``RedisBulkhead``/``RedisBulkheadConfiguration`` are exported from
     ``varco_redis`` and the opt-in ``@Configuration`` resolves a connected
@@ -253,9 +237,7 @@ async def test_export_and_di_registration_resolve(redis_container) -> None:
     global _container_settings
 
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
-    _container_settings = RedisEventBusSettings(
-        url=_redis_url(redis_container), channel_prefix=prefix
-    )
+    _container_settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
 
     container = DIContainer()
     container.provide(_redis_settings_provider)

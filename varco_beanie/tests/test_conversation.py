@@ -521,21 +521,22 @@ if not os.environ.get("VARCO_RUN_INTEGRATION"):
 
 
 @pytest.fixture
-async def conversation_store_integration(mongo_container_module):  # type: ignore[name-defined]
+async def conversation_store_integration(mongo_url: str):
     """
     Initialise Beanie with ConversationTurnDocument against a real MongoDB.
 
     Yields a ``BeanieConversationStore`` and drops the database afterwards.
 
-    Depends on the ``mongo_container_module`` fixture defined below.
+    Uses the shared session-scoped ``mongo_url`` fixture from
+    ``tests/conftest.py`` (Plan 012 / RT1, Step 6/7) — mongo_container_module
+    (module-scoped, local to this file) was replaced by it.
     """
     from beanie import init_beanie  # noqa: PLC0415
     from pymongo import AsyncMongoClient  # noqa: PLC0415
 
     db_name = f"test_conv_{uuid.uuid4().hex[:8]}"
-    connection_string = mongo_container_module.get_connection_url()
 
-    client = AsyncMongoClient(connection_string)
+    client = AsyncMongoClient(mongo_url)
     await init_beanie(
         database=client[db_name],
         document_models=[ConversationTurnDocument],
@@ -545,23 +546,6 @@ async def conversation_store_integration(mongo_container_module):  # type: ignor
 
     await client.drop_database(db_name)
     await client.close()
-
-
-@pytest.fixture(scope="module")
-def mongo_container_module():
-    """
-    Module-scoped MongoDB testcontainer — shared across all integration tests
-    to avoid per-test container startup overhead (~3-5s).
-
-    Requires Docker daemon and testcontainers[mongo].
-    """
-    if not os.environ.get("VARCO_RUN_INTEGRATION"):
-        pytest.skip("Integration tests disabled — set VARCO_RUN_INTEGRATION=1")
-
-    from testcontainers.mongodb import MongoDbContainer  # noqa: PLC0415
-
-    with MongoDbContainer() as mongo:
-        yield mongo
 
 
 @pytest.mark.integration
