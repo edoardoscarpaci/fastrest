@@ -11,9 +11,10 @@ Composes three previously-separate concerns behind one object: retry+DLQ
 
 DESIGN: a frozen config object, not a `@Configuration`
     ✅ A scanned `@Configuration` auto-activates on `container.scan()`
-       (CLAUDE.md pitfall: "policy authorizer silently active" is the same
-       class of mistake for a different feature) — durability silently
-       turning on is as bad as it silently staying off.
+       (`technical_docs/features/casbin-authorization.md`'s "Policy
+       authorizer silently active" pitfall is the same class of mistake for
+       a different feature) — durability silently turning on is as bad as
+       it silently staying off.
     ✅ `create_varco_app(reliability=preset)` (Phase 9's fastapi wiring) is
        one explicit line.
     ❌ Not injectable-by-scan — that is the point.

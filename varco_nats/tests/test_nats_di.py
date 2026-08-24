@@ -18,10 +18,18 @@ connection, which belongs to the integration suite.
 
 from __future__ import annotations
 
-from providify import DIContainer, Provider
+import sys
 
+import pydantic
+import pytest
+from providify import DIContainer, Provider, Singleton
+
+from varco_core.event import AbstractEventBus
 from varco_core.event.channel import ChannelManager
+from varco_core.event.config import EventBusSettings
+from varco_nats.bus import NatsEventBus
 from varco_nats.channel import NatsChannelManagerSettings, NatsStreamManager
+from varco_nats.config import NatsEventBusSettings
 
 
 @Provider(singleton=True, priority=100)
@@ -98,3 +106,100 @@ class TestNatsContainerValidates:
         container.scan("varco_nats", recursive=True)
 
         container.validate_bindings()
+
+
+class TestNatsEventBusSettingsCharacterization:
+    """
+    Plan 014 / Part A (F1) — characterization test pinning **current** behaviour.
+
+    See ``varco_kafka/tests/test_kafka_di.py``'s sibling class for the full
+    rationale; this mirrors it exactly for ``NatsEventBusSettings``.
+    """
+
+    def test_characterization_settings_resolve_through_the_container(self) -> None:
+        container = DIContainer()
+        container.scan("varco_nats", recursive=True)
+
+        settings = container.get(NatsEventBusSettings)
+
+        assert isinstance(settings, NatsEventBusSettings)
+        assert settings.servers
+
+    def test_characterization_settings_are_a_singleton(self) -> None:
+        container = DIContainer()
+        container.scan("varco_nats", recursive=True)
+
+        assert container.get(NatsEventBusSettings) is container.get(
+            NatsEventBusSettings
+        )
+
+    async def test_characterization_event_bus_resolves_with_injected_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Load-bearing test — see the kafka sibling for why ``start()`` is
+        stubbed to a no-op and ``await container.aget(...)`` is used instead
+        of the synchronous ``container.get()``.
+        """
+
+        async def _noop_start(self: NatsEventBus) -> None:
+            return None
+
+        monkeypatch.setattr(NatsEventBus, "start", _noop_start)
+
+        container = DIContainer()
+        container.scan("varco_nats", recursive=True)
+
+        bus = await container.aget(AbstractEventBus, qualifier="nats")
+
+        assert isinstance(bus, NatsEventBus)
+        assert bus._config is container.get(NatsEventBusSettings)
+
+
+class RequiredFieldSettingsForTest(EventBusSettings):
+    """Module-scope settings subclass with one non-defaulted field — Step 5."""
+
+    required_value: str
+
+
+@Singleton(priority=-sys.maxsize)
+class SingletonRequiredFieldSettingsForTest(RequiredFieldSettingsForTest):
+    pass
+
+
+class TestNatsRequiredFieldCharacterization:
+    def test_characterization_required_field_raises_validation_error_not_lookup_error(
+        self,
+    ) -> None:
+        """
+        Corrects ``audits/001-audit-di-wiring.md:19``'s predicted ``LookupError``
+        — see the kafka sibling test for the full rationale.
+        """
+        container = DIContainer()
+        container.scan(sys.modules[__name__])
+
+        with pytest.raises(pydantic.ValidationError):
+            container.get(SingletonRequiredFieldSettingsForTest)
+
+
+@Provider(singleton=True, priority=100)
+def _custom_event_bus_settings() -> NatsEventBusSettings:
+    """App-supplied override — module scope so its lazy annotation resolves."""
+    return NatsEventBusSettings(servers="nats://custom:4222")
+
+
+class TestNatsEventBusSettingsConvertedShapeInvariants:
+    """Step 7 — invariants the ``@Singleton`` → ``@Provider`` conversion must not break."""
+
+    def test_app_supplied_settings_win_over_the_default(self) -> None:
+        container = DIContainer()
+        container.scan("varco_nats", recursive=True)
+        container.provide(_custom_event_bus_settings)
+
+        assert container.get(NatsEventBusSettings).servers == "nats://custom:4222"
+
+    def test_settings_resolve_through_their_base_interface(self) -> None:
+        container = DIContainer()
+        container.scan("varco_nats", recursive=True)
+
+        assert isinstance(container.get(EventBusSettings), NatsEventBusSettings)

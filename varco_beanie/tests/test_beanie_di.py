@@ -1,11 +1,21 @@
 """
 Tests for the providify DI integration module (varco_beanie.di).
 
-No actual container resolution is performed — instead:
+Most of the tests below use no real container resolution — instead:
 - BeanieSettings is tested as a plain dataclass.
 - BeanieModule @Provider methods are called directly on an instance.
 - _make_repo_provider is tested as a pure function.
 - bind_repositories is tested against a mock container.
+
+A final section (``TestBeanieContainerValidates``, Plan 013 / F9) performs
+real container resolution: ``DIContainer().scan("varco_beanie",
+recursive=True); validate_bindings()``. Spot-check finding recorded in Plan
+013's Design section: this recursive-scan pattern already existed
+incidentally via ``test_beanie_tenancy_di.py``/``test_beanie_dlq.py``, but
+neither of those files is named for nor asserts anything about
+``BeanieModule``/``bind_repositories``/``bootstrap`` by name — this class
+makes that coverage explicit, named, and independent of those sub-areas'
+lifetimes.
 
 Coverage:
 - BeanieSettings:          frozen, field defaults, type annotations
@@ -14,6 +24,8 @@ Coverage:
 - _make_repo_provider:     produces a @Provider function with correct return annotation
 - bind_repositories:       calls container.provide() for each entity class,
                            raises ValueError when called with no classes
+- TestBeanieContainerValidates: real DIContainer scan + validate_bindings(),
+                           and bind_repositories() against a real container
 
 Thread safety:  N/A (unit tests)
 Async safety:   ✅ BeanieModule.repository_provider is async — tested with await
@@ -25,6 +37,8 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from providify import DIContainer, Provider
 
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
@@ -264,3 +278,106 @@ def test_bind_repositories_each_factory_has_distinct_annotation() -> None:
     assert AsyncRepository[_Post] in annotations
     # No duplicates — each entity gets its own distinct binding
     assert len(set(str(a) for a in annotations)) == 2
+
+
+# ── TestBeanieContainerValidates (Plan 013 / F9) ────────────────────────────
+
+
+class TestBeanieContainerValidates:
+    def test_regression_scan_validates_bindings(self) -> None:
+        """
+        User-visible symptom: an app calling ``varco_beanie.di.bootstrap()``
+        and then resolving anything died at startup with an
+        ``AnnotationResolutionError`` for a binding contributed by
+        ``varco_beanie`` (e.g. a future quoted ``@Provider`` return
+        annotation silently disabling injection container-wide — see
+        CLAUDE.md's pitfall table). Correct behaviour is a container that
+        validates cleanly.
+        """
+        container = DIContainer()
+        container.scan("varco_beanie", recursive=True)
+
+        container.validate_bindings()
+
+    def test_regression_bind_repositories_against_real_container_validates(
+        self,
+    ) -> None:
+        """
+        No existing ``varco_beanie`` test calls ``bind_repositories()``
+        against a real ``DIContainer`` — only mock-based coverage exists
+        above. A per-entity ``AsyncRepository[D]`` provider is generated via
+        runtime annotation patching (``_make_repo_provider``); a real
+        container is required to prove that patched annotation is actually
+        something providify can resolve type hints for, which a
+        ``MagicMock()`` container can never catch.
+        """
+        container = DIContainer()
+        container.scan("varco_beanie", recursive=True)
+
+        bind_repositories(container, _User)
+
+        container.validate_bindings()
+
+    async def test_regression_bound_repository_resolves_through_aget(self) -> None:
+        """
+        Plan 014 / Step 11 — characterization for site 6 before the
+        ``@Provider`` annotation-patch extraction (``provide_factory()``,
+        Step 22). ``validate_bindings()`` resolves annotations without
+        constructing anything; this actually builds the repository through
+        ``container.aget()`` (the factory is async — see ``bind_repositories``'
+        docstring) to prove the runtime-patched ``AsyncRepository[entity_cls]``
+        alias is genuinely resolvable, not just annotation-clean.
+
+        ``BeanieRepositoryProvider.init()`` (an async ``@PostConstruct``) is
+        stubbed via ``beanie.init_beanie`` — same rationale as
+        ``test_beanie_module_repository_provider_calls_init`` above: no real
+        MongoDB connection is required to prove DI wiring.
+        """
+
+        @Provider(singleton=True, priority=100)
+        def _beanie_settings_for_test() -> BeanieSettings:
+            return BeanieSettings(
+                mongo_client=MagicMock(),
+                db_name="testdb",
+                entity_classes=(_User, _Post),
+            )
+
+        container = DIContainer()
+        container.scan("varco_beanie", recursive=True)
+        container.provide(_beanie_settings_for_test)
+        bind_repositories(container, _User, _Post)
+
+        with patch("beanie.init_beanie", new_callable=AsyncMock):
+            user_repo = await container.aget(AsyncRepository[_User])
+            post_repo = await container.aget(AsyncRepository[_Post])
+
+        assert user_repo is not None
+        assert user_repo is not post_repo
+
+    async def test_regression_bound_repository_is_dependent_scoped_not_singleton(
+        self,
+    ) -> None:
+        """
+        Pins ``Scope.DEPENDENT`` (``varco_beanie/varco_beanie/di.py``
+        deliberately does not pass ``singleton=True``) — two resolutions of
+        the same generic alias must return two different instances.
+        """
+
+        @Provider(singleton=True, priority=100)
+        def _beanie_settings_for_test() -> BeanieSettings:
+            return BeanieSettings(
+                mongo_client=MagicMock(),
+                db_name="testdb",
+                entity_classes=(_User,),
+            )
+
+        container = DIContainer()
+        container.scan("varco_beanie", recursive=True)
+        container.provide(_beanie_settings_for_test)
+        bind_repositories(container, _User)
+
+        with patch("beanie.init_beanie", new_callable=AsyncMock):
+            first = await container.aget(AsyncRepository[_User])
+            second = await container.aget(AsyncRepository[_User])
+
+        assert first is not second

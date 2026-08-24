@@ -187,8 +187,9 @@ same way.
 
 **Why transaction-scoped, not session-scoped:** `SAAdvisoryLock`'s `release()` can be
 routed to a *different physical connection* behind a transaction-mode pooler (PgBouncer
-`pool_mode=transaction`), leaking the lock — the U-16 defect already in CLAUDE.md's
-pitfall table. `SAXactAdvisoryLock.xact()` is released by the caller's own
+`pool_mode=transaction`), leaking the lock — the U-16 defect documented in
+`technical_docs/features/distributed-locks.md`'s Pitfalls section.
+`SAXactAdvisoryLock.xact()` is released by the caller's own
 COMMIT/ROLLBACK, and **also by process death**: an OOM-killed pod mid-migration leaves
 no orphaned lock and there is no TTL to size.
 
@@ -718,3 +719,16 @@ indicates a defect in the shipped code:
   statement-level regression guard (`test_rls_migration_ops.py`, which asserts
   `rls_upgrade` renders byte-identical DDL to `enable_rls_ddl`, InitPlan form included)
   passes.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`mode="upgrade"` in a large multi-pod deployment** | Rolling deploys crawl; pods log `MigrationLockTimeout`, exit, and get restarted before eventually serving | Every replica races for one migration lock — the leader migrates while the rest burn `lock_timeout`, re-plan, and (if the leader is still working) raise | Deploy `VARCO_MIGRATE_MODE=check` on the pods and run `varco migrate upgrade` in a pre-deploy job / init container. `upgrade` is the small-deployment and dev convenience, not the production posture |
+| **`ensure_table()` and migrations both active** | Alembic's `CREATE TABLE` fails against a table `ensure_table()` already created | The two mechanisms are mutually exclusive *per deployment*, and the hazard is directional (`create_all(checkfirst=True)` against an Alembic table is a harmless no-op; the reverse is not) | Run `varco migrate adopt` (or `AlembicMigrator.adopt_framework_tables()`) **once**, then pick one mechanism. Order matters: adopt, then upgrade |
+| **`upgrade head` (singular) with the framework branch present** | Only the app's tables (or only the framework's) get migrated; the other branch silently stays behind | `varco_sa` ships its own Alembic branch (`branch_labels=("varco",)`) in the wheel, so there are **two** heads | Always `heads` (plural) — every varco command defaults to it. Or opt out with `include_framework_branch=False` + `get_target_metadata(..., include_framework=True)` |
+| **`index_mode="create"` on a large Mongo collection** | Pod startup blocks for minutes-to-hours; on a replica set the build replicates and can stall secondaries | An index build is real work, and `create` runs it inside the ASGI lifespan at exactly the moment a rolling deploy starts N new pods | Leave `index_mode="check"` (the default, independent of `mode`) and run `varco migrate index -t … --create` as a pre-deploy job |
+| **`VARCO_MIGRATE_MODE` set but no `migrations=` passed** | Env var is set, nothing migrates, no error | `create_varco_app` has no migrator to run — it now logs one WARNING naming the env var rather than staying silent | Pass `migrations=<AbstractMigrator>` to `create_varco_app` |
+| **`from varco_core import MigrationError`** gets the wrong class | `except MigrationError` never catches a schema-migration failure | `varco_core.migrator` (domain data/field migration) already owns the top-level `MigrationError`/`MigrationPlan` names, so the schema-migration versions are deliberately **not** re-exported | `from varco_core.migration import MigrationError, MigrationPlan`. Every other migration name (`AbstractMigrator`, `Revision`, `MigrationReport`, `MigrationSettings`, `InMemoryMigrator`, the other exceptions) *is* on `varco_core` |
+| **`varco migrate upgrade` without `--all-tenants` under db-per-tenant** | Only the global/framework schema advances; every tenant is left N revisions behind with no error | The default target is the single, non-fanned-out migrator | Use `varco migrate upgrade --all-tenants` (or `--tenant <id>` for one), which runs global-then-fan-out via `TenantFanoutMigrator` |
+| **Global migration run after the tenant fan-out** | Tenant-table foreign keys to global tables fail mid-migration | `TenantFanoutMigrator` orders the global/framework run before every tenant's specifically to prevent this | Never pass `--skip-global` unless you have already run the global migration separately and know it is current |

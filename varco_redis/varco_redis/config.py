@@ -50,7 +50,7 @@ from typing import Any
 
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-from providify import Singleton
+from providify import Provider
 
 from varco_core.event.config import EventBusSettings
 
@@ -58,7 +58,6 @@ from varco_core.event.config import EventBusSettings
 # ── RedisEventBusSettings ─────────────────────────────────────────────────────
 
 
-@Singleton(priority=-sys.maxsize)
 class RedisEventBusSettings(EventBusSettings):
     """
     Immutable configuration for ``RedisEventBus``.
@@ -138,6 +137,41 @@ class RedisEventBusSettings(EventBusSettings):
             - Redis channel names can be arbitrary strings — no validation here.
         """
         return f"{self.channel_prefix}{channel}"
+
+
+@Provider(singleton=True, priority=-sys.maxsize)
+def redis_event_bus_settings() -> RedisEventBusSettings:
+    """
+    Default ``RedisEventBusSettings`` binding, discovered by
+    ``container.scan("varco_redis", recursive=True)``.
+
+    DESIGN: ``@Provider`` factory instead of ``@Singleton`` on the class
+        A pydantic ``BaseSettings`` declares ``__init__(self, **values: Any)``.
+        A class-level ``@Singleton`` resolves a ``ClassBinding`` by injecting
+        the constructor signature — on providify < 1.1.0 that made every
+        resolution fail with ``LookupError: Cannot resolve 'values:
+        typing.Any'``. On current providify (>=1.1.0) the per-parameter
+        resolver skips ``VAR_KEYWORD`` parameters outright
+        (``providify/_annotations.py:583-590``), so ``**values`` is no longer
+        the trap it used to be — but the sanctioned shape must not depend on
+        that third-party implementation detail, and this keeps the class
+        consistent with its sibling settings factory
+        (``RedisBackplaneSettings`` in ``varco_redis.backplane``).
+        A factory has no injectable parameters, so the container just calls
+        it.
+        ✅ ``container.get(RedisEventBusSettings)`` works after a plain scan.
+        ✅ Same precedent as ``varco_casbin/di.py`` and ``varco_fastapi/di.py``.
+        ❌ Settings are no longer discoverable by class decoration alone — this
+           module must stay importable by the scanner (it always is).
+
+    ``priority=-sys.maxsize`` keeps this the lowest-priority binding, so any
+    application-supplied provider wins without needing an explicit priority.
+
+    Returns:
+        ``RedisEventBusSettings`` populated from ``VARCO_REDIS_*`` environment
+        variables (pydantic reads them at construction).
+    """
+    return RedisEventBusSettings()
 
 
 __all__ = [

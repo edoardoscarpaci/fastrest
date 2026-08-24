@@ -80,6 +80,22 @@ path):
 
 ---
 
+## Deferred follow-ups (Plan 014 / audit 001 Batch B)
+
+- **`weakref.WeakSet[FastAPI]` upgrade for the double-mount guards** — both `varco_fastapi.tenancy.mount._MOUNTED_APPS` and `varco_fastapi.admin.mount._MOUNTED_APPS` are `set[int]` keyed by `id(app)`, which can produce a spurious `ValueError` if a collected `FastAPI` instance's id is reused by a new, unrelated app; deliberately not fixed in Plan 014 to keep `mount_reliability_admin()`'s guard shape-identical to the `mount_tenant_admin()` reference it was ported from — should change *both* modules together in one follow-up.
+- **`varco_redis.di.async_bootstrap()` is missing the `container is None` guard `varco_memcached.di.async_bootstrap()` has** — when providify is absent, `bootstrap()` returns `None` and the subsequent `await container.ainstall(RedisCacheConfiguration)` (when `setup_cache=True`) raises `AttributeError: 'NoneType' object has no attribute 'ainstall'` instead of returning `None` like every other varco `async_bootstrap()`.
+
+---
+
+## Deferred follow-ups (Plan 015 / audit 002)
+
+- **F12 — `## Test Conventions` prose density (RT1/RT6 paragraphs)** — the audit flagged this as
+  "a judgment call, not a clear misplacement," and Plan 015 explicitly left it untouched
+  (`## Test Conventions` in `CLAUDE.md` is byte-identical to before the refactor). Revisit in a
+  future pass if the section keeps growing.
+
+---
+
 ## Parked
 
 | Feature | Why parked |

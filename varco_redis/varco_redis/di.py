@@ -3,11 +3,18 @@ varco_redis.di
 ==============
 Providify DI integration for ``varco_redis``.
 
-All singletons (``RedisEventBusSettings``, ``RedisEventBus``,
-``RedisStreamEventBus`` via selector, ``RedisChannelManager``,
-``RedisHealthCheck``, ``RedisCache``) carry ``@Singleton`` or module-level
-``@Provider`` annotations and are discovered automatically by
+All singletons (``RedisEventBus``, ``RedisStreamEventBus`` via selector,
+``RedisChannelManager``, ``RedisHealthCheck``, ``RedisCache``) carry
+``@Singleton`` on the class itself and are discovered automatically by
 ``container.scan("varco_redis", recursive=True)``.
+
+``RedisEventBusSettings`` is the exception: pydantic ``BaseSettings``
+declares ``__init__(self, **values)``, which is not a shape ``@Singleton``
+should be applied to (see CLAUDE.md's pitfall table). It is registered
+instead by a lowest-priority ``@Provider`` factory
+(``redis_event_bus_settings`` in ``varco_redis.config``), same as
+``RedisBackplaneSettings`` in ``varco_redis.backplane`` — both are
+discovered by the same ``scan()``.
 
 No ``@Configuration`` class or ``ainstall()`` call is required.
 

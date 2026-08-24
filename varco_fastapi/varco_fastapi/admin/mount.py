@@ -28,6 +28,11 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
+# Tracks which FastAPI app instances already had the admin surface mounted
+# — refuses a second mount rather than silently duplicating routes. Same
+# pattern as varco_fastapi.tenancy.mount._MOUNTED_APPS.
+_MOUNTED_APPS: set[int] = set()
+
 
 def mount_reliability_admin(
     app: FastAPI,
@@ -61,11 +66,22 @@ def mount_reliability_admin(
                      an mTLS check) applied to every mounted route.
 
     Raises:
-        ValueError: ``acknowledge_bundled_admin`` is not ``True``.
+        ValueError: ``acknowledge_bundled_admin`` is not ``True``, or this
+            app was already mounted once (a router was actually included on
+            a previous call — see Edge cases).
 
     Edge cases:
         - ``server_auth=None`` → routes mount unauthenticated and one
           WARNING is logged at mount time naming the risk.
+        - Mounting with neither ``audit_repo`` nor ``dlq`` given mounts
+          nothing and does **not** poison the app for a later real mount —
+          the app id is only recorded when at least one router was actually
+          included. This is a deliberate deviation from
+          ``mount_tenant_admin()``, which has no "mount nothing" case.
+        - The double-mount guard is keyed by ``id(app)`` — an app instance
+          that has been garbage-collected releases its id, which a new,
+          unrelated ``FastAPI`` instance could reuse (same caveat as
+          ``mount_tenant_admin()``'s ``_MOUNTED_APPS``).
     """
     if not acknowledge_bundled_admin:
         raise ValueError(
@@ -76,12 +92,20 @@ def mount_reliability_admin(
             "deployment genuinely isn't justified."
         )
 
+    if id(app) in _MOUNTED_APPS:
+        raise ValueError(
+            "mount_reliability_admin() was already called for this app — "
+            "refusing to mount a second time (would duplicate routes)."
+        )
+
     if server_auth is None:
         _logger.warning(
             "mount_reliability_admin(): server_auth=None — the reliability "
             "admin surface (%s) is mounting UNAUTHENTICATED.",
             prefix,
         )
+
+    mounted_any = False
 
     if audit_repo is not None:
         from varco_fastapi.admin.audit_router import build_audit_router
@@ -95,6 +119,7 @@ def mount_reliability_admin(
             ),
             dependencies=list(dependencies) if dependencies else None,
         )
+        mounted_any = True
 
     if dlq is not None:
         from varco_fastapi.admin.dlq_router import build_dlq_router
@@ -109,6 +134,13 @@ def mount_reliability_admin(
             ),
             dependencies=list(dependencies) if dependencies else None,
         )
+        mounted_any = True
+
+    # Only poison the app id when something was actually mounted — a
+    # no-op call (neither audit_repo nor dlq given) must not refuse a
+    # later, legitimate mount on the same app (see Edge cases above).
+    if mounted_any:
+        _MOUNTED_APPS.add(id(app))
 
 
 __all__ = ["mount_reliability_admin"]

@@ -659,6 +659,39 @@ def _scan_routers(
         return []
 
 
+def _lifecycle_discovery_warns() -> bool:
+    """
+    Read the ``VARCO_LIFECYCLE_DISCOVERY_WARN`` kill switch.
+
+    Controls whether ``_try_resolve_component()`` logs a missing-binding
+    signal (``is_resolvable() is False``) at WARNING (default) or DEBUG.
+    Lets an app that genuinely has no event bus / job runner silence that
+    one line without silencing its whole logger (Plan 014 / audit F2).
+
+    Args:
+        None.
+
+    Returns:
+        ``True`` unless the env var is set to a recognized falsy value
+        (``0``/``false``/``no``/``off``, case-insensitive).
+
+    Edge cases:
+        - Unset → ``True`` (warn — today's missing signal becomes visible
+          by default).
+        - Set to a garbage value (e.g. ``"maybe"``) → treated as truthy
+          (warn). Never raises from a logging-configuration read.
+
+    Thread safety:  ✅ Pure read of ``os.environ``.
+    Async safety:   ✅ No async operations.
+    """
+    import os as _os
+
+    raw = _os.environ.get("VARCO_LIFECYCLE_DISCOVERY_WARN")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
 def _collect_lifecycle_components(container: Any) -> list[Any]:
     """
     Collect lifecycle components from the DI container.
@@ -666,8 +699,10 @@ def _collect_lifecycle_components(container: Any) -> list[Any]:
     Scans known varco modules via ``container.scan()`` to ensure their
     ``@Singleton`` lifecycle classes are registered, then resolves each
     well-known lifecycle type with ``container.get()``.  Missing bindings
-    are silently skipped — an app that does not use Kafka should not fail
-    because ``KafkaEventBus`` is absent.
+    are logged and skipped — an app that does not use Kafka should not fail
+    because ``KafkaEventBus`` is absent, but a genuinely-forgotten binding
+    (e.g. ``AbstractEventBus``) now produces a WARNING naming the remedy
+    instead of vanishing silently (Plan 014 / audit F2).
 
     Args:
         container: ``DIContainer`` to query.  ``None`` → returns empty list.
@@ -686,6 +721,8 @@ def _collect_lifecycle_components(container: Any) -> list[Any]:
     # Resolve well-known lifecycle types via the public providify API.
     # container.scan(module) ensures the module's @Singleton classes are registered
     # before we call container.get() — this is the idiomatic providify pattern.
+    # AbstractEventBus / AbstractJobRunner are core infra you almost certainly
+    # meant to wire — warn_if_missing stays at its default (True).
     _try_resolve_component(
         container, components, "varco_core.event.base", "AbstractEventBus"
     )
@@ -693,11 +730,18 @@ def _collect_lifecycle_components(container: Any) -> list[Any]:
         container, components, "varco_core.job.base", "AbstractJobRunner"
     )
     # varco_ws push adapters — discovered when container.scan("varco_ws") was called.
-    # Only added when the caller explicitly registered them; silently skipped otherwise.
+    # Only added when the caller explicitly registered them — warn_if_missing=False
+    # so an app that never uses varco_ws doesn't get two guaranteed startup WARNINGs.
     _try_resolve_component(
-        container, components, "varco_ws.websocket", "WebSocketEventBus"
+        container,
+        components,
+        "varco_ws.websocket",
+        "WebSocketEventBus",
+        warn_if_missing=False,
     )
-    _try_resolve_component(container, components, "varco_ws.sse", "SSEEventBus")
+    _try_resolve_component(
+        container, components, "varco_ws.sse", "SSEEventBus", warn_if_missing=False
+    )
 
     return components
 
@@ -707,6 +751,8 @@ def _try_resolve_component(
     out: list[Any],
     module: str,
     class_name: str,
+    *,
+    warn_if_missing: bool = True,
 ) -> None:
     """
     Attempt to resolve a lifecycle component from the container by type.
@@ -727,24 +773,53 @@ def _try_resolve_component(
         ❌ scan() imports the module — if it has side-effects at import time
            those will run here.  All varco_core modules are side-effect-free.
 
+    DESIGN: tiered, always-logged, never-propagating skip (Plan 014 / audit F2)
+        ✅ Every skip now produces exactly one log line naming the module and
+           class — "you forgot ``<pkg>.bootstrap(container)``" is no longer
+           silent.
+        ✅ Control flow is unchanged: nothing new propagates out of this
+           function on any path — only the logging tier differs.
+        ❌ An app with several unwired optional components now logs several
+           WARNINGs at startup — mitigated by ``warn_if_missing=False`` for
+           genuinely opt-in components (the ``varco_ws`` push adapters) and
+           the ``VARCO_LIFECYCLE_DISCOVERY_WARN`` kill switch.
+
     Args:
         container:  The ``DIContainer`` to query.
         out:        List to append the resolved component to.
         module:     Fully-qualified module name (e.g. ``"varco_core.event.base"``).
         class_name: Name of the class to resolve (e.g. ``"AbstractEventBus"``).
+        warn_if_missing: When ``True`` (default), an ``is_resolvable() is
+            False`` outcome logs at WARNING (or DEBUG when
+            ``VARCO_LIFECYCLE_DISCOVERY_WARN`` is falsy). When ``False``,
+            that outcome always logs at DEBUG regardless of the kill
+            switch — for components that are legitimately optional and
+            would otherwise produce startup noise for every app that
+            doesn't use them (the ``varco_ws`` push adapters).
 
     Edge cases:
-        - Module not installed → ``ModuleNotFoundError`` caught, silently skipped.
-        - Binding not found after scan → ``is_resolvable()`` returns ``False``,
-          silently skipped.
-        - ``container.scan()`` raises for other reasons → silently skipped.
+        - Module not installed → ``ModuleNotFoundError`` caught, logged at
+          DEBUG ("package not installed"), skipped.
+        - Module present but ``class_name`` doesn't exist (version skew) →
+          ``AttributeError`` caught, logged at WARNING naming both the
+          module and the class, skipped.
+        - Binding not found after scan → ``is_resolvable()`` returns
+          ``False``, logged per ``warn_if_missing``/the kill switch, skipped.
+        - ``container.get()`` raises ``LookupError`` (binding vanished
+          between the check and the resolve) → logged at WARNING, skipped.
+        - ``container.get()`` raises any other exception (construction
+          failed, e.g. a socket connect error) → logged at WARNING with
+          ``exc_info=True``, skipped. The component is skipped and the app
+          still starts, exactly as before this change.
+        - No path in this function raises — every outcome either appends to
+          ``out`` or returns after logging.
 
     Thread safety:  ✅ Called once at startup.
     Async safety:   ✅ No async operations.
     """
-    try:
-        import importlib
+    import importlib
 
+    try:
         # Step 1: scan the module so its @Singleton / @Component classes are
         # registered.  This is a no-op if the module was already scanned.
         container.scan(module)
@@ -752,18 +827,92 @@ def _try_resolve_component(
         # Step 2: import the class so we have a concrete type for resolution.
         mod = importlib.import_module(module)
         cls = getattr(mod, class_name)
+    except ModuleNotFoundError:
+        # Common case — the optional package simply isn't installed.
+        _logger.debug(
+            "_try_resolve_component: %s not installed — skipping %s.%s",
+            module.split(".")[0],
+            module,
+            class_name,
+        )
+        return
+    except AttributeError:
+        # Module imported fine but the class name doesn't exist — a real
+        # signal (e.g. version skew between varco_fastapi and the backend
+        # package), previously indistinguishable from "not installed".
+        _logger.warning(
+            "_try_resolve_component: module %r has no attribute %r — skipping "
+            "lifecycle component (check for a version mismatch between "
+            "varco_fastapi and %s).",
+            module,
+            class_name,
+            module.split(".")[0],
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        # container.scan() raised for some other reason.
+        _logger.warning(
+            "_try_resolve_component: container.scan(%r) failed while looking "
+            "for %s.%s — skipping lifecycle component: %s",
+            module,
+            module,
+            class_name,
+            exc,
+            exc_info=True,
+        )
+        return
 
-        # Step 3: non-destructive existence check before resolving.
-        if not container.is_resolvable(cls):
-            return
+    # Step 3: non-destructive existence check before resolving.
+    if not container.is_resolvable(cls):
+        if warn_if_missing and _lifecycle_discovery_warns():
+            _logger.warning(
+                "_try_resolve_component: %s.%s is not bound in the DI "
+                "container — skipping this lifecycle component. If this is "
+                "unexpected, call <package>.bootstrap(container) before "
+                "create_varco_app(). Silence this with "
+                "VARCO_LIFECYCLE_DISCOVERY_WARN=false if the app genuinely "
+                "does not use it.",
+                module,
+                class_name,
+            )
+        else:
+            _logger.debug(
+                "_try_resolve_component: %s.%s is not bound in the DI "
+                "container — skipping this lifecycle component.",
+                module,
+                class_name,
+            )
+        return
 
-        # Step 4: resolve and collect.
+    # Step 4: resolve and collect.
+    try:
         component = container.get(cls)
-        out.append(component)
-    except Exception:  # noqa: BLE001
-        # Any failure (import error, binding missing, scan error) is silently
-        # skipped — lifecycle components are optional infrastructure.
-        pass
+    except LookupError as exc:
+        # Binding vanished between the is_resolvable() check and get() —
+        # rare, but a real signal worth a WARNING rather than silence.
+        _logger.warning(
+            "_try_resolve_component: %s.%s was resolvable but container.get() "
+            "raised %s — skipping this lifecycle component.",
+            module,
+            class_name,
+            exc,
+        )
+        return
+    except Exception as exc:  # noqa: BLE001
+        # Construction failed (e.g. a socket connect error opening a
+        # connection pool) — skip the component and let the app still
+        # start, exactly as before this change, but log it loudly.
+        _logger.warning(
+            "_try_resolve_component: constructing %s.%s failed — skipping "
+            "this lifecycle component: %s",
+            module,
+            class_name,
+            exc,
+            exc_info=True,
+        )
+        return
+
+    out.append(component)
 
 
 def _try_add_request_context_middleware(app: Any, container: Any) -> None:

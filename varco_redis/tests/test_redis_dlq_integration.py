@@ -151,7 +151,8 @@ class TestRedisDLQRetentionSweepIntegration:
         self, dlq
     ) -> None:
         """Loop delete_where(..., limit=chunk) until 0 -- the chunked-sweep
-        recipe from CLAUDE.md's retention pitfall table."""
+        recipe from technical_docs/features/job-scheduling-and-leases.md's
+        retention pitfall."""
         import asyncio
         from datetime import datetime, timedelta, timezone
 

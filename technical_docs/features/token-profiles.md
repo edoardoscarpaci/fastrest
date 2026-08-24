@@ -209,3 +209,9 @@ registered via `configure_token_profiles()`), for a profile that composes with
 - `technical_docs/features/jwt-claim-transformer.md` — the claim-mapping layer that
   runs in the same funnel, one step before profile resolution.
 - `technical_docs/features/route-guard.md` — `RouteGuard` evaluation order.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`is_system()` false for my internal token** | A token minted by your own internal issuer is not recognised as "system" | Only one static `SYSTEM_ISSUER` was configured, and this token's issuer doesn't match it | Define `VARCO_JWT_PROFILE__SYSTEM__ISS` (or any named `TokenProfile`) instead — see `technical_docs/features/token-profiles.md` |

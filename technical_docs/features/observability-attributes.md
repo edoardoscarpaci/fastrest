@@ -446,7 +446,7 @@ of "opt into durability once".
 **No metric attribute is `entry_id`, `event_type`, `handler_name`, or
 `tenant_id`** unless the operator explicitly opts in — `channel`/`source`
 are bounded by deployment topology, everything else risks the "metric
-series explosion" pitfall (see the main CLAUDE.md pitfall table).
+series explosion" pitfall (see this file's own "Pitfalls" section, below).
 
 ### `varco.dlq.depth` — global per instance, opt-in per channel (RD-3)
 
@@ -501,3 +501,18 @@ zero data points; `record_*` swallows a raising instrument;
 self-disables on `NotImplementedError` and logs once.
 `varco_sa/tests/test_sa_outbox.py` covers `count_pending()`/
 `oldest_pending_at()` against SQLite.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| Secret in a span attribute | A password/token value visible in the trace UI | Param capture is on and the param name isn't in the redact list | Add it to `VARCO_OTEL_CAPTURE_PARAMS_EXCLUDE`/`redact_patterns`, or `capture_params=False` on that `@span` |
+| Metric series explosion after adding a global attribute | Prometheus TSDB churn / OOM after a deploy | `k8s.pod.name` was added as a *per-measurement* attribute, so every pod creates its own series for every metric | Put static process identity in `OtelConfig.extra_resource_attrs` (Resource), not in the global attribute registry |
+| Global attribute never appears | Registry set, spans/metrics unlabelled | `configure_global_attributes(apply_to_spans/metrics=False)` or the corresponding env var is `false` | Check `VARCO_OTEL_GLOBAL_ATTRS_SPANS` / `_METRICS` |
+| Provider called on every measurement | Latency regression on the hot path | Provider registered with `cache_ttl=0.0` | Use the default `cache_ttl=None` (evaluate once) for immutable values |
+| `isinstance(create_counter(...), Counter)` is False | Type check fails after upgrade | The instrument is wrapped in `GlobalAttrInstrument` | Use duck typing, or `.unwrap()`, or `apply_to_metrics=False` |
+| Secret in a span attribute | A password/token value visible in the trace UI | Param capture is on and the param name isn't in the redact list | Add it to `VARCO_OTEL_CAPTURE_PARAMS_EXCLUDE`/`redact_patterns`, or `capture_params=False` on that `@span` |
+| Metric series explosion after adding a global attribute | Prometheus TSDB churn / OOM after a deploy | `k8s.pod.name` was added as a *per-measurement* attribute, so every pod creates its own series for every metric | Put static process identity in `OtelConfig.extra_resource_attrs` (Resource), not in the global attribute registry |
+| Global attribute never appears | Registry set, spans/metrics unlabelled | `configure_global_attributes(apply_to_spans/metrics=False)` or the corresponding env var is `false` | Check `VARCO_OTEL_GLOBAL_ATTRS_SPANS` / `_METRICS` |
+| Provider called on every measurement | Latency regression on the hot path | Provider registered with `cache_ttl=0.0` | Use the default `cache_ttl=None` (evaluate once) for immutable values |
+| `isinstance(create_counter(...), Counter)` is False | Type check fails after upgrade | The instrument is wrapped in `GlobalAttrInstrument` | Use duck typing, or `.unwrap()`, or `apply_to_metrics=False` |

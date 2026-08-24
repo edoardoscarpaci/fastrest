@@ -163,7 +163,18 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
 
     The factory's return-type annotation is patched at runtime so that
     providify registers the binding under the precise generic alias
-    ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``).
+    ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``). This is
+    the exact patch-then-register shape
+    ``varco_core.providify_compat.provide_factory()`` centralises for the
+    other five call sites that need it (Plan 014 / F8) — but that helper
+    always ends by calling ``container.provide()`` itself, and this function
+    is deliberately **container-less**: it is a pure builder, tested standalone
+    (``varco_beanie/tests/test_beanie_di.py``) as a callable with a patched
+    ``__annotations__``/``__name__`` before it is ever handed to a container.
+    Kept as this thin wrapper rather than being folded into
+    ``bind_repositories()`` for exactly that reason — see the plan's Step 22
+    escape hatch for a call site whose direct-import tests require the
+    build/register split to stay separate.
 
     DESIGN: dynamic annotation patching over Protocol / overloads
       ✅ No boilerplate per entity — one call per class

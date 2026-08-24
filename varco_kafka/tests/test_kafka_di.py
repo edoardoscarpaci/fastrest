@@ -18,10 +18,18 @@ connection, which belongs to the integration suite.
 
 from __future__ import annotations
 
-from providify import DIContainer, Provider
+import sys
 
+import pydantic
+import pytest
+from providify import DIContainer, Provider, Singleton
+
+from varco_core.event import AbstractEventBus
 from varco_core.event.channel import ChannelManager
+from varco_core.event.config import EventBusSettings
+from varco_kafka.bus import KafkaEventBus
 from varco_kafka.channel import KafkaChannelManager, KafkaChannelManagerSettings
+from varco_kafka.config import KafkaEventBusSettings
 
 
 @Provider(singleton=True, priority=100)
@@ -99,3 +107,125 @@ class TestKafkaContainerValidates:
         container.scan("varco_kafka", recursive=True)
 
         container.validate_bindings()
+
+
+class TestKafkaEventBusSettingsCharacterization:
+    """
+    Plan 014 / Part A (F1) — characterization test pinning **current** behaviour.
+
+    ``audits/001-audit-di-wiring.md:19`` observes that no test anywhere calls
+    ``container.get(KafkaEventBusSettings)`` — only ``validate_bindings()``
+    exercises the class, and that call resolves annotations without ever
+    constructing the class, so it cannot catch a broken constructor-injection
+    path. These tests close that gap by actually building the settings (and,
+    below, the bus that depends on them) through a real container.
+    """
+
+    def test_characterization_settings_resolve_through_the_container(self) -> None:
+        container = DIContainer()
+        container.scan("varco_kafka", recursive=True)
+
+        settings = container.get(KafkaEventBusSettings)
+
+        assert isinstance(settings, KafkaEventBusSettings)
+        assert settings.bootstrap_servers
+
+    def test_characterization_settings_are_a_singleton(self) -> None:
+        container = DIContainer()
+        container.scan("varco_kafka", recursive=True)
+
+        assert container.get(KafkaEventBusSettings) is container.get(
+            KafkaEventBusSettings
+        )
+
+    async def test_characterization_event_bus_resolves_with_injected_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        The load-bearing test. ``KafkaEventBus.__init__`` declares
+        ``config: Inject[KafkaEventBusSettings]`` with no default
+        (``varco_kafka/varco_kafka/bus.py``), so if the settings binding
+        cannot be constructed, the documented bootstrap call
+        (``bus = await container.aget(AbstractEventBus)``) is broken too.
+
+        ``KafkaEventBus.start`` is an ``async`` ``@PostConstruct`` that opens a
+        real producer connection, so it is stubbed to a no-op here — this test
+        proves DI construction/injection, not broker connectivity (no Docker
+        broker is required). Resolving synchronously via ``container.get()``
+        would raise before ever reaching the network (providify refuses to run
+        an async ``@PostConstruct`` synchronously), so the documented
+        ``await container.aget(...)`` bootstrap path is used instead.
+        """
+
+        async def _noop_start(self: KafkaEventBus) -> None:
+            return None
+
+        monkeypatch.setattr(KafkaEventBus, "start", _noop_start)
+
+        container = DIContainer()
+        container.scan("varco_kafka", recursive=True)
+
+        bus = await container.aget(AbstractEventBus, qualifier="kafka")
+
+        assert isinstance(bus, KafkaEventBus)
+        assert bus._config is container.get(KafkaEventBusSettings)
+
+
+class _RequiredFieldSettings(EventBusSettings):
+    """Module-scope settings subclass with one non-defaulted field — Step 5."""
+
+    required_value: str
+
+
+@Singleton(priority=-sys.maxsize)
+class SingletonRequiredFieldSettingsForTest(_RequiredFieldSettings):
+    pass
+
+
+class TestKafkaRequiredFieldCharacterization:
+    def test_characterization_required_field_raises_validation_error_not_lookup_error(
+        self,
+    ) -> None:
+        """
+        Corrects ``audits/001-audit-di-wiring.md:19``'s prediction that adding a
+        *required* field to a ``@Singleton``-decorated ``BaseSettings`` subclass
+        would reproduce ``LookupError: Cannot resolve 'values: typing.Any'``.
+
+        It does not: a pydantic field is not a constructor parameter — pydantic
+        collects it through ``**values``, which providify's per-parameter
+        resolver skips outright (``providify/_annotations.py:583-592``). The
+        real failure is a pydantic ``ValidationError`` at construction, raised
+        identically whether the class carries ``@Singleton`` or ``@Provider``.
+        """
+        container = DIContainer()
+        container.scan(sys.modules[__name__])
+
+        with pytest.raises(pydantic.ValidationError):
+            container.get(SingletonRequiredFieldSettingsForTest)
+
+
+@Provider(singleton=True, priority=100)
+def _custom_event_bus_settings() -> KafkaEventBusSettings:
+    """App-supplied override — module scope so its lazy annotation resolves."""
+    return KafkaEventBusSettings(bootstrap_servers="custom:9092")
+
+
+class TestKafkaEventBusSettingsConvertedShapeInvariants:
+    """
+    Step 7 — invariants the ``@Singleton`` → ``@Provider`` conversion (Step 8)
+    must not break. These pass under ``@Singleton`` too (that is intended):
+    they must stay green before *and* after the conversion.
+    """
+
+    def test_app_supplied_settings_win_over_the_default(self) -> None:
+        container = DIContainer()
+        container.scan("varco_kafka", recursive=True)
+        container.provide(_custom_event_bus_settings)
+
+        assert container.get(KafkaEventBusSettings).bootstrap_servers == "custom:9092"
+
+    def test_settings_resolve_through_their_base_interface(self) -> None:
+        container = DIContainer()
+        container.scan("varco_kafka", recursive=True)
+
+        assert isinstance(container.get(EventBusSettings), KafkaEventBusSettings)

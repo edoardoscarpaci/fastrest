@@ -405,3 +405,52 @@ def test_working_response_shape():
     assert r["id"] == "task-123"
     assert r["status"]["state"] == "working"
     assert r["artifacts"] == []
+
+
+# ── bind_skill_adapter against a real container (Plan 014 / Step 12) ──────────
+
+
+def test_bind_skill_adapter_resolves_through_a_real_container():
+    """
+    Characterization test for site 4 before the ``@Provider`` annotation-patch
+    extraction (``provide_factory()``, Step 20). Nothing today resolves
+    ``SkillAdapter`` from a real container.
+    """
+    from providify import DIContainer  # noqa: PLC0415
+
+    from varco_fastapi.router.skill import (
+        SkillAdapter,
+        bind_skill_adapter,
+    )  # noqa: PLC0415
+
+    container = DIContainer()
+    bind_skill_adapter(
+        container,
+        ItemRouter,
+        agent_name="ItemAgent",
+        agent_description="Item management",
+    )
+
+    adapter = container.get(SkillAdapter)
+
+    assert isinstance(adapter, SkillAdapter)
+    assert adapter.router_class is ItemRouter
+
+
+def test_bind_skill_adapter_registers_a_singleton():
+    from providify import DIContainer  # noqa: PLC0415
+
+    from varco_fastapi.router.skill import (
+        SkillAdapter,
+        bind_skill_adapter,
+    )  # noqa: PLC0415
+
+    container = DIContainer()
+    bind_skill_adapter(
+        container,
+        ItemRouter,
+        agent_name="ItemAgent",
+        agent_description="Item management",
+    )
+
+    assert container.get(SkillAdapter) is container.get(SkillAdapter)

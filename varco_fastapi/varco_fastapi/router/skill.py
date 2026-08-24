@@ -1074,12 +1074,18 @@ def bind_skill_adapter(
     Async safety:   ✅ No I/O during registration.
     """
     try:
-        from providify import Provider  # noqa: PLC0415
+        # Presence probe — providify is an optional dependency.  `import
+        # providify` (not `from varco_core.providify_compat import ...`) is
+        # deliberate — it triggers on providify's own absence, mirroring
+        # ``bind_mcp_adapter``'s guard.
+        import providify  # noqa: F401
     except ImportError:
         _logger.warning(
             "bind_skill_adapter: providify not installed — SkillAdapter not registered in DI."
         )
         return
+
+    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
 
     # Capture all args to avoid late-binding in the closure
     _router_cls = router_cls
@@ -1093,9 +1099,11 @@ def bind_skill_adapter(
     _store_cls = job_store_cls
     _conv_store_cls = conversation_store_cls
 
-    @Provider(singleton=True)
     def _skill_adapter_factory() -> SkillAdapter:
-        """Singleton SkillAdapter factory — built once at first injection."""
+        """Singleton SkillAdapter factory — built once at first injection.
+
+        Registered via ``varco_core.providify_compat.provide_factory()``.
+        """
         client = None
         if _client_cls is not None:
             try:
@@ -1150,8 +1158,9 @@ def bind_skill_adapter(
             conversation_store=conv_store,
         )
 
-    _skill_adapter_factory.__annotations__["return"] = SkillAdapter
-    container.provide(_skill_adapter_factory)
+    provide_factory(
+        container, _skill_adapter_factory, returns=SkillAdapter, singleton=True
+    )
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

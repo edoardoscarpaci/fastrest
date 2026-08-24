@@ -157,3 +157,12 @@ attribute holder (ABAC).
 - The SQLAlchemy persistence round-trip runs against `sqlite+aiosqlite` (no
   Docker) and, marked `@pytest.mark.integration`, against real Postgres via
   testcontainers (`uv run pytest varco_casbin/tests/ -m integration`).
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Per-call `CasbinPolicyEngine`** | Policy reloaded every request; slow, in-memory edits lost | A new enforcer is built per call | Resolve it as a DI singleton (`bootstrap`); share one instance |
+| **Policy authorizer silently active** | App's own authorizer is shadowed unexpectedly | A scanned `@Configuration` auto-activates on `scan` | The authorizer is opt-in via `enable_policy_authorizer(container)`; don't make it a scanned config |
+| **`memory` adapter in production** | Policies vanish on restart | The in-memory adapter has no durable store | Use `adapter="sqlalchemy"` (`varco-casbin[sqlalchemy]`) or `adapter="beanie"` (`varco-casbin[beanie]`) for persisted CRUD |
+| **Sync Casbin adapter with AsyncEnforcer** | `RuntimeError: Invalid parameters for enforcer` | `AsyncEnforcer` requires an `AsyncAdapter` | Use `casbin.persist.adapters.asyncio.*` (the factory in `varco_casbin.adapter` already does) |

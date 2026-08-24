@@ -326,7 +326,26 @@ where none does):
 to silently truncate the whole DLQ, same rule as `AbstractJobStore.delete_where`.
 `limit=` caps rows deleted per call; chunk a large sweep with repeated calls
 rather than one unbounded delete (each SA chunk is its own transaction under
-a transaction-mode pooler).
+a transaction-mode pooler). `KafkaDLQ`/`NatsDLQ.delete_where()` both check this
+"no predicate" case *before* their own backend-support `NotImplementedError` —
+an earlier bug (KI-2/KI-7) let a no-predicate call on either backend fall
+straight through to `NotImplementedError`, skipping the ABC's refusal.
+
+⚠️ **`BeanieDeadLetterQueue.count_by_channel()` bypasses beanie's own
+aggregation cursor.** On beanie 2.0.1 + motor 3.7.1,
+`Document.aggregate(pipeline).to_list()` raises `TypeError: object
+AsyncIOMotorLatentCommandCursor can't be used in 'await' expression` —
+beanie's `AggregationQuery.get_cursor()` unconditionally `await`s the
+collection's `aggregate()` call, but this motor version returns its cursor
+synchronously, not as a coroutine (KI-6). `count_by_channel()` works around
+it by driving `DeadLetterDocument.get_pymongo_collection().aggregate(pipeline)`
+directly (with an `inspect.isawaitable()` guard so it still works if a future
+driver version *does* return a coroutine) and iterating with `async for`
+instead of `.to_list()`. If your own application code calls
+`SomeDocument.aggregate(pipeline).to_list()` directly against this
+beanie/motor combination, expect the same `TypeError` — use the same
+`get_pymongo_collection().aggregate(pipeline)` bypass until beanie fixes the
+incompatibility upstream.
 
 ```bash
 varco retention prune --type dlq --before 2026-01-01T00:00:00Z --limit 5000 --chunk 1000 \
@@ -385,8 +404,8 @@ wrap `varco_sa.rls.enable_rls_ddl()` directly so the correct
 `(SELECT current_setting(..., true))` InitPlan form is always used — never a
 bare `current_setting()` call, which is not `LEAKPROOF` and silently forces
 a sequential scan on Postgres. **Nothing in varco enables this
-automatically** — paste it into your own reviewed migration, per CLAUDE.md's
-"RLS enabled by a startup hook" pitfall. See
+automatically** — paste it into your own reviewed migration, per
+`technical_docs/features/postgres-rls.md`'s "RLS enabled by a startup hook" pitfall. See
 `technical_docs/features/multitenancy.md` for the full RLS table list.
 
 ## REST admin surface
@@ -440,3 +459,12 @@ WARNING at mount time naming the risk.
 | `delete_where()` with no predicate | `ValueError` by design — refuses to delete the whole DLQ |
 | `list_entries(tenant_id="acme")` misses a framework-level entry | Correct — a `None`-tenant entry is never "every tenant"; use no filter for the operator/global view |
 | `mount_reliability_admin()` without `acknowledge_bundled_admin=True` | `ValueError` — bundling admin-adjacent privilege into the app pod is a deliberate, friction-gated choice |
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Poison outbox row silently stops a stream** | `OutboxRelay` retries the same undeliverable entry forever, blocking every entry queued behind it | No `retry_policy`/`dlq` wired — today's default is unbounded retry-in-place | Wire `retry_policy=` + `dlq=` on `OutboxRelay`; exhausted entries are pushed to the DLQ and deleted so the stream unblocks |
+| **`OutboxRelay(max_attempts=...)` without a `dlq`** | `ValueError` at construction | Deleting a poison entry with nowhere durable to put it is silent data loss — refused by design | Pass a `dlq=` (e.g. `SADeadLetterQueue`) alongside `max_attempts` |
+| **`list_entries(tenant_id="acme")` misses a framework-level dead letter** | An entry produced outside any tenant context (e.g. a boot-time outbox deserialize failure) never shows up under any explicit `tenant_id=` filter | `DeadLetterEntry.tenant_id=None` is deliberately never matched by `tenant_id="acme"` — a `None` tenant is not "every tenant" (Plan 009, RD-4/R4) | Use no `tenant_id` filter at all for the operator/global view; a `None`-tenant entry is correct, expected behaviour, not a bug |
+| **`redrive(entry_id)` called on Kafka/NATS** | `DeadLetterNotAddressable` | Stream-backed stores cannot address a single message by id — `supports_random_access=False` (RD-4) | Use `redrive_batch()` / the CLI's `--batch` flag, which work on every backend |
+| **`mount_reliability_admin()` without `acknowledge_bundled_admin=True`** | `ValueError` at mount time, nothing mounted | This surface can replay bus messages and delete audit/DLQ records — at least as privileged as the tenant control plane (RD-9) | Pass it only after confirming a standalone deployment isn't justified — same rule as `mount_tenant_admin()` |
+| **`mount_reliability_admin()` called twice** | Second call silently doubles/duplicates the DLQ+audit admin routes (same `prefix` doubles routes; a different `prefix` produces a second live surface) | No `id(app)` double-mount guard, unlike `mount_tenant_admin()` | Plan 014 / audit F4 — a second call for the same app now raises `ValueError`, same rule as `mount_tenant_admin()`. Calling with neither `audit_repo` nor `dlq` mounts nothing and does not poison the app for a later real mount (deliberate deviation from `mount_tenant_admin()`) |

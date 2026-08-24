@@ -8,10 +8,14 @@ carry ``@Singleton`` on their class definitions and are discovered automatically
 by ``container.scan("varco_nats", recursive=True)``.
 
 Settings classes are the exception: pydantic ``BaseSettings`` declares
-``__init__(self, **values)``, which providify cannot constructor-inject
-(``LookupError: Cannot resolve 'values: typing.Any'``).  They are therefore
-registered by lowest-priority ``@Provider`` factories — ``nats_channel_manager_settings``
-in ``varco_nats.channel`` and ``NatsDLQConfiguration.nats_dlq_settings`` in
+``__init__(self, **values)``, a shape ``@Singleton`` must not be applied to
+(see CLAUDE.md's pitfall table — on providify < 1.1.0 this raised
+``LookupError: Cannot resolve 'values: typing.Any'``; current providify
+skips ``**values`` outright, but the sanctioned shape must not depend on
+that implementation detail).  They are therefore registered by
+lowest-priority ``@Provider`` factories — ``nats_event_bus_settings`` in
+``varco_nats.config``, ``nats_channel_manager_settings`` in
+``varco_nats.channel``, and ``NatsDLQConfiguration.nats_dlq_settings`` in
 ``varco_nats.dlq`` — which the same ``scan()`` discovers.
 
 No ``@Configuration`` class or ``ainstall()`` call is required for the bus.

@@ -279,3 +279,10 @@ fail-fast behaviour, and correct here. See
 - **Example 23 — `examples/23-composite-all-in-one/`** — a runnable two-service composite.
 - `varco_fastapi/lifespan.py` — the per-service `VarcoLifespan` the composite drives.
 - `varco_fastapi/router/health.py` — the per-service health contract the aggregate reuses.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Naive `app.mount()` in a composite** | Mounted services answer requests with dead DB pools / no event bus | Starlette's `Router.lifespan` never descends into mounted sub-apps | Use `create_composite_app` — its `CompositeLifespan` drives each sub-app's own lifespan |
+| **Two composite services share a bare env name** | Both read the same `DATABASE_URL`; second service silently uses the first's config | One process = one `os.environ`; env is read at build time | Namespace env vars per service, or build each with `build_service(prefix, factory, env={...})` |

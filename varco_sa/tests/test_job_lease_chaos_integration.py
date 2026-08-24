@@ -6,8 +6,9 @@ Worker A ``try_claim(owner_id="a", lease_ttl=...)``, then A is simulated as
 crashed (never renews). After ``reap_expired_leases()``, worker B claims
 the same job and completes it. When A "resumes" and calls
 ``save(expected_epoch=<A's old epoch>)`` it must raise ``StaleLeaseError``
-and must NOT clobber B's result (CLAUDE.md's "stalled worker resumes and
-overwrites a completed result" pitfall).
+and must NOT clobber B's result (see
+``technical_docs/features/job-scheduling-and-leases.md``'s "stalled worker
+resumes and overwrites a completed result" pitfall).
 """
 
 from __future__ import annotations

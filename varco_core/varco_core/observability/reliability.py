@@ -8,8 +8,9 @@ DLQ, outbox, audit, and job-lease subsystems, all built on the existing
 ``install_reliability_metrics()`` is imperative, not a scanned
 ``@Configuration`` — metrics need the *live* DLQ/outbox instance, which only
 the application knows, and a scanned ``@Configuration`` would auto-activate
-on ``container.scan()`` (CLAUDE.md pitfall: "policy authorizer silently
-active" is the same class of mistake for a different feature).
+on ``container.scan()`` (``technical_docs/features/casbin-authorization.md``
+pitfall: "policy authorizer silently active" is the same class of mistake
+for a different feature).
 
 DESIGN: recording helpers (``record_*``) over decorating call sites
     ✅ The DLQ push path must never raise — a decorator wrapping ``push()``
@@ -382,6 +383,12 @@ def install_reliability_metrics(
     second time on a *different* ``MeterProvider`` (e.g. once per test)
     re-registers the gauge on the new provider's meter instead of silently
     reporting to the stale one.
+
+    Despite the verb, this takes **no container**, mutates module-level
+    globals, and is deliberately not a scanned ``@Configuration`` — see
+    CLAUDE.md's "DI wiring verb taxonomy" for how this differs from
+    providify's ``container.install(SomeConfiguration)`` (the same shape
+    as ``install_cache_metrics``).
 
     Args:
         dlq:         A live DLQ instance to observe (``varco.dlq.depth``).

@@ -442,3 +442,15 @@ the two-step deploy recipe above, not a schema change.
   `varco_core/varco_core/cache/backplane.py`,
   `varco_core/varco_core/observability/cache.py`,
   `varco_redis/varco_redis/backplane.py`.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Cache metrics never appear** | Dashboards for `varco.cache.*` stay empty even though the cache is being hit | `install_cache_metrics()` (`varco_core.observability.cache`) was never called — same rule as `install_reliability_metrics()`: a manual install function, deliberately not a scanned `@Configuration` | Call `install_cache_metrics()` once at startup |
+| **`LayeredCache` in multi-pod without a backplane** | Each pod's L1 silently serves stale entries after another pod's write/delete — the shipped bug Plan 010 / C1 closes | No `backplane=` wired — the default `LayeredCache(l1, l2, promote_ttl=...)` has no cross-node invalidation channel | Wire `backplane=RedisPubSubBackplane()` (`varco_redis.backplane`) for any `LayeredCache` shared across more than one process |
+| **`LayeredCache(backplane=..., promote_ttl=None)`** | `ValueError` at construction | A Pub/Sub backplane is best-effort (message loss on subscriber disconnect); an unbounded L1 TTL behind it means a missed invalidation has no bound on how long it can serve stale data | Pass a `promote_ttl=` alongside `backplane=` — mirrors `OutboxRelay(max_attempts=...)` refusing to run without a `dlq=` |
+| **Backplane key names visible fleet-wide** | Under a per-tenant-pod topology (`SCHEMA`/`DATABASE` isolation), every subscriber learns which tenant touched which entity id | The default `RedisPubSubBackplane` publishes one plaintext channel with raw key names (`tenant:{id}:Entity:pk`) | Use `channel_for=` (subscribe only to hosted tenants) or `hash_keys=True` (publish a key hash — degrades `delete_prefix()` invalidation to a local `clear` on receivers, documented not silent) |
+| **`soft_ttl >= ttl`** | `ValueError` at `CachePolicy` construction | A soft TTL at or beyond the hard TTL can never fire — the SWR window would be dead code | Set `soft_ttl` strictly less than `ttl` |
+| **Enabling envelope mode mid-rolling-deploy** | An **old** pod (or a pod whose policy doesn't set `soft_ttl`/`negative_ttl`/`stale_if_error`) reads a **new** pod's envelope and returns the raw `{"__varco_cache__": 1, ...}` wrapper dict to the application instead of the unwrapped value | `CacheEnvelope` is only tolerant on read in the safe direction (new pod reading old pod's legacy value) — the reverse direction is unsafe by design (D-5) | Roll out the new varco version to every pod with envelope-requiring policy fields off first, then turn them on — see the two-step deploy recipe in `technical_docs/features/cache-hardening.md` |
+| **Negative caching hiding a fixed row** | A "not found" response keeps being served long after the underlying row was created | `negative_ttl` was set longer than the operational fix loop for the missing row | Keep `negative_ttl` short (shorter than `ttl`), or invalidate explicitly (`cache.delete(key)`) when the row is created |

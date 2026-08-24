@@ -84,6 +84,8 @@ varco_sa/                — SQLAlchemy async ORM backend
   ├── di.py              — SAModule (@Configuration)
   └── (auto-generated)   — ORM models created from DomainModel subclasses at import time
 
+> `SAConfig` doubles as the DI settings object, avoiding a parallel `SASettings` class.
+
 varco_beanie/            — Beanie/MongoDB async ODM backend
   ├── __init__.py        — BeanieConfig, BeanieModelFactory
   ├── outbox.py          — BeanieOutboxRepository (OutboxDocument)
@@ -102,7 +104,7 @@ varco_memcached/         — Memcached cache backend (aiomcache)
   │                        MemcachedCacheConfiguration (@Configuration)
   └── health.py          — MemcachedHealthCheck (stats() probe)
 
-varco_ws/                — WebSocket and SSE push adapters (browser real-time events)
+varco_ws/                — WebSocket + Server-Sent Events (SSE) event bus backend (browser real-time events)
   ├── websocket.py       — WebSocketEventBus (push adapter), WebSocketConnection
   └── sse.py             — SSEEventBus (push adapter), SSEConnection, _STOP_SENTINEL
 
@@ -116,8 +118,25 @@ varco_casbin/            — Casbin policy-engine authorization backend (ACL/RBA
 ```
 
 > Authorization seam lives in **varco_core.auth.policy** (PolicyEngine, PolicyManagement,
-> EnforcementRequest, RequestMapper, PolicyEngineAuthorizer). See *Authorization* in CLAUDE.md
-> and `technical_docs/features/casbin-authorization.md`.
+> EnforcementRequest, RequestMapper, PolicyEngineAuthorizer). Full design:
+> `technical_docs/features/casbin-authorization.md`. CLAUDE.md retains only the three
+> wiring rules.
+
+### Dependency graph
+
+```
+varco_kafka     ──┐
+varco_nats      ──┤
+varco_redis     ──┤
+varco_sa        ──┤─→ varco_core
+varco_beanie    ──┤
+varco_memcached ──┤
+varco_ws        ──┤
+varco_fastapi   ──┤   (+ optional varco_core for the REST admin router it hosts)
+varco_casbin    ──┘   (+ optional varco_fastapi[fastapi] extra for the REST admin router)
+```
+
+`varco_core` is the only package without a `[tool.uv.sources]` sibling reference. All backend packages resolve it from the workspace rather than PyPI during development.
 
 ---
 

@@ -9,6 +9,89 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Documentation — repo-wide restructure (Plan 015, audit 002 F1–F11)
+
+`CLAUDE.md` reduced from ~2020 lines to ~744 lines of agent guidance
+(commands, layer rules, DI verb taxonomy, code-pattern pitfall table,
+Decision Tree, Pre-Implementation Checklist). Package map / dependency
+graph / type hierarchies consolidated into `ARCHITECTURE.md`. New README.md
+sections with runnable usage examples: Profiling, Background Jobs, Database
+Auditing, Dead Letter Queue, Composite Deployment, Durability preset
+(one-line opt-in), plus an A2A non-router-subject subsection and a
+Verification-hardening (`VARCO_JWT_*`) env-var table. Feature-specific
+operator pitfalls moved out of `CLAUDE.md`'s pitfall table into a
+`## Pitfalls` section on each owning `technical_docs/features/*.md` file
+(created where missing). No runtime code changes.
+
+### Fixed / Added — `varco-fastapi`, `varco-memcached`
+
+Plan 014 (audit 001 Batch B) — three small, additive DI/wiring fixes. No
+existing correct call site changes behaviour.
+
+- **Fixed: `_try_resolve_component()` no longer swallows every lifecycle
+  discovery failure into `except Exception: pass`.** Each skipped
+  component now produces exactly one log line naming the module/class:
+  `ModuleNotFoundError` → DEBUG ("package not installed"), `AttributeError`
+  → WARNING ("module present but has no `<class>`" — a version-skew
+  signal previously indistinguishable from "not installed"), a genuinely
+  missing binding (`is_resolvable() is False`) → WARNING naming the remedy
+  (`call <package>.bootstrap(container)` before `create_varco_app()`), a
+  `LookupError`/other exception from `container.get()` → WARNING (the
+  latter with `exc_info=True`). **Control flow is unchanged** — nothing new
+  propagates out of `_try_resolve_component()`; a broken/missing lifecycle
+  binding still does not stop the app from starting. New kill switch:
+  `VARCO_LIFECYCLE_DISCOVERY_WARN` (default `true`) demotes the
+  missing-binding WARNING to DEBUG. The two `varco_ws` push adapters pass
+  `warn_if_missing=False` (they are genuinely opt-in — warning about them
+  would be pure noise for every app that doesn't use `varco_ws`);
+  `AbstractEventBus`/`AbstractJobRunner` keep the default `True`.
+- **Fixed: `mount_reliability_admin()` now refuses a double mount.** Ports
+  the same `id(app)`-keyed `_MOUNTED_APPS` guard `mount_tenant_admin()`
+  already has — a second call for the same app now raises `ValueError`
+  instead of silently duplicating routes (previously: same `prefix` doubled
+  the mounted routes; a different `prefix` produced a second, fully live
+  admin surface with no signal). One deliberate deviation from
+  `mount_tenant_admin()`: calling with neither `audit_repo` nor `dlq` given
+  mounts nothing and does **not** poison the app for a later real mount —
+  the app id is only recorded once at least one router was actually
+  included.
+- **Added: `varco_memcached.di.async_bootstrap(setup_cache: bool = True)`.**
+  Mirrors `varco_redis.di.async_bootstrap(..., setup_cache=...)` in *shape*.
+  **The memcached default is unchanged** — `setup_cache=True` (the default)
+  reproduces today's unconditional `await
+  container.ainstall(MemcachedCacheConfiguration)` byte-for-byte for every
+  existing `await async_bootstrap(container)` call site.
+  `setup_cache=False` is now available for callers who want the sync scan
+  only, matching how `varco_redis`'s `async_bootstrap` behaves with
+  `setup_cache=False` — no connection pool is opened, no `CacheBackend`
+  binding is installed.
+
+### Changed — `varco-kafka`, `varco-nats`, `varco-redis`, `varco-core`, `varco-ws`, `varco-sa`, `varco-beanie`, `varco-fastapi`
+
+Plan 014 (audit 001 Batches C + D) — internal DI-wiring refactor, no public
+API change.
+
+- **Changed: `KafkaEventBusSettings`/`NatsEventBusSettings`/`RedisEventBusSettings`
+  are now registered by a `@Provider` factory instead of `@Singleton` on the
+  class.** Consistency/robustness fix, not a bug fix — a characterization
+  test (`varco_{kafka,nats,redis}/tests/test_*_di.py`) proved all three
+  resolved correctly through the container even under `@Singleton` on
+  today's providify (>= 1.1.0 skips pydantic's `**values` ctor param
+  outright), but the shape contradicted CLAUDE.md's own pitfall table and
+  each package's own sibling settings factory. `priority=-sys.maxsize` is
+  preserved exactly; base-interface lookup (`container.get(EventBusSettings)`)
+  and app-override-wins both still hold, proven by new regression tests.
+- **Added: `varco_core.providify_compat.provide_factory()`** — replaces six
+  of the seven independently hand-rolled `factory.__annotations__["return"]
+  = ...` + `@Provider` + `container.provide()` closures found across four
+  packages (audit F8; the audit itself named 5, two more were found during
+  this plan's inventory) with one shared helper. `varco_beanie.di`'s
+  `_make_repo_provider()` is the one documented exception — it stays a
+  container-less builder because its tests import it directly and assert on
+  its patched, unregistered `__annotations__`/`__name__`. Deliberately not
+  re-exported from `varco_core.__init__`; declares no bindings itself, so
+  `container.scan("varco_core")` picks up nothing new from it.
+
 ### BREAKING (security default) — `varco-core`, `varco-fastapi`
 
 Plan 005 Phase 2 (U-13, fail-closed JWT verification). Two fail-open holes
@@ -686,6 +769,67 @@ warning was not.
   `message_catalog=` supplied (i18n disabled, the default), behaviour is
   unchanged. See `technical_docs/features/error-taxonomy-and-i18n.md` and
   `technical_docs/features/i18n-and-localization.md`.
+
+- **`varco-kafka` — `AT_LEAST_ONCE` delivery could silently drop a message
+  whose handler raised.** `KafkaEventBus` now disables aiokafka's periodic
+  auto-commit for `AT_LEAST_ONCE` (previously honoured via
+  `enable_auto_commit`, default `True`) and commits the offset manually,
+  once per message, only after the handler chain returns without raising —
+  a raised handler now leaves the offset uncommitted so a fresh consumer in
+  the same `group_id` redelivers the message, instead of the offset being
+  silently advanced by aiokafka's fixed-interval timer regardless of
+  handler success. `KafkaEventBusSettings.enable_auto_commit` is retained
+  for backward compatibility only and no longer has any effect on bus
+  behaviour.
+- **`varco-kafka` — `KafkaDLQ.delete_where()` now raises `ValueError` for a
+  no-predicate call**, before its existing backend-support
+  `NotImplementedError`, matching the `AbstractDeadLetterQueue` contract
+  (previously a no-predicate call always raised `NotImplementedError`,
+  skipping the "refuse to delete everything" check every other DLQ backend
+  already had).
+- **`varco-nats` — `NatsDLQ.delete_where()` now raises `ValueError` for a
+  no-predicate call**, same fix and same contract gap as the `KafkaDLQ` fix
+  above.
+- **`varco-redis` — `RedisCache.set()`/`set_many()` now honour sub-second
+  `ttl` values.** They switched from second-precision `SETEX`/`int(ttl)`
+  (which truncated e.g. `ttl=0.05` to `0` and made Redis reject the call
+  with `ResponseError: invalid expire time`) to millisecond-precision
+  `PSETEX`/pipelined `psetex` (`round(ttl * 1000)`); a `ttl` that still
+  rounds to `<=0`ms now raises a clear `ValueError` instead of Redis's
+  cryptic `ResponseError`.
+- **`varco-redis` — `RedisJobStore.save()` gained `expected_epoch=`
+  fencing**, matching `SAJobStore`/`BeanieJobStore`. Previously passing
+  `expected_epoch=` raised `TypeError: unexpected keyword argument`; it now
+  performs the epoch-check-then-write inside a `WATCH`/`MULTI`/`EXEC`
+  transaction and raises `StaleLeaseError` on a stale or concurrently-raced
+  write, closing the gap for anyone relying on lease fencing with a Redis
+  job store.
+- **`varco-memcached` — `MemcachedCache.set()` no longer silently disables
+  expiry for a sub-second `ttl`.** A positive sub-second `ttl` (e.g.
+  `0.05`) is now rounded UP to `1` second (`math.ceil`) instead of
+  truncated DOWN to `0`, which Memcached's protocol treats as "never
+  expire" — previously the entry lived forever instead of expiring almost
+  immediately. Memcached's `exptime` remains genuinely whole-seconds-only
+  at the wire-protocol level (unlike Redis's millisecond `PSETEX`), so this
+  closes the silent-no-expiry failure mode without claiming sub-second
+  precision; an explicit `ttl=0`/`ttl=None` is still no-expiry, unchanged.
+- **`varco-beanie` — `BeanieDeadLetterQueue.count_by_channel()` no longer
+  raises `TypeError` on beanie 2.0.1 + motor 3.7.1.** It previously
+  `await`ed beanie's `Document.aggregate(pipeline).to_list()`, which raises
+  because this motor version's `aggregate()` returns its cursor
+  synchronously rather than as a coroutine; it now drives
+  `DeadLetterDocument.get_pymongo_collection().aggregate(pipeline)`
+  directly (with an `inspect.isawaitable()` guard for driver versions that
+  do return a coroutine) and iterates with `async for`. See
+  `technical_docs/features/dead-letter-queues.md` for the same caveat
+  applied to direct application code calling beanie aggregation.
+- **`varco-casbin` — `CasbinPolicyEngine.reload()` no longer raises
+  `TypeError` after any prior `enforce()` call.** `_AttrStr` (the `str`
+  subclass used to wrap ABAC/RBAC subjects and objects) gained a
+  `__reduce__` method so `copy.deepcopy` — used internally by Casbin's
+  `load_policy()` — reconstructs it through its real constructor instead of
+  the default `str`-subclass reconstruction, which called `cls(value)` and
+  omitted the required `attrs` argument.
 
 ### Changed
 

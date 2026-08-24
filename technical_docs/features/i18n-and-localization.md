@@ -253,3 +253,12 @@ concerns, explicitly parked in the backlog.
   the catalogue, `message_resolver`'s current wiring status.
 - `technical_docs/features/timezone-handling.md` — T1, the sibling X1
   consumer, and `LocalizationMiddleware`'s ordering hazard in full.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`tenant_id` expected in `RequestContext`** | `AttributeError`, or two disagreeing answers to "who is the tenant" | `RequestContext` deliberately holds only `locale`/`timezone`/`extras` (Plan 011 / D-6) — `TenantAwareService`, RLS, `tenancy_cache_key()`, the DLQ stamp and the audit trail all read `current_tenant()`, and a second source of truth is how they diverge | Call `current_tenant()`; compose by *ordering* (`LocalizationMiddleware` is the innermost built-in layer, so any app-supplied `TenantResolutionMiddleware` via `extra_middleware=` always dispatches first), never by containment |
+| **Localized response cached and served to the wrong locale** | A `fr` body is returned to an `en` client | The cache key did not mention the locale — the i18n analogue of the cross-tenant cache leak, and easier to hit because localization is applied at render time, far from the cache call | Cache the **unlocalized** representation and localize at render time; where the cached artifact is itself localized, build the key with `localization_cache_key(base, locale=True)`, which fails closed (`RuntimeError`) with no ambient locale, exactly like `tenancy_cache_key()` |
+| **`?lang=xx` silently ignored** | No 400, the response comes back in the fallback locale | `xx` is not in `I18nSettings.supported_locales` — by design, an unsupported explicit override falls through to the next precedence source rather than erroring | Add the locale to `supported_locales`, or expect the fallthrough — this is deliberate, not a bug |
+| **`Content-Language` header missing** | I18n appears to do nothing on an otherwise-working response | `I18nSettings.enabled=False` (the default), or `set_content_language=False` | Set `VARCO_I18N_ENABLED=true` (and check `set_content_language`) |

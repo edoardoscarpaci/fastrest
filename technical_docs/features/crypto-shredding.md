@@ -133,3 +133,10 @@ Redis's `destroy_scope` is intentionally **not** Lua-atomic across entries
 (see the `DESIGN:` block in `varco_redis/varco_redis/encryption_store.py`) —
 each per-entry tombstone write is itself idempotent, so a crash mid-destroy
 is safe to retry.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Destroyed key renders as corrupt data** | Decrypt of a crypto-shredded record raises a generic-looking error | `KeyDestroyedError` was caught by a bare `except EncryptionError` and treated the same as tampered data | Catch `KeyDestroyedError` specifically (it's a subclass) and render "erased", not "corrupt" |
+| **Per-subject registry built with `build_tenant_registry`** | Startup loads every key in the store, even ones for scopes not yet needed | `build_tenant_registry()` is eager-all; there is no per-scope equivalent by that name | Use `manager.build_scoped_registry(scope)` — loads exactly one scope's keys |

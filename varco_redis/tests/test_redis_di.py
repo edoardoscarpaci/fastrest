@@ -22,7 +22,16 @@ resolution are exercised — nothing is instantiated.
 
 from __future__ import annotations
 
-from providify import DIContainer
+import sys
+
+import pydantic
+import pytest
+from providify import DIContainer, Provider, Singleton
+
+from varco_core.event import AbstractEventBus
+from varco_core.event.config import EventBusSettings
+from varco_redis.bus import RedisEventBus
+from varco_redis.config import RedisEventBusSettings
 
 
 class TestRedisContainerValidates:
@@ -76,3 +85,100 @@ class TestRedisContainerValidates:
 
         assert "RedisPubSubBackplane" in implementations
         container.validate_bindings()
+
+
+class TestRedisEventBusSettingsCharacterization:
+    """
+    Plan 014 / Part A (F1) — characterization test pinning **current** behaviour.
+
+    See ``varco_kafka/tests/test_kafka_di.py``'s sibling class for the full
+    rationale; this mirrors it exactly for ``RedisEventBusSettings``.
+    """
+
+    def test_characterization_settings_resolve_through_the_container(self) -> None:
+        container = DIContainer()
+        container.scan("varco_redis", recursive=True)
+
+        settings = container.get(RedisEventBusSettings)
+
+        assert isinstance(settings, RedisEventBusSettings)
+        assert settings.url
+
+    def test_characterization_settings_are_a_singleton(self) -> None:
+        container = DIContainer()
+        container.scan("varco_redis", recursive=True)
+
+        assert container.get(RedisEventBusSettings) is container.get(
+            RedisEventBusSettings
+        )
+
+    async def test_characterization_event_bus_resolves_with_injected_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Load-bearing test — see the kafka sibling for why ``start()`` is
+        stubbed to a no-op and ``await container.aget(...)`` is used instead
+        of the synchronous ``container.get()``.
+        """
+
+        async def _noop_start(self: RedisEventBus) -> None:
+            return None
+
+        monkeypatch.setattr(RedisEventBus, "start", _noop_start)
+
+        container = DIContainer()
+        container.scan("varco_redis", recursive=True)
+
+        bus = await container.aget(AbstractEventBus, qualifier="redis")
+
+        assert isinstance(bus, RedisEventBus)
+        assert bus._config is container.get(RedisEventBusSettings)
+
+
+class RequiredFieldSettingsForTest(EventBusSettings):
+    """Module-scope settings subclass with one non-defaulted field — Step 5."""
+
+    required_value: str
+
+
+@Singleton(priority=-sys.maxsize)
+class SingletonRequiredFieldSettingsForTest(RequiredFieldSettingsForTest):
+    pass
+
+
+class TestRedisRequiredFieldCharacterization:
+    def test_characterization_required_field_raises_validation_error_not_lookup_error(
+        self,
+    ) -> None:
+        """
+        Corrects ``audits/001-audit-di-wiring.md:19``'s predicted ``LookupError``
+        — see the kafka sibling test for the full rationale.
+        """
+        container = DIContainer()
+        container.scan(sys.modules[__name__])
+
+        with pytest.raises(pydantic.ValidationError):
+            container.get(SingletonRequiredFieldSettingsForTest)
+
+
+@Provider(singleton=True, priority=100)
+def _custom_event_bus_settings() -> RedisEventBusSettings:
+    """App-supplied override — module scope so its lazy annotation resolves."""
+    return RedisEventBusSettings(url="redis://custom:6379/0")
+
+
+class TestRedisEventBusSettingsConvertedShapeInvariants:
+    """Step 7 — invariants the ``@Singleton`` → ``@Provider`` conversion must not break."""
+
+    def test_app_supplied_settings_win_over_the_default(self) -> None:
+        container = DIContainer()
+        container.scan("varco_redis", recursive=True)
+        container.provide(_custom_event_bus_settings)
+
+        assert container.get(RedisEventBusSettings).url == "redis://custom:6379/0"
+
+    def test_settings_resolve_through_their_base_interface(self) -> None:
+        container = DIContainer()
+        container.scan("varco_redis", recursive=True)
+
+        assert isinstance(container.get(EventBusSettings), RedisEventBusSettings)

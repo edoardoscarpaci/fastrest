@@ -157,7 +157,7 @@ Where in the codebase this feature is wired in or consumed:
 - Which routers / services / handlers use it
 
 ## Edge Cases & Pitfalls
-Things that could go wrong and how to avoid them. Mirror the CLAUDE.md pitfalls table format where relevant.
+Things that could go wrong and how to avoid them. Mirror the CLAUDE.md pitfalls table format where relevant — and put feature-specific pitfalls in the feature's own `technical_docs/features/*.md` `## Pitfalls` section, not in CLAUDE.md.
 
 ## Testing
 How to test this feature:

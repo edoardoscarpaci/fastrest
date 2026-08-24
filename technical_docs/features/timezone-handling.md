@@ -372,3 +372,11 @@ right approach for a bespoke error-rendering path outside `create_varco_app`.
   `params`, the `message_resolver` seam.
 - `technical_docs/features/job-scheduling-and-leases.md` — the "Zoned
   schedules" section for the full T2 wiring recipe.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`assume="utc"` breaks a working datetime filter** | `asyncpg` raises on a query that worked before the policy was changed | asyncpg rejects an **aware** datetime against a `TIMESTAMP WITHOUT TIME ZONE` column — which is exactly why `"naive"` (today's behaviour) is the default and `"utc"` is only the *recommendation* (Plan 011 / D-10) | Migrate the column to `TIMESTAMPTZ`, or leave the policy at `"naive"` and have clients send an explicit offset (`2026-01-01T00:00:00Z`) — an explicit offset wins under every policy |
+| **`DatetimeCoercionPolicy(assume="utc")` has no effect on a `?field__gte=` filter** | The naive-string bound is still returned naive despite a policy being configured | `ASTTypeCoercion` (the visitor `QueryTransformer` drives) has no `policy=` parameter — only the free function `coerce_datetime(value, policy=...)` honours it | Call `coerce_datetime(value, policy=my_policy)` directly, or register a field-specific coercer via `TypeCoercionRegistry.register_field()` with `functools.partial(coerce_datetime, policy=my_policy)` |
+| **tzdata absent in a slim image** | `ValueError` at `TimezoneSettings`/`I18nSettings`-adjacent startup naming a zone that "could not be resolved" | `python:*-slim`/distroless/Alpine images often ship no `/usr/share/zoneinfo` | `pip install tzdata` or `pip install "varco-core[tz]"` |

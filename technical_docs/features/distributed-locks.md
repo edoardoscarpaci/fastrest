@@ -143,6 +143,10 @@ today.
 | `ttl=` passed to `SAXactAdvisoryLock.try_acquire` seems to do nothing | It's not merely unenforced — it's meaningless for a transaction-scoped lock; the transaction's own commit/rollback bounds it. Use `xact()` and keep the wrapping transaction short instead |
 | Reaching for `RedisLock` to "fix" the pooling issue | Only relevant if Redis is already available in your deployment — for an air-gapped/no-Redis constraint, `SAXactAdvisoryLock` is the fix that needs no new infrastructure |
 
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`release()` returns false and the lock leaks** | A `SAAdvisoryLock` held by process A appears to release successfully but the next process to borrow that pooled connection inherits an already-locked key | Session-level advisory lock behind a transaction-mode connection pooler (PgBouncer `pool_mode=transaction`) — `release()` is routed to a different physical connection than `try_acquire()` used | Use `SAXactAdvisoryLock.xact(key, session)` instead — the lock is released by the caller's own COMMIT/ROLLBACK, so pooling never has a chance to misroute the release |
+
 ## Migration
 
 None — Phase 5 adds a new class in the same module; no schema change.

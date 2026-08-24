@@ -316,3 +316,9 @@ deliberately **deferred** to a future plan rather than bolted on here.
   layer.
 - `technical_docs/features/composite-deployment.md` — the process-global registry
   caveat for multi-service-in-one-process deployments.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Roles empty although the JWT has them** | `AuthContext.roles` is empty for a valid, correctly-signed token | The claim is named `sofy-roles`/`realm_access.roles`, not `roles` — the default mapping never looked there | Set `VARCO_JWT_TRANSFORM_ROLES_FIELD` (see `technical_docs/features/jwt-claim-transformer.md`) |

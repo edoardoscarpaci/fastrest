@@ -36,9 +36,10 @@ Override before or after calling ``setup_varco_defaults``::
 
     container.bind(TaskSerializer, MySerializer)  # overrides default
 
-``bind_clients()`` mirrors ``bind_repositories()`` from ``varco_sa.di`` — patches
-``__annotations__["return"]`` so providify resolves ``Inject[VarcoClient[OrderRouter]]``
-correctly at injection time.
+``bind_clients()`` mirrors ``bind_repositories()`` from ``varco_sa.di`` — both go
+through ``varco_core.providify_compat.provide_factory()``, which patches
+``__annotations__["return"]`` so providify resolves
+``Inject[VarcoClient[OrderRouter]]`` correctly at injection time.
 
 DESIGN: bind_clients() helper over manual provider registration
     ✅ Same pattern as bind_repositories() — familiar to varco users
@@ -114,9 +115,11 @@ def bind_clients(container: Any, *client_classes: type) -> None:
     Implementation (same pattern as ``bind_repositories()`` in ``varco_sa.di``):
 
     1. Read ``_router_class`` ClassVar to get the router type.
-    2. Create a ``@Provider(singleton=True)`` factory function.
-    3. Patch ``factory.__annotations__["return"]`` to ``VarcoClient[router_type]``.
-    4. Register in the container.
+    2. Create a plain factory function.
+    3. Register it via ``varco_core.providify_compat.provide_factory(container,
+       factory, returns=VarcoClient[router_type], singleton=True)`` — patches
+       ``factory.__annotations__["return"]``, decorates with ``@Provider``,
+       and registers, in one call.
 
     Args:
         container:     ``DIContainer`` instance to register into.
@@ -146,6 +149,7 @@ def bind_clients(container: Any, *client_classes: type) -> None:
     Thread safety:  ✅ Registration happens at bootstrap; no concurrent access.
     Async safety:   ✅ No I/O during registration.
     """
+    from varco_core.providify_compat import provide_factory
     from varco_fastapi.client.base import AsyncVarcoClient
 
     for client_cls in client_classes:
@@ -168,28 +172,28 @@ def bind_clients(container: Any, *client_classes: type) -> None:
             """Singleton factory — DI container calls this once."""
             return __cls()
 
-        # Patch the return annotation BEFORE decorating: @Provider reads the
-        # annotation to derive the binding interface, so patching afterwards
-        # would register under the placeholder `Any` instead of the alias.
-        # (Same trick as bind_repositories() in varco_sa.di.)
-        _factory.__annotations__["return"] = client_alias
-
-        # DESIGN: `@Provider(singleton=True)` applied explicitly, and
-        # `container.provide()` called WITHOUT a fallback chain.
+        # Registration goes through varco_core.providify_compat.provide_factory()
+        # — see that module's docstring for why patching the return annotation
+        # before registering (not before decorating) is the only ordering
+        # constraint that matters. (Same helper bind_repositories() in
+        # varco_sa.di uses.)
+        #
+        # DESIGN: no fallback chain around registration.
         #
         # `provide()` only accepts @Provider-decorated callables, and `bind()`
-        # rejects a function outright (it calls `issubclass()` on it). The
-        # previous three nested `except Exception` fallbacks could therefore
-        # never succeed — they only converted a precise error into a confusing
-        # one from the last branch, and would silently swallow a genuine
-        # registration failure if any branch ever did succeed by accident.
+        # rejects a function outright (it calls `issubclass()` on it). Three
+        # nested `except Exception` fallbacks used to sit here and could
+        # therefore never succeed — they only converted a precise error into a
+        # confusing one from the last branch, and would silently swallow a
+        # genuine registration failure if any branch ever did succeed by
+        # accident.
         #
         #   ✅ A registration failure surfaces immediately, naming the real cause.
         #   ✅ One code path — what is tested is what runs.
         #   ❌ No "best effort" partial registration; a bad client class aborts
         #      the whole bind_clients() call (intended — a half-wired container
         #      fails later, further from the cause).
-        container.provide(Provider(singleton=True)(_factory))
+        provide_factory(container, _factory, returns=client_alias, singleton=True)
 
 
 def bind_clients_from(container: Any, *router_classes: type) -> None:

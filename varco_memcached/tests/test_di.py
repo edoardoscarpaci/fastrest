@@ -211,6 +211,27 @@ class TestAsyncBootstrap:
         # ainstall must be awaited exactly once with the real configuration class
         container.ainstall.assert_awaited_once_with(MemcachedCacheConfiguration)
 
+    async def test_no_kwargs_call_awaits_ainstall_exactly_once(self) -> None:
+        """
+        Plan 014 / audit F7 — characterization of TODAY'S unconditional
+        install: ``await async_bootstrap(container)`` with **no kwargs**
+        must await ``container.ainstall(MemcachedCacheConfiguration)``
+        exactly once.
+
+        This is the behaviour Plan 014 step 18's new ``setup_cache: bool =
+        True`` parameter must preserve byte-for-byte as its default — this
+        test is written before that parameter exists, precisely so it pins
+        the pre-change contract (see the plan's Risks section).
+        """
+        from varco_memcached.cache import MemcachedCacheConfiguration  # noqa: PLC0415
+
+        container = _make_mock_container()
+
+        with patch("varco_memcached.di.bootstrap", return_value=container):
+            await async_bootstrap(container)
+
+        container.ainstall.assert_awaited_once_with(MemcachedCacheConfiguration)
+
     async def test_passes_none_container_to_bootstrap(self) -> None:
         """
         async_bootstrap(None) must pass None through to bootstrap() so
@@ -226,6 +247,52 @@ class TestAsyncBootstrap:
         # None must be forwarded — not resolved here — so bootstrap() can apply
         # its own DIContainer.current() fallback consistently.
         mock_bs.assert_called_once_with(None)
+
+    async def test_setup_cache_false_does_not_await_ainstall(self) -> None:
+        """
+        Plan 014 / audit F7, step 19 — ``setup_cache=False`` must not await
+        ``container.ainstall(...)`` and must still return the container.
+        """
+        container = _make_mock_container()
+
+        with patch("varco_memcached.di.bootstrap", return_value=container):
+            result = await async_bootstrap(container, setup_cache=False)
+
+        container.ainstall.assert_not_awaited()
+        assert result is container
+
+    async def test_setup_cache_false_with_providify_absent_returns_none(self) -> None:
+        """
+        Plan 014 / audit F7, step 19 — ``setup_cache=False`` with providify
+        absent still returns ``None`` (the ``container is None`` guard runs
+        before the ``setup_cache`` branch either way).
+        """
+        original = sys.modules.get("providify")
+        sys.modules["providify"] = None  # type: ignore[assignment]
+        try:
+            result = await async_bootstrap(_make_mock_container(), setup_cache=False)
+        finally:
+            if original is None:
+                sys.modules.pop("providify", None)
+            else:
+                sys.modules["providify"] = original
+
+        assert result is None
+
+    async def test_setup_cache_default_true_awaits_ainstall(self) -> None:
+        """
+        Plan 014 / audit F7, step 19 — the default (``setup_cache=True``)
+        path is unchanged: ``ainstall`` is still awaited exactly once.
+        """
+        from varco_memcached.cache import MemcachedCacheConfiguration  # noqa: PLC0415
+
+        container = _make_mock_container()
+
+        with patch("varco_memcached.di.bootstrap", return_value=container):
+            result = await async_bootstrap(container)
+
+        container.ainstall.assert_awaited_once_with(MemcachedCacheConfiguration)
+        assert result is container
 
     async def test_importerror_guard_returns_none(self) -> None:
         """

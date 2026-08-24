@@ -12,8 +12,9 @@ documented, non-negotiable performance regression this codebase guards
 against everywhere RLS is touched.
 
 **Nothing calls these automatically.** Paste them into a reviewed app
-revision, per CLAUDE.md's "RLS enabled by a startup hook" pitfall — the same
-rule as every other RLS helper in this codebase.
+revision, per `technical_docs/features/postgres-rls.md`'s "RLS enabled by a
+startup hook" pitfall — the same rule as every other RLS helper in this
+codebase.
 
 Usage (inside an Alembic revision)::
 

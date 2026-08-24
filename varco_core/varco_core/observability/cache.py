@@ -10,8 +10,9 @@ pattern to copy.
 
 ``install_cache_metrics()`` is a manual install function, deliberately
 **not** a scanned ``@Configuration`` — a scanned config auto-activates on
-``container.scan()`` (CLAUDE.md's "policy authorizer silently active"
-pitfall, same class of mistake for a different feature).
+``container.scan()`` (``technical_docs/features/casbin-authorization.md``'s
+"policy authorizer silently active" pitfall, same class of mistake for a
+different feature).
 
 Instrument names (Decision D-2 — settled by research brief 003; see
 Plan 010's "Decisions" section for the full citation trail):
@@ -209,6 +210,11 @@ def install_cache_metrics(*, config: CacheMetricsConfig | None = None) -> None:
     (or the default). ``config.enabled=False`` disables recording without
     unregistering the already-created OTel instruments (they just stop
     being written to).
+
+    Despite the verb, this takes **no container**, mutates module-level
+    globals, and is deliberately not a scanned ``@Configuration`` — see
+    CLAUDE.md's "DI wiring verb taxonomy" for how this differs from
+    providify's ``container.install(SomeConfiguration)``.
 
     Args:
         config: ``CacheMetricsConfig``. Defaults to ``CacheMetricsConfig()``

@@ -212,9 +212,13 @@ def bind_websocket_adapter(
     Async safety:   ✅ No I/O during registration.
     """
     try:
-        # Lazy import — providify is an optional dependency.
-        # The guard mirrors bind_mcp_adapter in varco_fastapi.
-        from providify import Provider  # noqa: PLC0415
+        # Presence probe — providify is an optional dependency.  This
+        # `import providify` (not `from varco_core.providify_compat import
+        # ...`) is deliberate: it is what
+        # `varco_ws/tests/test_di.py::test_bind_websocket_adapter_importerror_guard`
+        # blocks by purging `sys.modules`, so the guard must trigger on
+        # providify's own absence, not incidentally on the compat module's.
+        import providify  # noqa: F401
     except ImportError:
         import logging  # noqa: PLC0415
 
@@ -228,6 +232,7 @@ def bind_websocket_adapter(
     # keep the module-level import list minimal and match the lazy-import
     # pattern used throughout the package.
     from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
+    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
     from varco_ws.websocket import (  # noqa: PLC0415
         BackpressurePolicy,
         WebSocketEventBus,
@@ -245,7 +250,6 @@ def bind_websocket_adapter(
         else BackpressurePolicy.DROP_OLDEST
     )
 
-    @Provider(singleton=True)
     def _ws_factory() -> WebSocketEventBus:
         """Singleton WebSocketEventBus factory — built once at first injection.
 
@@ -255,6 +259,10 @@ def bind_websocket_adapter(
         evaluation turns the ``Inject[...]`` hint into a string, so providify
         cannot recognise it as an injection point.  The closure approach is the
         same pattern used by ``bind_mcp_adapter`` in ``varco_fastapi``.
+
+        Registered via ``varco_core.providify_compat.provide_factory()`` —
+        see that module for why patching the return annotation before
+        registering is the only ordering constraint.
         """
         bus = container.get(AbstractEventBus)
         return WebSocketEventBus(
@@ -265,12 +273,7 @@ def bind_websocket_adapter(
             backpressure_policy=_backpressure_policy,
         )
 
-    # Patch the return annotation so providify can resolve Inject[WebSocketEventBus].
-    # Without this, the annotation is the string "WebSocketEventBus" (due to
-    # `from __future__ import annotations`) and providify cannot look up the class.
-    _ws_factory.__annotations__["return"] = WebSocketEventBus
-
-    container.provide(_ws_factory)
+    provide_factory(container, _ws_factory, returns=WebSocketEventBus, singleton=True)
 
 
 # ── bind_sse_adapter ──────────────────────────────────────────────────────────
@@ -338,8 +341,12 @@ def bind_sse_adapter(
     Async safety:   ✅ No I/O during registration.
     """
     try:
-        # Lazy import — providify is an optional dependency.
-        from providify import Provider  # noqa: PLC0415
+        # Presence probe — see bind_websocket_adapter's comment for why this
+        # is `import providify`, not `from varco_core.providify_compat
+        # import ...`: it is what
+        # `varco_ws/tests/test_di.py::test_bind_sse_adapter_importerror_guard`
+        # blocks by purging `sys.modules`.
+        import providify  # noqa: F401
     except ImportError:
         import logging  # noqa: PLC0415
 
@@ -351,6 +358,7 @@ def bind_sse_adapter(
 
     # Resolve defaults imported lazily to keep module-level import list minimal.
     from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
+    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
     from varco_ws.sse import SSEEventBus  # noqa: PLC0415
 
     # Capture every arg at binding time — same closure-capture pattern as
@@ -359,7 +367,6 @@ def bind_sse_adapter(
     _channel = channel
     _max_queue_size = max_queue_size
 
-    @Provider(singleton=True)
     def _sse_factory() -> SSEEventBus:
         """Singleton SSEEventBus factory — built once at first injection.
 
@@ -367,6 +374,8 @@ def bind_sse_adapter(
         rather than declaring ``Inject[AbstractEventBus]`` as a parameter.
         Avoids the ``from __future__ import annotations`` string-annotation
         problem — same pattern as ``bind_mcp_adapter`` in ``varco_fastapi``.
+
+        Registered via ``varco_core.providify_compat.provide_factory()``.
         """
         bus = container.get(AbstractEventBus)
         return SSEEventBus(
@@ -376,11 +385,7 @@ def bind_sse_adapter(
             max_queue_size=_max_queue_size,
         )
 
-    # Patch the return annotation so providify can resolve Inject[SSEEventBus].
-    # Mirrors the same pattern used in bind_mcp_adapter (varco_fastapi).
-    _sse_factory.__annotations__["return"] = SSEEventBus
-
-    container.provide(_sse_factory)
+    provide_factory(container, _sse_factory, returns=SSEEventBus, singleton=True)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

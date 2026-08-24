@@ -812,12 +812,19 @@ def bind_mcp_adapter(
     Async safety:   ✅ No I/O during registration.
     """
     try:
-        from providify import Provider  # noqa: PLC0415
+        # Presence probe — providify is an optional dependency.  `import
+        # providify` (not `from varco_core.providify_compat import ...`) is
+        # deliberate: it is what
+        # `test_bind_mcp_adapter_noop_without_providify` blocks by purging
+        # `sys.modules`, so the guard triggers on providify's own absence.
+        import providify  # noqa: F401
     except ImportError:
         _logger.warning(
             "bind_mcp_adapter: providify not installed — MCPAdapter not registered in DI."
         )
         return
+
+    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
 
     # Capture args in closure — avoids late-binding if bind_mcp_adapter is
     # called in a loop for multiple routers.
@@ -827,9 +834,11 @@ def bind_mcp_adapter(
     _prefix = tool_name_prefix
     _enabled = enabled_routes
 
-    @Provider(singleton=True)
     def _mcp_adapter_factory() -> MCPAdapter:
-        """Singleton MCPAdapter factory — built once at first injection."""
+        """Singleton MCPAdapter factory — built once at first injection.
+
+        Registered via ``varco_core.providify_compat.provide_factory()``.
+        """
         client = None
         if _client_cls is not None:
             # Try to resolve from container first (preferred — gets auth, etc.)
@@ -846,10 +855,7 @@ def bind_mcp_adapter(
             enabled_routes=_enabled,
         )
 
-    # Patch return annotation so providify resolves Inject[MCPAdapter]
-    _mcp_adapter_factory.__annotations__["return"] = MCPAdapter
-
-    container.provide(_mcp_adapter_factory)
+    provide_factory(container, _mcp_adapter_factory, returns=MCPAdapter, singleton=True)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

@@ -213,3 +213,9 @@ non-CRUD (custom) routes to `super()._make_http_handler` → base `_make_custom_
 
 - [GenericRouter](generic-router.md) — service-free routers built on `@route`.
 - [RouteGuard](route-guard.md) — declarative per-route authorization.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Custom service method unknown on `self._service`** | Type checker reports `.compile`/`.custom_method()` etc. as unknown attributes | Router declared without the 6th `S` type arg — `self._service` is only typed as the erased `AsyncService[Any, ...]` base | Subscript `CRUDRouter[..., ConcreteService]` (or `VarcoCRUDRouter[..., ConcreteService]`) and use `self.service`/`self._service`, both narrowed to `ConcreteService` |

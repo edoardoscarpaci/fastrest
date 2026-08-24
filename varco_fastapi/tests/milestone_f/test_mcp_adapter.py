@@ -459,3 +459,38 @@ def test_bind_mcp_adapter_noop_without_providify():
     finally:
         if orig is not None:
             sys.modules["providify"] = orig
+
+
+# ── bind_mcp_adapter against a real container (Plan 014 / Step 12) ────────────
+
+
+def test_bind_mcp_adapter_resolves_through_a_real_container():
+    """
+    Characterization test for site 3 before the ``@Provider`` annotation-patch
+    extraction (``provide_factory()``, Step 19). Today ``bind_mcp_adapter``
+    is only exercised against the providify-absent path
+    (``test_bind_mcp_adapter_noop_without_providify``) — nothing resolves
+    ``MCPAdapter`` from a real container.
+    """
+    from providify import DIContainer  # noqa: PLC0415
+
+    from varco_fastapi.router.mcp import bind_mcp_adapter  # noqa: PLC0415
+
+    container = DIContainer()
+    bind_mcp_adapter(container, OrderRouter)
+
+    adapter = container.get(MCPAdapter)
+
+    assert isinstance(adapter, MCPAdapter)
+    assert adapter.router_class is OrderRouter
+
+
+def test_bind_mcp_adapter_registers_a_singleton():
+    from providify import DIContainer  # noqa: PLC0415
+
+    from varco_fastapi.router.mcp import bind_mcp_adapter  # noqa: PLC0415
+
+    container = DIContainer()
+    bind_mcp_adapter(container, OrderRouter)
+
+    assert container.get(MCPAdapter) is container.get(MCPAdapter)

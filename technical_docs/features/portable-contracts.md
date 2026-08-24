@@ -182,3 +182,9 @@ those and "in-process `client_for()`".
 
 See also: `docs/client.md`, `docs/client-code-generation.md`,
 `docs/peer-service-integration.md`.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`client_for()`'s custom `@route` method assumed typed/strict** | A wrong kwarg silently passes through instead of raising `TypeError`, unlike a `gen-client`-generated client for the same router | `_VarcoClientMeta` (the metaclass behind `client_for()`) was deliberately NOT rewired onto `build_client_method` in Plan 009 Phase 7 (high-blast-radius deferral) — only `contract_client()`/`gen-client` go through it | Don't assume parity between `client_for()` and a cross-repo generated client for custom routes; generate a typed client (`varco gen-client`) if you need the strict signature today — see `technical_docs/features/portable-contracts.md`'s status note |

@@ -81,7 +81,11 @@ def enable_rls_ddl(
 
     Returns raw SQL strings for the caller to run inside its OWN Alembic
     revision (typically via ``op.execute(stmt)`` for each string, in order).
-    **Nothing is applied here** — this function performs no I/O.
+    **Nothing is applied here** — this function performs no I/O. Despite the
+    ``enable_*`` name, this is unrelated to the DI opt-in ``enable_*`` family
+    (CLAUDE.md's "DI wiring verb taxonomy") — no container is touched, no
+    binding is registered; see ``varco_casbin.di.enable_policy_authorizer``
+    for that pattern.
 
     The generated policy uses the ``(SELECT current_setting(...))`` InitPlan
     form — see the module docstring's InitPlan finding. Do not hand-edit the

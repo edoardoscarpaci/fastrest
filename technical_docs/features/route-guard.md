@@ -253,3 +253,10 @@ To add guard support to CRUD routes:
 1. Add a `_create_requires`, `_read_requires`, etc. ClassVar to `VarcoCRUDRouter` in `router/crud.py`.
 2. Plumb through `introspect_routes()` in `introspection.py` (the CRUD `ResolvedRoute` block around line 260).
 3. Enforce inside each CRUD handler factory, mirroring the `_make_custom_handler` pattern.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **`requires=` without `_auth`** | `RuntimeError` at `build_router()` startup | Guard can never be satisfied with no `AuthContext` | Set `_auth` on the router, or use `allow_anonymous()` if the route is public |
+| **`ctx` declared but no `_auth`** | Handler gets 500 (missing argument) | Without auth middleware, no `AuthContext` is injected | Set `_auth` on the router or remove `ctx` from the handler signature |

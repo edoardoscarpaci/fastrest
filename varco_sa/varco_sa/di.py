@@ -60,6 +60,7 @@ from providify import Configuration, Inject, Provider
 from varco_core.lock import AbstractDistributedLock
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
+from varco_core.providify_compat import provide_factory
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import IUoWProvider
 from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
@@ -279,32 +280,31 @@ def bind_repositories(
         )
 
     for entity_cls in entity_classes:
-        container.provide(_make_repo_provider(entity_cls))
+        _bind_repo_provider(container, entity_cls)
 
 
-def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
+def _bind_repo_provider(container: DIContainer, entity_cls: type[DomainModel]) -> None:
     """
-    Build a ``@Provider``-decorated sync factory for ``AsyncRepository[entity_cls]``.
+    Register a sync ``AsyncRepository[entity_cls]`` provider on *container*.
 
-    The factory's return-type annotation is patched at runtime so that
+    The factory's return-type annotation must be patched at runtime so that
     providify registers the binding under the precise generic alias
-    ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``).
-
-    DESIGN: dynamic annotation patching over Protocol / overloads
-      ✅ No boilerplate per entity — one call per class
-      ✅ providify's _is_generic_subtype() matches on the generic alias
-      ❌ Annotation patching is non-standard and invisible to static checkers
-         (mypy/pyright will not infer the return type from __annotations__)
+    ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``), not the
+    bare unparameterised ``AsyncRepository`` — otherwise every entity's repo
+    would collide under one interface. That patch-then-register mechanism is
+    shared with five other call sites across four packages; see
+    ``varco_core.providify_compat.provide_factory()`` for the single
+    implementation and its own DESIGN block.
 
     Args:
+        container:  The ``DIContainer`` to register the binding into.
         entity_cls: The ``DomainModel`` subclass to build a provider for.
 
     Returns:
-        A function with ``@Provider`` metadata stamped and the return
-        annotation set to ``AsyncRepository[entity_cls]``.
+        None — the provider is registered as a side effect on *container*.
 
     Thread safety:  ✅ Pure function — creates a new closure each call.
-    Async safety:   ✅ The returned factory is synchronous — repository
+    Async safety:   ✅ The registered factory is synchronous — repository
                        construction itself is synchronous; I/O is lazy.
     """
 
@@ -315,18 +315,15 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
         # subtype for entity_cls, creating a fresh AsyncSession per call.
         return provider.get_repository(entity_cls)
 
-    # Patch the return annotation with the concrete generic alias so providify
-    # registers this binding under AsyncRepository[entity_cls], not the bare
-    # unparameterised AsyncRepository.  Without this patch, all entity repos
-    # would collide under the same unparameterised interface.
-    _repo_factory.__annotations__["return"] = AsyncRepository[entity_cls]  # type: ignore[misc, valid-type]
-
-    # Give the closure a descriptive __name__ for debugging / describe() output.
-    _repo_factory.__name__ = f"_repo_factory_{entity_cls.__name__}"
-
-    # Stamp @Provider metadata — DEPENDENT scope (default) so a fresh repo
-    # wrapper is returned each time; AsyncSession is created per resolution.
-    return Provider(_repo_factory)
+    # DEPENDENT scope (default, singleton=False) — a fresh repo wrapper is
+    # returned each time; AsyncSession is created per resolution.
+    provide_factory(
+        container,
+        _repo_factory,
+        returns=AsyncRepository[entity_cls],  # type: ignore[valid-type]
+        singleton=False,
+        name=f"_repo_factory_{entity_cls.__name__}",
+    )
 
 
 # ── bootstrap ─────────────────────────────────────────────────────────────────

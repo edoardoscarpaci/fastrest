@@ -199,3 +199,10 @@ deciding what your `.mo` files say. See
   the precedence chain, `LocalizationMiddleware`.
 - `technical_docs/features/timezone-handling.md` — T1/T3, the sibling X1
   consumer.
+
+## Pitfalls
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Error body gained `message_key`/`params` after upgrade** | An exact-equality assertion on an error response body fails after a version bump | Plan 011 / D-4 — the one deliberate wire delta: built-in varco exceptions now emit `message_key` (`varco.error.not_found`) and non-empty `params` as extension members. An out-of-tree `ServiceException` with no `message_key` is unaffected | Assert on the keys you care about instead of the whole dict, or restore the exact pre-plan body with `VARCO_ERROR_INCLUDE_MESSAGE_KEY=false` / `VARCO_ERROR_INCLUDE_PARAMS=false` |
+| **Error response not localized although i18n is enabled** | A 404/500 body is in English (and has no `Content-Language` header) despite I18n being enabled and `?lang=fr` set | `create_varco_app()` only wires `message_catalog=` into the error paths when a `MessageCatalog` was actually resolved (`i18n.enabled=True` **and** a container was passed) — with no catalog bound, both `_make_error_response()`/`add_exception_handlers()` and `ErrorMiddleware` are byte-identical to before this fix: `message_key`/`params` still appear, but `message` stays `default_message` | Confirm `create_varco_app(container=..., i18n=I18nSettings(enabled=True))` and that a `MessageCatalog` (e.g. `GettextMessageCatalog`) is actually bound in the container; if you built a custom exception handler yourself, pass `message_catalog=`/`set_content_language=` explicitly — see `technical_docs/features/error-taxonomy-and-i18n.md`'s `message_resolver` section |

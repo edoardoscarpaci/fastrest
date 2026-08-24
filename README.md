@@ -129,6 +129,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [MultiKeyAuthority — key rotation](#multikeyauthority--key-rotation)
   - [TrustedIssuerRegistry — verification](#trustedissuerregistry--verification)
   - [Key sources](#key-sources)
+  - [Verification hardening (VARCO_JWT_*)](#verification-hardening-varco_jwt_)
 - [Connection Settings](#connection-settings)
   - [SSLConfig](#sslconfig)
   - [RedisConnectionSettings](#redisconnectionsettings)
@@ -136,11 +137,13 @@ policy engine, field encryption, observability, profiling, …) — see
 - [FastAPI Integration](#fastapi-integration)
   - [VarcoRouter and VarcoCRUDRouter](#varcorouter-and-varcoCRUDRouter)
   - [CRUD mixins](#crud-mixins)
+  - [Service-free routers — GenericRouter](#service-free-routers--genericrouter)
   - [JWT authentication middleware](#jwt-authentication-middleware)
   - [Request context](#request-context)
   - [Middleware stack](#middleware-stack)
   - [Job runner — async mode](#job-runner--async-mode)
   - [Bootstrap helpers](#bootstrap-helpers)
+  - [A2A — exposing a non-router subject](#a2a--exposing-a-non-router-subject)
   - [Calling other varco services — client_for](#calling-other-varco-services--client_for)
 - [Observability](#observability)
   - [@span — distributed tracing](#span--distributed-tracing)
@@ -149,6 +152,12 @@ policy engine, field encryption, observability, profiling, …) — see
   - [OtelConfig and DI wiring](#otelconfig-and-di-wiring)
 - [Health Checks](#health-checks)
 - [Exception Hierarchy](#exception-hierarchy)
+- [Profiling](#profiling)
+- [Background Jobs](#background-jobs)
+- [Database Auditing](#database-auditing)
+- [Dead Letter Queue](#dead-letter-queue)
+- [Composite Deployment](#composite-deployment)
+- [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
 
 ---
 
@@ -992,6 +1001,57 @@ from varco_core.tenancy import TenancySettings, TenantIsolation
 settings = TenancySettings(isolation=TenantIsolation.SCHEMA)   # opt-in
 ```
 
+**Worked example — turn on schema-per-tenant isolation and onboard a tenant:**
+
+```python
+from varco_core.tenancy import TenancySettings, TenantIsolation
+from varco_sa.tenancy.router import SASchemaRouter
+from varco_sa.tenancy.provisioner import SASchemaProvisioner
+from varco_sa.tenancy.catalog import SATenantCatalog
+from varco_core.tenancy.control.service import TenantControlService
+
+# 1. Opt in — everything else stays SHARED-shaped until this flips
+settings = TenancySettings(isolation=TenantIsolation.SCHEMA)
+
+# 2. Wire the router (schema_translate_map, not search_path — see
+#    technical_docs/features/postgres-rls.md §3) and the provisioner
+router = SASchemaRouter(schema_template=settings.schema_template)
+provisioner = SASchemaProvisioner(engine=engine)
+
+# 3. The control service ties catalog + provisioner + event emission together
+control_service = TenantControlService(
+    catalog=SATenantCatalog(session=admin_session),
+    provisioner=provisioner,
+    producer=producer,   # AbstractEventProducer — emits TenantCatalogChanged
+)
+
+# 4. Onboard — idempotent; a second call on an already-active tenant is a no-op
+await control_service.provision("acme")
+
+# 5. Per-request: TenantResolutionMiddleware checks catalog status BEFORE
+#    pool.ensure(), then wraps the handler in tenant_context("acme") —
+#    session_factory_for(engine, "acme") resolves every routed table to
+#    schema "t_acme"; global + framework tables stay in the default schema.
+```
+
+**Caveat**: models generated under `SAModelFactory.build(..., isolation="schema")` carry a
+symbolic `"tenant"` schema token only for `TenantScope.TENANT` models — a `GLOBAL` model or
+one of the ten framework tables never does, and under `TenantIsolation.SHARED` (the
+default) `__table__.schema` stays `None`, byte-identical to today.
+
+**Mounting the admin/provisioning surface** — always opt-in and gated:
+
+```python
+from varco_fastapi.tenancy.mount import mount_tenant_admin
+
+app = create_varco_app(container, routers=[...])       # tenant traffic — no admin privilege
+mount_tenant_admin(                                     # ← privileged surface, opt-in
+    app, control_service,
+    acknowledge_bundled_admin=True,   # required; ValueError without it
+    server_auth=auth, admin_role="tenant-admin", prefix="/tenancy",
+)
+```
+
 ---
 
 ## Query System
@@ -1048,6 +1108,34 @@ params = QueryParams(
     offset=40,   # page 3 of 20
 )
 ```
+
+**Worked example — add filtering to a list endpoint end-to-end:**
+
+```python
+# 1. HTTP layer receives filter strings (e.g., ?age__gte=18&status__eq=active)
+from varco_core.query import QueryParams
+
+params = QueryParams(
+    filters=request.query_params.getlist("filter"),  # ["age__gte=18", "status__eq=active"]
+    sort=request.query_params.getlist("sort"),       # ["+created_at"]
+    limit=int(request.query_params.get("limit", 50)),
+    offset=int(request.query_params.get("offset", 0)),
+)
+
+# 2. Pass to service (uses QueryTransformer internally)
+page = await user_service.list(params, tenant_id=current_user.tenant_id)
+
+# 3. Service.list() handles:
+#    - Parse filters → AST (ComparisonNode, AndNode, OrNode, NotNode)
+#    - Type coercion (string "18" → int 18)
+#    - Optimize (constant folding, dead branches)
+#    - Apply to backend query (SQLAlchemy: WHERE clause)
+```
+
+**Caveat**: Filter operators are backend-agnostic AST. If adding a new comparison operator:
+- Update `QueryParser` to recognize it (e.g., `"__between"`)
+- Extend `ASTVisitor` subclasses to handle it (e.g., `SQLAlchemyFilterVisitor`)
+- Test on every backend (SQLAlchemy, Beanie, etc.)
 
 ### QueryParser
 
@@ -1267,6 +1355,58 @@ async def on_placed(self, event: OrderPlacedEvent) -> None: ...
 ```python
 @listen(OrderPlacedEvent, OrderUpdatedEvent)
 async def on_any_order(self, event: Event) -> None: ...
+```
+
+**Worked example — add a new event type and handler end-to-end:**
+
+```python
+# 1. Define the event in varco_core (domain layer)
+class OrderShippedEvent(DomainEvent):
+    order_id: UUID
+    shipped_at: datetime
+
+# 2. Emit from service (via producer, not bus directly)
+class OrderService(AsyncService[Order, UUID, ...]):
+    async def ship_order(self, order_id: UUID) -> None:
+        async with self._uow_provider.get_uow() as uow:
+            order = await repo.get(order_id)
+            order.status = "shipped"
+            await repo.save(order)
+            await self._producer.produce(OrderShippedEvent(
+                order_id=order_id,
+                shipped_at=datetime.now(UTC),
+            ))
+
+# 3. Handle in a consumer (EventConsumer subclass)
+class NotificationConsumer(EventConsumer):
+    def __init__(self, bus: AbstractEventBus, mailer: Mailer):
+        self._bus = bus
+        self._mailer = mailer
+
+    @PostConstruct
+    def _setup(self) -> None:
+        self.register_to(self._bus)
+
+    @listen(OrderShippedEvent, channel="orders")
+    async def on_order_shipped(self, event: OrderShippedEvent) -> None:
+        await self._mailer.send(f"Order {event.order_id} shipped!")
+
+# 4. Wire in DI
+container = DIContainer()
+container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus @Singletons
+container.install(NotificationConsumerModule)
+```
+
+**Caveat**: If the handler can fail (e.g., email send timeout), add `retry_policy` and `dlq`:
+
+```python
+@listen(
+    OrderShippedEvent,
+    channel="orders",
+    retry_policy=RetryPolicy(max_attempts=3, base_delay=1.0),
+    dlq=my_dlq,  # routes to DLQ after 3 failures
+)
+async def on_order_shipped(self, event: OrderShippedEvent) -> None: ...
 ```
 
 ---
@@ -1962,6 +2102,48 @@ class PostService(
 
 `get()` results are cached automatically; `update()` and `delete()` evict the entry.
 
+**Worked example — mix in caching + explicit invalidation on an event:**
+
+```python
+# 1. Choose invalidation strategy
+from varco_core.cache import TTLStrategy, TaggedStrategy, CompositeStrategy
+
+# 2. Mix in CacheServiceMixin (order matters in MRO!)
+class UserService(
+    CacheServiceMixin,          # ← LEFT side (runs first)
+    TenantAwareService,
+    AsyncService[User, UUID, UserCreateDTO, UserReadDTO, UserUpdateDTO],
+):
+    _cache_config = CacheConfig(
+        backend=RedisCache(...),
+        invalidation_strategy=CompositeStrategy([
+            TTLStrategy(ttl_seconds=300),
+            TaggedStrategy(),
+        ]),
+    )
+
+    def _get_repo(self, uow: AsyncUnitOfWork) -> AsyncRepository[User, UUID]:
+        return uow.get_repository(User)
+
+# 3. Use @cached on methods (works with any async callable)
+from varco_core.cache import cached
+
+@cached(key_fn=lambda self, user_id: f"user:{user_id}")
+async def get_user_profile(self, user_id: UUID) -> UserProfile:
+    # This is cached; invalidation strategy handles eviction
+    return await self.read(user_id)
+
+# 4. Invalidate explicitly when needed
+@listen(UserUpdatedEvent, channel="users")
+async def on_user_updated(self, event: UserUpdatedEvent) -> None:
+    await self._cache.invalidate_by_tag(f"user:{event.user_id}")
+```
+
+**Caveat**: Cache invalidation is hard. Order strategies by most-to-least-aggressive:
+- `EventDrivenStrategy` (immediate, requires event emission)
+- `TaggedStrategy` (explicit, requires you to call invalidate)
+- `TTLStrategy` (eventual, stale reads until expiry)
+
 ### @cached decorator
 
 Cache any async callable independently of the service layer:
@@ -2145,6 +2327,51 @@ from varco_core.resilience import timeout, retry, circuit_breaker, RetryPolicy, 
 async def call_external_api(payload: dict) -> Response: ...
 ```
 
+**Worked example — integrate a new external API with resilience:**
+
+```python
+from varco_core.resilience import (
+    retry, timeout, circuit_breaker, rate_limit, bulkhead,
+    RetryPolicy, CircuitBreakerConfig, RateLimitConfig,
+    BulkheadConfig, InMemoryRateLimiter,
+)
+
+# Shared instances — one per external dependency (NOT per-call)
+_payment_limiter = InMemoryRateLimiter(RateLimitConfig(rate=100, period=1.0))
+_payment_bulkhead = Bulkhead(BulkheadConfig(max_concurrent=10, max_wait=0.5))
+
+class PaymentService:
+    def __init__(self, http_client: httpx.AsyncClient):
+        self._client = http_client
+        # Shared breaker per external service (NOT per-call)
+        self._breaker = CircuitBreaker(
+            CircuitBreakerConfig(failure_threshold=5, recovery_timeout=60.0)
+        )
+
+    @timeout(10.0)  # Fail fast if API hangs
+    @retry(RetryPolicy(max_attempts=3, base_delay=0.5, max_delay=5.0))
+    @circuit_breaker(config=...)  # Or use self._breaker.protect(fn)
+    async def charge_card(self, amount: float, card_token: str) -> TransactionId:
+        response = await self._client.post(
+            "https://payment-api.example.com/charge",
+            json={"amount": amount, "token": card_token},
+        )
+        if response.status_code >= 500:
+            raise ExternalServiceError("Payment API down")
+        return TransactionId(response.json()["id"])
+
+# Decorator order matters (bottom-to-top execution):
+# 1. circuit_breaker checks state
+# 2. retry wraps and retries on failure
+# 3. timeout cancels if > 10s
+```
+
+**Rate limiting**: Use `@rate_limit` to cap calls per second. `InMemoryRateLimiter` is per-process; use `varco_redis.RedisRateLimiter` in multi-pod deployments.
+
+**Bulkhead**: Use `Bulkhead` to cap concurrent in-flight calls to one dependency. Must be a **shared** instance (same rule as `CircuitBreaker`). `Bulkhead` is per-process, same limitation as `InMemoryRateLimiter` — use `varco_redis.RedisBulkhead` for fleet-wide concurrency limiting in multi-pod deployments.
+
+**Hedged requests**: Use `@hedge` only for idempotent reads to cut tail latency — never for writes.
+
 ---
 
 ## JWT / Authority System
@@ -2242,6 +2469,90 @@ VARCO_TRUSTED_ISSUERS='[
   {"issuer": "google",  "source": "oidc",       "discovery_url": "https://accounts.google.com"}
 ]'
 ```
+
+### Verification hardening (VARCO_JWT_\*)
+
+`varco_core.jwt.config.JwtVerificationSettings` — env-var reference:
+
+| Env var | Default | Effect |
+|---|---|---|
+| `VARCO_JWT_LEEWAY_SECONDS` | `0.0` | clock-skew leeway for `exp`/`nbf` checks — fixes intermittent cross-host 401s |
+| `VARCO_JWT_AUDIENCE` | `None` | this service's expected `aud` — **required** unless `VARCO_JWT_ALLOW_ANY_AUDIENCE=true` (Plan 005 Phase 2 / U-13, **BREAKING security default**: `JwtBearerAuth` now *refuses to construct* with `ValueError` when omitted, instead of logging a warning and proceeding) |
+| `VARCO_JWT_ALLOW_ANY_AUDIENCE` | `false` | named escape hatch restoring the pre-Phase-2 "warn once and proceed with no audience enforcement" behaviour |
+| `VARCO_JWT_ENFORCE_ISS` | `true` | whether `TrustedIssuerRegistry.verify()` checks the token's `iss` claim against the resolved issuer's registered value (Plan 005 Phase 2 / U-13, **BREAKING security default**: previously never enforced here) |
+| `VARCO_JWT_TRANSFORM_*` | — | claim-transform mapping (global) — see the claim-transformer feature doc |
+| `VARCO_JWT_TRANSFORM__<LABEL>__*` | — | per-issuer claim-transform override, keyed by `iss` |
+| `VARCO_JWT_PROFILE__<NAME>__*` | — | named token profile declaration |
+| `VARCO_JWKS_MIN_REFRESH_SECONDS` | `10.0` | rate limit between kid-miss JWKS refreshes |
+| `VARCO_JWKS_TTL_SECONDS` | `0.0` | proactive JWKS reload age threshold (`0` = disabled) |
+
+**Common pitfalls:**
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Token from another service accepted** | Since Plan 005 Phase 2: `JwtBearerAuth()` **fails to start** (`ValueError`) unless `audience=`/`VARCO_JWT_AUDIENCE`/`allow_any_audience=True` is set — this used to be a silent accept | `aud` was never enforced by default — now fails closed instead of warning | Set `VARCO_JWT_AUDIENCE` (or `JwtBearerAuth(audience=...)`), or explicitly opt out with `allow_any_audience=True` / `VARCO_JWT_ALLOW_ANY_AUDIENCE=true` |
+| **Forged/misrouted `iss` claim accepted** | A token signed by issuer A's key but claiming `iss` of issuer B used to verify successfully | `TrustedIssuerRegistry.verify()` never checked `iss` against the resolving issuer | Since Plan 005 Phase 2 this is enforced by default (`VARCO_JWT_ENFORCE_ISS=true`); opt out per-call with `verify(enforce_issuer=False)` only if you have a specific reason |
+| **Intermittent 401 across hosts** | Same token, same secret, fails verification only on some hosts/some requests | Clock skew between hosts — `exp`/`nbf` checked with zero tolerance by default | Set `VARCO_JWT_LEEWAY_SECONDS=30` (or `leeway=` on `parse()`/`verify()`) |
+
+**Worked example — consume a foreign-shaped JWT (Keycloak/Cognito):**
+
+An IdP-minted token rarely uses varco's canonical claim names. Set env vars — **no code
+changes** — and every JWT entry point (`JwtParser.parse()`, `TrustedIssuerRegistry.verify()`,
+`JwtBearerAuth`, `PassthroughAuth`) picks up the mapping for free:
+
+```bash
+# Keycloak: roles live under realm_access.roles, Spring-style "ROLE_" prefix
+export VARCO_JWT_TRANSFORM_ROLES_FIELD="realm_access.roles"
+export VARCO_JWT_TRANSFORM_ROLES_STRIP_PREFIX="ROLE_"
+export VARCO_JWT_TRANSFORM_TOKEN_TYPE_FIELD="typ"
+
+# Cognito: groups + token_use instead of roles/token_type
+export VARCO_JWT_TRANSFORM_ROLES_FIELD="cognito:groups"
+export VARCO_JWT_TRANSFORM_TOKEN_TYPE_FIELD="token_use"
+```
+
+```python
+from varco_core.jwt import JwtParser
+
+token = JwtParser.parse(raw_token, secret)   # unchanged call site
+token.auth_ctx.roles                         # populated from the foreign claim
+token.extra_claims["realm_access"]            # original claim still visible (non-destructive)
+```
+
+For per-issuer overrides (mixed fleets, gateway forwarding tokens from several IdPs), a code
+escape hatch (`ClaimMapping` / a custom `ClaimTransformer`), and the full env-var table, see
+`technical_docs/features/jwt-claim-transformer.md`.
+
+**Worked example — gate a route on a named token profile (replacing `SYSTEM_ISSUER`):**
+
+Instead of a single `JwtUtil.SYSTEM_ISSUER` value, declare one or more named profiles and
+gate routes on the resolved profile:
+
+```bash
+export VARCO_JWT_PROFILE__INTERNAL__ISS="mesh-signer"
+export VARCO_JWT_PROFILE__INTERNAL__TOKEN_TYPE="system"
+export VARCO_JWT_PROFILE__INTERNAL__ROLES="internal"
+```
+
+```python
+from varco_fastapi.router.presets import GenericRouter
+from varco_fastapi.router.endpoint import route
+from varco_fastapi.auth import JwtBearerAuth
+from varco_fastapi.auth.guard import require_token_profile
+
+class MeshRouter(GenericRouter):
+    _prefix = "/mesh"
+    _auth = JwtBearerAuth(registry)
+
+    @route("GET", "/internal-only", requires=require_token_profile("internal"))
+    async def internal_only(self, ctx) -> dict:
+        return {"ok": True}
+```
+
+A bare `sub`+`iss` service-mesh token with no roles/scopes/grants still gets a fully
+authorized `AuthContext` when it matches a profile declaring `implied_roles`/`implied_scopes`
+(⚠️ intentional materialisation — see `technical_docs/features/token-profiles.md`).
+`JwtUtil.SYSTEM_ISSUER`/`is_system()` keep working unchanged for callers not ready to migrate.
 
 ---
 
@@ -2391,6 +2702,42 @@ class OrderRouter(ReadMixin, ListMixin, VarcoCRUDRouter[...]):
         return {"pk": str(order.pk), "status": order.status}
 ```
 
+**Exposing custom service methods, typed** — `VarcoCRUDRouter` (and the `CRUDRouter`/
+`ReadOnlyRouter`/`WriteRouter`/`NoDeleteRouter` presets) accept an optional, defaulted 6th
+type parameter `S` — the concrete `AsyncService` subclass. Add it as the 6th type arg to get
+`self._service` typed `S | None` and the `self.service` property typed non-Optional `S`, with
+zero per-subclass boilerplate (no cast, no hand-rolled `@property` override):
+
+```python
+from varco_fastapi.router.presets import CRUDRouter
+from varco_fastapi.router.endpoint import route
+
+class OrderService(AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
+    async def cancel_order(self, order_id: UUID) -> None: ...
+
+class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
+    _prefix = "/orders"
+
+    @route("POST", "/{order_id}/cancel")
+    async def cancel(self, order_id: UUID) -> None:
+        # self.service is typed OrderService (not the erased AsyncService base) —
+        # .cancel_order is visible to the type checker with no cast.
+        await self.service.cancel_order(order_id)
+```
+
+- 5-arg subscription (`CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]`) still
+  works unchanged — `S` defaults to `AsyncService[Any, ...]` via PEP 696
+  (`typing_extensions.TypeVar`, since `requires-python = ">=3.12"` predates the native syntax).
+- `self.service` raises `RuntimeError` if `_service` was never injected/set — prefer it over
+  `self._service` at call sites that invoke custom methods, so you don't repeat an
+  `is None` guard. The 501-Not-Implemented CRUD fallback path is unaffected — it still reads
+  `getattr(self, "_service", None)` directly, not the property.
+- Fallback for anyone staying on 5 type args: declare a subclass `@property` that casts, e.g.
+  `@property\n    def service(self) -> OrderService:\n        return cast(OrderService, self._service)`.
+
+See `technical_docs/features/custom-routes.md` for the full custom-route parameter-injection
+reference.
+
 ### CRUD mixins
 
 Each mixin contributes exactly one route. All support per-mixin OpenAPI customization via ClassVars.
@@ -2414,6 +2761,45 @@ class OrderRouter(CreateMixin, ReadMixin, ListMixin, VarcoCRUDRouter[...]):
     _list_max_limit = 200
     _create_async_capable = True    # allow ?with_async=true
 ```
+
+### Service-free routers — `GenericRouter`
+
+Use `GenericRouter` (alias for `VarcoRouter` with no type args) when the server has no
+`AsyncService` or repository — e.g. a data-transformation pipeline, an API gateway, or
+computed analytics routes. All cross-cutting features (middleware, telemetry, auth,
+`RouteGuard` authorization) work identically to a service-backed router.
+
+```python
+from varco_fastapi.router.presets import GenericRouter
+from varco_fastapi.router.endpoint import route
+from varco_fastapi.auth import JwtBearerAuth
+from varco_fastapi.auth.guard import require_scopes, require_roles
+
+class ReportRouter(GenericRouter):
+    _prefix = "/reports"
+    _auth = JwtBearerAuth(...)               # authentication stays in middleware
+
+    @route("GET", "/summary", requires=require_scopes("reports:read"))
+    async def get_summary(self, ctx: AuthContext) -> dict:
+        return {"total": compute_total(ctx)}
+
+    @route("DELETE", "/cache", requires=require_roles("admin"))
+    async def purge_cache(self, ctx: AuthContext) -> None:
+        invalidate_cache()
+
+# Wire exactly like a normal router
+app = create_varco_app(routers=[ReportRouter])
+```
+
+**Key facts**:
+- `validate_router_class` does NOT warn about missing generic type args (`D/PK/C/R/U`) for a `GenericRouter` — they are legitimately absent.
+- `requires=` kwarg on `@route` takes a `RouteGuard` (built with `require_scopes`, `require_roles`, `require_grant`, `require_predicate`, or `allow_anonymous`).
+- Guard is checked **before** the handler runs; denial raises `ServiceAuthorizationError` → HTTP 403.
+- If `ctx` is declared in the handler, `_auth` must be set (or it will not be populated).
+- For truly public endpoints (no auth needed), use `requires=allow_anonymous()` or omit `requires=` altogether and don't declare `ctx`.
+- **Custom `@route` handlers get full FastAPI parameter injection** — declare `Query(...)`, `Body(...)` (Pydantic models), `Depends(...)`, `Request`/`Response`/`BackgroundTasks`, and **type-coerced** path params, exactly like a hand-written FastAPI endpoint; the return annotation drives the OpenAPI response model. `build_router()` synthesizes a wrapper whose `__signature__` mirrors the method so FastAPI parses everything natively (see `_make_custom_handler` / `_synthesize_custom_signature` in `router/base.py`). `ctx`/`auth`/`context` and the `RouteGuard`/async-offload behavior are unchanged. **Exception:** on an `async_capable` route with a job runner wired, `response_model` inference is suppressed (the route may return a `JobAcceptedResponse` when `?with_async=true`).
+
+See `technical_docs/features/generic-router.md` for the full design.
 
 ### JWT authentication middleware
 
@@ -2521,6 +2907,51 @@ fastapi_bootstrap(container, setup_producer=True)
 
 app = FastAPI(lifespan=VarcoLifespan(container))
 ```
+
+### A2A — exposing a non-router subject
+
+Use `source=` instead of `router_cls` when the thing you want other agents to call is not a
+`VarcoRouter` — a data pipeline, a wrapper around a third-party API, anything with no CRUD
+routes to introspect:
+
+```python
+from varco_fastapi.router.a2a.source import SkillDefinition, AgentMetadata
+from varco_fastapi.router.skill import SkillAdapter
+
+class ReportSkillSource:
+    def skills(self) -> list[SkillDefinition]:
+        return [
+            SkillDefinition(
+                id="generate_report",
+                name="Generate Report",
+                description="Builds a PDF summary for the given date range",
+                input_modes=("application/json",),
+                output_modes=("application/json",),
+                route=None,  # no VarcoRouter route backs this skill
+            )
+        ]
+
+    def agent_metadata(self) -> AgentMetadata:
+        return AgentMetadata(name="ReportAgent", description="Generates PDF reports")
+
+    async def invoke(self, skill_id: str, payload: dict, *, ctx=None) -> dict:
+        # ctx is the verified caller's AuthContext (U-3) — use it for the audit trail,
+        # e.g. record which end user / agent / platform requested the report.
+        return {"report_url": await build_report(payload, requested_by=ctx)}
+
+adapter = SkillAdapter(
+    None,                       # router_cls omitted
+    source=ReportSkillSource(),
+    agent_name="ReportAgent",
+    agent_description="Generates PDF reports",
+    client=None,                # not needed — invoke() does its own work
+)
+adapter.mount(app)              # same v1.0.0 + legacy A2A surface as a router-backed adapter
+```
+
+`adapter.router_class` is `None` for a non-router source — that is the documented contract,
+not a bug. `router_cls` and `source=` are mutually exclusive; passing both or neither raises
+`ValueError` at construction. Full design: `technical_docs/features/a2a-surface.md`.
 
 ### Calling other varco services — `client_for`
 
@@ -2744,6 +3175,226 @@ register_global_attribute_provider(
 `varco_beanie`. See the
 [Database Auditing guide](technical_docs/features/database-auditing.md) for
 wiring, the Alembic/Beanie setup, and the per-backend idempotency behaviour.
+
+---
+
+## Profiling
+
+Diagnostic CPU + memory profiler. Complements the aggregate OTel observability layer
+(spans/metrics answer "how slow on average"; the profiler answers "which function is hot"
+and "what allocated this memory"). Off by default — zero overhead when disabled
+(`VARCO_PROFILING_ENABLED=false`).
+
+```python
+from varco_core.profiling import profile, profiled, ProfileConfig, set_profiling_enabled
+
+# 1. Enable globally (or VARCO_PROFILING_ENABLED=true in env)
+set_profiling_enabled(True)
+
+# 2a. Decorator form — wraps every call
+@profile(ProfileConfig(top_n=10))
+async def slow_query() -> list[Row]:
+    return await db.execute("SELECT ...")
+
+# 2b. Context manager form — gives access to the report object
+async with profiled("batch_export") as session:
+    rows = await db.fetch_all()
+    await write_csv(rows)
+print(session.report.format())   # human-readable table to stderr/logs
+
+# 3. FastAPI: enable via env var or create_varco_app flag
+#    VARCO_PROFILER_ENABLED=true VARCO_PROFILER_ATTACH_HEADERS=true
+app = create_varco_app(container, enable_profiling=True)
+# → X-Profile-Wall-Ms + X-Profile-Mem-Kb headers on each response
+```
+
+**Adding a custom backend (memray, pyinstrument, py-spy):**
+
+```python
+from varco_core.profiling import CpuProfilerBackend, CpuProfileResult, register_cpu_backend
+
+class PyinstrumentBackend:
+    name = "pyinstrument"
+    def start(self) -> None: ...
+    def collect(self, top_n: int, sort_by: str) -> CpuProfileResult: ...
+
+register_cpu_backend("pyinstrument", PyinstrumentBackend)
+cfg = ProfileConfig(cpu_backend="pyinstrument")
+```
+
+```python
+from varco_core.profiling import MemoryProfilerBackend, MemoryProfileResult, register_memory_backend
+
+class MemrayBackend:
+    name = "memray"
+    def start(self) -> None: ...
+    def collect(self, top_n: int) -> MemoryProfileResult: ...
+
+register_memory_backend("memray", MemrayBackend)
+cfg = ProfileConfig(memory_backend="memray")
+```
+
+**Caveats:**
+
+| Pitfall | Symptom | Root Cause | Fix |
+|---|---|---|---|
+| **Profiling left always-on** | 20–100% overhead in production | `cProfile`/`tracemalloc` are expensive deterministic tools | Default is off (`VARCO_PROFILING_ENABLED=false`); activate only to diagnose a hotspot |
+| **Two profiling sessions concurrent** | Contaminated reports (each session records the other's frames) | `cProfile`/`tracemalloc` are process-global | The middleware serialises with a `Lock`; for manual use, never profile two operations simultaneously |
+| **`cProfile` across `await` on a busy loop** | Report includes frames from other coroutines | `cProfile` captures the whole event loop thread | Use a sampling backend (e.g. pyinstrument) for concurrent async code; cProfile is best for CPU-bound or isolated coroutines |
+| **tracemalloc state not restored** | App's own tracemalloc usage broken after a profiling session | Session left tracemalloc on when it found it off (or vice versa) | `TracemallocMemoryBackend.collect()` always restores the prior tracing state; if writing a custom memory backend, do the same |
+
+---
+
+## Background Jobs
+
+`AbstractJobStore`/`AbstractJobRunner` (`varco_core.job.base`) support a time dimension
+(`Job.run_at`, `AbstractJobRunner.enqueue(run_at=, delay=)`), bounded retry
+(`Job.attempt`/`max_attempts`, `JobRunner(retry_policy=, dlq=)`), and a fenced lease
+(`try_claim(owner_id=, lease_ttl=)`, `renew()`, `reap_expired_leases()`,
+`save(expected_epoch=)` → `StaleLeaseError` on a stale write).
+
+```python
+claimed = await store.try_claim(job_id, owner_id="worker-7", lease_ttl=30.0)
+renewed = await store.renew(job_id, owner_id="worker-7", epoch=claimed.lease_epoch, lease_ttl=30.0)
+await store.save(claimed.as_completed(result), expected_epoch=claimed.lease_epoch)
+# StaleLeaseError if a stalled worker resumes after being fenced out by a reap
+```
+
+`JobPoller(lease_aware=True)` (the default) detects death via `store.reap_expired_leases()`
+instead of a wall-clock `stale_threshold`. Retention primitive:
+`store.delete_where(..., limit=1000)` looped until it returns `0` (a bounded chunked sweep —
+never one unbounded `delete_where()` call, which can starve the connection pool).
+
+Zoned, DST-safe one-shot scheduling:
+
+```python
+await job_runner.enqueue(job, coro, run_at_wall=wall_dt, tz="America/New_York")
+# _prepare_zoned_job() resolves DST gaps/overlaps and materializes run_at (UTC) before save()
+```
+
+Design rationale (lease/fencing model, zoned-schedule materialization, retry-binding
+decisions) lives in `technical_docs/features/job-scheduling-and-leases.md`.
+
+---
+
+## Database Auditing
+
+An append-only audit trail for `create`/`update`/`delete` mutations, event-driven like the
+outbox pattern but persisted by a dedicated consumer rather than a relay: `AuditLogMixin`
+(service mixin, composes to the LEFT of `AsyncService`) emits an `AuditEvent` on the
+`"varco.audit"` channel via the service's existing `AbstractEventProducer` — `AuditConsumer`
+subscribes and persists each event as an `AuditEntry` via an injected `AuditRepository`
+(`SAAuditRepository` in `varco_sa`, `BeanieAuditRepository` in `varco_beanie`).
+
+```python
+class OrderService(
+    AuditLogMixin,                                              # ← left of AsyncService
+    AsyncService[Order, UUID, CreateOrderDTO, OrderReadDTO, UpdateOrderDTO],
+):
+    def _get_repo(self, uow): return uow.orders
+    def _get_audit_actor(self, ctx): return ctx.sub            # override — base returns None
+
+# Wire the consumer from @PostConstruct, same rule as any other EventConsumer
+class AuditWiring:
+    def __init__(self, bus: Inject[AbstractEventBus], audit_repo: Inject[SAAuditRepository]):
+        self._bus = bus
+        self._consumer = AuditConsumer(audit_repo=audit_repo)
+
+    @PostConstruct
+    def _setup(self) -> None:
+        self._consumer.register_to(self._bus)
+```
+
+Idempotency is backend-specific: `SAAuditRepository.save` uses Postgres
+`INSERT ... ON CONFLICT (entry_id) DO NOTHING` (falling back to a plain `IntegrityError`-raising
+insert on non-Postgres dialects); `BeanieAuditRepository.save` is a plain `doc.insert()` with no
+conflict handling. See `technical_docs/features/database-auditing.md` for the full wiring guide
+(Alembic/Beanie setup, `list_for_entity()`, retention, tamper evidence via `hash_chain=True`).
+
+---
+
+## Dead Letter Queue
+
+`AbstractDeadLetterQueue` is the interface. `InMemoryDeadLetterQueue` is for tests. Backend
+implementations (`KafkaDLQ`, `RedisDLQ`, `SADeadLetterQueue` in their respective packages) push
+to a dedicated topic/channel/table. **Contract**: `push()` must never raise.
+
+```python
+# Handler that retries 3x then routes to DLQ
+@listen(
+    OrderPlacedEvent,
+    channel="orders",
+    retry_policy=RetryPolicy(max_attempts=3, base_delay=1.0),
+    dlq=my_dlq,
+)
+async def on_order(self, event: OrderPlacedEvent) -> None: ...
+```
+
+Redrive, retention, tenancy, a Beanie backend, and a bundled REST admin surface
+(`mount_reliability_admin()`) are covered in `technical_docs/features/dead-letter-queues.md`.
+
+---
+
+## Composite Deployment
+
+Use `create_composite_app` (`varco_fastapi.composite`) to run several **already-built** varco
+services in a single ASGI process. Each service keeps its own container, database,
+environment, middleware, and `/docs` — they are mounted as ASGI sub-apps under prefixes.
+
+```python
+from varco_fastapi import create_composite_app, ServiceMount
+
+from orders_service.app import app as orders_app      # its own create_varco_app()
+from billing_service.app import app as billing_app     # its own container + DB + env
+
+composite = create_composite_app([
+    ServiceMount("/orders", orders_app),
+    ServiceMount("/billing", billing_app),
+])
+# uvicorn composite:composite
+```
+
+**Key facts**:
+- Mounting is purely additive — existing service code is untouched. Each sub-app serves
+  its own `{prefix}/docs` + `{prefix}/openapi.json`; there is no merged OpenAPI schema.
+- `create_composite_app` installs a `CompositeLifespan` that drives **each sub-app's own
+  lifespan**. This is required: Starlette's `Router.lifespan` does NOT descend into
+  mounted sub-apps, so without it every service's DB pool / `AbstractEventBus` /
+  `OutboxRelay` would silently never start.
+- Startup is **fail-fast** — one service failing to start aborts the whole process
+  (no half-broken deployment). Shutdown is LIFO.
+- `aggregate_health=True` (default) exposes a root `GET /health` that probes each
+  service's own health in-process (via `httpx.ASGITransport`) and returns 503 if any is
+  unhealthy — one readiness signal for the whole deployment.
+- **Env isolation**: all services share one `os.environ`. Runtime isolation is automatic
+  (each app holds its own container/engine objects). The only hazard is *build-time*
+  env-name collision — two services reading bare `os.environ["DATABASE_URL"]` see the
+  same value. Fix by namespacing env vars per service, or use
+  `build_service(prefix, factory, env={...})` which overlays a scoped environment only
+  while that one service is built, then restores it.
+- No composite-level middleware by default — each sub-app owns its full middleware stack
+  and runs it exactly as standalone (avoids double-processing, e.g. tracing wrapped twice).
+
+Design detail: `technical_docs/features/composite-deployment.md`.
+
+---
+
+## Durability preset (one-line opt-in)
+
+```python
+from varco_core.reliability import ReliabilityPreset
+from varco_fastapi import create_varco_app
+from varco_sa.dlq import SADeadLetterQueue
+
+dlq = SADeadLetterQueue(engine)
+app = create_varco_app(container, routers=[...], reliability=ReliabilityPreset.durable(dlq=dlq))
+```
+
+Turns on `RetryPolicy.durable_delivery()` + the DLQ for every bare `@listen(...)` handler (via
+`set_default_reliability_preset()`'s resolution at `register_to()` time), starts an
+`OutboxRelay`, wires an `AuditConsumer`, and installs the reliability metrics pack — all from
+one preset object. `reliability=None` (the default) registers nothing — byte-identical to not
+using this feature. See `technical_docs/features/reliability-preset.md`.
 
 ---
 
