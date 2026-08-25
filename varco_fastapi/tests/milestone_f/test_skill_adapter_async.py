@@ -413,7 +413,8 @@ def test_working_response_shape():
 def test_bind_skill_adapter_resolves_through_a_real_container():
     """
     Characterization test for site 4 before the ``@Provider`` annotation-patch
-    extraction (``provide_factory()``, Step 20). Nothing today resolves
+    extraction (the now-deleted ``varco_core.providify_compat.provide_factory()``
+    shim, Plan 014 Step 20). Nothing today resolves
     ``SkillAdapter`` from a real container.
     """
     from providify import DIContainer  # noqa: PLC0415

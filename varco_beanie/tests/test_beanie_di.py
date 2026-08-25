@@ -375,7 +375,8 @@ class TestBeanieContainerValidates:
     async def test_regression_bound_repository_resolves_through_aget(self) -> None:
         """
         Plan 014 / Step 11 — characterization for site 6 before the
-        ``@Provider`` annotation-patch extraction (``provide_factory()``,
+        ``@Provider`` annotation-patch extraction (the now-deleted
+        ``varco_core.providify_compat.provide_factory()`` shim, Plan 014,
         Step 22). ``validate_bindings()`` resolves annotations without
         constructing anything; this actually builds the repository through
         ``container.aget()`` (the factory is async — see ``bind_repositories``'

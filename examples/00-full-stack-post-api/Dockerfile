@@ -55,9 +55,6 @@ COPY varco_beanie/    ./varco_beanie/
 COPY varco_memcached/ ./varco_memcached/
 COPY varco_ws/        ./varco_ws/
 COPY example/         ./example/
-# Copy vendored wheels — providify 0.1.6 is vendored here because uv.lock
-# stores a relative path to the wheel (Docker-compatible, no external deps).
-COPY vendor/          ./vendor/
 # Step 1: sync the workspace — installs all varco_* packages into .venv.
 # --no-dev: skip dev-only dependencies (pytest, testcontainers, httpx).
 # --frozen: fail if uv.lock is stale — prevents silent dependency drift.

@@ -1987,7 +1987,7 @@ async def test_something_async(di_acontainer):
 def test_with_override(di_container, di_overrides):
     # di_overrides: a ContainerOverrides bound to di_container — any
     # override made through it is undone automatically at teardown
-    di_overrides.override(SomeInterface, a_test_double)
+    di_overrides.instance(SomeInterface, a_test_double)
     ...
 
 def test_with_global(di_container, di_global):

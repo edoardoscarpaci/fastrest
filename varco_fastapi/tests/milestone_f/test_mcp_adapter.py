@@ -467,7 +467,8 @@ def test_bind_mcp_adapter_noop_without_providify():
 def test_bind_mcp_adapter_resolves_through_a_real_container():
     """
     Characterization test for site 3 before the ``@Provider`` annotation-patch
-    extraction (``provide_factory()``, Step 19). Today ``bind_mcp_adapter``
+    extraction (the now-deleted ``varco_core.providify_compat.provide_factory()``
+    shim, Plan 014 Step 19). Today ``bind_mcp_adapter``
     is only exercised against the providify-absent path
     (``test_bind_mcp_adapter_noop_without_providify``) — nothing resolves
     ``MCPAdapter`` from a real container.

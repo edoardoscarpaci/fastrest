@@ -27,10 +27,11 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed — internal compat shim deleted; adopts providify 2.0.0's native override (Plan 016, Phase C)
 
-- **Deleted a `varco_core` internal compat module** that patched a factory's
-  return annotation by hand before registering it with providify — the only
-  reason it existed was that providify had no supported way to state a
-  factory's interface explicitly. Every former call site (`varco_ws/di.py`,
+- **Deleted `varco_core.providify_compat` (its `provide_factory()` helper)** —
+  the internal compat module that patched a factory's return annotation by
+  hand before registering it with providify. The only reason it existed was
+  that providify had no supported way to state a factory's interface
+  explicitly. Every former call site (`varco_ws/di.py`,
   `varco_fastapi/di.py`, `varco_fastapi/router/skill.py`,
   `varco_fastapi/router/mcp.py`, `varco_sa/di.py`, `varco_beanie/di.py`) now
   calls providify's native `container.provide(Provider(...)(factory),
@@ -110,9 +111,10 @@ API change.
   each package's own sibling settings factory. `priority=-sys.maxsize` is
   preserved exactly; base-interface lookup (`container.get(EventBusSettings)`)
   and app-override-wins both still hold, proven by new regression tests.
-- **Added, then later deleted (Plan 016 / RL-2, same `[Unreleased]` section):** a
-  `varco_core` compat helper that replaced six of the seven independently
-  hand-rolled `factory.__annotations__["return"] = ...` + `@Provider` +
+- **Added, then later deleted (Plan 016 / RL-2, same `[Unreleased]` section):**
+  `varco_core.providify_compat.provide_factory()`, a compat helper that
+  replaced six of the seven independently hand-rolled
+  `factory.__annotations__["return"] = ...` + `@Provider` +
   `container.provide()` closures found across four packages (audit F8; the
   audit itself named 5, two more were found during this plan's inventory)
   with one shared function. `varco_beanie.di`'s `_make_repo_provider()` was

@@ -145,7 +145,8 @@ class TestSAContainerValidates:
     def test_regression_bound_repository_resolves_through_get(self) -> None:
         """
         Plan 014 / Step 11 — characterization for site 5 before the
-        ``@Provider`` annotation-patch extraction (``provide_factory()``,
+        ``@Provider`` annotation-patch extraction (the now-deleted
+        ``varco_core.providify_compat.provide_factory()`` shim, Plan 014,
         Step 21). ``validate_bindings()`` resolves annotations without
         constructing anything; this actually builds the repository through
         ``container.get()`` to prove the runtime-patched
