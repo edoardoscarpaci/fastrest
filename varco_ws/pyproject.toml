@@ -20,6 +20,9 @@ classifiers   = [
 dependencies = [
     # Workspace sibling — resolved from the monorepo via [tool.uv.sources] below.
     "varco-core",
+    # Direct importers: varco_ws/sse.py:79, varco_ws/websocket.py:85 — previously
+    # satisfied only transitively via varco-core, an undeclared dependency.
+    "providify>=1.1.0",
 ]
 
 [project.urls]
