@@ -1968,6 +1968,40 @@ uv run pytest varco_kafka/tests/ -m integration
 uv run pytest varco_redis/tests/ -m integration
 ```
 
+### providify's pytest fixtures (providify ≥ 2.0.0)
+
+Installing `providify` activates its own `pytest11` plugin — four function-scoped, yield-based
+fixtures, available in every test with no import and no conftest change:
+
+```python
+def test_something(di_container):
+    # di_container: a fresh, empty DIContainer, one per test
+    di_container.scan("varco_core", recursive=True)
+    ...
+
+async def test_something_async(di_acontainer):
+    # di_acontainer: the async counterpart — usable directly under
+    # asyncio_mode = "auto"; container.ashutdown() is awaited at teardown
+    ...
+
+def test_with_override(di_container, di_overrides):
+    # di_overrides: a ContainerOverrides bound to di_container — any
+    # override made through it is undone automatically at teardown
+    di_overrides.override(SomeInterface, a_test_double)
+    ...
+
+def test_with_global(di_container, di_global):
+    # di_global: makes DIContainer.current() return di_container for the
+    # duration of this test, then restores the previous current()
+    ...
+```
+
+varco deliberately does not re-export or wrap any of these four fixtures (Plan 016 / RL-3d) —
+use providify's own names directly. A project's own `conftest.py` can redefine `di_container` (or
+any of the other three) and that definition wins over the plugin default, same as any other
+pytest fixture override. A test that requests none of them sees no behavioural difference from
+providify's plugin not being installed at all.
+
 ---
 
 ## Cache System

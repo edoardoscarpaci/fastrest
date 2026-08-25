@@ -567,6 +567,28 @@ found while implementing Plan 012" table for the accumulated findings (e.g. `Red
 `MemcachedCache` truncating a sub-second `ttl` to `int()`, `KafkaDLQ`/`NatsDLQ.delete_where()`
 never reaching the ABC's "no predicate → `ValueError`" check).
 
+**providify's `pytest11` plugin fixtures** (providify ≥ 2.0.0, Plan 016 / RL-3d) — installing
+`providify` activates its own `pytest11` entry point (`providify/pytest_plugin.py`) in every
+project, with **four** function-scoped, yield-based, non-autouse fixtures:
+
+| Fixture | Yields |
+|---|---|
+| `di_container` | A fresh, empty `DIContainer` — a new instance per test. |
+| `di_acontainer` | The async counterpart — same fresh-per-test contract, usable directly under this repo's `asyncio_mode = "auto"` with no extra marker; `container.ashutdown()` is awaited automatically at teardown. |
+| `di_overrides` | A `ContainerOverrides` bound to that test's `di_container`; any override made through it is undone automatically at teardown. |
+| `di_global` | Makes `DIContainer.current()` return the test's container for the duration of the test, then restores whatever `current()` returned before. |
+
+varco **deliberately does not re-export or wrap any of these** — see Design §RL-3d in Plan 016:
+`testkit/varco_conformance` is never packaged, so it cannot deliver fixtures to a downstream
+consumer anyway, and a second name for an identical fixture is pure confusion. Use them directly
+via `providify`'s own names. A project's own `conftest.py` **can** redefine `di_container` (or any
+of the other three) and that consumer definition wins over the plugin default
+(`providify/pytest_plugin.py:33-37`) — ordinary pytest fixture-override semantics, no varco-side
+opt-out mechanism needed. A test that requests none of the four sees zero behavioural difference
+from providify's plugin not being installed at all — verified by
+`varco_core/tests/test_providify_pytest_plugin.py`, which exercises all four plus this inertness
+guarantee with no conftest edits anywhere in the repo.
+
 ---
 
 ## Common Pitfalls & How to Avoid Them
