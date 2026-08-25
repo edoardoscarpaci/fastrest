@@ -115,12 +115,12 @@ Two name collisions this table exists specifically to call out:
 Several `bind_*` factories above register a binding whose interface is only known at call time
 (a generic alias like `AsyncRepository[User]`, or a plain class captured in a closure) —
 providify needs the *real* return type, not the placeholder `from __future__ import
-annotations` leaves on a closure. Framework code doing this always goes through
-`varco_core.providify_compat.provide_factory(container, factory, returns=..., singleton=...,
-name=...)` (Plan 014 / audit F8) rather than hand-rolling
-`factory.__annotations__["return"] = ...` — see that module's docstring for the full ordering
-rationale. It is a deletable compat shim, not a DI entry point: not re-exported from
-`varco_core`, and invisible to `container.scan("varco_core")`.
+annotations` leaves on a closure. Framework code doing this uses providify's native
+`container.provide(Provider(singleton=...)(factory), returns=...)` / `@Provider(returns=...)`
+(providify ≥ 2.0.0, Plan 016 / RL-2) — the `returns=` override is applied at
+decoration/registration time, so no `factory.__annotations__["return"] = ...` patching is
+needed. (Prior to providify 2.0.0 this went through a since-deleted `varco_core`
+compat shim — see UPSTREAM-GAPS.md U-20.)
 
 ### Resilience (varco_core.resilience)
 
@@ -485,11 +485,12 @@ copy-pasted patch-before-register dances, silent behavior differences across ver
   source**, not from memory or `varco`'s docs about it — the register has a standing lesson
   (U-8, the "Maintainer response" section) about entries filed off documentation that didn't
   survive contact with source.
-- If a workaround is genuinely unavoidable in the short term (e.g. `varco_core.providify_compat`
-  for U-20 — six independent hand-rolled annotation patches consolidated into one shared,
-  documented, deletable helper), centralize it in exactly one place, name it as a shim intended
-  for deletion, and still file the UPSTREAM-GAPS.md entry — the shim is not a substitute for the
-  report.
+- If a workaround is genuinely unavoidable in the short term (e.g. the now-deleted
+  `varco_core` compat shim filed under U-20 — six independent hand-rolled annotation
+  patches consolidated into one shared, documented, deletable helper until providify 2.0.0
+  shipped `@Provider(returns=...)` natively), centralize it in exactly one place, name it as a
+  shim intended for deletion, and still file the UPSTREAM-GAPS.md entry — the shim is not a
+  substitute for the report.
 - This mirrors the same rule already documented for downstream consumers of `varco_*` (see the
   register's own purpose statement) — inside this repo, `providify` is the upstream and the same
   discipline applies to it.

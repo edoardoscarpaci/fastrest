@@ -1075,9 +1075,8 @@ def bind_skill_adapter(
     """
     try:
         # Presence probe — providify is an optional dependency.  `import
-        # providify` (not `from varco_core.providify_compat import ...`) is
-        # deliberate — it triggers on providify's own absence, mirroring
-        # ``bind_mcp_adapter``'s guard.
+        # providify` is deliberate — it triggers on providify's own absence,
+        # mirroring ``bind_mcp_adapter``'s guard.
         import providify  # noqa: F401
     except ImportError:
         _logger.warning(
@@ -1085,7 +1084,7 @@ def bind_skill_adapter(
         )
         return
 
-    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
+    from providify import Provider  # noqa: PLC0415
 
     # Capture all args to avoid late-binding in the closure
     _router_cls = router_cls
@@ -1102,7 +1101,9 @@ def bind_skill_adapter(
     def _skill_adapter_factory() -> SkillAdapter:
         """Singleton SkillAdapter factory — built once at first injection.
 
-        Registered via ``varco_core.providify_compat.provide_factory()``.
+        Registered via ``container.provide(Provider(...)(...), returns=...)``
+        — the decoration-time ``returns=`` override means this closure's
+        placeholder return annotation never needs patching.
         """
         client = None
         if _client_cls is not None:
@@ -1158,8 +1159,8 @@ def bind_skill_adapter(
             conversation_store=conv_store,
         )
 
-    provide_factory(
-        container, _skill_adapter_factory, returns=SkillAdapter, singleton=True
+    container.provide(
+        Provider(singleton=True)(_skill_adapter_factory), returns=SkillAdapter
     )
 
 

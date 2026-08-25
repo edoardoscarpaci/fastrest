@@ -37,9 +37,10 @@ Override before or after calling ``setup_varco_defaults``::
     container.bind(TaskSerializer, MySerializer)  # overrides default
 
 ``bind_clients()`` mirrors ``bind_repositories()`` from ``varco_sa.di`` — both go
-through ``varco_core.providify_compat.provide_factory()``, which patches
-``__annotations__["return"]`` so providify resolves
-``Inject[VarcoClient[OrderRouter]]`` correctly at injection time.
+through ``container.provide(Provider(...)(factory), returns=...)``, whose
+decoration-time ``returns=`` override lets providify resolve
+``Inject[VarcoClient[OrderRouter]]`` correctly at injection time without any
+annotation patching.
 
 DESIGN: bind_clients() helper over manual provider registration
     ✅ Same pattern as bind_repositories() — familiar to varco users
@@ -116,10 +117,10 @@ def bind_clients(container: Any, *client_classes: type) -> None:
 
     1. Read ``_router_class`` ClassVar to get the router type.
     2. Create a plain factory function.
-    3. Register it via ``varco_core.providify_compat.provide_factory(container,
-       factory, returns=VarcoClient[router_type], singleton=True)`` — patches
-       ``factory.__annotations__["return"]``, decorates with ``@Provider``,
-       and registers, in one call.
+    3. Register it via ``container.provide(Provider(singleton=True)(factory),
+       returns=VarcoClient[router_type])`` — the decoration-time ``returns=``
+       override means the factory's placeholder return annotation never
+       needs patching.
 
     Args:
         container:     ``DIContainer`` instance to register into.
@@ -149,7 +150,6 @@ def bind_clients(container: Any, *client_classes: type) -> None:
     Thread safety:  ✅ Registration happens at bootstrap; no concurrent access.
     Async safety:   ✅ No I/O during registration.
     """
-    from varco_core.providify_compat import provide_factory
     from varco_fastapi.client.base import AsyncVarcoClient
 
     for client_cls in client_classes:
@@ -172,11 +172,11 @@ def bind_clients(container: Any, *client_classes: type) -> None:
             """Singleton factory — DI container calls this once."""
             return __cls()
 
-        # Registration goes through varco_core.providify_compat.provide_factory()
-        # — see that module's docstring for why patching the return annotation
-        # before registering (not before decorating) is the only ordering
-        # constraint that matters. (Same helper bind_repositories() in
-        # varco_sa.di uses.)
+        # Registration goes through providify's native
+        # container.provide(Provider(...)(factory), returns=...) — the
+        # decoration-time returns= override means the factory's placeholder
+        # return annotation never needs patching. (Same pattern
+        # bind_repositories() in varco_sa.di uses.)
         #
         # DESIGN: no fallback chain around registration.
         #
@@ -193,7 +193,7 @@ def bind_clients(container: Any, *client_classes: type) -> None:
         #   ❌ No "best effort" partial registration; a bad client class aborts
         #      the whole bind_clients() call (intended — a half-wired container
         #      fails later, further from the cause).
-        provide_factory(container, _factory, returns=client_alias, singleton=True)
+        container.provide(Provider(singleton=True)(_factory), returns=client_alias)
 
 
 def bind_clients_from(container: Any, *router_classes: type) -> None:

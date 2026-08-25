@@ -21,7 +21,8 @@ Coverage:
 - BeanieSettings:          frozen, field defaults, type annotations
 - BeanieModule:            repository_provider() creates + inits the provider,
                            query_compiler() returns BeanieQueryCompiler
-- _make_repo_provider:     produces a @Provider function with correct return annotation
+- _make_repo_provider:     produces a @Provider function whose ProviderMetadata.returns
+                           carries the correct interface (Plan 016 / RL-2)
 - bind_repositories:       calls container.provide() for each entity class,
                            raises ValueError when called with no classes
 - TestBeanieContainerValidates: real DIContainer scan + validate_bindings(),
@@ -191,36 +192,81 @@ def test_make_repo_provider_produces_callable() -> None:
     assert callable(fn)
 
 
-def test_make_repo_provider_sets_correct_return_annotation() -> None:
+def test_make_repo_provider_stamps_provider_metadata_returns() -> None:
     """
-    The factory's return annotation is patched to AsyncRepository[_User].
+    ``_make_repo_provider`` must express its interface override via
+    providify's native ``@Provider(returns=...)`` decoration-time metadata
+    (Plan 016 / RL-2, Design §RL-2 + Steps 16-17) — NOT via patching
+    ``__annotations__["return"]`` (the ``di.py:207`` shim being deleted).
 
-    This is the key mechanism that lets providify register the binding under
-    the correct generic alias — without this, all repos would collide on the
-    bare AsyncRepository interface.
+    ``ProviderMetadata`` is stored on the function object at the
+    ``__di_provider__`` slot (verified in the installed providify 2.0.0
+    source: ``providify/metadata.py`` — ``_DI_PROVIDER_ATTR =
+    "__di_provider__"``, ``_get_provider_metadata()``/``_set_provider_metadata()``
+    are the sanctioned read/write funnel). We read it back through that
+    real function rather than inventing an attribute name.
+
+    This test fails today because ``di.py:207`` still does
+    ``_repo_factory.__annotations__["return"] = ...`` and returns
+    ``Provider(_repo_factory)`` with NO ``returns=`` kwarg — so
+    ``ProviderMetadata.returns`` is ``None``, not
+    ``AsyncRepository[_User]``.
     """
+    from providify.metadata import _get_provider_metadata
+
     fn = _make_repo_provider(_User)
-    # The underlying function is the @Provider-decorated version — unwrap it
-    # by looking at __wrapped__ or the __annotations__ directly on the fn
-    # (Provider stamps metadata but returns the original function object).
-    return_annotation = fn.__annotations__.get("return")
-    assert return_annotation == AsyncRepository[_User]
+
+    meta = _get_provider_metadata(fn)
+    assert (
+        meta is not None
+    ), "_make_repo_provider() must return a @Provider-decorated callable"
+    assert meta.returns == AsyncRepository[_User]
 
 
-def test_make_repo_provider_different_entities_have_different_annotations() -> None:
-    """Each call produces a factory with a distinct return annotation."""
+def test_make_repo_provider_different_entities_have_distinct_provider_metadata_returns() -> (
+    None
+):
+    """
+    Edge case (Plan 016 Step 16): two different entity classes must produce
+    two distinct interfaces in the ``@Provider`` metadata, not just two
+    distinct raw annotations — this is what lets both bindings coexist in
+    the same container without colliding on a shared interface.
+    """
+    from providify.metadata import _get_provider_metadata
+
     fn_user = _make_repo_provider(_User)
     fn_post = _make_repo_provider(_Post)
 
-    assert fn_user.__annotations__["return"] != fn_post.__annotations__["return"]
-    assert fn_user.__annotations__["return"] == AsyncRepository[_User]
-    assert fn_post.__annotations__["return"] == AsyncRepository[_Post]
+    meta_user = _get_provider_metadata(fn_user)
+    meta_post = _get_provider_metadata(fn_post)
+
+    assert meta_user is not None
+    assert meta_post is not None
+    assert meta_user.returns != meta_post.returns
+    assert meta_user.returns == AsyncRepository[_User]
+    assert meta_post.returns == AsyncRepository[_Post]
 
 
 def test_make_repo_provider_function_name_includes_entity_name() -> None:
     """The factory __name__ includes the entity class name for debugging."""
     fn = _make_repo_provider(_User)
     assert "_User" in fn.__name__
+
+
+def test_make_repo_provider_returns_an_async_coroutine_function() -> None:
+    """
+    Edge case (Plan 016 Step 16): the object ``_make_repo_provider()``
+    hands back must still be an ``async def`` coroutine function after the
+    ``@Provider(returns=...)`` rewrite — ``Provider(...)`` returns the
+    original function unchanged (only metadata is stamped), so this must
+    hold both before and after the RL-2 migration; it is here to guard
+    against a future rewrite accidentally wrapping/replacing the factory
+    with something synchronous.
+    """
+    import inspect
+
+    fn = _make_repo_provider(_User)
+    assert inspect.iscoroutinefunction(fn)
 
 
 # ── bind_repositories() ───────────────────────────────────────────────────────
@@ -258,12 +304,17 @@ def test_bind_repositories_passes_provider_functions_to_container() -> None:
 
 def test_bind_repositories_each_factory_has_distinct_annotation() -> None:
     """
-    Each factory passed to container.provide() has a distinct return annotation.
+    Each factory passed to container.provide() carries a distinct interface
+    in its ``@Provider`` metadata (Plan 016 / RL-2 — rewritten to assert on
+    ``ProviderMetadata.returns`` rather than ``__annotations__["return"]``,
+    since ``_make_repo_provider()`` no longer patches the annotation).
 
     Verifies that the closure correctly captures each entity class — a common
     mistake is late binding where all factories close over the last value of
     the loop variable.
     """
+    from providify.metadata import _get_provider_metadata
+
     provided_fns: list = []
 
     def capture_provide(fn):
@@ -273,11 +324,11 @@ def test_bind_repositories_each_factory_has_distinct_annotation() -> None:
     mock_container.provide.side_effect = capture_provide
     bind_repositories(mock_container, _User, _Post)
 
-    annotations = [fn.__annotations__["return"] for fn in provided_fns]
-    assert AsyncRepository[_User] in annotations
-    assert AsyncRepository[_Post] in annotations
+    returns = [_get_provider_metadata(fn).returns for fn in provided_fns]
+    assert AsyncRepository[_User] in returns
+    assert AsyncRepository[_Post] in returns
     # No duplicates — each entity gets its own distinct binding
-    assert len(set(str(a) for a in annotations)) == 2
+    assert len(set(str(r) for r in returns)) == 2
 
 
 # ── TestBeanieContainerValidates (Plan 013 / F9) ────────────────────────────

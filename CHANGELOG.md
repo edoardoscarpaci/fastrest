@@ -25,6 +25,19 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   transitive dependency via `varco-core`. This is a strictly additive
   metadata fix — the dependency was already installed in practice.
 
+### Removed — internal compat shim deleted; adopts providify 2.0.0's native override (Plan 016, Phase C)
+
+- **Deleted a `varco_core` internal compat module** that patched a factory's
+  return annotation by hand before registering it with providify — the only
+  reason it existed was that providify had no supported way to state a
+  factory's interface explicitly. Every former call site (`varco_ws/di.py`,
+  `varco_fastapi/di.py`, `varco_fastapi/router/skill.py`,
+  `varco_fastapi/router/mcp.py`, `varco_sa/di.py`, `varco_beanie/di.py`) now
+  calls providify's native `container.provide(Provider(...)(factory),
+  returns=...)` / `Provider(returns=...)(factory)` directly — no annotation
+  patching. Closes UPSTREAM-GAPS.md U-20. No behaviour change; purely a
+  mechanical migration off a now-removed internal shim.
+
 ### Documentation — repo-wide restructure (Plan 015, audit 002 F1–F11)
 
 `CLAUDE.md` reduced from ~2020 lines to ~744 lines of agent guidance
@@ -97,16 +110,18 @@ API change.
   each package's own sibling settings factory. `priority=-sys.maxsize` is
   preserved exactly; base-interface lookup (`container.get(EventBusSettings)`)
   and app-override-wins both still hold, proven by new regression tests.
-- **Added: `varco_core.providify_compat.provide_factory()`** — replaces six
-  of the seven independently hand-rolled `factory.__annotations__["return"]
-  = ...` + `@Provider` + `container.provide()` closures found across four
-  packages (audit F8; the audit itself named 5, two more were found during
-  this plan's inventory) with one shared helper. `varco_beanie.di`'s
-  `_make_repo_provider()` is the one documented exception — it stays a
-  container-less builder because its tests import it directly and assert on
-  its patched, unregistered `__annotations__`/`__name__`. Deliberately not
-  re-exported from `varco_core.__init__`; declares no bindings itself, so
-  `container.scan("varco_core")` picks up nothing new from it.
+- **Added, then later deleted (Plan 016 / RL-2, same `[Unreleased]` section):** a
+  `varco_core` compat helper that replaced six of the seven independently
+  hand-rolled `factory.__annotations__["return"] = ...` + `@Provider` +
+  `container.provide()` closures found across four packages (audit F8; the
+  audit itself named 5, two more were found during this plan's inventory)
+  with one shared function. `varco_beanie.di`'s `_make_repo_provider()` was
+  the one documented exception — it stayed a container-less builder because
+  its tests import it directly and assert on its patched, unregistered
+  `__annotations__`/`__name__`. The helper was never re-exported from
+  `varco_core.__init__` and declared no bindings itself. Superseded by
+  providify 2.0.0's native `@Provider(returns=...)` / `container.provide(fn,
+  returns=...)` — see the "Removed" entry above and UPSTREAM-GAPS.md U-20.
 
 ### BREAKING (security default) — `varco-core`, `varco-fastapi`
 

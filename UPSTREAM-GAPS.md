@@ -10,11 +10,15 @@ library repos before (or alongside) starting the platform.
 
 - Repos: `/home/edoardo/projects/varco`, `/home/edoardo/projects/providify`
 - Design ledger: [design/agbuilder/workspace.md](design/agbuilder/workspace.md)
-- Last updated: 2026-08-23 · adds **U-20 (P2, request)** — `container.provide()`/`@Provider` has no
+- Last updated: 2026-08-25 · **U-20 CLOSED** — providify 2.0.0 ships `@Provider(returns=…)` /
+  `container.provide(fn, returns=…)` (`providify/container.py:989`, `providify/decorator/scope.py:493`),
+  exactly the ask filed below. The interim `varco_core` compat shim (a hand-rolled
+  patch-then-register helper) has been deleted; every former call site now uses the native
+  override (Plan 016 / RL-2).
+- Previously: 2026-08-23 · adds **U-20 (P2, request)** — `container.provide()`/`@Provider` has no
   supported way to register a factory whose interface is a runtime-computed generic alias, found
-  while consolidating six independent workarounds in `varco_core`'s Plan 014 into
-  `varco_core.providify_compat.provide_factory()`. Not blocking; filed so the workaround isn't
-  reinvented a seventh time.
+  while consolidating six independent workarounds in `varco_core`'s Plan 014 into one internal
+  compat helper. Not blocking; filed so the workaround isn't reinvented a seventh time.
 - Previously: 2026-08-04 · after **T5.3 part 2 (D-70/ADR-074)** — **U-6 RE-SCOPED downward after a
   source sweep**: its retry/DLQ mechanism exists and is already per-subscription; the real gap is the
   **relay** leg, and the DLQ-persistence leg leaves U-6 entirely (ours to build over an existing ABC).
@@ -58,7 +62,7 @@ library repos before (or alongside) starting the platform.
 | [U-15](#u-15) | `varco_fastapi` | HTTP conventions absent: no pagination envelope, no idempotency-key handling, no API versioning | — (AG Builder unblocked) | **P3 — report only** |
 | [U-18](#u-18) | `varco_core` / `varco_sa` | Job store has no bulk/predicate delete, no TTL, no `expires_at` — retention is id-at-a-time | — (demoted from R-045 by ADR-072 §3.7) | **P2 — hygiene** (was a D-67 GDPR candidate; demoted) |
 | [U-19](#u-19) | `varco_core` | `request_token` stores the raw undecoded Bearer JWT at rest | — (mitigated locally by ADR-072 §3.6) | **P1 — report, not request** |
-| [U-20](#u-20) | `providify` | `container.provide()`/`@Provider` cannot register a factory whose interface is a runtime-computed generic alias — six sites in `varco_core` mutate `__annotations__` by hand to work around it | — (interim: `varco_core.providify_compat.provide_factory()`) | **P2 — hygiene, report and request** |
+| [U-20](#u-20) | `providify` | `container.provide()`/`@Provider` cannot register a factory whose interface is a runtime-computed generic alias — six sites in `varco_core` mutate `__annotations__` by hand to work around it | — (fixed upstream: `@Provider(returns=…)` / `container.provide(fn, returns=…)`, providify 2.0.0) | **✅ CLOSED** |
 
 ---
 
@@ -951,10 +955,21 @@ an upstream break stays contained.
 
 **Raised by:** `varco_core`'s own Plan 014 (DI settings + provider-helper refactor), 2026-08-23,
 while consolidating six independently hand-rolled copies of the same workaround into one shared
-helper (`varco_core.providify_compat.provide_factory()`).
-**Status:** ✅ verified in source — `providify/binding.py:456-505` (`ProviderBinding.__init__`),
-`providify/container.py:658-672` (`DIContainer.provide`), `providify/decorator/scope.py:489-570`
-(`Provider`).
+internal helper (since deleted — Plan 016).
+**Status:** ✅ **CLOSED — fixed upstream in providify 2.0.0** (Plan 016 / RL-2, 2026-08-25). Verified
+in source: `DIContainer.provide(self, fn, *, returns: Any = None)` (`providify/container.py:989`),
+`Provider(..., returns: Any = None)` (`providify/decorator/scope.py:493`); precedence is call-site
+`returns=` > `@Provider(returns=…)` > resolved return annotation (`container.py:995-998`). This is
+exactly the shape requested below. The interim `varco_core` compat shim
+has been deleted; every one of its former call sites (`varco_ws/di.py`, `varco_fastapi/di.py`,
+`varco_fastapi/router/skill.py`, `varco_fastapi/router/mcp.py`, `varco_sa/di.py`,
+`varco_beanie/di.py`) now calls `container.provide(Provider(...)(factory), returns=…)` /
+`Provider(returns=…)(factory)` directly. See CHANGELOG §2.0.0 lines 199-214 for the upstream
+changelog entry.
+
+**Status prior to closure (kept for history):** ✅ verified in source — `providify/binding.py:456-505`
+(`ProviderBinding.__init__`), `providify/container.py:658-672` (`DIContainer.provide`),
+`providify/decorator/scope.py:489-570` (`Provider`).
 
 **What providify does today.** `@Provider` stamps registration metadata on a function and returns
 it unchanged (`scope.py:538-566` — never reads `__annotations__`). The interface a provider binds
@@ -984,7 +999,7 @@ relying on the fact (verified, not assumed) that neither `@Provider`'s decorator
 carried its own copy-pasted `DESIGN:` comment justifying the ordering; one (`varco_fastapi.di`, prior
 to this cleanup) had the reasoning **factually wrong** about why the ordering mattered. `varco_core`
 has now collapsed six of the seven sites into one internal helper
-(`varco_core.providify_compat.provide_factory()`) precisely so there is one place to delete when this
+(since deleted — Plan 016) precisely so there is one place to delete when this
 lands upstream — but every one of the six is still reaching into a private attribute
 (`__annotations__`) that providify's public API never promised as a registration mechanism.
 
@@ -1004,16 +1019,13 @@ This removes the only reason any varco call site currently mutates `__annotation
 else's function object, and removes the trap where the *ordering* of decorate-vs-patch is
 load-bearing but invisible in the type signature of either `@Provider` or `provide()`.
 
-**Priority: P2 — hygiene / API-surface completeness, not a blocker.** The workaround is understood,
-centralised, and tested (`ProviderBinding.__init__` never reads the annotation before `provide()`
-does, so the patch-then-register ordering is safe and will stay safe unless that internal detail
-changes) — nothing is broken today. It is filed because it is the kind of gap that would otherwise
-get re-invented a seventh time by the next caller who needs a dynamically-typed provider and doesn't
-know the five prior sites exist.
+**Priority: P2 — hygiene / API-surface completeness, not a blocker** (as originally filed — now moot,
+see Status above).
 
-**Interim:** `varco_core.providify_compat.provide_factory()` — one shared, documented, tested helper
-that does the annotation-patch-then-register dance, explicitly named and positioned (module
-docstring) as a shim to be deleted the day this lands.
+**Interim (historical, deleted in Plan 016):** a `varco_core` internal helper — one shared,
+documented, tested function that did the annotation-patch-then-register dance, explicitly named
+and positioned (module docstring) as a shim to be deleted the day this landed. It landed; the shim is
+gone.
 
 ---
 

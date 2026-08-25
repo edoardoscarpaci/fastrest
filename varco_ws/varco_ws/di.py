@@ -213,11 +213,10 @@ def bind_websocket_adapter(
     """
     try:
         # Presence probe — providify is an optional dependency.  This
-        # `import providify` (not `from varco_core.providify_compat import
-        # ...`) is deliberate: it is what
+        # `import providify` is deliberate: it is what
         # `varco_ws/tests/test_di.py::test_bind_websocket_adapter_importerror_guard`
         # blocks by purging `sys.modules`, so the guard must trigger on
-        # providify's own absence, not incidentally on the compat module's.
+        # providify's own absence.
         import providify  # noqa: F401
     except ImportError:
         import logging  # noqa: PLC0415
@@ -231,8 +230,8 @@ def bind_websocket_adapter(
     # Resolve defaults that live in the varco_ws module — imported here to
     # keep the module-level import list minimal and match the lazy-import
     # pattern used throughout the package.
+    from providify import Provider  # noqa: PLC0415
     from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
-    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
     from varco_ws.websocket import (  # noqa: PLC0415
         BackpressurePolicy,
         WebSocketEventBus,
@@ -260,9 +259,9 @@ def bind_websocket_adapter(
         cannot recognise it as an injection point.  The closure approach is the
         same pattern used by ``bind_mcp_adapter`` in ``varco_fastapi``.
 
-        Registered via ``varco_core.providify_compat.provide_factory()`` —
-        see that module for why patching the return annotation before
-        registering is the only ordering constraint.
+        Registered via ``container.provide(Provider(...)(...), returns=...)`` —
+        the decoration-time ``returns=`` override on ``@Provider`` means the
+        placeholder return annotation on this closure never needs patching.
         """
         bus = container.get(AbstractEventBus)
         return WebSocketEventBus(
@@ -273,7 +272,7 @@ def bind_websocket_adapter(
             backpressure_policy=_backpressure_policy,
         )
 
-    provide_factory(container, _ws_factory, returns=WebSocketEventBus, singleton=True)
+    container.provide(Provider(singleton=True)(_ws_factory), returns=WebSocketEventBus)
 
 
 # ── bind_sse_adapter ──────────────────────────────────────────────────────────
@@ -342,8 +341,7 @@ def bind_sse_adapter(
     """
     try:
         # Presence probe — see bind_websocket_adapter's comment for why this
-        # is `import providify`, not `from varco_core.providify_compat
-        # import ...`: it is what
+        # is `import providify`: it is what
         # `varco_ws/tests/test_di.py::test_bind_sse_adapter_importerror_guard`
         # blocks by purging `sys.modules`.
         import providify  # noqa: F401
@@ -357,8 +355,8 @@ def bind_sse_adapter(
         return
 
     # Resolve defaults imported lazily to keep module-level import list minimal.
+    from providify import Provider  # noqa: PLC0415
     from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
-    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
     from varco_ws.sse import SSEEventBus  # noqa: PLC0415
 
     # Capture every arg at binding time — same closure-capture pattern as
@@ -375,7 +373,9 @@ def bind_sse_adapter(
         Avoids the ``from __future__ import annotations`` string-annotation
         problem — same pattern as ``bind_mcp_adapter`` in ``varco_fastapi``.
 
-        Registered via ``varco_core.providify_compat.provide_factory()``.
+        Registered via ``container.provide(Provider(...)(...), returns=...)``
+        — the decoration-time ``returns=`` override means this closure's
+        placeholder return annotation never needs patching.
         """
         bus = container.get(AbstractEventBus)
         return SSEEventBus(
@@ -385,7 +385,7 @@ def bind_sse_adapter(
             max_queue_size=_max_queue_size,
         )
 
-    provide_factory(container, _sse_factory, returns=SSEEventBus, singleton=True)
+    container.provide(Provider(singleton=True)(_sse_factory), returns=SSEEventBus)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

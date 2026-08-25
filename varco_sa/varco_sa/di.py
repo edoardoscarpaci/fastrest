@@ -60,7 +60,6 @@ from providify import Configuration, Inject, Provider
 from varco_core.lock import AbstractDistributedLock
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
-from varco_core.providify_compat import provide_factory
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import IUoWProvider
 from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
@@ -287,14 +286,13 @@ def _bind_repo_provider(container: DIContainer, entity_cls: type[DomainModel]) -
     """
     Register a sync ``AsyncRepository[entity_cls]`` provider on *container*.
 
-    The factory's return-type annotation must be patched at runtime so that
+    The factory is registered with an explicit ``returns=`` override so that
     providify registers the binding under the precise generic alias
     ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``), not the
     bare unparameterised ``AsyncRepository`` — otherwise every entity's repo
-    would collide under one interface. That patch-then-register mechanism is
-    shared with five other call sites across four packages; see
-    ``varco_core.providify_compat.provide_factory()`` for the single
-    implementation and its own DESIGN block.
+    would collide under one interface. providify's ``@Provider(returns=…)`` /
+    ``container.provide(fn, returns=…)`` apply this override at
+    decoration/registration time, so no return-annotation patching is needed.
 
     Args:
         container:  The ``DIContainer`` to register the binding into.
@@ -317,12 +315,13 @@ def _bind_repo_provider(container: DIContainer, entity_cls: type[DomainModel]) -
 
     # DEPENDENT scope (default, singleton=False) — a fresh repo wrapper is
     # returned each time; AsyncSession is created per resolution.
-    provide_factory(
-        container,
-        _repo_factory,
+    #
+    # __name__ is set explicitly (not subsumed by returns=) so per-entity
+    # closures built in this loop are distinguishable in describe() output.
+    _repo_factory.__name__ = f"_repo_factory_{entity_cls.__name__}"
+    container.provide(
+        Provider(singleton=False)(_repo_factory),
         returns=AsyncRepository[entity_cls],  # type: ignore[valid-type]
-        singleton=False,
-        name=f"_repo_factory_{entity_cls.__name__}",
     )
 
 

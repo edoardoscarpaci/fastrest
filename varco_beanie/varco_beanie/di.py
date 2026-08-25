@@ -161,33 +161,25 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
     """
     Build a ``@Provider``-decorated async factory for ``AsyncRepository[entity_cls]``.
 
-    The factory's return-type annotation is patched at runtime so that
-    providify registers the binding under the precise generic alias
-    ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``). This is
-    the exact patch-then-register shape
-    ``varco_core.providify_compat.provide_factory()`` centralises for the
-    other five call sites that need it (Plan 014 / F8) — but that helper
-    always ends by calling ``container.provide()`` itself, and this function
-    is deliberately **container-less**: it is a pure builder, tested standalone
-    (``varco_beanie/tests/test_beanie_di.py``) as a callable with a patched
-    ``__annotations__``/``__name__`` before it is ever handed to a container.
-    Kept as this thin wrapper rather than being folded into
-    ``bind_repositories()`` for exactly that reason — see the plan's Step 22
-    escape hatch for a call site whose direct-import tests require the
-    build/register split to stay separate.
-
-    DESIGN: dynamic annotation patching over Protocol / overloads
-      ✅ No boilerplate per entity — one call per class
-      ✅ providify's _is_generic_subtype() matches on the generic alias
-      ❌ Annotation patching is non-standard and invisible to static checkers
-         (mypy/pyright will not infer the return type from __annotations__)
+    The factory is stamped with providify's native ``@Provider(returns=...)``
+    decoration-time override so it registers under the precise generic alias
+    ``AsyncRepository[entity_cls]`` (e.g. ``AsyncRepository[User]``), not the
+    bare unparameterised ``AsyncRepository`` — otherwise every entity's repo
+    would collide under one interface. This function is a plain,
+    **container-less** builder: it returns the decorated-but-unregistered
+    factory, tested standalone (``varco_beanie/tests/test_beanie_di.py``)
+    before it is ever handed to ``container.provide()`` by
+    ``bind_repositories()``. Since ``returns=`` is applied at decoration time
+    (not by mutating ``__annotations__``), the override survives being
+    returned unregistered and passed to ``container.provide()`` later — no
+    annotation patching is needed.
 
     Args:
         entity_cls: The ``DomainModel`` subclass to build a provider for.
 
     Returns:
-        An async function with ``@Provider`` metadata stamped and the
-        return annotation set to ``AsyncRepository[entity_cls]``.
+        An async function with ``@Provider(returns=AsyncRepository[entity_cls])``
+        metadata stamped.
 
     Thread safety:  ✅ Pure function — creates a new closure each call.
     Async safety:   ✅ The returned factory is async.
@@ -200,18 +192,13 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
         # for entity_cls without needing any additional parameters.
         return provider.get_repository(entity_cls)
 
-    # Patch the return annotation with the concrete generic alias so providify
-    # registers this binding under AsyncRepository[entity_cls], not the bare
-    # unparameterised AsyncRepository.  Without this patch, all entity repos
-    # would collide under the same unparameterised interface.
-    _repo_factory.__annotations__["return"] = AsyncRepository[entity_cls]  # type: ignore[misc, valid-type]
-
     # Give the closure a descriptive __name__ for debugging / describe() output.
     _repo_factory.__name__ = f"_repo_factory_{entity_cls.__name__}"
 
-    # Stamp @Provider metadata — DEPENDENT scope (default) so a fresh repo
-    # wrapper is returned each time; repositories carry no state between calls.
-    return Provider(_repo_factory)
+    # Stamp @Provider metadata with the explicit returns= override — DEPENDENT
+    # scope (default) so a fresh repo wrapper is returned each time;
+    # repositories carry no state between calls.
+    return Provider(returns=AsyncRepository[entity_cls])(_repo_factory)  # type: ignore[valid-type]
 
 
 # ── bootstrap ─────────────────────────────────────────────────────────────────

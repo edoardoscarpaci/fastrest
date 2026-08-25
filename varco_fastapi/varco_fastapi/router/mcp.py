@@ -813,8 +813,7 @@ def bind_mcp_adapter(
     """
     try:
         # Presence probe — providify is an optional dependency.  `import
-        # providify` (not `from varco_core.providify_compat import ...`) is
-        # deliberate: it is what
+        # providify` is deliberate: it is what
         # `test_bind_mcp_adapter_noop_without_providify` blocks by purging
         # `sys.modules`, so the guard triggers on providify's own absence.
         import providify  # noqa: F401
@@ -824,7 +823,7 @@ def bind_mcp_adapter(
         )
         return
 
-    from varco_core.providify_compat import provide_factory  # noqa: PLC0415
+    from providify import Provider  # noqa: PLC0415
 
     # Capture args in closure — avoids late-binding if bind_mcp_adapter is
     # called in a loop for multiple routers.
@@ -837,7 +836,9 @@ def bind_mcp_adapter(
     def _mcp_adapter_factory() -> MCPAdapter:
         """Singleton MCPAdapter factory — built once at first injection.
 
-        Registered via ``varco_core.providify_compat.provide_factory()``.
+        Registered via ``container.provide(Provider(...)(...), returns=...)``
+        — the decoration-time ``returns=`` override means this closure's
+        placeholder return annotation never needs patching.
         """
         client = None
         if _client_cls is not None:
@@ -855,7 +856,9 @@ def bind_mcp_adapter(
             enabled_routes=_enabled,
         )
 
-    provide_factory(container, _mcp_adapter_factory, returns=MCPAdapter, singleton=True)
+    container.provide(
+        Provider(singleton=True)(_mcp_adapter_factory), returns=MCPAdapter
+    )
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
