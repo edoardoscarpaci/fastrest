@@ -9,6 +9,22 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed — `providify` dependency bumped to 2.0.0 (Plan 016, Phases A–B)
+
+- **`providify>=2.0.0`** across all ten workspace members (`varco_core`,
+  `varco_kafka`, `varco_nats`, `varco_redis`, `varco_beanie`, `varco_sa`,
+  `varco_memcached`, `varco_ws`, `varco_fastapi`, `varco_casbin`), up from
+  `>=1.1.0`.
+- **The vendored-wheel `[tool.uv.sources]` override is removed** from the
+  workspace root `pyproject.toml` — `providify` now resolves from PyPI for
+  every workspace member instead of a locally-built wheel checked into
+  `vendor/`.
+- **`varco-ws` gains an explicit `providify` dependency.** It imports
+  `providify` directly (`varco_ws/sse.py`, `varco_ws/websocket.py`) but
+  previously declared no such dependency, relying entirely on the
+  transitive dependency via `varco-core`. This is a strictly additive
+  metadata fix — the dependency was already installed in practice.
+
 ### Documentation — repo-wide restructure (Plan 015, audit 002 F1–F11)
 
 `CLAUDE.md` reduced from ~2020 lines to ~744 lines of agent guidance
