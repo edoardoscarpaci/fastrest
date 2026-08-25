@@ -7,6 +7,7 @@ CLAUDE.md's pitfall table (see e.g. varco_redis/tests/test_redis_di.py).
 from __future__ import annotations
 
 from providify import DIContainer
+from varco_conformance.providify_health import assert_no_structural_di_issues
 
 
 async def test_container_scan_varco_sa_with_migration_module_validates_bindings() -> (
@@ -21,3 +22,4 @@ async def test_container_scan_varco_sa_with_migration_module_validates_bindings(
     container.scan("varco_sa", recursive=True)
 
     container.validate_bindings()
+    assert_no_structural_di_issues(container)

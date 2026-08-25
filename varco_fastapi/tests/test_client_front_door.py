@@ -62,6 +62,7 @@ class TestBindClientsFrom:
         self,
     ) -> None:
         from providify import DIContainer
+        from varco_conformance.providify_health import assert_no_structural_di_issues
         from varco_fastapi.client.base import VarcoClient
         from varco_fastapi.di import bind_clients_from
 
@@ -71,6 +72,7 @@ class TestBindClientsFrom:
         resolved = await container.aget(VarcoClient[OrderRouter])
         assert resolved is not None
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
 
 class TestDemotedNamesShim:

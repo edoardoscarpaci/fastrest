@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from providify import DIContainer, Provider
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from varco_conformance.providify_health import assert_no_structural_di_issues
 
 from varco_core.model import DomainModel
 from varco_core.repository import AsyncRepository
@@ -83,6 +84,7 @@ class TestSAContainerValidates:
         container.scan("varco_sa", recursive=True)
 
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     def test_regression_core_sa_module_implementations_discovered(self) -> None:
         """
@@ -117,6 +119,7 @@ class TestSAContainerValidates:
         assert "AbstractDistributedLock" in interfaces
         assert "SAXactAdvisoryLock" in interfaces
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     def test_regression_bind_repositories_against_real_container_validates(
         self,
@@ -137,6 +140,7 @@ class TestSAContainerValidates:
         bind_repositories(container, _Entity)
 
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     def test_regression_bound_repository_resolves_through_get(self) -> None:
         """

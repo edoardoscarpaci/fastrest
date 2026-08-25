@@ -27,6 +27,7 @@ import sys
 import pydantic
 import pytest
 from providify import DIContainer, Provider, Singleton
+from varco_conformance.providify_health import assert_no_structural_di_issues
 
 from varco_core.event import AbstractEventBus
 from varco_core.event.config import EventBusSettings
@@ -48,6 +49,7 @@ class TestRedisContainerValidates:
         container.scan("varco_redis", recursive=True)
 
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     def test_regression_streams_bus_bindings_also_validate(self) -> None:
         """
@@ -66,6 +68,7 @@ class TestRedisContainerValidates:
 
         assert "RedisEventBus" in implementations
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     def test_regression_cache_backplane_bindings_also_validate(self) -> None:
         """
@@ -85,6 +88,7 @@ class TestRedisContainerValidates:
 
         assert "RedisPubSubBackplane" in implementations
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
 
 class TestRedisEventBusSettingsCharacterization:

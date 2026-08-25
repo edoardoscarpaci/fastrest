@@ -115,6 +115,7 @@ packages = ["varco_fastapi"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths    = ["tests"]
+pythonpath   = ["../testkit"]
 markers      = [
     "integration: real external services required (disabled by default — use -m integration)",
 ]

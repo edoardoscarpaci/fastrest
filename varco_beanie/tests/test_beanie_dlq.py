@@ -82,11 +82,13 @@ class TestBeanieDIBindingHealth:
         bootstrap() (the per-package 'green suite, dead container' guard)."""
         from providify import DIContainer
         from varco_beanie.dlq import BeanieDeadLetterQueue
+        from varco_conformance.providify_health import assert_no_structural_di_issues
         from varco_core.event.dlq import AbstractDeadLetterQueue
 
         container = DIContainer()
         container.scan("varco_beanie", recursive=True)
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
         resolved = await container.aget(AbstractDeadLetterQueue)
         assert isinstance(resolved, BeanieDeadLetterQueue)

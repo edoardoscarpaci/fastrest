@@ -40,6 +40,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from providify import DIContainer, Provider
+from varco_conformance.providify_health import assert_no_structural_di_issues
 
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
@@ -349,6 +350,7 @@ class TestBeanieContainerValidates:
         container.scan("varco_beanie", recursive=True)
 
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     def test_regression_bind_repositories_against_real_container_validates(
         self,
@@ -368,6 +370,7 @@ class TestBeanieContainerValidates:
         bind_repositories(container, _User)
 
         container.validate_bindings()
+        assert_no_structural_di_issues(container)
 
     async def test_regression_bound_repository_resolves_through_aget(self) -> None:
         """
