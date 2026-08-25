@@ -178,6 +178,16 @@ class VarcoLifespan:
             - If a component's ``stop()`` raises during shutdown, the error is
               logged and subsequent stops still run — a failing stop must not
               block other components from cleaning up.
+            - ``VarcoLifespan`` does **not** call
+              ``container.shutdown()``/``container.ashutdown()`` — only the
+              explicitly registered lifecycle components in ``self._components``
+              are stopped, via ``_stop_all()`` above. A ``@PreDestroy`` hook on a
+              singleton that is not also a registered lifecycle component is
+              never run by this class today (Plan 016 / RL-3b — characterized,
+              not adopted; see ``test_lifespan_shutdown_characterization.py`` for
+              the locked shape of providify 2.0.0's aggregated ``ShutdownError``
+              a future adoption would need to handle, and BACKLOG.md's RL-8 row
+              for the adoption decision itself).
         """
         # Run async setup first so it can register additional components
         # (e.g. DI resolution of bus/consumer/job_runner) before the start loop.
