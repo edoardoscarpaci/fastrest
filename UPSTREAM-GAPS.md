@@ -32,34 +32,49 @@ library repos before (or alongside) starting the platform.
 - Verification: items marked **✅ verified in source** were read directly in the library
   code, not inferred from documentation. Items marked **⚠️ unverified** need a check before
   you act on them.
+- **Last reconciled:** 2026-08-25 against providify 2.0.0 (Plan 016 / RL-4). Convention from this
+  reconciliation forward: every entry's **Status** line must name the **file:line** it was
+  verified in — never a `CLAUDE.md`/`README.md` claim, per the register's own U-8 lesson
+  (`UPSTREAM-GAPS.md` §"Maintainer response — source corrections"). Three entries this pass
+  found genuinely stale — verified as still-open weeks/months ago, but the underlying gap has
+  since been closed by varco's own later work: **U-11 CLOSED** (fencing/lease/renew shipped,
+  Plan 005 Phase 4), **U-13 CLOSED** (`aud`/`iss` fail-closed by default shipped), **U-17
+  CLOSED** (`run_at`/`retry_policy` binding shipped, Plan 005 Phase 4 + Plan 011 T2). **U-1/U-2
+  CLOSED** (`ScopedEncryptorRegistry`/`destroy_scope()`/`KeyDestroyedError` shipped). **U-3
+  CLOSED** (`SkillSource`/`source=` decoupling shipped) — no longer merely "downgraded, gap
+  still real"; varco's own source now satisfies the ask, independent of AG Builder no longer
+  needing it. See each entry below for file:line evidence.
 
 ## Summary
 
 | ID | Library | Gap | Blocks | Priority |
 |----|---------|-----|--------|----------|
-| [U-1](#u-1) | `varco_core` | Encryption keys are tenant-scoped; need arbitrary-principal (data-subject) scoping | R-045 GDPR erasure | **P0 — blocker** |
-| [U-2](#u-2) | `varco_core` | No hard-delete / destroy semantics on key retirement | R-045 | **P0 — blocker** |
+| [U-1](#u-1) | `varco_core` | ~~Encryption keys are tenant-scoped; need arbitrary-principal (data-subject) scoping~~ | R-045 GDPR erasure | **✅ CLOSED** — `ScopedEncryptorRegistry`/`load_for_scope`/`rotate_scope` shipped (was P0) |
+| [U-2](#u-2) | `varco_core` | ~~No hard-delete / destroy semantics on key retirement~~ | R-045 | **✅ CLOSED** — `destroy()`/`destroy_scope()`/`DestroyReceipt`/`KeyDestroyedError` shipped (was P0) |
 
-> ⚠️ **U-1/U-2 scope note — D-12 / [ADR-017](design/agbuilder/architecture/decisions/ADR-017-erasure-execution-model.md), 2026-08-02.**
+> ⚠️ **U-1/U-2 scope note — D-12 / [ADR-017](design/agbuilder/architecture/decisions/ADR-017-erasure-execution-model.md), 2026-08-02 (historical; superseded 2026-08-25).**
 > Erasure is now **delete-first, shred the residue**: rows are hard-deleted wherever deletion is
 > possible, and key destruction covers only residue (backups, WAL, replicas, append-only audit).
-> **U-1 and U-2 remain P0 and their asks are unchanged** — the shred path is still required, just
-> no longer the whole mechanism. What is *not* upstream: the delete path, the per-store
-> delete/shred classification, the extended receipt (per-store outcomes) and restore-time receipt
-> replay are **ours to build**, not varco asks. Do not widen the upstream request to cover them.
-| [U-3](#u-3) | `varco_fastapi` | `SkillAdapter` subject is a `VarcoRouter` class; needs an arbitrary agent subject with a hand-authored Agent Card | R-014, R-039 | **P2 — reported, no longer blocking** (was P0; see D-9g) |
+> This note originally read "U-1 and U-2 remain P0 and their asks are unchanged" — as of the
+> 2026-08-25 Plan 016/RL-4 reconciliation both entries are **CLOSED**, verified against
+> `varco_core/encryption.py` / `encryption_store.py` source (see each entry's body). What remains
+> **ours to build**, not varco asks: the delete path, the per-store delete/shred classification,
+> the extended receipt (per-store outcomes), and restore-time receipt replay.
+| [U-3](#u-3) | `varco_fastapi` | ~~`SkillAdapter` subject is a `VarcoRouter` class; needs an arbitrary agent subject with a hand-authored Agent Card~~ | R-014, R-039 | **✅ CLOSED** — `SkillSource`/`source=`/`ctx=` shipped (was P2, downgraded from P0 by D-9g) |
 | [U-4](#u-4) | `varco_fastapi` | A2A protocol surface **confirmed stale** against A2A v1.0.0 | R-014 | **P1 — reported, no longer blocking** (was P0-verify; now verified) |
 | [U-5](#u-5) | `varco_core` / `varco_sa` | No Postgres Row-Level Security support in the tenancy layer | R-022 fail-closed | **P2 — report, not request** (was P1; downgraded 2026-08-03 by [ADR-053](design/agbuilder/architecture/decisions/ADR-053-two-layer-tenant-isolation-schema-per-tenant-over-row-level-security.md) — we build it, and the report now carries the LEAKPROOF/InitPlan finding) |
 | [U-6](#u-6) | `varco_core` | ~~`AuditConsumer` ships with no retry policy, DLQ, or per-stream policy scope~~ **RE-SCOPED 2026-08-04:** the retry/DLQ mechanism **exists and is already per-subscription**; the real gap is that **`OutboxRelay` has no attempt tracking or dead-letter path at all** | R-027, R-048 | **P1 — high** (ask is *smaller and more precise*; the DLQ-persistence leg left U-6 entirely — it is ours to build) |
-| [U-11](#u-11) | `varco_core` / `varco_sa` | `try_claim` ignores its TTL; no heartbeat/renew, no fencing token; `JobPoller` detects death by wall-clock age | NFR-6, ADR-032/033 run ownership | **P1 — high** (interim built in-runner) |
 | [U-7](#u-7) | `varco_core` | No distributed rate limiter (`InMemoryRateLimiter` only) | R-057 | **P2 — medium** |
 | [U-8](#u-8) | `varco` | `ARCHITECTURE.md` is stale on `SkillAdapter` async support | docs correctness | **P2 — low** |
 | [U-9](#u-9) | `varco_core` | Graph-shaped durable execution (sagas are linear only) | R-002, ADR-003 | **P3 — decided against** |
-| [U-13](#u-13) | `varco_fastapi` / `varco_core` | **JWT validation fails open**: `aud` checked only if an env var is set, `iss` never enforced | R-052, R-054, R-022 | **P1 — report *and* request** (security-default defect, U-4's class) |
+| [U-10](#u-10) | `varco_fastapi` | `MCPAdapter` exposes routes *as* an MCP server; R-009/R-010 need an MCP **client** — different products, not a defect | — (no upstream change requested) | **P3 — evaluated, no request** |
+| [U-11](#u-11) | `varco_core` / `varco_sa` | ~~`try_claim` ignores its TTL; no heartbeat/renew, no fencing token; `JobPoller` detects death by wall-clock age~~ | NFR-6, ADR-032/033 run ownership | **✅ CLOSED** — `lease_ttl`/`lease_epoch`/`renew`/`reap_expired_leases`/`StaleLeaseError` shipped (was P1) |
+| [U-12](#u-12) | `providify` | No interface-**conformance** check at `bind`/registration time — `validate()` covers only wiring resolvability (missing/ambiguous binding, cycles, scope, unresolved annotation), not "does the implementation satisfy the Protocol/ABC" | — (working substitute: static typing + contract tests) | **P2 — report, still open** (re-verified against providify 2.0.0 source; NOT closed by `validate()`) |
+| [U-13](#u-13) | `varco_fastapi` / `varco_core` | ~~**JWT validation fails open**: `aud` checked only if an env var is set, `iss` never enforced~~ | R-052, R-054, R-022 | **✅ CLOSED** — `aud` required by default (`ValueError` unless `allow_any_audience=True`), `iss` enforced by default (`VARCO_JWT_ENFORCE_ISS=true`) (was P1) |
 | [U-16](#u-16) | `varco_sa` | **`SAAdvisoryLock` is session-scoped**: behind a transaction pooler, `release()` runs on a different connection, silently no-ops, and the lock leaks | R-045, NFR-9, R-016/R-017 | **P1 — report *and* request** (correctness defect against a supported topology, U-4/U-13's class; interim built in-platform) |
-| [U-17](#u-17) | `varco_core` / `varco_sa` | Job store has **no time dimension** — no `run_at`, delay, or retry-after; `RetryPolicy` exists but is unreachable from `AbstractJobStore` | R-045, NFR-9, R-027, R-048 | **P1 — high** (one nullable column + one predicate on an already-correct claim query; DLQ leg overlaps U-6) |
-| [U-14](#u-14) | `varco_fastapi` / `varco_core` | Auth ergonomics: no composed auth→role→policy middleware, no route-level policy decorator, no resource hierarchy in `PolicyEngine`, no refresh flow, no introspection | — (AG Builder unblocked) | **P3 — report only** |
-| [U-15](#u-15) | `varco_fastapi` | HTTP conventions absent: no pagination envelope, no idempotency-key handling, no API versioning | — (AG Builder unblocked) | **P3 — report only** |
+| [U-17](#u-17) | `varco_core` / `varco_sa` | ~~Job store has **no time dimension** — no `run_at`, delay, or retry-after; `RetryPolicy` exists but is unreachable from `AbstractJobStore`~~ | R-045, NFR-9, R-027, R-048 | **✅ CLOSED** (items 1–3) — `run_at`/`enqueue(run_at=/delay=)`/`RetryPolicy` binding shipped (was P1; item 4's DLQ leg overlaps still-open U-6) |
+| [U-14](#u-14) | `varco_fastapi` / `varco_core` | Auth ergonomics: no composed auth→role→policy middleware, no route-level policy decorator, no resource hierarchy in `PolicyEngine`, no refresh flow, no introspection | — (AG Builder unblocked) | **P3 — report only** (re-verified 2026-08-25 — absences confirmed still hold) |
+| [U-15](#u-15) | `varco_fastapi` | HTTP conventions absent: no pagination envelope, no idempotency-key handling, no API versioning | — (AG Builder unblocked) | **P3 — report only** (re-verified 2026-08-25 — absences confirmed still hold) |
 | [U-18](#u-18) | `varco_core` / `varco_sa` | Job store has no bulk/predicate delete, no TTL, no `expires_at` — retention is id-at-a-time | — (demoted from R-045 by ADR-072 §3.7) | **P2 — hygiene** (was a D-67 GDPR candidate; demoted) |
 | [U-19](#u-19) | `varco_core` | `request_token` stores the raw undecoded Bearer JWT at rest | — (mitigated locally by ADR-072 §3.6) | **P1 — report, not request** |
 | [U-20](#u-20) | `providify` | `container.provide()`/`@Provider` cannot register a factory whose interface is a runtime-computed generic alias — six sites in `varco_core` mutate `__annotations__` by hand to work around it | — (fixed upstream: `@Provider(returns=…)` / `container.provide(fn, returns=…)`, providify 2.0.0) | **✅ CLOSED** |
@@ -72,7 +87,15 @@ library repos before (or alongside) starting the platform.
 
 **Requirement:** R-045 (erase all personal data for *an identified data subject*)
 **Decision that depends on it:** [ADR-001](design/agbuilder/architecture/decisions/ADR-001-crypto-shredding-for-gdpr-erasure.md)
-**Status:** ✅ verified in source
+**Status:** ✅ CLOSED — verified in source 2026-08-25 (Plan 016 / RL-4, re-verifying a stale
+2026-08-02 "still P0" claim against the register's own U-8 lesson). `varco_core/encryption.py:811`
+(`ScopedEncryptorRegistry`, "sibling of `TenantAwareEncryptorRegistry`... keyed by the opaque
+`scope` dimension instead of `tenant_id`... e.g. `f"{tenant}:subject:{sid}"` for per-data-subject
+keys") and `varco_core/encryption_store.py:799` (`EncryptionKeyManager.build_scoped_registry`),
+`:368`/`:382` (`load_for_scope`/`list_scopes` on the `EncryptionKeyStore` Protocol), `:851`
+(`rotate_scope`) ship exactly the generalised-scoping-dimension ask below — the previous
+`✅ verified in source` status (undated) predates this work and described the gap as still open;
+it no longer is.
 
 **What exists.** `varco_core/encryption.py` and `encryption_store.py` are a well-built
 envelope-encryption layer:
@@ -116,12 +139,24 @@ maps `context` → scope. AG Builder would use `scope = f"{tenant_id}:subject:{s
 tenants. Worth confirming the SA backend indexes `scope` and that `build_*_registry` does
 not load all keys eagerly — at a few thousand subjects an eager load would hurt.
 
+**Shipped.** `EncryptionKeyStore.load_for_scope`/`list_scopes` (`encryption_store.py:368,382`),
+`EncryptionKeyManager.build_scoped_registry`/`rotate_scope` (`encryption_store.py:799,851`), and
+`ScopedEncryptorRegistry` (`encryption.py:811`) match this shape exactly — `scope` generalises
+`tenant_id` as asked, `TenantAwareEncryptorRegistry` is untouched (a genuinely separate sibling
+class, not a subclass), and per Plan 016/RL-4 re-verification this entry is closed.
+
 ---
 
 ### U-2 · No destroy semantics — `retire()` and `delete()` are not "provably destroyed" {#u-2}
 
 **Requirement:** R-045
-**Status:** ✅ verified in source
+**Status:** ✅ CLOSED — verified in source 2026-08-25 (Plan 016 / RL-4). `varco_core/encryption.py:562`
+(`MultiKeyEncryptorRegistry.destroy(kid)` — distinct from `retire()`, idempotent, leaves the
+encryptor mapping intact so decrypt fails distinguishably), `:183` (`KeyDestroyedError`, a
+subclass of `EncryptionError`), `:227` (`DestroyReceipt`, a frozen dataclass), and
+`varco_core/encryption_store.py:891` (`EncryptionKeyManager.destroy_scope(scope, *, actor=None)
+-> DestroyReceipt`) match the "what to add" shape below exactly, kid-for-kid. The previous
+`✅ verified in source` status (undated) predates this work.
 
 **What exists.** `MultiKeyEncryptorRegistry.retire(kid)` removes a key from the registry;
 `EncryptionKeyStore.delete(kid)` removes the stored entry. `EncryptionKeyManager.rotate()`
@@ -161,12 +196,32 @@ class KeyDestroyedError(EncryptionError): ...   # raised on decrypt of a shredde
 Plus documentation stating the operator's obligation: key-store backups must not outlive the
 erasure window, or destruction is not destruction.
 
+**Shipped.** All three items above ship as designed: `destroy()`/`destroy_scope()` are
+irreversible (no un-destroy call exists), `DestroyReceipt` is the auditable record (no personal
+data in its fields — `scope`/`kids`/`destroyed_at`/`actor`), and `KeyDestroyedError` is a
+distinguishable `EncryptionError` subclass so callers can render "erased" rather than "corrupt".
+Per Plan 016/RL-4 re-verification this entry is closed.
+
 ---
 
 ### U-3 · `SkillAdapter` cannot expose a deployed agent as an A2A agent {#u-3}
 
 **Requirement:** R-014 (deployed agent reachable over A2A), R-039 (hand-written skills description)
-**Status:** ✅ verified in source · **⬇️ DOWNGRADED P0 → P2 on 2026-08-02 by design decision D-9g**
+**Status:** ✅ CLOSED — verified in source 2026-08-25 (Plan 016 / RL-4). Not just "downgraded, gap
+still real" as previously recorded: varco's own source has since shipped the exact ask, in
+`varco_fastapi/varco_fastapi/router/a2a/source.py:16` ("Plan 005, Phase 7 (U-3 + U-4)... the
+seam that lets a `SkillAdapter` expose *any* subject... through the same A2A surface") —
+`SkillSource` (`:102`, a `runtime_checkable` `Protocol`), `SkillDefinition` (`:44`, now
+accepting `route=None` for "author-supplied... or non-router `SkillSource` implementations"),
+`AgentMetadata` (`:76`), and `invoke(..., ctx: AuthContext | None = None)` (`:143`, "U-3's
+per-request auth passthrough... distinguish the three caller classes A2A expects to audit").
+`varco_fastapi/varco_fastapi/router/skill.py:179` confirms `SkillAdapter(..., source=...)` is
+now mutually exclusive with `router_cls=`. This closure is independent of D-9g below — it was
+recorded purely as "downgraded, no longer blocking AG Builder" before; the gap itself is now
+also fixed upstream, for whichever future consumer needs it.
+
+**⬇️ Historical note — DOWNGRADED P0 → P2 on 2026-08-02 by design decision D-9g** (retained
+verbatim; this is why AG Builder itself never adopted the fix above):
 
 > **AG Builder no longer depends on this.** D-9g adopts the official **`a2a-sdk` v1.1.2**
 > (Linux Foundation) inside the runner, behind an `A2AServerPort` bound in providify — the same
@@ -217,6 +272,9 @@ class RouterSkillSource(SkillSource): ...    # today's behaviour, unchanged
 - **Per-request auth context passthrough** — R-055 requires distinguishing three caller
   classes (end user, another agent, integrating platform) and recording them in the audit
   trail; the adapter must surface the verified caller identity to `invoke`
+
+**Shipped.** Every item above is implemented as specified — see the Status line for the
+file:line evidence. Per Plan 016/RL-4 re-verification this entry is closed.
 
 ---
 
@@ -330,8 +388,16 @@ varco source:
 NFR-6 (runs survive process restart)
 **Decision:** [ADR-033](design/agbuilder/architecture/decisions/ADR-033-run-ownership-lease-heartbeat-and-fencing.md)
 (with [ADR-032](design/agbuilder/architecture/decisions/ADR-032-orphan-attempt-recovery-policy.md))
-**Status:** ✅ verified in source 2026-08-03 — read from `varco_core` / `varco_sa` / `varco_fastapi`,
-not from docs
+**Status:** ✅ CLOSED — re-verified in source 2026-08-25 (Plan 016 / RL-4; the 2026-08-03 status
+below was accurate as-of-then but is now stale — the gap it describes has since shipped, "Plan
+005 Phase 4"). `varco_sa/varco_sa/job_store.py:591` (`SAJobStore.try_claim(..., owner_id=,
+lease_ttl=)` — "the UPDATE also sets `owner_id`, `lease_expires_at = now + lease_ttl` and
+increments `lease_epoch` (fencing token)"), `:1033`-adjacent `renew()`/`reap_expired_leases()`,
+and `varco_core/varco_core/job/base.py:82` (`StaleLeaseError`), `:682` (`save(job, *,
+expected_epoch=)` — refuses a stale write), `:1033` (`AbstractJobStore.renew`), `:1069`
+(`reap_expired_leases`) satisfy all three items in "What `varco` would need" below verbatim.
+`varco_beanie/varco_beanie/job_store.py:684,833,869` implements the same trio for the Beanie
+backend. Historical note (accurate as of 2026-08-03, now superseded):
 
 `AbstractJobStore.try_claim(job_id: UUID) -> Job | None` (`varco_core/varco_core/job/base.py:517`),
 implemented by `SAJobStore` (`varco_sa/varco_sa/job_store.py:226`, method at `:388`), does an atomic
@@ -366,9 +432,12 @@ What `varco` would need:
 - Documented guidance on TTL vs heartbeat interval (the widely-cited rule is TTL ≥ 3× heartbeat plus
   2× worst-case pause, renewal jittered at 50–75% of remaining TTL)
 
-**Interim:** AG Builder implements the lease, heartbeat and epoch itself in the runner, over varco's
-existing atomic claim (ADR-033). If this lands upstream, the `RunClaimer` binding switches and the
-`runs` ownership columns stay as they are.
+**Interim (historical — superseded, see Status above):** AG Builder implements the lease,
+heartbeat and epoch itself in the runner, over varco's existing atomic claim (ADR-033). Now that
+this has landed upstream, the `RunClaimer` binding can switch to varco's native
+`try_claim`/`renew`/`reap_expired_leases`; the `runs` ownership columns stay as they are.
+
+**Shipped.** Per Plan 016/RL-4 re-verification this entry is closed.
 
 ---
 
@@ -440,19 +509,28 @@ outcome than two"). **U-17's DLQ leg is thereby unblocked; its `run_at` leg is u
 **Requirement:** R-052 (identity is OIDC-based), R-054 (verification configurable per integration),
 R-022 (fail closed)
 **Decision that depends on it:** [ADR-057](design/agbuilder/architecture/decisions/ADR-057-fail-closed-jwt-issuer-and-per-deployable-audience.md)
-**Status:** ✅ verified in source
-**Priority:** **P1 — report *and* request.** This is the same category as U-4: a **defect against a
-specification**, not a feature request. It is *not* a blocker for AG Builder only because we carry a
-wrapper (below).
+**Status:** ✅ CLOSED — re-verified in source 2026-08-25 (Plan 016 / RL-4; the undated status
+below described the state accurately at the time but is now stale). `varco_fastapi/varco_fastapi/auth/server_auth.py:189-235`
+— `JwtBearerAuth.__init__` now raises `ValueError` at construction when no `audience`/
+`VARCO_JWT_AUDIENCE` is configured, **unless** `allow_any_audience=True` /
+`VARCO_JWT_ALLOW_ANY_AUDIENCE=true` is explicitly opted into (a named, auditable escape hatch —
+exactly item 1 of "The ask" below). `varco_core/varco_core/authority/registry.py:540-598` —
+`TrustedIssuerRegistry.verify(..., enforce_issuer: bool | None = None)` now compares the token's
+`iss` against the resolved issuer's registered `iss` **by default** (`VARCO_JWT_ENFORCE_ISS`,
+default `True`), raising `jwt.InvalidIssuerError` on mismatch — exactly item 2. Both BREAKING
+security defaults are documented in `CLAUDE.md`'s "Two BREAKING security defaults" paragraph.
+**Priority (historical, superseded):** was **P1 — report *and* request** ("the same category as
+U-4: a defect against a specification, not a feature request... not a blocker for AG Builder
+only because we carry a wrapper below").
 
-**What exists.**
+**What existed at the time this entry was filed (now fixed — see Status).**
 
-- `varco_fastapi/auth/server_auth.py:103-242` — `JwtBearerAuth` reads `VARCO_JWT_AUDIENCE`. **If the
-  variable is unset it logs a warning and does not check `aud` at all.**
-- `varco_core/authority/registry.py:124-275` — `TrustedIssuerRegistry.verify()` resolves the token's
-  `kid` against cached keysets from **any** registered issuer and validates the signature. **It never
-  compares the `iss` claim.** The caller is expected to check `token.iss` afterwards; nothing in the
-  signature, the return type or the docstring says so.
+- `varco_fastapi/auth/server_auth.py:103-242` — `JwtBearerAuth` read `VARCO_JWT_AUDIENCE`. **If the
+  variable was unset it logged a warning and did not check `aud` at all.**
+- `varco_core/authority/registry.py:124-275` — `TrustedIssuerRegistry.verify()` resolved the token's
+  `kid` against cached keysets from **any** registered issuer and validated the signature. **It never
+  compared the `iss` claim.** The caller was expected to check `token.iss` afterwards; nothing in the
+  signature, the return type or the docstring said so.
 
 **Why it matters.** Together these mean a service that forgets one environment variable accepts a
 token minted for *any* audience by *any* registered issuer — silently, permanently, and in the
@@ -468,11 +546,14 @@ A log warning at startup is not a control: nobody reads a warning in a working s
    to do it, the return type should make it impossible to forget.
 3. Not asked for: refresh-token flow or introspection (see U-14).
 
-**What AG Builder does meanwhile.** ADR-057 ships a **thin strict wrapper** that adds the `iss` check
-and refuses to boot without an explicit audience, with **one audience per deployable** so a token
-minted for the runner is rejected by the builder API. ⚠️ This is deliberately *not* a working-around
-under the standing rule — the wrapper is **written to be deleted** when upstream tightens the default,
-and it exists only because a fail-open authentication default cannot wait on someone else's release.
+**What AG Builder did meanwhile (historical — the wrapper's stated deletion condition has now
+been met).** ADR-057 shipped a **thin strict wrapper** that added the `iss` check and refused to
+boot without an explicit audience, with **one audience per deployable** so a token minted for the
+runner is rejected by the builder API. ⚠️ This was deliberately *not* a working-around under the
+standing rule — the wrapper was **written to be deleted** when upstream tightened the default,
+and existed only because a fail-open authentication default could not wait on someone else's
+release. **Shipped.** Both defaults now match the ask exactly. Per Plan 016/RL-4 re-verification
+this entry is closed.
 
 ---
 
@@ -552,8 +633,17 @@ R-027/R-048 (audit delivery must retry)
 recovery ([ADR-032](design/agbuilder/architecture/decisions/ADR-032-orphan-attempt-recovery-policy.md)),
 lease expiry ([ADR-033](design/agbuilder/architecture/decisions/ADR-033-run-ownership-lease-heartbeat-and-fencing.md)),
 warm-pool refill ([ADR-023](design/agbuilder/architecture/decisions/ADR-023-sandbox-warm-pool-and-single-use-isolation.md))
-**Status:** ✅ verified in source 2026-08-04 — `varco_core/varco_core/job/base.py`,
-`varco_sa/varco_sa/job_store.py`
+**Status:** ✅ CLOSED (items 1–3) — re-verified in source 2026-08-25 (Plan 016 / RL-4; the
+2026-08-04 status below was accurate at the time but is now stale). `varco_core/varco_core/job/base.py:252`
+(`Job.run_at: datetime | None`), `:1145-1176` (`AbstractJobRunner.submit(..., run_at=, delay=)`),
+`:284` ("with a `retry_policy` on the runner"), `varco_sa/varco_sa/job_store.py:591-680`
+(`try_claim` now honours `run_at IS NULL OR run_at <= now`), and
+`varco_fastapi/varco_fastapi/job/runner.py:123-186,683-703` (`retry_policy=`/`callback_retry_policy=`,
+binding `RetryPolicy.compute_delay(attempt)` into `Job.as_retry(run_at=...)`) satisfy items 1–3 of
+"What `varco` would need" below exactly. Item 4 (terminal `DEAD` state / DLQ hand-off) also
+shipped — `JobStatus.DEAD` (`job/base.py:127`) and `as_dead()` (`:513`) — but the item explicitly
+says it "overlaps U-6's DLQ ask", and **U-6 itself remains open** (`OutboxRelay` still has no
+attempt tracking or dead-letter path) — this entry's closure does not imply U-6 is closed.
 
 The job lifecycle is `PENDING → RUNNING → COMPLETED | FAILED | CANCELLED` with **no intermediate
 states and no time dimension**. There is no `run_at`, no `next_retry_at`, no `delay`, no `interval`,
@@ -592,9 +682,12 @@ caller, with no scheduler component, no leader election and no cron parser upstr
 cron would be asking for a subsystem when a column suffices. AG Builder builds recurrence on top of
 `run_at` and does not consider that a gap.
 
-**Interim:** AG Builder carries `run_at` in its own periodic-job table and applies the predicate in its
-own claim query, keeping the shape above so the migration to upstream `run_at` is a column rename and
-a binding switch.
+**Interim (historical — superseded, see Status above):** AG Builder carries `run_at` in its own
+periodic-job table and applies the predicate in its own claim query, keeping the shape above so
+the migration to upstream `run_at` is a column rename and a binding switch — now that it has
+landed upstream, that switch is available.
+
+**Shipped.** Per Plan 016/RL-4 re-verification, items 1–3 of this entry are closed.
 
 ---
 
@@ -761,7 +854,12 @@ is a candidate for extraction into varco — but not before it has proven itself
 
 **Decisions that surfaced it:** [ADR-055](design/agbuilder/architecture/decisions/ADR-055-idp-asserted-groups-mapped-to-a-fixed-internal-role-vocabulary.md),
 [ADR-056](design/agbuilder/architecture/decisions/ADR-056-two-layer-authorization-enforcement.md)
-**Status:** ✅ verified in source · **P3 — report only, no request**
+**Status:** ✅ re-verified in source 2026-08-25 (Plan 016 / RL-4, Step 40) — `varco_fastapi/varco_fastapi/auth/guard.py:61`
+(`class RouteGuard`) and `varco_core/varco_core/auth/policy.py:548` (`class
+PolicyEngineAuthorizer`) both still exist as described, with no combined middleware or
+route-level policy decorator added since, and no resource-hierarchy/role-hierarchy/refresh/
+introspection additions found. The described absences **still hold**; nothing to close.
+**P3 — report only, no request** (unchanged).
 
 varco ships two authorization layers and no path between them:
 
@@ -785,7 +883,11 @@ ever offer a composed helper: **it should preserve the ability to keep the layer
 ### U-15 · HTTP conventions absent from `varco_fastapi` {#u-15}
 
 **Decision that surfaced it:** [ADR-059](design/agbuilder/architecture/decisions/ADR-059-builder-api-cross-cutting-contract.md)
-**Status:** ✅ verified in source · **P3 — report only, no request**
+**Status:** ✅ re-verified in source 2026-08-25 (Plan 016 / RL-4, Step 40) — a repo-wide search of
+`varco_fastapi/varco_fastapi/` for pagination-envelope classes, `idempotency`/`IdempotencyKey`
+handling, and API-version support found none; `varco_core/varco_core/query/` (the AST/pagination
+system) also has no envelope class. The described absences **still hold**; nothing to close.
+**P3 — report only, no request** (unchanged).
 
 varco supplies error-to-HTTP mapping (`varco_core/exception/http.py:88-295` — `ErrorMessage`,
 `error_code_for()` MRO walk, `register_error_code`), which AG Builder adopts as-is. It supplies **no**
@@ -910,12 +1012,38 @@ and its upstream implications are already tracked as U-3/U-4.
 
 ---
 
-### U-12 · `providify` — no interface conformance check at registration (P2)
+### U-12 · `providify` — no interface conformance check at registration (P2) {#u-12}
 
 **Raised by:** D-42 / [ADR-049](design/agbuilder/architecture/decisions/ADR-049-the-node-executor-contract-and-the-providify-boundary.md),
 P2 round 3, 2026-08-03.
-**Verified in source** at `/home/edoardo/projects/providify/` — per the standing rule that produced
-U-8: read the source, not `ARCHITECTURE.md`.
+**Status:** ⚠️ STILL OPEN — re-verified against **providify 2.0.0's own installed source**
+2026-08-25 (Plan 016 / RL-4, Step 39):
+`.venv/lib/python3.12/site-packages/providify/validation.py:58-91` (`class IssueKind(StrEnum)`:
+`MISSING_BINDING`, `MISSING_BINDING_DEFAULTED`, `MISSING_BINDING_DEFERRED`, `AMBIGUOUS_BINDING`,
+`CIRCULAR_DEPENDENCY`, `SCOPE_LEAK`, `LIVE_REQUIRED`, `UNRESOLVED_ANNOTATION`) and
+`.venv/lib/python3.12/site-packages/providify/container.py:5290-5330` (`DIContainer.validate()`
+docstring: *"Nothing is instantiated... additionally detects missing bindings, ambiguous
+bindings, and static circular dependencies"*).
+
+**Verdict.** Every `IssueKind` member is a **wiring-resolvability** check (can the graph be
+built: is there a candidate, is it unambiguous, is there a cycle, does an annotation resolve, is
+a scope/`Live[T]` rule violated). **None of them check interface *conformance*** — whether a
+registered implementation's `__mro__`/method set actually satisfies the Protocol/ABC it is bound
+against. `validate()`'s own docstring is explicit that it walks "the ENTIRE declared dependency
+graph" for exactly the three defect classes named above, with **no fourth "does the
+implementation structurally satisfy its interface" pass** — `bind(Interface, Implementation)`
+still accepts an `Implementation` missing a method the `Interface` Protocol declares, and the
+failure still surfaces at the first call to that method, not at `validate()`/`scan()` time. **The
+gap this entry describes is NOT closed by providify 2.0.0.**
+
+**Restated ask, in 2.0.0 terms.** A ninth `IssueKind` (e.g. `INTERFACE_NONCONFORMANT`), opt-in
+(to avoid breaking duck-typed registrations that work today), that `validate()` raises when a
+binding's implementation does not structurally satisfy a `runtime_checkable` `Protocol` (or fails
+an explicit signature comparison against an ABC) it is registered against. This is additive to
+the existing three-tier check (graph → scope → conformance), not a replacement for any of them.
+**Verified in source** at `/home/edoardo/projects/providify/` (pre-2.0.0, D-42 filing) and now
+also at the installed 2.0.0 wheel above — per the standing rule that produced U-8: read the
+source, not `ARCHITECTURE.md`.
 
 **What providify does today.** Registration is decorator-based (`@Component`, `@Singleton`,
 `@Provider`) stamping metadata at import time, plus programmatic `container.bind()` / `register()` /
@@ -944,10 +1072,11 @@ it to change. What ADR-049's **INV-3** forbids is *us* pointing it at an operato
 path, now that D-40c has established tenant-scoped plugin installation. That is a rule for our
 codebase and ADR-020's addendum, not a providify defect.
 
-📌 **Maturity note, for the same register as ADR-018's:** `providify` is **1.1.0,
-`Development Status :: 3 - Alpha`**, as `varco_core` is Alpha 1.1.3. Both are mandated. The DI
-surface ADR-049 depends on is deliberately small — decorator registration and async resolution — so
-an upstream break stays contained.
+📌 **Maturity note, for the same register as ADR-018's (updated 2026-08-25, Plan 016):**
+`providify` is now **2.0.0** — the CHANGELOG's own stated purpose for the 1.x → 2.x jump is
+"purely to escape the Alpha classifier" (`providify/CHANGELOG.md:20`), not a breaking-change
+signal. The DI surface ADR-049 depends on is deliberately small — decorator registration and
+async resolution — so an upstream break stays contained.
 
 ---
 
