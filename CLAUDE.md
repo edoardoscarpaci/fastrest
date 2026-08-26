@@ -15,8 +15,11 @@ operator Pitfalls tables.
 All commands run from the **workspace root** (`/home/edoardo/projects/varco`) using a single shared virtual environment managed by `uv`.
 
 ```bash
-# Install everything (all workspace members + dev deps)
-uv sync
+# Install everything (all workspace members + dev deps, including ruff/mypy — see below)
+uv sync --all-packages --all-extras
+
+# One-time, per clone: makes `git blame` skip the mechanical ruff sweep commits (Plan 017 / RL-6)
+git config blame.ignoreRevsFile .git-blame-ignore-revs
 
 # Run all tests for one package (every workspace member has its own tests/ dir:
 # varco_core, varco_kafka, varco_nats, varco_redis, varco_sa, varco_beanie,
@@ -42,10 +45,40 @@ uv run python -c "from varco_core.event import AbstractEventBus"
 
 The `Makefile` (workspace root) wraps the above plus lint/type-check/build/docs targets across
 every package in one call — `make lint` (`ruff check`), `make format` (`ruff format` + `ruff
-check --fix`), `make type-check` (`mypy`), `make test` / `make test PKG=varco_redis`, `make
-integration-test`, `make build`, `make publish`, `make docs` / `make docs-serve`. Run `make
-help` for the full list. `pytest-asyncio` is installed with `asyncio_mode = "auto"` in every
-package — all `async def test_*` functions run automatically without `@pytest.mark.asyncio`.
+check --fix`), `make type-check` (`mypy`), `make test` (now delegates to `scripts/unit_tests.sh`
+— runs **all eleven** workspace suites (ten packages + `examples/00-full-stack-post-api`) and
+*accumulates* pass/fail/skip into one summary instead of aborting at the first red package; `make
+test PKG=varco_redis` narrows to one), `make integration-test` / `make integration-test-clean`,
+`make build`, `make publish`, `make docs` / `make docs-serve`. Run `make help` for the full list.
+`pytest-asyncio` is installed with `asyncio_mode = "auto"` in every package — all `async def
+test_*` functions run automatically without `@pytest.mark.asyncio`.
+
+`ruff` and `mypy` are **pinned dev dependencies**, declared in the root `pyproject.toml`'s
+`[dependency-groups] lint` group (`ruff==0.16.4`, `mypy==2.3.1`) and pulled in by the `dev` group
+via PEP 735 `{ include-group = "lint" }`. `make lint`/`make type-check` invoke them as `uv run
+ruff`/`uv run mypy` — resolving the exact pin recorded in `uv.lock`. **Never invoke linting via
+`uvx ruff`** — `uvx` resolves whatever the newest ruff release is at the moment you run it, which
+can silently diverge from the pin CI enforces (see the Common Pitfalls table).
+
+### CI
+
+Two GitHub Actions workflows gate `main` (`.github/workflows/`):
+
+- **`test.yml`** — runs on every push/PR to `main`. Three jobs: `lint` (`ruff check .` + `mypy`
+  over the ten source dirs, Python 3.12 only — mypy is version-independent given a pinned
+  `python_version` in `[tool.mypy]`), `unit` (matrix `[3.12, 3.13]`, `fail-fast: false`, runs
+  `scripts/unit_tests.sh`), and `all-green` (`needs: [lint, unit]`, `if: always()`, asserts both
+  results are literally `'success'` — a *skipped* leg fails it too). **`all-green` is the only
+  required status check** — never select an individual matrix leg in branch protection, or a
+  skipped leg leaves the check permanently pending.
+- **`integration.yml`** — `push: [main]` + nightly `schedule` + `workflow_dispatch` only (not on
+  PRs). Runs `make integration-test-clean` via testcontainers, no `services:` blocks. Not a
+  required check — a nightly failure is a BACKLOG/Phase-3 signal, not a merge blocker.
+
+**Branch protection (repository setting, not in the repo tree — apply manually):** Settings →
+Branches → rule for `main` → Require status checks to pass → select **only** `Tests / All tests
+passed` (the `all-green` job). This has not yet been applied to this repository as of Plan 017 —
+apply it before relying on it.
 
 ---
 
@@ -538,6 +571,19 @@ creates/drops) against their own dev database. `make integration-test-clean` uns
 `VARCO_TEST_*` name first, guaranteeing fresh containers regardless of the calling shell's
 environment.
 
+**Integration tests run in CI too, now** (`.github/workflows/integration.yml`, Plan 017 / RL-5)
+— push to `main`, nightly `schedule`, and `workflow_dispatch`. It always invokes `make
+integration-test-clean`, never plain `make integration-test`, so every CI integration run is a
+genuine clean-room run — the same guarantee described above, just automated. This is exactly why
+CI provisions brokers via testcontainers rather than GitHub Actions `services:` blocks: a
+`services:` block can only be wired to the conftests through the **bare** env var names
+(`REDIS_URL`, `DATABASE_URL`, …) that the `VARCO_TEST_<SERVICE>_URL` contract deliberately never
+honors — so a `services:`-backed workflow would either be silently ignored by the fixtures (each
+one boots its own container anyway, doubling cost) or would require breaking the "bare names are
+never honored" invariant just to make CI convenient. Testcontainers-only keeps the "NOT a
+clean-room run" signal meaningful on the one class of run — CI — where it matters most, and keeps
+local and CI runs on byte-identical code paths.
+
 **Conformance suite opt-in** (`testkit/varco_conformance`, Plan 012 / RT6) — a shared,
 never-packaged suite of behavioral contract tests, one module per `varco_core` ABC
 (`event_bus.py`, `cache.py`, `job_store.py`, `dlq.py`). Reached via one `pythonpath =
@@ -622,6 +668,7 @@ guarantee with no conftest edits anywhere in the repo.
 | **Adding a bulk method directly to `AsyncCache`** | `isinstance(third_party_cache, AsyncCache)` silently starts returning `False` for out-of-tree caches | `AsyncCache` is `runtime_checkable` — `isinstance()` tests method presence, so any new method changes what satisfies it | Add to `BulkCache` instead (Plan 011 / D-11) — `AsyncCache` stays byte-for-byte unchanged |
 | **Forgot `<pkg>.bootstrap(container)`** | App starts, `AbstractEventBus` silently absent | `_try_resolve_component()` used to swallow every skip (import error, missing binding, construction failure) into `except Exception: pass` with zero logging | Plan 014 / audit F2 — one WARNING now names the missing binding at startup (`_lifecycle_discovery_warns()`); silence it with `VARCO_LIFECYCLE_DISCOVERY_WARN=false` if the app genuinely has no bus/job runner. Control flow is unchanged — the component is still skipped, the app still starts |
 | **`varco_memcached.async_bootstrap()` opens a pool you didn't want** | An unwanted Memcached connection is opened just from calling `async_bootstrap()` | `setup_cache` defaults `True` — unconditional `ainstall(MemcachedCacheConfiguration)`, unlike `varco_redis.di.async_bootstrap()` which defaults `setup_cache=False` | Pass `setup_cache=False` for the sync-scan-only equivalent of `bootstrap()`. Note the defaults deliberately differ: `varco_redis`'s `async_bootstrap` also serves a streams/event-bus path where no cache is wanted; memcached's only reason to exist is the cache, so its default stays `True` for backward compatibility (Plan 014 / audit F7) |
+| **Linting with `uvx ruff`** | Local green, CI red (or vice versa) with no code change | `uvx` resolves the newest ruff release at invocation time; CI resolves the pin recorded in `uv.lock` | Always `uv run ruff`, never `uvx ruff` — the pin lives in the root `[dependency-groups] lint` group (Plan 017 / RL-6) |
 
 Feature-specific operational pitfalls (wrong env var → wrong runtime behaviour) live in each feature's own `technical_docs/features/*.md` **Pitfalls** section, not here.
 

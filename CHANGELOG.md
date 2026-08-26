@@ -9,6 +9,53 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — live CI, workspace lint/type gates (Plan 017, RL-5 / RL-6)
+
+- **Two GitHub Actions workflows are now live** — `.github/workflows/test.yml` (lint + mypy +
+  unit tests across a `[3.12, 3.13]` matrix, aggregated into a single `all-green` required
+  check) and `.github/workflows/integration.yml` (testcontainers-backed integration suite on
+  push-to-`main`, nightly, and manual dispatch). Both were previously 100% commented-out
+  skeletons — nothing ran automatically before this release.
+- **Root `[tool.ruff]` and `[tool.mypy]` configuration** — the workspace now has real,
+  version-pinned lint and type-check gates (`ruff==0.16.4`, `mypy==2.3.1`, declared in a new
+  `[dependency-groups] lint` group and pulled into `dev` via PEP 735). Previously neither tool
+  was declared as a dependency anywhere and both ran on ambient/unpinned versions if run at all.
+- **`scripts/unit_tests.sh` (new)** — the shared entry point for `make test` and CI's `unit` job.
+  Runs all ten packages plus the `examples/00-full-stack-post-api` suite and *accumulates*
+  pass/fail/skip into one summary instead of aborting at the first red package (the previous
+  `Makefile` loop used `|| exit 1`, hiding every failure after the first).
+- **`.git-blame-ignore-revs` (new)** — lists the mechanical ruff autofix sweep commits so
+  `git blame` skips them; run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once per
+  clone.
+- **`varco_nats` now ships `py.typed`.** `varco_nats/pyproject.toml` has always declared the
+  `"Typing :: Typed"` classifier, but the marker file itself was missing from the package —
+  every downstream type-checker consuming `varco_nats` was silently treating its public API as
+  untyped (`Any`), regardless of the classifier's promise. Fixed and wheel-verified; this is the
+  only package that changes what a downstream type-checker sees.
+- **`varco_casbin` added to the `Makefile` package list.** It was silently excluded from `make
+  lint`, `make format`, `make type-check`, `make test`, `make build`, and `make publish` — it is
+  now linted, type-checked, unit-tested, and built for the first time via the shared `make`
+  targets (it was always covered by its own `varco_casbin/tests/` suite run directly, just never
+  through the aggregate `make`/CI entry points).
+- **`.pre-commit-config.yaml`'s ruff hook bumped `v0.4.1` → `v0.16.4`** — unplanned but required:
+  `v0.4.1` predates the `UP046`/`UP047` rule codes now referenced in the new `[tool.ruff.lint]`
+  ignore list and could not parse the config, blocking every commit.
+
+### Fixed — runtime bugs surfaced by the new mypy gate (Plan 017, RL-6)
+
+- **`varco_fastapi`'s `RequestContextMiddleware`** — `_maybe_tenant_context()` used `async with`
+  on `varco_core.service.tenant.tenant_context()`, which is a **synchronous** context manager.
+  Every request carrying a `tenant_id` raised `AttributeError` at this point. Fixed to `with`.
+- **`varco_fastapi`'s A2A custom-route dispatch** (`router/a2a/router_source.py`) called a
+  nonexistent `client.request(...)`; fixed to the real internal `client._request(method=,
+  path=, path_params=, body=)`.
+- **`varco_core.tenancy.control.consumer`** — the no-DLQ fallback path constructed
+  `RetryExhaustedError` without its required `attempts`/`last_exc` arguments, raising `TypeError`
+  instead of the intended retry error on that path.
+- **`varco_core.job.base.enqueue_via()`** — the `overlap:` parameter was annotated with the wrong
+  enum (`GapPolicy` instead of `OverlapPolicy`), and a `run_at_wall is None` guard was missing
+  when `tz=` was supplied.
+
 ### Changed — `providify` dependency bumped to 2.0.0 (Plan 016, Phases A–B)
 
 - **`providify>=2.0.0`** across all ten workspace members (`varco_core`,

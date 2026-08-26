@@ -2,6 +2,12 @@
 
 A modular Python framework for building expressive, backend-agnostic REST APIs on top of SQLAlchemy and MongoDB (Beanie/Motor). It provides a clean domain model layer, a generic service layer with built-in authorization, a fluent query builder with AST-based filtering, automatic ORM class generation, and a pluggable type coercion system.
 
+**CI**: every push and pull request to `main` runs a live GitHub Actions gate — `ruff` +
+`mypy` + the full unit suite across Python 3.12 and 3.13
+(`.github/workflows/test.yml`) — plus a nightly + push-to-`main` integration run against real
+brokers via testcontainers (`.github/workflows/integration.yml`). See
+[CLAUDE.md](CLAUDE.md#ci) for the job breakdown.
+
 ---
 
 ## Packages
@@ -38,7 +44,7 @@ The [`examples/00-full-stack-post-api/`](examples/00-full-stack-post-api/) direc
 
 ```bash
 git clone https://github.com/edoardoscarpaci/varco && cd varco
-uv sync
+uv sync --all-packages --all-extras
 cd examples/00-full-stack-post-api && docker compose up -d
 # app at http://localhost:8000/docs
 ```
@@ -1967,6 +1973,12 @@ uv run pytest varco_redis/tests/
 uv run pytest varco_kafka/tests/ -m integration
 uv run pytest varco_redis/tests/ -m integration
 ```
+
+`make test` (`scripts/unit_tests.sh`) runs the same per-package suites as CI's `unit` job —
+all ten packages plus the `examples/00-full-stack-post-api` suite, one accumulated summary
+rather than aborting on the first red package. `make lint` / `make type-check` use the same
+`uv run ruff` / `uv run mypy` commands CI's `lint` job runs — never `uvx ruff` (see CLAUDE.md's
+Common Pitfalls table).
 
 ### providify's pytest fixtures (providify ≥ 2.0.0)
 
