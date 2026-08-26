@@ -156,18 +156,12 @@ class PostService(
         """
         Return the ``AsyncRepository[Post]`` from the open unit-of-work.
 
-        ``SQLAlchemyUnitOfWork`` exposes repositories as attributes derived
-        from the entity class name: ``Post → uow.posts``.  The attribute is
-        set by ``SQLAlchemyUnitOfWork._begin()`` using the ``repo_factories``
-        dict populated by ``RepositoryProvider.make_uow()``.
-
-        DESIGN: attribute access over ``uow.get_repository(Post)``
-            ✅ Matches the ``SQLAlchemyUnitOfWork`` API — no ``get_repository``
-               method exists on the UoW; only on ``RepositoryProvider`` directly.
-            ✅ Type-safe at the call site — IDE can infer the repo type from
-               the attribute declaration in ``SQLAlchemyUnitOfWork``.
-            ❌ Attribute name must match the lowercased plural derived name —
-               ``Post → posts``, ``UserRole → userroles``.
+        Repositories are exposed as entity-derived attributes — ``Post`` →
+        ``uow.posts`` — the sanctioned accessor documented by
+        ``RepositoryProvider.make_uow()`` and produced by
+        ``SQLAlchemyUnitOfWork._begin()``.  No ``AsyncUnitOfWork`` defines a
+        ``get_repository()`` method; that name belongs to ``RepositoryProvider``
+        itself, not to a unit of work.
 
         Args:
             uow: The open ``AsyncUnitOfWork`` for this request.

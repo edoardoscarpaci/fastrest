@@ -90,17 +90,12 @@ class PostService(AsyncService[Post, UUID, PostCreate, PostRead, PostUpdate]):
         """
         Return the ``AsyncRepository[Post]`` from the open unit-of-work.
 
-        ``BeanieUnitOfWork`` exposes repositories as attributes named after the
-        entity class: ``Post → uow.posts`` (lowercased + "s").
-        The attribute is set by ``BeanieUnitOfWork._begin()`` from the
-        ``repo_factories`` dict built by ``BeanieRepositoryProvider.make_uow()``.
-
-        DESIGN: attribute access over ``uow.get_repository(Post)``
-            ✅ Matches the ``BeanieUnitOfWork`` API — no ``get_repository``
-               method exists on the UoW object; only on ``RepositoryProvider``.
-            ❌ Attribute name must match the auto-derived name: ``Post → "posts"``.
-               Derived by ``_repo_attr()`` in ``provider.py``:
-               ``cls.__name__.lstrip("_").lower() + "s"`` → "posts".
+        Repositories are exposed as entity-derived attributes — ``Post`` →
+        ``uow.posts`` — the sanctioned accessor documented by
+        ``BeanieRepositoryProvider.make_uow()`` and produced by
+        ``BeanieUnitOfWork._begin()``.  No ``AsyncUnitOfWork`` defines a
+        ``get_repository()`` method; that name belongs to ``RepositoryProvider``
+        itself, not to a unit of work.
 
         Args:
             uow: The open ``AsyncUnitOfWork`` for this request.

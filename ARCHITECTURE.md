@@ -972,7 +972,6 @@ class UserService(
         return uow.users
 
 
-
 # Method resolution order (MRO):
 # UserService → CacheServiceMixin → TenantAwareService → ValidatorServiceMixin
 #   → AsyncService → ...

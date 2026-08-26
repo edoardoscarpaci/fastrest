@@ -2245,7 +2245,6 @@ class UserService(
         return uow.users
 
 
-
 # 3. Use @cached on methods (works with any async callable)
 from varco_core.cache import cached
 
