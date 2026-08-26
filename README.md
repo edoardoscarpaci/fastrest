@@ -2044,6 +2044,13 @@ rather than aborting on the first red package. `make lint` / `make type-check` u
 `uv run ruff` / `uv run mypy` commands CI's `lint` job runs — never `uvx ruff` (see CLAUDE.md's
 Common Pitfalls table).
 
+`make chaos-test` / `make chaos-test-clean` run the **chaos** suite — tests that kill, pause, or
+restart a real container mid-test to assert guarantees `make integration-test` cannot: outbox
+entries surviving a broker/database restart, a `CircuitBreaker` opening and recovering around a
+black-holed dependency, and a job lease correctly fencing out a crashed worker. Excluded from
+`make integration-test` by default (see CLAUDE.md's Test Conventions "Chaos tests" paragraph for
+the full design).
+
 ### providify's pytest fixtures (providify ≥ 2.0.0)
 
 Installing `providify` activates its own `pytest11` plugin — four function-scoped, yield-based

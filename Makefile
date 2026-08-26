@@ -20,6 +20,17 @@
 #   point, so every CI integration run is a genuine clean-room run. It is
 #   NOT a required check; `.github/workflows/test.yml`'s `all-green` job is
 #   the only one (RL-5, plans/017-ci-green-workflows-and-lint-type-gates.md).
+#   make chaos-test        — chaos tests: kills/pauses/restarts a real
+#                            container mid-test (requires Docker; honors any
+#                            VARCO_TEST_*_URL override present in the shell).
+#                            Excluded from `make integration-test` by default.
+#   make chaos-test PKG=varco_redis — chaos tests for one package
+#   make chaos-test-clean  — chaos tests, guaranteed clean-room (unsets every
+#                            VARCO_TEST_*_URL override first)
+#   `.github/workflows/integration.yml`'s `chaos` job runs
+#   `make chaos-test-clean` (nightly + workflow_dispatch only, never on
+#   push:main) — it is NOT a required check, same disposition as the
+#   `integration` job (Plan 018 / RT7-ci).
 #   make build            — build wheels for all packages
 #   make build PKG=varco_redis — build one package
 #   make publish          — publish all dist/* to PyPI (requires UV_PUBLISH_TOKEN)
@@ -89,6 +100,16 @@ help:
 	@echo "                                — .github/workflows/integration.yml runs"
 	@echo "                                exactly this target (push:main + nightly +"
 	@echo "                                workflow_dispatch); not a required check"
+	@echo "  make chaos-test              chaos tests: kills/pauses/restarts a real"
+	@echo "                                container mid-test (requires Docker; honors"
+	@echo "                                VARCO_TEST_*_URL overrides if set); excluded"
+	@echo "                                from integration-test by default"
+	@echo "  make chaos-test PKG=varco_redis  chaos tests (one package)"
+	@echo "  make chaos-test-clean        chaos tests, clean-room (unsets every"
+	@echo "                                VARCO_TEST_*_URL override first) — the"
+	@echo "                                integration.yml 'chaos' job runs exactly"
+	@echo "                                this target (nightly + workflow_dispatch"
+	@echo "                                only); never a required check"
 	@echo "  make build                   build wheels + sdists (all packages)"
 	@echo "  make build PKG=varco_redis   build one package"
 	@echo "  make publish                 publish dist/* to PyPI"
@@ -166,6 +187,37 @@ integration-test-clean:
 		env -u VARCO_TEST_REDIS_URL -u VARCO_TEST_MONGO_URL -u VARCO_TEST_POSTGRES_URL \
 			-u VARCO_TEST_KAFKA_URL -u VARCO_TEST_MEMCACHED_URL -u VARCO_TEST_NATS_URL \
 			bash scripts/integration_tests.sh; \
+	fi
+
+# ── Chaos tests (Plan 018 / RT7b) ──────────────────────────────────────────────
+# `chaos-test` / `chaos-test-clean` mirror `integration-test` / `integration-test-clean`
+# above exactly, differing only in MARKER_EXPR: "integration and chaos" instead
+# of the script's own default "integration and not chaos". Chaos tests kill,
+# pause, or restart a real container mid-test (§RT7-shape) — never run as part
+# of the default `integration-test` target, and never a required CI check
+# (.github/workflows/integration.yml's `chaos` job, nightly + dispatch only).
+.PHONY: chaos-test
+chaos-test:
+	@if [ -n "$(PKG)" ]; then \
+		MARKER_EXPR="integration and chaos" bash scripts/integration_tests.sh $(PKG); \
+	else \
+		MARKER_EXPR="integration and chaos" bash scripts/integration_tests.sh; \
+	fi
+
+# `chaos-test-clean` is the guaranteed clean-room entry point for chaos tests —
+# same six VARCO_TEST_*_URL names unset first as `integration-test-clean`, so a
+# stray shell env var can never point a chaos run at a container it does not
+# own (and is therefore not allowed to restart/pause).
+.PHONY: chaos-test-clean
+chaos-test-clean:
+	@if [ -n "$(PKG)" ]; then \
+		env -u VARCO_TEST_REDIS_URL -u VARCO_TEST_MONGO_URL -u VARCO_TEST_POSTGRES_URL \
+			-u VARCO_TEST_KAFKA_URL -u VARCO_TEST_MEMCACHED_URL -u VARCO_TEST_NATS_URL \
+			MARKER_EXPR="integration and chaos" bash scripts/integration_tests.sh $(PKG); \
+	else \
+		env -u VARCO_TEST_REDIS_URL -u VARCO_TEST_MONGO_URL -u VARCO_TEST_POSTGRES_URL \
+			-u VARCO_TEST_KAFKA_URL -u VARCO_TEST_MEMCACHED_URL -u VARCO_TEST_NATS_URL \
+			MARKER_EXPR="integration and chaos" bash scripts/integration_tests.sh; \
 	fi
 
 # ── Build ─────────────────────────────────────────────────────────────────────

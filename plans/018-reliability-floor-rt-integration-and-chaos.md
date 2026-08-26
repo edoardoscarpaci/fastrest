@@ -542,36 +542,36 @@ against production code is a finding, never a licence to edit `varco_*/varco_*/`
 
 ### Phase 0 — scaffolding (gates every later phase)
 
-1. [ ] `testkit/varco_chaos/__init__.py` (**new**) — package marker + module docstring stating
+1. [x] `testkit/varco_chaos/__init__.py` (**new**) — package marker + module docstring stating
        that this package is **never packaged** (same status as `varco_conformance`), that it holds
        **helpers only, never test classes** (§RT7-home), and that it is the only place in the repo
        allowed to call `get_wrapped_container()`.
-2. [ ] `testkit/varco_chaos/containers.py` (**new**) — `ChaosContainer` per §chaos-fixture:
+2. [x] `testkit/varco_chaos/containers.py` (**new**) — `ChaosContainer` per §chaos-fixture:
        `__init__(container, *, ready: Callable[[str], bool] | None = None)`,
        `restart(timeout: int = 5)`, `paused()` (contextmanager, `unpause()` in `finally`),
        `wait_ready(timeout: float = 60.0)`. Full docstring with `Args`/`Raises`/`Edge cases`/
        `Async safety`, and a `DESIGN:` block recording ✅ port/ID survivorship via docker-py
        `restart()` / ❌ `.stop()`+`.start()` deletes and re-ports (research 002 §1, §2) — so the
        next reader cannot "simplify" it back to the broken form.
-3. [ ] `testkit/varco_chaos/leases.py` (**new**) — `abandon_lease(store, job_id)` helper for the
+3. [x] `testkit/varco_chaos/leases.py` (**new**) — `abandon_lease(store, job_id)` helper for the
        in-process worker-crash scenario: cancels the renew task without renewing, leaving the
        claim stale. Keeps the same shape in both `varco_sa` and `varco_redis` lease tests.
-4. [ ] `varco_kafka/pyproject.toml`, `varco_redis/pyproject.toml`, `varco_sa/pyproject.toml`,
+4. [x] `varco_kafka/pyproject.toml`, `varco_redis/pyproject.toml`, `varco_sa/pyproject.toml`,
        `varco_fastapi/pyproject.toml`, `varco_nats/pyproject.toml` — add to
        `[tool.pytest.ini_options] markers`:
        `"chaos: kills/pauses/restarts a real container; excluded from -m integration by default — use make chaos-test"`.
        In the same edit **verify** each already has `pythonpath = ["../testkit"]` (as
        `varco_core/pyproject.toml:95` does) and add it where missing.
-5. [ ] `scripts/integration_tests.sh` — introduce `MARKER_EXPR="${MARKER_EXPR:-integration and not chaos}"`
+5. [x] `scripts/integration_tests.sh` — introduce `MARKER_EXPR="${MARKER_EXPR:-integration and not chaos}"`
        near the top; replace the hardcoded `-m integration` at **`:184`** and **`:190`** with
        `-m "$MARKER_EXPR"`. Print `Marker expression: <expr>` in the header block (next to the
        clean-room banner, `:81-86`) and again in the summary (`:226-231`), with the explicit hint
        `chaos tests excluded — run 'make chaos-test'` when the default expression is active.
-6. [ ] `Makefile` — add `chaos-test` and `chaos-test-clean` targets mirroring
+6. [x] `Makefile` — add `chaos-test` and `chaos-test-clean` targets mirroring
        `integration-test`/`integration-test-clean` (`:147-169`) exactly, differing only by
        `MARKER_EXPR="integration and chaos"`. `chaos-test-clean` uses the same `env -u` list of
        six `VARCO_TEST_*_URL` names. Add both to the `help` target and the `Makefile:4-25` header.
-7. [ ] **Verify:** `make integration-test PKG=varco_core` still behaves identically (exit 5 →
+7. [x] **Verify:** `make integration-test PKG=varco_core` still behaves identically (exit 5 →
        "no tests" is still not a failure, `:195-201`); `make chaos-test PKG=varco_core` reports
        "no tests" rather than erroring. `make lint && make type-check`.
        Commit: `RT7: chaos scaffolding — testkit/varco_chaos, chaos marker, MARKER_EXPR`.
@@ -721,7 +721,7 @@ against production code is a finding, never a licence to edit `varco_*/varco_*/`
         advisory lock, kill the holding connection (`pg_terminate_backend`, or
         `chaos.restart()` if the former proves flaky), assert the next lifespan acquires the lock
         and applies the pending revision rather than hanging to `lock_timeout`.
-34. [ ] `.github/workflows/integration.yml` — add the `chaos` job per §RT7-ci: same
+34. [x] `.github/workflows/integration.yml` — add the `chaos` job per §RT7-ci: same
         checkout/setup-python/setup-uv/`uv sync --locked --all-packages --all-extras` preamble
         (reuse the **existing pinned SHAs** at `:48-52` verbatim — do not re-derive them),
         `if: github.event_name != 'push'`, `run: make chaos-test-clean`, its own
@@ -734,26 +734,26 @@ against production code is a finding, never a licence to edit `varco_*/varco_*/`
 
 ### Phase 7 — docs and close-out (same commits as the code, per CLAUDE.md)
 
-36. [ ] `CLAUDE.md` §*Commands* — add `make chaos-test` / `make chaos-test-clean` and state that
+36. [x] `CLAUDE.md` §*Commands* — add `make chaos-test` / `make chaos-test-clean` and state that
         `make integration-test` now **excludes** chaos by default (`MARKER_EXPR`).
-37. [ ] `CLAUDE.md` §*Test Conventions* — add a **"Chaos tests"** paragraph: the `chaos` marker and
+37. [x] `CLAUDE.md` §*Test Conventions* — add a **"Chaos tests"** paragraph: the `chaos` marker and
         why it is additive to `integration`; the three container scopes and when each applies
         (session-shared → function-scoped `*_container_fresh` → module-scoped `*_container_chaos`,
         §chaos-fixture); that `ChaosContainer` is the only sanctioned caller of
         `get_wrapped_container()` and **why `.stop()`+`.start()` is forbidden** (new host port,
         research 002 §1); that chaos runs nightly + dispatch only, never on `push`, and is never a
         required check.
-38. [ ] `CLAUDE.md` §*CI* subsection — document `integration.yml`'s second job and its
+38. [x] `CLAUDE.md` §*CI* subsection — document `integration.yml`'s second job and its
         `if: github.event_name != 'push'` guard.
-39. [ ] `CLAUDE.md` §*Common Pitfalls* — one row: **"restarting a session-scoped container"** →
+39. [x] `CLAUDE.md` §*Common Pitfalls* — one row: **"restarting a session-scoped container"** →
         symptom "unrelated tests in the same package fail with connection errors after a chaos
         test" → cause "the session-scoped fixture is shared by the whole package suite" → fix
         "declare a module-scoped `*_container_chaos` fixture **inside the chaos module**, never in
         `conftest.py`".
-40. [ ] `README.md` — testing section: add `make chaos-test` to the command list and one sentence
+40. [x] `README.md` — testing section: add `make chaos-test` to the command list and one sentence
         on what the chaos suite asserts (outbox durability, breaker behaviour under a black hole,
         lease fencing). Keep it short; the design lives in this plan.
-41. [ ] `BACKLOG.md` §Phase 3 — apply **every** row of the *Status corrections* table above, then:
+41. [x] `BACKLOG.md` §Phase 3 — apply **every** row of the *Status corrections* table above, then:
         close **RT8** ✅ done (already in both runners) and **RT2/RT3/RT4/RT5** as this plan
         completes them; downgrade **RT9** from ⬜ pending to its real residual and close it; split
         **RT7** into **RT7a** (in-process lease fencing — done in Phase 5) and **RT7b** (container
@@ -765,7 +765,7 @@ against production code is a finding, never a licence to edit `varco_*/varco_*/`
         migration integration coverage** (§RT9-scope), (c) **many-connection WS/SSE scale test**
         blocked on undocumented Actions fd limits (§RT4-backpressure), (d) every
         `xfail(strict=True)` filed in Steps 12/15/19/24/28/35.
-42. [ ] `CHANGELOG.md` `## [Unreleased]` — chaos test suite + `make chaos-test`; NATS/Kafka/Casbin/
+42. [x] `CHANGELOG.md` `## [Unreleased]` — chaos test suite + `make chaos-test`; NATS/Kafka/Casbin/
         WS real-broker coverage; the nightly chaos CI job. **Test-only release** — call out
         explicitly that no runtime package changed.
 43. [ ] **Final:** `make lint && make type-check && make test && make integration-test-clean &&
@@ -890,3 +890,210 @@ make lint && make type-check && make test \
   broker or database restart; the breaker opens on a black-holed dependency; a reaped lease fences
   its zombie holder; a crashed migration lock holder does not wedge the next deploy." It is not
   "varco is chaos-tested". Do not let the CHANGELOG overstate it.
+
+---
+
+## Execution log — resume state (as of 2026-08-26)
+
+A `/build` run was started and **interrupted mid-way** (API session limit). This section records
+exactly what exists so a fresh session can resume without redoing work. **Read this before
+re-running `/build`.**
+
+### Git state
+
+- Branch: **`plan-018-reliability-floor`**, cut from `main` at `241aada`.
+- **Nothing is committed.** All work below is in the uncommitted working tree.
+- `main` is untouched. Nothing pushed. CI has not run.
+- Intent (per the original request): finish on this branch, then merge to `main` **once**, so
+  GitHub Actions fires a single time.
+
+### ✅ DONE — Phase 1-6 test modules (18 files, uncommitted)
+
+The test-writer phase is **complete**. Do **not** rewrite, reshape or "fix" these files.
+All 18 pass `uv run ruff check` and `uv run ruff format --check`.
+
+| Plan steps | File | State |
+|---|---|---|
+| 8 | `varco_nats/tests/test_nats_semantics_integration.py` | new, 3 tests — 1 red (Finding B below) |
+| 9 | `varco_nats/tests/test_nats_channel_integration.py` | new, 4 tests — 3 red (Finding C below) |
+| 10 | `varco_nats/tests/test_nats_dlq_integration.py` | new, 1 test — green |
+| 11 | `varco_nats/tests/test_nats_health_chaos.py` | new, 1 test — blocked on `varco_chaos` |
+| 13-14 | `varco_casbin/tests/test_concurrent_writers_integration.py` | new, 3 tests — **all green** (the Risks section's adapter assumption **holds**) |
+| 16 | `varco_ws/tests/conftest.py` | modified — `/ws/bp` endpoint at `:106-158` |
+| 17-18 | `varco_ws/tests/test_ws_backpressure_integration.py` | new, 2 tests — green, 3/3 consecutive |
+| 20 | `varco_kafka/tests/test_kafka_eos_integration.py` | new, 4 tests — **blocked, see Finding A** |
+| 21 | `varco_kafka/tests/test_kafka_rebalance_integration.py` | modified, 1→3 tests — green (74 s) |
+| 22 | `varco_kafka/tests/test_kafka_offsets_integration.py` | modified, 3→4 tests — green |
+| 23 | `varco_kafka/tests/test_kafka_eos.py` | modified — docstring only, as specified |
+| 25 | `varco_fastapi/tests/test_app_migrations_integration.py` | modified, 6→7 tests — green (34 s) |
+| 26 | `varco_sa/tests/test_sa_job_lease_crash.py` | new, 2 tests — blocked on `varco_chaos` |
+| 27 | `varco_redis/tests/test_redis_job_lease_crash.py` | new, 2 tests — blocked on `varco_chaos` |
+| 29-30 | `varco_kafka/tests/test_kafka_chaos.py` | new, 2 tests — blocked on `varco_chaos` |
+| 31 | `varco_sa/tests/test_sa_chaos.py` | new, 1 test — blocked on `varco_chaos` |
+| 32 | `varco_redis/tests/test_redis_chaos.py` | new, 1 test — blocked on `varco_chaos` |
+| 33 | `varco_fastapi/tests/test_migration_chaos.py` | new, 1 test — blocked on `varco_chaos` |
+
+"blocked on `varco_chaos`" = collection fails with exactly
+`ModuleNotFoundError: No module named 'varco_chaos'`. **This is expected and correct** — Steps 1-3
+have not been written yet. **No file fails importing a `varco_*` module.**
+
+### ❌ NOT STARTED — everything else
+
+- **Steps 1-3** — `testkit/varco_chaos/` does not exist. `testkit/` contains only
+  `varco_conformance`. This is the gate for six test modules.
+- **Step 4** — the `chaos` marker is **not** registered in any `[tool.pytest.ini_options] markers`
+  list. (`pythonpath = ["../testkit"]` **is** already present in varco_kafka, varco_nats,
+  varco_fastapi, varco_redis, varco_sa, varco_ws — Step 4's verify half is done.)
+- **Steps 5-7** — `scripts/integration_tests.sh` `MARKER_EXPR` and the `Makefile` `chaos-test` /
+  `chaos-test-clean` targets: not written.
+- **Step 34** — the `chaos` job in `.github/workflows/integration.yml`: not written.
+- **Steps 36-43** — CLAUDE.md, README.md, BACKLOG.md, CHANGELOG.md: untouched.
+
+### Questions the plan left open, now ANSWERED
+
+- **Step 21 / Risks §3** — *"whether the existing `test_kafka_rebalance_integration.py`
+  pre-creates its topic is unverified"*. **It does pre-create it.** Safe to extend; done.
+- **Risks §1 — casbin-async-sqlalchemy-adapter concurrent-writer semantics.** The assumption
+  **holds**. All three Step 13 tests are green against real Postgres. No BACKLOG finding.
+
+### Findings that must be carried into the resumed build
+
+**A. BLOCKING PREREQUISITE the plan omits — Kafka transactions hang.** Every Step 20 EOS test
+times out (560 s × 3). Root-caused with a standalone probe: `AIOKafkaProducer(transactional_id=...)`
+`.start()` never returns against a default `testcontainers.kafka.KafkaContainer()` — a single
+broker cannot create `__transaction_state` at the default replication factor 3. **Proven fix**, at
+`varco_kafka/tests/conftest.py:53`:
+
+```python
+with KafkaContainer().with_env(
+    "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1"
+).with_env("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") as container:
+```
+
+Probe result with the two env vars: `producer started (init_transactions OK)` / `txn committed OK`.
+**[x] Applied** (`varco_kafka/tests/conftest.py`, resumed session). It is a test-fixture change,
+inside the plan's allowed Non-goals exception (a) for a package's own `tests/conftest.py` — but it
+is a **deviation from the plan as written**, called out here rather than in a commit message since
+this session does not commit. Treated as a new Phase-0 step per the resume instructions.
+
+**B. NATS `AT_LEAST_ONCE` does not redeliver after a handler raises.**
+`varco_nats/varco_nats/bus.py:565-573` acks in a `finally`, and its own docstring says the message
+is acked *"whether or not a handler raised … JetStream only redelivers on a process crash."*
+Step 8's test as specified contradicts the documented implementation. Per the standing rule →
+`xfail(strict=True, reason="BUG: ...")` + a BACKLOG row. **Do not edit `bus.py`.**
+
+**C. NATS `channel_exists` is a "has messages" predicate, not an "exists" predicate.**
+`channel.py:377-395` and `:417` — `list_channels` returns *"channels that currently carry
+messages"*, and `declare_channel`'s `channel` arg is *"only used for logging"*. So
+`declare_channel(...)` → `channel_exists(...)` is `False` with nothing published, and 3 of Step 9's
+4 round-trips fail **structurally**. Genuine finding: the `ChannelManager` ABC contract is
+unsatisfiable on NATS. → `xfail(strict=True)` on the three + a BACKLOG row naming the ABC-contract
+gap. **Do not edit `channel.py`.**
+
+**D. WS backpressure margin is machine-dependent and thin.** Steps 17-18 required raising the
+volume to `_N=6000` × `_PAYLOAD=64 KiB` (~384 MB in flight) to make assertion (1)
+(`slow_received < _N`) engage. Calibration recorded in the module: 2000×16 KiB **fails**,
+3000×64 KiB **fails**, 6000×64 KiB **passes**. Cause: uvicorn's `websockets_impl` buffers
+server-side writes with no applied `write_limit`, so the client's `max_queue=1` does not propagate
+into varco's per-client `asyncio.Queue` until the buffer saturates. §RT4-backpressure explicitly
+declined to use `write_limit`, which is why the margin is this thin. **3/3 clean runs locally
+(~95 s each); Step 19 asks for 5 — 2 runs still owed.** File a BACKLOG row about the
+machine-dependent margin. If it flakes, the Edge-cases table governs: **raise the volume, never
+relax the assertion.**
+
+**E. Test-side bugs found and already fixed** (recorded so they are not "re-discovered"):
+- aiokafka fires `on_partitions_revoked` with an **empty set on the initial join**; the
+  precondition now anchors on a post-initial-join slice. Characterized in the docstring.
+- The commit-on-revoke listener called `consumer.commit()` unconditionally → `IllegalStateError:
+  No partitions assigned` on that initial empty revoke. Now guarded on `consumer.assignment()`.
+- That same test decoded `json.loads(record.value)["data"]["order_id"]`, but varco's
+  `JsonEventSerializer` envelope is **flat** — `{"__event_type__", "event_id", "timestamp",
+  <fields>}`, with no `"data"` wrapper.
+
+### Plan line-reference drift (minor, verify before quoting)
+
+| Plan cites | Actual |
+|---|---|
+| `bus.py:376` (EXACTLY_ONCE dedup branch) | `bus.py:377-379` |
+| `bus.py:549` (`pre_ack`) | `bus.py:552` |
+| Step 16 as work to be done | **already implemented** at `varco_ws/tests/conftest.py:106-158`, which shifts every plan line number after `:105` in that file |
+| `varco_casbin/tests/conftest.py:66` "function-scoped `casbin_db_url`" | correct — no drift |
+| `varco_ws/tests/conftest.py:64-128` `_build_app()`, `:94-98` comment | correct |
+| `outbox.py:809-830`, `websocket.py:600-609`, `websocket.py:469-516`, `job/base.py:82,682` | **unverified** — could not be reached while `varco_chaos` is absent |
+| Step 3's description of `abandon_lease` ("cancels the renew task without renewing, leaving the claim stale") | As shipped (`testkit/varco_chaos/leases.py`), it is a **documented no-op** — neither `test_sa_job_lease_crash.py` nor `test_redis_job_lease_crash.py` ever starts a background renew task, so there is nothing to cancel; "abandoning" the lease is achieved simply by the test not calling `renew()` again. The function's own docstring explains this and names the no-op as deliberate: it exists as a named, searchable call site for the moment the worker "crashes", and gives a future real background-renew-task refactor exactly one place to add a `task.cancel()` call so both twin tests would pick it up from one edit |
+| BACKLOG RT2 file count (plan says 10, BACKLOG says 13) | **unverified** |
+
+### How to resume
+
+Re-run `/build plans/018-reliability-floor-rt-integration-and-chaos.md` **on the existing
+`plan-018-reliability-floor` branch**, and tell it:
+
+1. **Skip the test-writer phase entirely** — the 18 modules above are done and verified.
+2. Go straight to the implementer with: Phase 0 (Steps 1-7) **plus Finding A's conftest fix as a
+   new Phase-0 step**, then Step 34, then Phase 7 (Steps 36-43), applying Findings B/C as
+   `xfail(strict=True)` + BACKLOG rows.
+3. **Bound every command** — pass an explicit tool `timeout`, wrap pytest/make in shell `timeout`
+   (≤ 480 s for integration/chaos), pipe through `| tail -N`, never run the whole repo suite in
+   one call, retry at most once. An earlier foreground run appeared to deadlock on an unbounded
+   testcontainers boot.
+4. **Do not run `gh workflow run` / `gh run watch`** (Steps 35, 43 ask for it) — the branch is
+   unpushed and CI must fire exactly once, on the final merge to `main`.
+5. Standing rule, unchanged: **nothing under `varco_*/varco_*/` may be edited.** A red test is a
+   finding (`xfail(strict=True)` + BACKLOG row), never a licence to patch production source.
+
+### Second resume — completed 2026-08-26
+
+Steps 1-7, the Finding A conftest fix, Step 34, and Phase 7 (Steps 36-42) are now done, all
+uncommitted on `plan-018-reliability-floor`. Step 43 is **partially** done — `make lint`/`make
+type-check`/`make test` (per-touched-package, not the full `make test` sweep) all green; the full
+`make integration-test-clean`/`make chaos-test-clean` sweep and `gh workflow run integration.yml`
+were deliberately **not** run (explicit scope instruction: bound every command, never the whole
+repo suite in one call, never trigger CI from this unpushed branch).
+
+**New findings from wiring the scaffolding, beyond B/C/D:**
+
+- **`ChaosContainer.wait_ready()` bug, found and fixed (testkit-only, not a scope violation —
+  this file is Steps 1-3's own new code, not a "the 18 test modules" file).** The original
+  implementation matched the readiness predicate against `DockerContainer.get_logs()`'s full
+  cumulative history. After `restart()`, a historical "ready" line from the container's
+  *original* boot is still present in that history, so the predicate matched instantly and
+  falsely — before the restarted process had actually finished coming back up, producing
+  `ConnectionRefusedError` on the next connection attempt. Fixed by tracking a per-stream byte
+  offset, captured immediately before `restart()` issues the docker restart call, and matching
+  the predicate only against log content at-or-after that offset. Verified against
+  `test_nats_health_chaos.py`/`test_redis_chaos.py` (pause-based, unaffected by the bug, still
+  green) and `test_sa_chaos.py` (restart-based, where the bug reproduced and the fix corrected
+  the false-positive timing).
+- **RT7b-port-remap (new, load-bearing, NOT fixed this session)**: `docker-py`'s
+  `Container.restart()` did not preserve the host port mapping in this session's Docker
+  27.5.1/WSL2 environment — verified independently with raw `docker-py`, no testcontainers
+  involved (`before restart ports: {'HostPort': '32811'}` → `after: {'HostPort': '32812'}`).
+  This contradicts research 002 §1's port-survivorship claim that every restart-based chaos
+  test's "capture the DSN once, reuse across restarts" pattern depends on. Reproduced through
+  `ChaosContainer`/`test_sa_chaos.py`. **Not worked around** — doing so would require rewriting
+  the already-written Phase 6 test files' DSN-caching pattern, out of this session's scope.
+  Filed as its own BACKLOG.md row (`RT7b-port-remap`) and a Common Pitfalls table row in
+  CLAUDE.md. Not yet re-verified against a native Linux dockerd (the actual GitHub Actions
+  runner) — genuinely unknown whether the nightly `chaos` job will hit this.
+- **RT7a-redis-claim-guard (new)**: running the previously-`varco_chaos`-blocked
+  `test_redis_job_lease_crash.py` for the first time surfaced a genuine cross-backend
+  disagreement — `RedisJobStore.reap_expired_leases()` does not release the SET-NX-EX claim
+  guard key `try_claim()` created, so a legitimate re-claim can be refused for up to `claim_ttl`
+  (default 30s) after a correct reap. `SAJobStore`'s twin test passes cleanly. `xfail(strict=True)`
+  applied to the one affected test; the negative-case sibling test is unaffected and stays green.
+  Confirmed via an ad-hoc probe (`claim_ttl=1` passes, default `claim_ttl=30` fails).
+
+**Verified this session** (previously blocked on `varco_chaos`, now collect and were run against
+real Docker): `test_nats_health_chaos.py` (green), `test_redis_chaos.py` (green),
+`test_redis_job_lease_crash.py` (1 green + 1 xfail-strict), `test_sa_job_lease_crash.py` (green),
+`test_sa_chaos.py` (green after the `wait_ready()` fix above), plus re-runs of
+`test_nats_semantics_integration.py` and `test_nats_channel_integration.py` with Findings B/C's
+xfail markers applied and confirmed green. **Also verified this session**: `test_kafka_eos_integration.py` (all 4 tests green, 42s) —
+confirms Finding A's conftest fix (`KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR`/`_MIN_ISR=1`)
+resolves the hang exactly as the interrupted session's probe predicted. **Not run this session**
+(out of scope / not needed to validate Phase-0 scaffolding, and each pays a fresh ~20-30s Kafka
+container boot): `test_kafka_chaos.py`, `test_migration_chaos.py`, the broader
+`test_kafka_rebalance_integration.py`/`test_kafka_offsets_integration.py` suites, and
+`test_nats_dlq_integration.py`/`test_concurrent_writers_integration.py`/
+`test_ws_backpressure_integration.py` (all previously reported green in the first resume's
+execution log and not re-run here since they were never blocked on `varco_chaos`).

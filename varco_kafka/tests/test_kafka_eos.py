@@ -12,6 +12,26 @@ Uses the same ``FakeProducer`` / ``FakeConsumer`` pattern as ``test_kafka_bus.py
 extended with transaction / commit capabilities.
 
 No real Kafka broker required.
+
+Division of labour with ``test_kafka_eos_integration.py`` (Plan 018 / RT5,
+Steps 20 & 23)
+--------------------------------------------------------------------------
+This module asserts **wiring**: which kwargs ``KafkaEventBus`` passes to
+aiokafka (``transactional_id`` only for ``EXACTLY_ONCE``,
+``enable_auto_commit=False``, ``isolation_level="read_committed"``), and in
+which order commit and dispatch happen per mode. None of that is observable
+from a broker — you cannot ask Kafka "which kwarg did the client send" — so
+these 13 tests are deliberately fake-backed and stay that way. They run in
+milliseconds and are **not** marked ``integration``.
+
+``varco_kafka/tests/test_kafka_eos_integration.py`` asserts the complementary
+half: **observable semantics** against a real broker — that a record inside
+an aborted transaction is invisible to a ``read_committed`` consumer, that
+transactional offsets appear only on commit, that at-least-once really
+redelivers when a consumer dies before committing, and that at-most-once
+really loses the message when it dies after committing. Neither file
+subsumes the other; both are required for ``KafkaDeliverySemantics`` to be
+considered covered.
 """
 
 from __future__ import annotations
