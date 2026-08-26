@@ -561,7 +561,7 @@ class RedisStreamEventBus(AbstractEventBus):
 
         # results shape: [(stream_key_bytes, [(msg_id_bytes, {field: value}), ...])]
         for stream_key_raw, messages in results:
-            stream_key: str = (
+            stream_key = (
                 stream_key_raw.decode("utf-8")
                 if isinstance(stream_key_raw, bytes)
                 else stream_key_raw
@@ -609,7 +609,7 @@ class RedisStreamEventBus(AbstractEventBus):
         """
         assert self._redis is not None
 
-        payload = fields.get(_PAYLOAD_FIELD.encode()) or fields.get(_PAYLOAD_FIELD)
+        payload = fields.get(_PAYLOAD_FIELD.encode()) or fields.get(_PAYLOAD_FIELD)  # type: ignore[call-overload]
         if not payload:
             _logger.error(
                 "RedisStreamEventBus: message %s on stream %s has no '%s' field — "

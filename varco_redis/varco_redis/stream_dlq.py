@@ -631,7 +631,7 @@ class RedisStreamDLQ(AbstractDeadLetterQueue):
         """
         # Serialize the nested Event to bytes, then decode to a JSON-compatible
         # string for embedding in the outer dict.
-        event_bytes = self._serializer.serialize(entry.event)
+        event_bytes = self._serializer.serialize(entry.event)  # type: ignore[arg-type]
 
         data = {
             "entry_id": str(entry.entry_id),

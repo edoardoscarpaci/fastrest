@@ -114,7 +114,7 @@ class RedisHealthCheck(HealthCheck):
                 decode_responses=False,
             )
             # wait_for bounds the total PING round-trip including connection setup.
-            await asyncio.wait_for(client.ping(), timeout=self._timeout)
+            await asyncio.wait_for(client.ping(), timeout=self._timeout)  # type: ignore[arg-type]
             latency_ms = (time.monotonic() - start) * 1000
             return HealthResult(
                 status=HealthStatus.HEALTHY,

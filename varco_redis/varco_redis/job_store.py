@@ -302,11 +302,11 @@ class RedisJobStore(AbstractJobStore):
                         f"{expected_epoch} does not match stored lease_epoch "
                         f"({current_job.lease_epoch if current_job is not None else 'row not found'})."
                     )
-                old_status = current_job.status
+                fenced_old_status = current_job.status
                 pipe.multi()
                 pipe.set(job_key, _job_to_json(job))
-                if old_status != job.status:
-                    pipe.zrem(self._status_key(old_status), str(job.job_id))
+                if fenced_old_status != job.status:
+                    pipe.zrem(self._status_key(fenced_old_status), str(job.job_id))
                 score = job.created_at.timestamp()
                 pipe.zadd(self._status_key(job.status), {str(job.job_id): score})
                 try:
@@ -634,8 +634,7 @@ class RedisJobStore(AbstractJobStore):
                 running_job = dataclasses.replace(
                     running_job,
                     owner_id=owner_id,
-                    lease_expires_at=datetime.now(UTC)
-                    + timedelta(seconds=lease_ttl),
+                    lease_expires_at=datetime.now(UTC) + timedelta(seconds=lease_ttl),
                     lease_epoch=job.lease_epoch + 1,
                 )
             await self.save(running_job)
