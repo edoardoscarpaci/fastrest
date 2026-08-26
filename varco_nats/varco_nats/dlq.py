@@ -500,7 +500,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
                 "Call await dlq.start() or use 'async with dlq' first."
             )
         try:
-            info = await self._js.stream_info(self._dlq_stream)
+            info = await self._js.stream_info(self._dlq_stream)  # type: ignore[union-attr]
         except NotFoundError:
             # No DLQ stream yet → nothing has ever been pushed.
             return 0
@@ -604,7 +604,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
 
         # A durable pull subscription so the relay resumes from its last
         # position after a restart.
-        self._consumer = await self._js.pull_subscribe(
+        self._consumer = await self._js.pull_subscribe(  # type: ignore[union-attr]
             self._dlq_subject,
             durable=self._dlq_durable,
             stream=self._dlq_stream,
@@ -646,7 +646,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
         Edge cases:
             - Datetimes are stored as ISO-8601 strings (timezone-aware).
         """
-        event_bytes = self._serializer.serialize(entry.event)
+        event_bytes = self._serializer.serialize(entry.event)  # type: ignore[arg-type]
 
         data = {
             "entry_id": str(entry.entry_id),
