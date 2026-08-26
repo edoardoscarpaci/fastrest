@@ -73,15 +73,23 @@ this table.
 
 ### Plan 017 findings — new rows filed during CI-green implementation
 
-⚠️ **RL-20 — `examples/00-full-stack-post-api` unit suite is RED (8 failed, 3 passed)**, 🔴 must,
-S. Pre-existing and unrelated to plan 017 (reproduced at `cae7f33`, before any plan-017 commit);
-root cause is the example's `InMemoryUoW` test double lacking the `.posts` attribute
-`service.py:181` expects. **This is load-bearing, stated without softening:**
-`scripts/unit_tests.sh` (the new `unit` CI job's entry point) includes this suite as an
-`EXTRA_SUITES` entry, so **the `unit` job is RED on its very first CI run** until this is fixed
-— the "gates land green" claim for RL-5/RL-6 covers ruff/mypy/the ten packages' own suites only,
-not this example. Fix the test double before relying on `all-green` as a merge gate. Evidence:
-`examples/00-full-stack-post-api/example/tests/`; `scripts/unit_tests.sh`'s `EXTRA_SUITES` array.
+✅ **RL-20 — `examples/00-full-stack-post-api` unit suite — RESOLVED, row retained as a
+measurement-discipline record.** This row was originally filed 🔴 must, claiming the suite was
+RED (8 failed, 3 passed) and that the new `unit` CI job would therefore fail on its first run.
+**That claim was wrong.** The `InMemoryUoW` test double had already been fixed in commit
+`f03e613` (it now subclasses `AsyncUnitOfWork` and exposes `uow.posts`, with five regression
+tests added — see CHANGELOG's "unit-test double drifted from the UoW contract" entry). The
+observed failure came from a transient `uv` workspace re-sync racing test collection, not from
+the code; a re-run on the identical tree gives **51 passed**, and `make test` is green across
+all eleven suites.
+
+⚠️ **The lesson, which is the reason this row is kept rather than deleted:** a single red
+pytest run immediately after `uv` has re-synced the workspace is not evidence. It was taken as
+evidence twice — once by the implementing agent, once during review — and produced a false
+🔴-must blocker on the release path. Re-run before filing. This is the same U-8 discipline the
+register already imposes on entries filed off documentation rather than source. Evidence:
+`examples/00-full-stack-post-api/example/tests/` (51 passed); `scripts/unit_tests.sh`'s
+`EXTRA_SUITES` array; commit `f03e613`.
 
 | ID | Feature | Severity | Complexity | Rationale | Evidence |
 |----|---------|----------|------------|-----------|----------|

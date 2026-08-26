@@ -2242,7 +2242,8 @@ class UserService(
     )
 
     def _get_repo(self, uow: AsyncUnitOfWork) -> AsyncRepository[User, UUID]:
-        return uow.get_repository(User)
+        return uow.users
+
 
 
 # 3. Use @cached on methods (works with any async callable)

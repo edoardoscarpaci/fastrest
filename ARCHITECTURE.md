@@ -969,7 +969,8 @@ class UserService(
     AsyncService[User, UUID, UserCreateDTO, UserReadDTO, UserUpdateDTO],
 ):
     def _get_repo(self, uow: AsyncUnitOfWork) -> AsyncRepository[User, UUID]:
-        return uow.get_repository(User)
+        return uow.users
+
 
 
 # Method resolution order (MRO):

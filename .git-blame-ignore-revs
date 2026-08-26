@@ -13,3 +13,9 @@
 # handful of real bug fixes), so treat `git blame` output on lines it
 # touches with that caveat in mind.
 f03e6133b9bc62c77a2052e5ee0032952dd79e49
+
+# chore(format): adopt ruff format, replacing black (618 files reformatted).
+# black formatted to its 88-column default while [tool.ruff] pins
+# line-length = 100. Purely mechanical apart from one relocated
+# `# type: ignore[safe-super]` comment in observability/repository_mixin.py.
+db35156ed88b92f8e17bea4b58359bc180cf260a

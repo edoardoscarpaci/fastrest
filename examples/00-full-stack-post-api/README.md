@@ -327,7 +327,7 @@ class CommentUpdate(UpdateDTO):
 @Singleton
 class CommentService(AsyncService[Comment, UUID, CommentCreate, CommentRead, CommentUpdate]):
     def _get_repo(self, uow):
-        return uow.get_repository(Comment)
+        return uow.comments
 
 
 # 4. Router (router.py)

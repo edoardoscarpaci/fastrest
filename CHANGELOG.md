@@ -16,6 +16,15 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   check) and `.github/workflows/integration.yml` (testcontainers-backed integration suite on
   push-to-`main`, nightly, and manual dispatch). Both were previously 100% commented-out
   skeletons — nothing ran automatically before this release.
+- **`ruff format` replaces `black`; ruff now owns both linting and formatting.** The
+  `psf/black` pre-commit hook was removed and `ruff-format` added alongside `ruff-check`. black
+  formatted to its 88-column default while `[tool.ruff]` pins `line-length = 100`, so the two
+  had been in silent conflict; reconciling them cost one 618-file reformat, recorded in
+  `.git-blame-ignore-revs`. ⚠️ **This reflows almost every source file** — rebase in-flight
+  branches across the sweep commit rather than merging through it.
+- **`mypy` now runs as a pre-commit hook**, via `make type-check` rather than `mirrors-mypy`, so
+  the hook resolves the same pinned mypy that `uv.lock` and CI resolve instead of installing its
+  own into an isolated venv.
 - **Root `[tool.ruff]` and `[tool.mypy]` configuration** — the workspace now has real,
   version-pinned lint and type-check gates (`ruff==0.16.4`, `mypy==2.3.1`, declared in a new
   `[dependency-groups] lint` group and pulled into `dev` via PEP 735). Previously neither tool
@@ -56,7 +65,18 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   enum (`GapPolicy` instead of `OverlapPolicy`), and a `run_at_wall is None` guard was missing
   when `tz=` was supplied.
 
-### Changed — `providify` dependency bumped to 2.0.0 (Plan 016, Phases A–B)
+### Fixed — `examples/00-full-stack-post-api` unit-test double drifted from the UoW contract
+
+- **`InMemoryUoW` (`example/tests/test_post_service.py`) now subclasses `AsyncUnitOfWork` and
+  exposes the repository as `uow.posts`.** The double previously duck-typed the interface and
+  offered a fictional `get_repository(entity_cls)` accessor — a method no `AsyncUnitOfWork` in
+  `varco_core`/`varco_sa`/`varco_beanie` defines; only `RepositoryProvider` has it. Production
+  code (`PostService._get_repo()`) was already correctly calling `uow.posts`, per the
+  attribute-per-entity contract `RepositoryProvider.make_uow()` documents, so every CRUD test
+  failed with `AttributeError: 'InMemoryUoW' object has no attribute 'posts'` (8/11 tests in the
+  package, turning the CI `unit` job and the required `all-green` check red on `main`). The bug
+  predates Plan 017 — it was merely made visible once `scripts/unit_tests.sh` started running
+  the examples suite. No production code changed; five regression tests were added.
 
 - **`providify>=2.0.0`** across all ten workspace members (`varco_core`,
   `varco_kafka`, `varco_nats`, `varco_redis`, `varco_beanie`, `varco_sa`,
