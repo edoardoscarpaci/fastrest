@@ -38,9 +38,7 @@ def test_make_uow_outside_tenant_context_raises_runtime_error() -> None:
     assert "tenant_context" in str(exc.value)
 
 
-def test_make_uow_active_tenant_not_ensured_raises_runtime_error_naming_ensure() -> (
-    None
-):
+def test_make_uow_active_tenant_not_ensured_raises_runtime_error_naming_ensure() -> None:
     from varco_core.service.tenant import tenant_context
 
     provider = _make_provider()

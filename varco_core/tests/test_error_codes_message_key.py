@@ -38,9 +38,7 @@ def test_message_keys_are_unique_across_members() -> None:
     assert len(keys) == len(set(keys))
 
 
-def test_error_code_constructs_positionally_with_trailing_message_key_defaulted() -> (
-    None
-):
+def test_error_code_constructs_positionally_with_trailing_message_key_defaulted() -> None:
     # message_key must be trailing and defaulted — positional construction of
     # ErrorCode(code, http_status, default_message) must keep working
     # unchanged for any out-of-tree caller.

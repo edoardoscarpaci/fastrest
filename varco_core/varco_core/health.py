@@ -267,11 +267,7 @@ class CompositeHealthCheck(HealthCheck):
         if not self._checks:
             # Edge case: no registered checks — return a trivially healthy result
             # rather than confusing operators with an empty list.
-            return [
-                HealthResult(
-                    HealthStatus.HEALTHY, self._name, detail="no checks registered"
-                )
-            ]
+            return [HealthResult(HealthStatus.HEALTHY, self._name, detail="no checks registered")]
 
         # Run all probes concurrently.  return_exceptions=True ensures that if a
         # probe breaks the contract and raises, we collect the exception object

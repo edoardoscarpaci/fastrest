@@ -131,9 +131,7 @@ def build_jwt_authority() -> JwtAuthority:
         # (e.g. ``-e VARCO_JWT_PRIVATE_KEY_PEM="-----BEGIN...\\n...END-----"``).
         pem_bytes = raw_pem.replace("\\n", "\n").encode()
         _logger.info("auth: loading JWT private key from VARCO_JWT_PRIVATE_KEY_PEM")
-        return JwtAuthority.from_pem(
-            pem_bytes, kid=KID, issuer=ISSUER, algorithm="RS256"
-        )
+        return JwtAuthority.from_pem(pem_bytes, kid=KID, issuer=ISSUER, algorithm="RS256")
 
     # Dev mode: generate a fresh RSA-2048 key pair.
     # cryptography is a transitive dependency of PyJWT — always available.
@@ -314,9 +312,7 @@ class AuthRouter:
             )
             token_str = authority.sign(builder)
 
-            _logger.info(
-                "auth: issued token for user=%s roles=%s", body.username, user["roles"]
-            )
+            _logger.info("auth: issued token for user=%s roles=%s", body.username, user["roles"])
             return TokenResponse(access_token=token_str)
 
         @router.get(

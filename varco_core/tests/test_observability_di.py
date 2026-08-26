@@ -139,9 +139,7 @@ class TestRegressionOtelDependencyInjection:
 
         assert isinstance(provider, MeterProvider)
 
-    def test_regression_global_attributes_provider_resolves(
-        self, app_config_provider
-    ) -> None:
+    def test_regression_global_attributes_provider_resolves(self, app_config_provider) -> None:
         """``observability_attributes`` also takes ``Inject[OtelConfig]``."""
         from varco_core.observability.attributes import GlobalAttributes
 
@@ -168,9 +166,7 @@ class TestDocumentedBootstrapApi:
 
         assert container.get(OtelConfig).service_name == "varco"
 
-    def test_provide_before_install_overrides_the_default(
-        self, app_config_provider
-    ) -> None:
+    def test_provide_before_install_overrides_the_default(self, app_config_provider) -> None:
         container = DIContainer()
         container.provide(app_config_provider)
         container.install(OtelConfiguration)

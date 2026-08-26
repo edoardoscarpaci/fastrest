@@ -199,10 +199,7 @@ class OAuth2Config(BaseModel):
             v is not None for v in (self.token_url, self.client_id, self.client_secret)
         )
         partial_client_creds = (
-            any(
-                v is not None
-                for v in (self.token_url, self.client_id, self.client_secret)
-            )
+            any(v is not None for v in (self.token_url, self.client_id, self.client_secret))
             and not has_client_creds
         )
 

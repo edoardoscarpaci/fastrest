@@ -33,8 +33,6 @@ def test_importing_new_fastapi_modules_leaves_forbidden_modules_absent() -> None
         "assert not leaked, f'leaked: {leaked}'\n"
         "print('OK')\n"
     )
-    result = subprocess.run(
-        [sys.executable, "-c", script], capture_output=True, text=True
-    )
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert "OK" in result.stdout

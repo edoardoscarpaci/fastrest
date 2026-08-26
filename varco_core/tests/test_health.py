@@ -259,9 +259,7 @@ class TestCompositeHealthCheck:
     async def test_no_latency_in_aggregate(self) -> None:
         # CompositeHealthCheck does not compute a meaningful aggregate latency
         # (probes run in parallel with different durations).
-        composite = CompositeHealthCheck(
-            _FixedCheck(_result(HealthStatus.HEALTHY, "a"))
-        )
+        composite = CompositeHealthCheck(_FixedCheck(_result(HealthStatus.HEALTHY, "a")))
         result = await composite.check()
         assert result.latency_ms is None
 

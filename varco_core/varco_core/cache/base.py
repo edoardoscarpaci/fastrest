@@ -201,9 +201,7 @@ class BulkCache(Protocol[K, V]):
     Async safety:   ✅  All methods are coroutines.
     """
 
-    async def get_many(
-        self, keys: list[K], *, type_hint: type | None = None
-    ) -> dict[K, V]:
+    async def get_many(self, keys: list[K], *, type_hint: type | None = None) -> dict[K, V]:
         """Return a ``{key: value}`` dict for every key that was a hit.
         A missing/expired key is simply absent from the result — never
         present with a ``None`` value (mirrors ``get()``'s per-key miss
@@ -428,9 +426,7 @@ class CacheBackend(abc.ABC):
     # (MGET/pipelined SET, get_multi/set_multi) as an OPTIMIZATION, never as
     # a correctness fix — see varco_redis.cache / varco_memcached.cache.
 
-    async def get_many(
-        self, keys: list[Any], *, type_hint: type | None = None
-    ) -> dict[Any, Any]:
+    async def get_many(self, keys: list[Any], *, type_hint: type | None = None) -> dict[Any, Any]:
         """Portable default: loop over ``get()``. A miss is simply absent
         from the result dict."""
         result: dict[Any, Any] = {}
@@ -440,9 +436,7 @@ class CacheBackend(abc.ABC):
                 result[key] = value
         return result
 
-    async def set_many(
-        self, items: dict[Any, Any], *, ttl: float | None = None
-    ) -> None:
+    async def set_many(self, items: dict[Any, Any], *, ttl: float | None = None) -> None:
         """Portable default: loop over ``set()``."""
         for key, value in items.items():
             await self.set(key, value, ttl=ttl)

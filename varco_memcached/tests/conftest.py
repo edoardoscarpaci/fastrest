@@ -42,9 +42,7 @@ def memcached_host_port(request: pytest.FixtureRequest) -> tuple[str, int]:
 
     override = os.environ.get("VARCO_TEST_MEMCACHED_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("memcached", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("memcached", override))
         host, _, port = override.partition(":")
         yield host, int(port)
         return

@@ -121,17 +121,13 @@ class TestJsonSerializer:
         assert back == user
         assert isinstance(back, User)
 
-    def test_deserialize_without_type_hint_returns_raw_object(
-        self, s: JsonSerializer
-    ) -> None:
+    def test_deserialize_without_type_hint_returns_raw_object(self, s: JsonSerializer) -> None:
         data = b'{"key": 42}'
         result = s.deserialize(data)
         assert isinstance(result, dict)
         assert result["key"] == 42
 
-    def test_deserialize_invalid_json_raises_value_error(
-        self, s: JsonSerializer
-    ) -> None:
+    def test_deserialize_invalid_json_raises_value_error(self, s: JsonSerializer) -> None:
         with pytest.raises(Exception):  # ValueError or json.JSONDecodeError
             s.deserialize(b"NOT_JSON{{{")
 
@@ -232,9 +228,7 @@ class TestTypedJsonSerializer:
 
     # ── Pydantic model round-trip ─────────────────────────────────────────────
 
-    def test_pydantic_model_roundtrip_no_type_hint(
-        self, s: TypedJsonSerializer
-    ) -> None:
+    def test_pydantic_model_roundtrip_no_type_hint(self, s: TypedJsonSerializer) -> None:
         original = _SampleModel(name="Alice", value=42)
         data = s.serialize(original)
         back = s.deserialize(data)
@@ -242,9 +236,7 @@ class TestTypedJsonSerializer:
         assert isinstance(back, _SampleModel)
         assert back == original
 
-    def test_pydantic_model_envelope_contains_type_key(
-        self, s: TypedJsonSerializer
-    ) -> None:
+    def test_pydantic_model_envelope_contains_type_key(self, s: TypedJsonSerializer) -> None:
         data = s.serialize(_SampleModel(name="Bob", value=1))
         envelope = json.loads(data)
         # __type__ must encode the full qualified path, __data__ the fields
@@ -263,9 +255,7 @@ class TestTypedJsonSerializer:
 
     # ── Plain class round-trip ────────────────────────────────────────────────
 
-    def test_plain_class_serializes_with_type_embedded(
-        self, s: TypedJsonSerializer
-    ) -> None:
+    def test_plain_class_serializes_with_type_embedded(self, s: TypedJsonSerializer) -> None:
         # Plain classes without a Pydantic schema serialize via __dict__ and embed
         # __type__ in the envelope.  On deserialization, TypeAdapter raises
         # PydanticSchemaGenerationError — the serializer falls back gracefully
@@ -326,9 +316,7 @@ class TestTypedJsonSerializer:
 
     # ── Backwards-compat: non-envelope bytes ─────────────────────────────────
 
-    def test_non_envelope_bytes_delegate_to_json_serializer(
-        self, s: TypedJsonSerializer
-    ) -> None:
+    def test_non_envelope_bytes_delegate_to_json_serializer(self, s: TypedJsonSerializer) -> None:
         # Bytes produced by the plain JsonSerializer have no __type__ key.
         # TypedJsonSerializer must handle these gracefully.
         raw = JsonSerializer().serialize({"key": "value"})
@@ -336,9 +324,7 @@ class TestTypedJsonSerializer:
         # Without type_hint the result is a plain dict — same as JsonSerializer.
         assert result == {"key": "value"}
 
-    def test_non_envelope_bytes_with_type_hint_delegates(
-        self, s: TypedJsonSerializer
-    ) -> None:
+    def test_non_envelope_bytes_with_type_hint_delegates(self, s: TypedJsonSerializer) -> None:
         raw = JsonSerializer().serialize({"name": "Dave", "value": 3})
         result = s.deserialize(raw, type_hint=_SampleModel)
         assert isinstance(result, _SampleModel)

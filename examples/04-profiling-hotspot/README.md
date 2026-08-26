@@ -52,7 +52,8 @@ uv run pytest examples/04-profiling-hotspot/tests/ -v
 ### `@profile` — decoration-time kill-switch
 
 ```python
-set_profiling_enabled(True)   # must be set BEFORE @profile is evaluated
+set_profiling_enabled(True)  # must be set BEFORE @profile is evaluated
+
 
 @profile(ProfileConfig(top_n=5, cpu=True, memory=True))
 async def slow_query() -> list[Row]: ...
@@ -66,7 +67,7 @@ the original function untouched — zero call-path overhead.
 ```python
 async with profiled("batch_job") as session:
     await do_work()
-print(session.report.wall_time_ms)   # None when profiling is disabled
+print(session.report.wall_time_ms)  # None when profiling is disabled
 ```
 
 `profiled()` checks the kill-switch at call time, not decoration time — toggling
@@ -77,12 +78,16 @@ print(session.report.wall_time_ms)   # None when profiling is disabled
 ```python
 from varco_core.profiling import CpuProfileResult, register_cpu_backend
 
+
 class MyBackend:
     name = "my-backend"
+
     def start(self) -> None: ...
     def collect(self, top_n: int, sort_by: str) -> CpuProfileResult: ...
 
+
 register_cpu_backend("my-backend", MyBackend)
+
 
 @profile(ProfileConfig(cpu_backend="my-backend"))
 async def fn() -> None: ...

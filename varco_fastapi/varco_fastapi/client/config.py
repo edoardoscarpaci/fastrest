@@ -120,9 +120,7 @@ class ClientConfig:
 
         extra_mw: tuple[AbstractClientMiddleware, ...] = kwargs.pop("middleware", ())
         if authority is not None:
-            extra_mw = extra_mw + (
-                JwtMiddleware(authority, audience="api", expires_in=3600),
-            )
+            extra_mw = extra_mw + (JwtMiddleware(authority, audience="api", expires_in=3600),)
 
         defaults: dict[str, Any] = {
             "verify": True,

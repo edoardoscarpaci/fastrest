@@ -157,18 +157,15 @@ class CircuitBreakerConfig:
         """
         if self.failure_threshold < 1:
             raise ValueError(
-                f"CircuitBreakerConfig.failure_threshold must be ≥ 1, "
-                f"got {self.failure_threshold}."
+                f"CircuitBreakerConfig.failure_threshold must be ≥ 1, got {self.failure_threshold}."
             )
         if self.recovery_timeout < 0:
             raise ValueError(
-                f"CircuitBreakerConfig.recovery_timeout must be ≥ 0, "
-                f"got {self.recovery_timeout}."
+                f"CircuitBreakerConfig.recovery_timeout must be ≥ 0, got {self.recovery_timeout}."
             )
         if self.success_threshold < 1:
             raise ValueError(
-                f"CircuitBreakerConfig.success_threshold must be ≥ 1, "
-                f"got {self.success_threshold}."
+                f"CircuitBreakerConfig.success_threshold must be ≥ 1, got {self.success_threshold}."
             )
 
 
@@ -358,9 +355,7 @@ class CircuitBreaker:
         await self._maybe_attempt_recovery()
 
         if self._state == CircuitState.OPEN:
-            raise CircuitOpenError(
-                self.name, self._opened_at, self.config.recovery_timeout
-            )
+            raise CircuitOpenError(self.name, self._opened_at, self.config.recovery_timeout)
 
         if self._state == CircuitState.HALF_OPEN:
             return await self._probe_async(func, *args, **kwargs)
@@ -401,14 +396,10 @@ class CircuitBreaker:
         if self._state == CircuitState.OPEN:
             if time.monotonic() - self._opened_at >= self.config.recovery_timeout:
                 self._state = CircuitState.HALF_OPEN
-                _logger.info(
-                    "Circuit '%s' → HALF_OPEN (recovery timeout elapsed).", self.name
-                )
+                _logger.info("Circuit '%s' → HALF_OPEN (recovery timeout elapsed).", self.name)
 
         if self._state == CircuitState.OPEN:
-            raise CircuitOpenError(
-                self.name, self._opened_at, self.config.recovery_timeout
-            )
+            raise CircuitOpenError(self.name, self._opened_at, self.config.recovery_timeout)
 
         try:
             result = func(*args, **kwargs)
@@ -475,9 +466,7 @@ class CircuitBreaker:
             # (OPEN→HALF_OPEN).  If two coroutines race, the second one sees
             # HALF_OPEN and is rejected by call_async (treated like OPEN).
             self._state = CircuitState.HALF_OPEN
-            _logger.info(
-                "Circuit '%s' → HALF_OPEN (recovery timeout elapsed).", self.name
-            )
+            _logger.info("Circuit '%s' → HALF_OPEN (recovery timeout elapsed).", self.name)
 
     async def _probe_async(
         self,
@@ -514,9 +503,7 @@ class CircuitBreaker:
         # Non-blocking acquire — if the lock is held another probe is running;
         # reject immediately rather than queueing probes.
         if lock.locked():
-            raise CircuitOpenError(
-                self.name, self._opened_at, self.config.recovery_timeout
-            )
+            raise CircuitOpenError(self.name, self._opened_at, self.config.recovery_timeout)
 
         async with lock:
             # Re-check state after acquiring — the state may have changed
@@ -525,9 +512,7 @@ class CircuitBreaker:
                 # The probe that held the lock already closed or re-opened the
                 # circuit — short-circuit to avoid a redundant probe.
                 if self._state == CircuitState.OPEN:
-                    raise CircuitOpenError(
-                        self.name, self._opened_at, self.config.recovery_timeout
-                    )
+                    raise CircuitOpenError(self.name, self._opened_at, self.config.recovery_timeout)
                 # CLOSED — rare race; proceed normally (the lock will be released)
                 # Fall through to the try block below.
 
@@ -608,7 +593,7 @@ class CircuitBreaker:
         self._failure_count = 0  # reset so next CLOSED window starts fresh
         self._success_count = 0
         _logger.error(
-            "Circuit '%s' → OPEN (failure threshold reached). " "Recovery in %.1f s.",
+            "Circuit '%s' → OPEN (failure threshold reached). Recovery in %.1f s.",
             self.name,
             self.config.recovery_timeout,
         )

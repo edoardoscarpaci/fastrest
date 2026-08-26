@@ -184,10 +184,7 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
         # Apply sort directives — Beanie accepts [(field, direction), ...]
         # direction: 1 = ascending, -1 = descending (pymongo convention)
         if params.sort:
-            sort_list = [
-                (sf.field, -1 if sf.order == SortOrder.DESC else 1)
-                for sf in params.sort
-            ]
+            sort_list = [(sf.field, -1 if sf.order == SortOrder.DESC else 1) for sf in params.sort]
             find_query = find_query.sort(sort_list)
 
         # Apply pagination
@@ -334,8 +331,7 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
         for entity in entities:
             if not entity.is_persisted():
                 raise ValueError(
-                    f"Cannot delete {type(entity).__name__}: "
-                    "not yet persisted (pk is None)."
+                    f"Cannot delete {type(entity).__name__}: not yet persisted (pk is None)."
                 )
 
         # Build a MongoDB $in filter on the _id (Beanie primary key field).
@@ -427,10 +423,7 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
         find_query = self._mapper._orm_cls.find(mongo_filter)
 
         if params.sort:
-            sort_list = [
-                (sf.field, -1 if sf.order == SortOrder.DESC else 1)
-                for sf in params.sort
-            ]
+            sort_list = [(sf.field, -1 if sf.order == SortOrder.DESC else 1) for sf in params.sort]
             find_query = find_query.sort(sort_list)
 
         if params.offset is not None:

@@ -64,9 +64,9 @@ The tests spin up a PostgreSQL 16 container via testcontainers. One test directl
 ```python
 @dataclass
 class Patient(AuditedDomainModel):
-    name: Annotated[str, FieldHint(max_length=255)]          # plaintext
-    ssn:  Annotated[str | None, EncryptedHint()] = None      # encrypted → LargeBinary
-    notes: Annotated[str | None, EncryptedHint()] = None     # encrypted → LargeBinary
+    name: Annotated[str, FieldHint(max_length=255)]  # plaintext
+    ssn: Annotated[str | None, EncryptedHint()] = None  # encrypted → LargeBinary
+    notes: Annotated[str | None, EncryptedHint()] = None  # encrypted → LargeBinary
 ```
 
 `EncryptedHint` is a presence marker — its position in `Annotated` is all that matters. `SAModelFactory` detects it and generates a `LargeBinary` column with an encrypt/decrypt mapper.

@@ -174,9 +174,7 @@ async def running_server() -> AsyncIterator[RunningServer]:
         if asyncio.get_event_loop().time() > deadline:
             server.should_exit = True
             await server_task
-            raise TimeoutError(
-                f"uvicorn did not start within 15 seconds on port {port}"
-            )
+            raise TimeoutError(f"uvicorn did not start within 15 seconds on port {port}")
         await asyncio.sleep(0.05)
 
     base_url = f"http://127.0.0.1:{port}"

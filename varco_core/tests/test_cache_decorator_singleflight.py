@@ -26,9 +26,7 @@ async def cache() -> InMemoryCache:
 
 
 class TestDecoratorSingleflight:
-    async def test_singleflight_true_calls_loader_once_under_stampede(
-        self, cache
-    ) -> None:
+    async def test_singleflight_true_calls_loader_once_under_stampede(self, cache) -> None:
         from varco_core.cache.policy import CachePolicy
 
         calls = 0
@@ -44,9 +42,7 @@ class TestDecoratorSingleflight:
         assert calls == 1
         assert all(r == {"id": 42} for r in results)
 
-    async def test_default_no_singleflight_reproduces_the_stampede_bug(
-        self, cache
-    ) -> None:
+    async def test_default_no_singleflight_reproduces_the_stampede_bug(self, cache) -> None:
         calls = 0
 
         @cached(cache, ttl=60.0, namespace="nosf")

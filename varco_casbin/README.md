@@ -33,14 +33,14 @@ from providify import DIContainer
 from varco_casbin.di import bootstrap, enable_policy_authorizer
 from varco_core.auth import PolicyEngine, PolicyManagement, AbstractAuthorizer
 
-container = bootstrap(DIContainer())                 # scans the engine + settings
-enable_policy_authorizer(container)                  # opt-in: bind the authorizer
+container = bootstrap(DIContainer())  # scans the engine + settings
+enable_policy_authorizer(container)  # opt-in: bind the authorizer
 
 engine: PolicyEngine = await container.aget(PolicyEngine)
-mgmt:   PolicyManagement = await container.aget(PolicyManagement)
+mgmt: PolicyManagement = await container.aget(PolicyManagement)
 
-await mgmt.add_role_for_user("alice", "admin")       # g, alice, admin
-await mgmt.add_policy("admin", "*", "*")             # p, admin, *, *
+await mgmt.add_role_for_user("alice", "admin")  # g, alice, admin
+await mgmt.add_policy("admin", "*", "*")  # p, admin, *, *
 ```
 
 ## Configuration
@@ -68,7 +68,8 @@ role assignments over REST — all endpoints guarded by `require_roles(admin_rol
 
 ```python
 from varco_casbin.router import build_policy_router
-app.include_router(build_policy_router(engine, server_auth=auth))   # engine = CasbinPolicyEngine
+
+app.include_router(build_policy_router(engine, server_auth=auth))  # engine = CasbinPolicyEngine
 ```
 
 

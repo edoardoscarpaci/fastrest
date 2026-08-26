@@ -91,9 +91,7 @@ class SAEngineRegistry:
     async def _dispose_engine(self, engine: AsyncEngine) -> None:
         await engine.dispose()
 
-    async def ensure(
-        self, tenant_id: str, *, dsn_ref: str | None = None
-    ) -> AsyncEngine:
+    async def ensure(self, tenant_id: str, *, dsn_ref: str | None = None) -> AsyncEngine:
         """
         Return the cached engine for ``tenant_id``, creating it if absent.
 

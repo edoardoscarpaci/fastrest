@@ -189,15 +189,11 @@ def _job_to_row(job: Job) -> dict[str, Any]:
         "result": job.result,
         "error": job.error,
         "callback_url": job.callback_url,
-        "auth_snapshot": (
-            json.dumps(job.auth_snapshot) if job.auth_snapshot is not None else None
-        ),
+        "auth_snapshot": (json.dumps(job.auth_snapshot) if job.auth_snapshot is not None else None),
         "request_token": job.request_token,
         "job_metadata": json.dumps(job.metadata),
         "task_payload": (
-            json.dumps(job.task_payload.to_dict())
-            if job.task_payload is not None
-            else None
+            json.dumps(job.task_payload.to_dict()) if job.task_payload is not None else None
         ),
         "run_at": job.run_at,
         "attempt": job.attempt,
@@ -385,9 +381,7 @@ class SAJobStore(AbstractJobStore):
         async with self._engine.begin() as conn:
             if expected_epoch is not None:
                 current = await conn.execute(
-                    sa.select(_jobs_table.c.lease_epoch).where(
-                        _jobs_table.c.job_id == job.job_id
-                    )
+                    sa.select(_jobs_table.c.lease_epoch).where(_jobs_table.c.job_id == job.job_id)
                 )
                 current_row = current.fetchone()
                 if current_row is None or current_row.lease_epoch != expected_epoch:
@@ -397,9 +391,7 @@ class SAJobStore(AbstractJobStore):
                         f"({current_row.lease_epoch if current_row else 'row not found'})."
                     )
             # DELETE existing row — silent no-op if not found.
-            await conn.execute(
-                sa.delete(_jobs_table).where(_jobs_table.c.job_id == job.job_id)
-            )
+            await conn.execute(sa.delete(_jobs_table).where(_jobs_table.c.job_id == job.job_id))
             # INSERT fresh row — the DELETE ensures no IntegrityError.
             await conn.execute(sa.insert(_jobs_table).values(**row))
         _logger.debug("SAJobStore.save: job_id=%s status=%s", job.job_id, job.status)
@@ -495,9 +487,7 @@ class SAJobStore(AbstractJobStore):
         Async safety: ✅ Uses ``engine.begin()`` — single committed transaction.
         """
         async with self._engine.begin() as conn:
-            await conn.execute(
-                sa.delete(_jobs_table).where(_jobs_table.c.job_id == job_id)
-            )
+            await conn.execute(sa.delete(_jobs_table).where(_jobs_table.c.job_id == job_id))
         _logger.debug("SAJobStore.delete: job_id=%s", job_id)
 
     async def delete_where(
@@ -573,10 +563,7 @@ class SAJobStore(AbstractJobStore):
                     else sa.literal_column("rowid")
                 )
                 select_stmt = (
-                    sa.select(row_id_col)
-                    .select_from(_jobs_table)
-                    .where(*conditions)
-                    .limit(limit)
+                    sa.select(row_id_col).select_from(_jobs_table).where(*conditions).limit(limit)
                 )
                 delete_stmt = sa.delete(_jobs_table).where(row_id_col.in_(select_stmt))
             else:
@@ -680,9 +667,7 @@ class SAJobStore(AbstractJobStore):
 
             # Transition PENDING → RUNNING within the same transaction.
             await conn.execute(
-                sa.update(_jobs_table)
-                .where(_jobs_table.c.job_id == job_id)
-                .values(**update_values)
+                sa.update(_jobs_table).where(_jobs_table.c.job_id == job_id).values(**update_values)
             )
             # Re-build the Job with updated fields (frozen — can't mutate).
             job = _row_to_job(row)

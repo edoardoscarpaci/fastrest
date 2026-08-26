@@ -73,10 +73,7 @@ from opentelemetry.sdk.metrics.export import InMemoryMetricReader
 _prometheus_installed = importlib.util.find_spec("prometheus_client") is not None
 _requires_prometheus = pytest.mark.skipif(
     not _prometheus_installed,
-    reason=(
-        "prometheus_client not installed — "
-        "run: uv add opentelemetry-exporter-prometheus"
-    ),
+    reason=("prometheus_client not installed — run: uv add opentelemetry-exporter-prometheus"),
 )
 
 
@@ -243,8 +240,7 @@ async def test_metrics_endpoint_is_mounted(inmemory_client: httpx.AsyncClient) -
     """
     response = await inmemory_client.get("/metrics")
     assert response.status_code != 404, (
-        "GET /metrics must be mounted when enable_metrics=True. "
-        f"Got {response.status_code}."
+        f"GET /metrics must be mounted when enable_metrics=True. Got {response.status_code}."
     )
 
 
@@ -274,9 +270,9 @@ async def test_metrics_endpoint_returns_200_with_prometheus(
     """
     response = await plain_client.get("/metrics")
     assert response.status_code == 200
-    assert "text/plain" in response.headers.get(
-        "content-type", ""
-    ), "Expected Prometheus text/plain content-type for GET /metrics."
+    assert "text/plain" in response.headers.get("content-type", ""), (
+        "Expected Prometheus text/plain content-type for GET /metrics."
+    )
 
 
 @_requires_prometheus
@@ -296,9 +292,9 @@ async def test_metrics_body_contains_prometheus_text(
     assert response.status_code == 200
     body = response.text
     # Classic Prometheus text format always starts with # HELP / # TYPE blocks.
-    assert (
-        "# HELP" in body or "# TYPE" in body
-    ), "Prometheus text format must contain # HELP or # TYPE comment lines."
+    assert "# HELP" in body or "# TYPE" in body, (
+        "Prometheus text format must contain # HELP or # TYPE comment lines."
+    )
 
 
 # ── Happy path — MetricsMiddleware records instruments ────────────────────────
@@ -410,6 +406,5 @@ async def test_metrics_not_mounted_when_disabled() -> None:
         response = await client.get("/metrics")
 
     assert response.status_code == 404, (
-        "GET /metrics must not be mounted when enable_metrics=False. "
-        f"Got {response.status_code}."
+        f"GET /metrics must not be mounted when enable_metrics=False. Got {response.status_code}."
     )

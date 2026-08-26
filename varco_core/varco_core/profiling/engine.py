@@ -196,9 +196,7 @@ class ProfileSession:
             mem_peak_bytes=mem_result.peak_bytes if mem_result is not None else 0,
             mem_delta_bytes=mem_result.delta_bytes if mem_result is not None else 0,
             rss_delta_bytes=rss_delta,
-            top_allocations=(
-                mem_result.top_allocations if mem_result is not None else ()
-            ),
+            top_allocations=(mem_result.top_allocations if mem_result is not None else ()),
             artifacts=tuple(artifacts),
             cpu_backend=cpu_backend_name,
             memory_backend=memory_backend_name,

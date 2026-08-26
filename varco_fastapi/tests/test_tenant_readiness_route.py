@@ -124,9 +124,7 @@ def test_readiness_route_is_admin_guarded() -> None:
     assert response.status_code == 403
 
 
-def test_readiness_after_simulated_coordinator_restart_is_incomplete_empty_seen() -> (
-    None
-):
+def test_readiness_after_simulated_coordinator_restart_is_incomplete_empty_seen() -> None:
     """RD-18 caveat made visible: a fresh coordinator (simulating a restart)
     reports complete=false with an empty seen set, rather than hiding the
     reset."""

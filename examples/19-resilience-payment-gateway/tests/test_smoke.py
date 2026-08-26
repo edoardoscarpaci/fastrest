@@ -190,9 +190,9 @@ async def test_retry_fires_on_transient_failure(client: httpx.AsyncClient) -> No
     )
 
     # The retry should eventually succeed on the 3rd attempt
-    assert (
-        resp.status_code == 200
-    ), f"Expected 200 after retries, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 200, (
+        f"Expected 200 after retries, got {resp.status_code}: {resp.text}"
+    )
 
     # call_count must be ≥ 3 — the stub was called at least 3 times
     count = await _get_call_count(client)
@@ -222,9 +222,7 @@ async def test_timeout_fires_on_slow_stub(client: httpx.AsyncClient) -> None:
         timeout=3.0,
     )
 
-    assert (
-        resp.status_code == 503
-    ), f"Expected 503 (timeout), got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 503, f"Expected 503 (timeout), got {resp.status_code}: {resp.text}"
     data = resp.json()
     assert data["error"] == "timeout", f"Expected error=timeout, got: {data}"
 
@@ -279,9 +277,9 @@ async def test_circuit_breaker_opens_after_repeated_failures(
             json={"amount": 1.00, "card_token": f"tok_trip_{i}"},
         )
         # Each attempt returns 503 (retry_exhausted or direct error)
-        assert (
-            resp.status_code == 503
-        ), f"Attempt {i+1}: expected 503, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 503, (
+            f"Attempt {i + 1}: expected 503, got {resp.status_code}: {resp.text}"
+        )
 
     # Record stub call count after the 3 threshold failures
     count_after_trips = await _get_call_count(client)
@@ -294,9 +292,9 @@ async def test_circuit_breaker_opens_after_repeated_failures(
 
     assert resp.status_code == 503, resp.text
     data = resp.json()
-    assert (
-        data["error"] == "circuit_open"
-    ), f"Expected error=circuit_open for 4th request, got: {data}"
+    assert data["error"] == "circuit_open", (
+        f"Expected error=circuit_open for 4th request, got: {data}"
+    )
 
     # Stub call count must NOT have increased — circuit is open, stub not reached
     count_after_open = await _get_call_count(client)

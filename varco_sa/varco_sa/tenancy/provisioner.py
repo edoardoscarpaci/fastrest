@@ -45,9 +45,7 @@ class SASchemaProvisioner(AbstractTenantProvisioner):
                              validate) the real schema name.
     """
 
-    def __init__(
-        self, *, connection_factory, router: SASchemaRouter | None = None
-    ) -> None:
+    def __init__(self, *, connection_factory, router: SASchemaRouter | None = None) -> None:
         self._connection_factory = connection_factory
         self._router = router or SASchemaRouter()
 
@@ -63,9 +61,7 @@ class SASchemaProvisioner(AbstractTenantProvisioner):
         async with self._connection_factory() as conn:  # type: AsyncConnection
             await conn.execute(sa.text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         """
         ``DROP SCHEMA "<schema>" CASCADE`` — only with ``confirm_destroy=True``.
 
@@ -80,6 +76,4 @@ class SASchemaProvisioner(AbstractTenantProvisioner):
 
         schema_name = self._router.schema_name_for(tenant_id)
         async with self._connection_factory() as conn:  # type: AsyncConnection
-            await conn.execute(
-                sa.text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE')
-            )
+            await conn.execute(sa.text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))

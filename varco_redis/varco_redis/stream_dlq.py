@@ -359,8 +359,7 @@ class RedisStreamDLQ(AbstractDeadLetterQueue):
 
         except Exception as exc:  # noqa: BLE001 — push MUST NOT propagate
             _logger.error(
-                "RedisStreamDLQ.push() failed unexpectedly — entry dropped "
-                "(entry_id=%s): %s",
+                "RedisStreamDLQ.push() failed unexpectedly — entry dropped (entry_id=%s): %s",
                 entry.entry_id,
                 exc,
                 exc_info=True,
@@ -436,9 +435,7 @@ class RedisStreamDLQ(AbstractDeadLetterQueue):
                 # redis-py returns field names as bytes when decode_responses=False.
                 # Try both bytes and str keys for robustness against redis-py
                 # version differences or future decode_responses changes.
-                payload: bytes | None = fields.get(b"payload") or fields.get(
-                    _PAYLOAD_FIELD
-                )
+                payload: bytes | None = fields.get(b"payload") or fields.get(_PAYLOAD_FIELD)
                 if payload is None:
                     _logger.warning(
                         "RedisStreamDLQ.pop_batch: stream entry %r has no 'payload' "

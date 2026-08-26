@@ -31,9 +31,7 @@ from varco_core.model import DomainModel
 class Post(DomainModel):
     """Domain entity carrying an owner attribute for the ABAC matcher."""
 
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     owner_id: str = ""
 
     class Meta:

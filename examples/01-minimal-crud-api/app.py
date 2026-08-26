@@ -149,9 +149,7 @@ def create_app() -> FastAPI:
     #   ✅ ``_service`` is set correctly — all CRUD endpoints work.
     #   ✅ No ``container.bind()`` bookkeeping required.
     #   ❌ Two extra lines — acceptable for a clear, explicit wiring.
-    service = container.get(
-        AsyncService[Product, UUID, ProductCreate, ProductRead, ProductUpdate]
-    )
+    service = container.get(AsyncService[Product, UUID, ProductCreate, ProductRead, ProductUpdate])
     product_router_instance = ProductRouter(service=service)
     api_router = product_router_instance.build_router()
     app.include_router(api_router)

@@ -46,9 +46,7 @@ async def test_subclass_overriding_deprovision_still_gated_by_abc() -> None:
         async def provision(self, tenant_id: str, **kwargs: object) -> None:
             calls.append(f"provision:{tenant_id}")
 
-        async def deprovision(
-            self, tenant_id: str, *, confirm_destroy: bool = False
-        ) -> None:
+        async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
             calls.append(f"deprovision:{tenant_id}")
             await super().deprovision(tenant_id, confirm_destroy=confirm_destroy)
 

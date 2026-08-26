@@ -102,9 +102,7 @@ def _run_index(args: argparse.Namespace) -> int:
 def _run_new(args: argparse.Namespace) -> int:
     version = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     class_name = "".join(part.capitalize() for part in args.name.split("_"))
-    content = _MIGRATION_TEMPLATE.format(
-        name=args.name, class_name=class_name, version=version
-    )
+    content = _MIGRATION_TEMPLATE.format(name=args.name, class_name=class_name, version=version)
     from pathlib import Path
 
     out_path = Path(args.out) / f"{version}_{args.name}.py"

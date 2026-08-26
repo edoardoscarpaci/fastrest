@@ -48,9 +48,7 @@ def test_mount_without_acknowledgement_raises_value_error() -> None:
     app = FastAPI()
 
     with pytest.raises(ValueError) as exc:
-        mount_tenant_admin(
-            app, _FakeControlService(), server_auth=_StubAuth("tenant-admin")
-        )
+        mount_tenant_admin(app, _FakeControlService(), server_auth=_StubAuth("tenant-admin"))
 
     message = str(exc.value)
     assert "acknowledge_bundled_admin" in message

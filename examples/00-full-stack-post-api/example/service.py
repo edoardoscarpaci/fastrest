@@ -222,9 +222,7 @@ class PostService(
 
         return entity
 
-    async def _after_create(
-        self, entity: Post, read_dto: PostRead, ctx: AuthContext
-    ) -> None:
+    async def _after_create(self, entity: Post, read_dto: PostRead, ctx: AuthContext) -> None:
         """
         Publish ``PostCreatedEvent`` after a successful commit.
 

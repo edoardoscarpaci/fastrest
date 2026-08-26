@@ -94,9 +94,7 @@ async def test_regression_job_runner_enqueue_zoned_materializes_run_at() -> None
     assert saved.status == JobStatus.PENDING
 
 
-async def test_regression_job_runner_enqueue_run_at_and_zoned_mutually_exclusive() -> (
-    None
-):
+async def test_regression_job_runner_enqueue_run_at_and_zoned_mutually_exclusive() -> None:
     store = InMemoryJobStore()
     runner = JobRunner(store=store)
     job = Job(job_id=uuid4())

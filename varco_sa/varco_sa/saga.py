@@ -202,9 +202,7 @@ class SASagaRepository(AbstractSagaRepository):
         row = _state_to_row(state)
         async with self._engine.begin() as conn:
             # Delete the existing row (no-op if absent).
-            await conn.execute(
-                _sagas_table.delete().where(_sagas_table.c.saga_id == state.saga_id)
-            )
+            await conn.execute(_sagas_table.delete().where(_sagas_table.c.saga_id == state.saga_id))
             await conn.execute(_sagas_table.insert().values(**row))
 
         _logger.debug(

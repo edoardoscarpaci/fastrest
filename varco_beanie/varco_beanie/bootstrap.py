@@ -97,9 +97,7 @@ class BeanieConfig:
     """
 
     # Connected pymongo async client — the source of database operations
-    mongo_client: (
-        Any  # AsyncMongoClient; Any avoids hard pymongo submodule dep at type-check
-    )
+    mongo_client: Any  # AsyncMongoClient; Any avoids hard pymongo submodule dep at type-check
 
     # MongoDB database name
     db_name: str

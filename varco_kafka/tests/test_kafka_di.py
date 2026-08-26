@@ -79,13 +79,10 @@ class TestKafkaChannelManagerSettingsDI:
         container = DIContainer()
         container.scan("varco_kafka", recursive=True)
 
-        implementations = {
-            getattr(b, "implementation", None) for b in container._bindings
-        }
+        implementations = {getattr(b, "implementation", None) for b in container._bindings}
         assert KafkaChannelManager in implementations
         assert any(
-            b.interface in (ChannelManager, KafkaChannelManager)
-            for b in container._bindings
+            b.interface in (ChannelManager, KafkaChannelManager) for b in container._bindings
         )
 
 
@@ -135,9 +132,7 @@ class TestKafkaEventBusSettingsCharacterization:
         container = DIContainer()
         container.scan("varco_kafka", recursive=True)
 
-        assert container.get(KafkaEventBusSettings) is container.get(
-            KafkaEventBusSettings
-        )
+        assert container.get(KafkaEventBusSettings) is container.get(KafkaEventBusSettings)
 
     async def test_characterization_event_bus_resolves_with_injected_settings(
         self, monkeypatch: pytest.MonkeyPatch

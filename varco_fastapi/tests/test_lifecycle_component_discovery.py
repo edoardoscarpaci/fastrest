@@ -227,7 +227,9 @@ def test_missing_websocket_binding_emits_no_warning_while_event_bus_does(
         _collect_lifecycle_components(container)
 
     warnings = [
-        r for r in caplog.records if r.levelno == logging.WARNING  # type: ignore[attr-defined]
+        r
+        for r in caplog.records
+        if r.levelno == logging.WARNING  # type: ignore[attr-defined]
     ]
     assert any(_Bus.__name__ in r.getMessage() for r in warnings)
     assert not any("WebSocketEventBus" in r.getMessage() for r in warnings)

@@ -86,6 +86,7 @@ from typing import Annotated
 from varco_core import AuditedDomainModel
 from varco_core.meta import FieldHint, PrimaryKey, PKStrategy, pk_field
 
+
 class Post(AuditedDomainModel):
     pk: Annotated[int, PrimaryKey(PKStrategy.INT_AUTO)] = pk_field()
     title: Annotated[str, FieldHint(max_length=200)]
@@ -101,17 +102,19 @@ from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AbstractAuthorizer
 from providify import Inject, Singleton
 
+
 @Singleton
 class PostService(AsyncService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     def __init__(
         self,
         uow_provider: Inject[IUoWProvider],
-        authorizer:   Inject[AbstractAuthorizer],
-        assembler:    Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
+        authorizer: Inject[AbstractAuthorizer],
+        assembler: Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
     ) -> None:
         super().__init__(uow_provider=uow_provider, authorizer=authorizer, assembler=assembler)
 
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
 ```
 
 ### Build and run a query
@@ -127,7 +130,8 @@ params = QueryParams(
 
 # Parse from a query string (e.g. from a URL parameter)
 from varco_core import QueryParser
-params = QueryParser().parse('published == true AND pk > 10', limit=20)
+
+params = QueryParser().parse("published == true AND pk > 10", limit=20)
 ```
 
 ### JWT — build and verify tokens
@@ -136,12 +140,7 @@ params = QueryParser().parse('published == true AND pk > 10', limit=20)
 from datetime import timedelta
 from varco_core import JwtBuilder, JwtParser
 
-token = (
-    JwtBuilder()
-    .subject("user-42")
-    .expires_in(timedelta(hours=1))
-    .encode("s3cr3t")
-)
+token = JwtBuilder().subject("user-42").expires_in(timedelta(hours=1)).encode("s3cr3t")
 tok = JwtParser.parse(token, "s3cr3t", algorithms=["HS256"])
 ```
 
@@ -162,8 +161,12 @@ Two ways to configure it — pick whichever fits your deployment:
 
 ```python
 from varco_core.jwt.transform import (
-    CanonicalClaim, ClaimMapping, ClaimPath, ClaimRule,
-    MappingClaimTransformer, ValueShape,
+    CanonicalClaim,
+    ClaimMapping,
+    ClaimPath,
+    ClaimRule,
+    MappingClaimTransformer,
+    ValueShape,
 )
 
 # Map a Keycloak-shaped token: realm_access.roles -> roles, with a "ROLE_" prefix strip
@@ -197,9 +200,9 @@ transformer lazily from the environment on first use:
 from varco_core.jwt import JwtParser
 
 token = JwtParser.parse(raw_token, secret)
-token.auth_ctx.roles                     # populated from "sofy-roles"/"realm_access.roles"
-token.auth_ctx.metadata["tenant_id"]      # populated from "org.id"
-token.extra_claims["sofy-roles"]          # still visible — non-destructive transform
+token.auth_ctx.roles  # populated from "sofy-roles"/"realm_access.roles"
+token.auth_ctx.metadata["tenant_id"]  # populated from "org.id"
+token.extra_claims["sofy-roles"]  # still visible — non-destructive transform
 ```
 
 Per-issuer overrides (`VARCO_JWT_TRANSFORM__<LABEL>__*`), the full env-var table, a
@@ -236,7 +239,7 @@ from varco_core.cache import InMemoryCache, TTLStrategy
 
 async with InMemoryCache(strategy=TTLStrategy(default_ttl=300)) as cache:
     await cache.set("user:42", {"name": "Alice"})
-    result = await cache.get("user:42")   # returns dict; None after 300 s
+    result = await cache.get("user:42")  # returns dict; None after 300 s
     await cache.delete("user:42")
 ```
 
@@ -269,12 +272,14 @@ _cache = LayeredCache(
     promote_ttl=60,
 )
 
+
 @cached(_cache, ttl=300, namespace="posts")
 async def get_post(post_id: int) -> dict:
     return await db.fetch_post(post_id)  # only called on a cache miss
 
-post = await get_post(42)     # miss → hits DB → cached
-post = await get_post(42)     # hit  → served from cache
+
+post = await get_post(42)  # miss → hits DB → cached
+post = await get_post(42)  # hit  → served from cache
 
 # Evict a specific entry:
 await get_post.invalidate(42)
@@ -291,8 +296,7 @@ class PostRepository:
         self._cache = cache
 
     @cached(lambda self: self._cache, ttl=120, namespace="posts")
-    async def find_by_id(self, post_id: int) -> dict | None:
-        ...
+    async def find_by_id(self, post_id: int) -> dict | None: ...
 ```
 
 ### Cache — `CacheServiceMixin` (look-aside built into the service)
@@ -308,34 +312,38 @@ parameters required:
 from varco_core import AsyncService, CacheServiceMixin
 from providify import Inject, Singleton
 
+
 @Singleton
 class PostService(
     CacheServiceMixin[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO],
     AsyncService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO],
 ):
-    _cache_namespace = "post"   # unique key prefix
-    _cache_ttl = 300             # seconds
+    _cache_namespace = "post"  # unique key prefix
+    _cache_ttl = 300  # seconds
 
     def __init__(
         self,
         uow_provider: Inject[IUoWProvider],
-        authorizer:   Inject[AbstractAuthorizer],
-        assembler:    Inject[AbstractDTOAssembler[Post, ...]],
+        authorizer: Inject[AbstractAuthorizer],
+        assembler: Inject[AbstractDTOAssembler[Post, ...]],
         # No cache parameter — resolved via ClassVar[Inject[CacheBackend]]
     ) -> None:
         super().__init__(uow_provider=uow_provider, authorizer=authorizer, assembler=assembler)
 
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
+
 
 # Register the cache backend once — all CacheServiceMixin subclasses share it:
 from varco_redis.cache import RedisCacheConfiguration
+
 container = DIContainer()
 await container.ainstall(RedisCacheConfiguration)  # binds CacheBackend
 
 # Usage is identical to a plain PostService — caching is transparent:
-post = await post_service.get(42, ctx)            # look-aside (ReadDTO cached)
-posts = await post_service.list(params, ctx)      # cached by params hash
-await post_service.update(42, dto, ctx)           # evicts get key + list
+post = await post_service.get(42, ctx)  # look-aside (ReadDTO cached)
+posts = await post_service.list(params, ctx)  # cached by params hash
+await post_service.update(42, dto, ctx)  # evicts get key + list
 ```
 
 Override the qualifier or injection strategy on specific services:
@@ -344,10 +352,12 @@ Override the qualifier or injection strategy on specific services:
 from typing import Annotated, ClassVar
 from providify import InjectMeta, LiveMeta
 
+
 class PostService(CacheServiceMixin, AsyncService[Post, ...]):
     _cache_namespace = "post"
     # Use a specific qualified backend (e.g. "layered"):
     _cache: ClassVar[Annotated[CacheBackend, InjectMeta(qualifier="layered")]]
+
 
 class SessionService(CacheServiceMixin, AsyncService[Session, ...]):
     _cache_namespace = "session"
@@ -405,13 +415,17 @@ async with (
 
 ```python
 from varco_core.cache import (
-    InMemoryCache, CompositeStrategy, TTLStrategy, ExplicitStrategy, TaggedStrategy
+    InMemoryCache,
+    CompositeStrategy,
+    TTLStrategy,
+    ExplicitStrategy,
+    TaggedStrategy,
 )
 
 strategy = CompositeStrategy(
-    TTLStrategy(300),         # evict after 5 minutes
-    ExplicitStrategy(),       # evict on demand
-    TaggedStrategy(),         # evict by tag
+    TTLStrategy(300),  # evict after 5 minutes
+    ExplicitStrategy(),  # evict on demand
+    TaggedStrategy(),  # evict by tag
 )
 
 async with InMemoryCache(strategy=strategy) as cache:
@@ -431,15 +445,18 @@ Composable decorators for any sync or async callable:
 ```python
 from varco_core.resilience import retry, RetryPolicy, CircuitBreaker, CircuitBreakerConfig, timeout
 
+
 # Retry with exponential back-off + jitter
 @retry(RetryPolicy(max_attempts=3, base_delay=0.5, retryable_on=(ConnectionError,)))
 async def call_payment_api(payload: dict) -> Receipt:
     return await http_client.post("/charge", json=payload)
 
+
 # Timeout (async only)
 @timeout(10.0)
 async def fetch_user(user_id: int) -> User:
     return await db.get(User, user_id)
+
 
 # Circuit breaker — share ONE instance per external dependency
 payment_breaker = CircuitBreaker(
@@ -447,9 +464,11 @@ payment_breaker = CircuitBreaker(
     name="payments",
 )
 
+
 @payment_breaker.protect
 async def charge(amount: float) -> str:
     return await _charge(amount)
+
 
 # Compose all three (bottom-to-top execution order):
 @timeout(10.0)
@@ -469,10 +488,12 @@ from varco_core.profiling import profile, profiled, ProfileConfig, set_profiling
 # Enable globally (or set VARCO_PROFILING_ENABLED=true in env)
 set_profiling_enabled(True)
 
+
 # Decorator — works on sync and async functions
 @profile(ProfileConfig(top_n=10))
 async def slow_query() -> list[Row]:
     return await db.execute("SELECT ...")
+
 
 # Context manager — gives direct access to the report
 async with profiled("batch_export") as session:
@@ -488,10 +509,13 @@ or middleware:
 ```python
 from varco_core.profiling import CpuProfilerBackend, CpuProfileResult, register_cpu_backend
 
+
 class PyinstrumentBackend:
     name = "pyinstrument"
+
     def start(self) -> None: ...
     def collect(self, top_n: int, sort_by: str) -> CpuProfileResult: ...
+
 
 register_cpu_backend("pyinstrument", PyinstrumentBackend)
 cfg = ProfileConfig(cpu_backend="pyinstrument")  # use it anywhere
@@ -510,6 +534,7 @@ from varco_core.resilience import RetryPolicy
 
 dlq = InMemoryDeadLetterQueue(max_size=10_000)  # swap for KafkaDLQ / RedisDLQ in production
 
+
 class OrderConsumer(EventConsumer):
     @PostConstruct
     def _setup(self) -> None:
@@ -523,6 +548,7 @@ class OrderConsumer(EventConsumer):
     )
     async def on_order(self, event: OrderPlacedEvent) -> None:
         await self._fulfillment.process(event)
+
 
 # Replay or inspect later
 entries: list[DeadLetterEntry] = await dlq.pop_batch(limit=50)
@@ -541,9 +567,9 @@ from varco_core.service.outbox import OutboxEntry, OutboxRelay
 # 1. In your service — save event in the same transaction as the entity
 async with uow:
     order = await repo.save(Order(...))
-    await outbox_repo.save(OutboxEntry.from_event(
-        OrderPlacedEvent(order_id=order.pk), channel="orders"
-    ))
+    await outbox_repo.save(
+        OutboxEntry.from_event(OrderPlacedEvent(order_id=order.pk), channel="orders")
+    )
 
 # 2. At app startup — start the relay background task
 relay = OutboxRelay(outbox=outbox_repo, bus=bus, poll_interval=1.0)
@@ -563,10 +589,12 @@ from dataclasses import dataclass
 from varco_core.model import DomainModel
 from varco_core.validation import DomainModelValidator, CompositeValidator, ValidationResult
 
+
 @dataclass(kw_only=True)
 class Order(DomainModel):
     quantity: int
     total: float
+
 
 class OrderValidator(DomainModelValidator[Order]):
     def validate(self, value: Order) -> ValidationResult:
@@ -574,6 +602,7 @@ class OrderValidator(DomainModelValidator[Order]):
         result += self._rule(value.quantity <= 0, "quantity must be positive", field="quantity")
         result += self._rule(value.total < 0, "total must be non-negative", field="total")
         return result
+
 
 # All errors collected before raising — user sees the full list at once
 validator = CompositeValidator(OrderValidator(), AnotherValidator())
@@ -583,11 +612,13 @@ result.raise_if_invalid()  # raises ServiceValidationError with all errors joine
 # Inject into a service via ValidatorServiceMixin:
 from varco_core.service.validation import ValidatorServiceMixin
 
+
 class OrderService(
     ValidatorServiceMixin[Order, int, CreateOrderDTO, OrderReadDTO, UpdateOrderDTO],
     AsyncService[Order, int, CreateOrderDTO, OrderReadDTO, UpdateOrderDTO],
 ):
-    def _get_repo(self, uow): return uow.orders
+    def _get_repo(self, uow):
+        return uow.orders
 ```
 
 ### Serialization — pluggable ser/deser
@@ -596,9 +627,9 @@ class OrderService(
 from varco_core.serialization import JsonSerializer, NoOpSerializer
 
 s = JsonSerializer()
-data: bytes = s.serialize({"key": "value"})                  # → UTF-8 JSON bytes
-back: dict   = s.deserialize(data)                            # → raw Python dict
-model        = s.deserialize(data, type_hint=MyPydanticModel) # → validated model
+data: bytes = s.serialize({"key": "value"})  # → UTF-8 JSON bytes
+back: dict = s.deserialize(data)  # → raw Python dict
+model = s.deserialize(data, type_hint=MyPydanticModel)  # → validated model
 
 # Pass-through for pre-serialized bytes
 noop = NoOpSerializer()

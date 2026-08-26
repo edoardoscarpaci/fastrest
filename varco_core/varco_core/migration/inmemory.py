@@ -95,9 +95,7 @@ class InMemoryMigrator(AbstractMigrator):
             pending=pending,
         )
 
-    async def upgrade(
-        self, target: str = "heads", *, dry_run: bool = False
-    ) -> MigrationReport:
+    async def upgrade(self, target: str = "heads", *, dry_run: bool = False) -> MigrationReport:
         self.calls.append("upgrade")
         if self._name is not None and self._call_log is not None:
             self._call_log.append(self._name)

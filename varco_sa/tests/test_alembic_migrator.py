@@ -131,9 +131,7 @@ async def test_upgrade_applies_pending_and_plan_becomes_empty(
     await migrator.close()
 
 
-async def test_upgrade_second_time_is_a_noop(
-    versions_dir: Path, sqlite_url: str
-) -> None:
+async def test_upgrade_second_time_is_a_noop(versions_dir: Path, sqlite_url: str) -> None:
     from varco_sa.migration.migrator import AlembicMigrator
 
     _write_two_revisions(versions_dir)
@@ -149,9 +147,7 @@ async def test_upgrade_second_time_is_a_noop(
     await migrator.close()
 
 
-async def test_downgrade_base_reverses_all_revisions(
-    versions_dir: Path, sqlite_url: str
-) -> None:
+async def test_downgrade_base_reverses_all_revisions(versions_dir: Path, sqlite_url: str) -> None:
     from varco_sa.migration.migrator import AlembicMigrator
 
     _write_two_revisions(versions_dir)
@@ -168,9 +164,7 @@ async def test_downgrade_base_reverses_all_revisions(
     await migrator.close()
 
 
-async def test_stamp_marks_without_executing_ddl(
-    versions_dir: Path, sqlite_url: str
-) -> None:
+async def test_stamp_marks_without_executing_ddl(versions_dir: Path, sqlite_url: str) -> None:
     from sqlalchemy import inspect as sa_inspect
     from varco_sa.migration.migrator import AlembicMigrator
 
@@ -186,9 +180,7 @@ async def test_stamp_marks_without_executing_ddl(
     assert plan.is_empty is True  # stamped as current, per alembic semantics
 
     async with engine.connect() as conn:
-        table_names = await conn.run_sync(
-            lambda sync_conn: sa_inspect(sync_conn).get_table_names()
-        )
+        table_names = await conn.run_sync(lambda sync_conn: sa_inspect(sync_conn).get_table_names())
     assert "widgets" not in table_names
     assert "gadgets" not in table_names
     await migrator.close()
@@ -210,9 +202,7 @@ async def test_upgrade_dry_run_emits_sql_and_touches_no_table(
 
     assert report.applied != () or "CREATE TABLE" in report.format()
     async with engine.connect() as conn:
-        table_names = await conn.run_sync(
-            lambda sync_conn: sa_inspect(sync_conn).get_table_names()
-        )
+        table_names = await conn.run_sync(lambda sync_conn: sa_inspect(sync_conn).get_table_names())
     assert "widgets" not in table_names
     await migrator.close()
 
@@ -228,9 +218,7 @@ async def test_failing_revision_leaves_alembic_version_at_n_minus_1_and_resumes(
         )
     )
     (versions_dir / "0002_boom.py").write_text(
-        FAILING_REVISION_TEMPLATE.format(
-            message="boom", revision="0002", down_revision="0001"
-        )
+        FAILING_REVISION_TEMPLATE.format(message="boom", revision="0002", down_revision="0001")
     )
     engine = create_async_engine(sqlite_url)
     migrator = AlembicMigrator(

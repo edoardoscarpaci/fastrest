@@ -53,9 +53,7 @@ async def test_two_migrators_concurrent_upgrade_exactly_one_applies(db) -> None:
     migrator_a = BeanieMigrator(db, registry, index_mode="off", owner_id="a")
     migrator_b = BeanieMigrator(db, registry, index_mode="off", owner_id="b")
 
-    report_a, report_b = await asyncio.gather(
-        migrator_a.upgrade(), migrator_b.upgrade()
-    )
+    report_a, report_b = await asyncio.gather(migrator_a.upgrade(), migrator_b.upgrade())
 
     reports = [report_a, report_b]
     skipped = [r for r in reports if r.skipped_locked]
@@ -97,7 +95,5 @@ async def test_index_mode_create_creates_missing_index_check_does_not(db) -> Non
     indexes_after_check = await db["widgets"].index_information()
     assert len(indexes_after_check) <= 1  # only the default _id_ index
 
-    migrator_create = BeanieMigrator(
-        db, registry, index_guard=guard, index_mode="create"
-    )
+    migrator_create = BeanieMigrator(db, registry, index_guard=guard, index_mode="create")
     await migrator_create.upgrade()

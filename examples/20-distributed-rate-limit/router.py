@@ -66,9 +66,7 @@ def build_router(
         return JSONResponse(
             status_code=429,
             content={
-                "detail": (
-                    f"Rate limit exceeded. " f"Retry after {retry_after:.3f} seconds."
-                ),
+                "detail": (f"Rate limit exceeded. Retry after {retry_after:.3f} seconds."),
                 "retry_after": retry_after,
             },
             headers={"Retry-After": str(retry_ceil)},

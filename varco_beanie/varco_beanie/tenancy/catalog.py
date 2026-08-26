@@ -47,12 +47,8 @@ if TYPE_CHECKING:
 
 _LEGAL_TRANSITIONS: dict[TenantStatus, frozenset[TenantStatus]] = {
     TenantStatus.PENDING: frozenset({TenantStatus.ACTIVE, TenantStatus.DELETED}),
-    TenantStatus.ACTIVE: frozenset(
-        {TenantStatus.SUSPENDED, TenantStatus.DEPROVISIONING}
-    ),
-    TenantStatus.SUSPENDED: frozenset(
-        {TenantStatus.ACTIVE, TenantStatus.DEPROVISIONING}
-    ),
+    TenantStatus.ACTIVE: frozenset({TenantStatus.SUSPENDED, TenantStatus.DEPROVISIONING}),
+    TenantStatus.SUSPENDED: frozenset({TenantStatus.ACTIVE, TenantStatus.DEPROVISIONING}),
     TenantStatus.DEPROVISIONING: frozenset({TenantStatus.DELETED}),
     TenantStatus.DELETED: frozenset(),
 }
@@ -154,9 +150,7 @@ class BeanieTenantCatalog(AbstractTenantCatalog):
             raise TenantNotFoundError(tenant_id)
         return descriptor
 
-    async def add(
-        self, descriptor: TenantDescriptor, *, allow_literal_dsn: bool = False
-    ) -> None:
+    async def add(self, descriptor: TenantDescriptor, *, allow_literal_dsn: bool = False) -> None:
         """
         Insert or idempotently re-insert ``descriptor``.
 

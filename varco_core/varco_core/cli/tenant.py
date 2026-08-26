@@ -48,9 +48,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
 
     deprovision_p = verb_parsers.add_parser("deprovision")
     deprovision_p.add_argument("tenant_id")
-    deprovision_p.add_argument(
-        "--yes-i-really-mean-it", action="store_true", dest="confirm"
-    )
+    deprovision_p.add_argument("--yes-i-really-mean-it", action="store_true", dest="confirm")
 
     verb_parsers.add_parser("list")
 
@@ -87,9 +85,7 @@ async def _run_async(args: argparse.Namespace) -> int:
         except Exception as exc:  # noqa: BLE001 - CLI boundary
             print(str(exc), file=sys.stderr)
             return 1
-        print(
-            f"Provisioning requested for tenant {args.tenant_id!r} (status: pending)."
-        )
+        print(f"Provisioning requested for tenant {args.tenant_id!r} (status: pending).")
         print(f"varco migrate upgrade --tenant {args.tenant_id}")
         return 0
 

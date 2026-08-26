@@ -186,9 +186,7 @@ class OidcDiscoverySource:
                           ``jwks_uri`` is absent from the document.
         """
         try:
-            with urllib.request.urlopen(
-                self._discovery_url, timeout=self._timeout
-            ) as resp:
+            with urllib.request.urlopen(self._discovery_url, timeout=self._timeout) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as e:
             raise KeyLoadError(
@@ -199,16 +197,14 @@ class OidcDiscoverySource:
             ) from e
         except urllib.error.URLError as e:
             raise KeyLoadError(
-                f"Cannot reach OIDC discovery endpoint {self._discovery_url!r}: "
-                f"{e.reason}."
+                f"Cannot reach OIDC discovery endpoint {self._discovery_url!r}: {e.reason}."
             ) from e
 
         try:
             config: dict[str, Any] = json.loads(body)
         except json.JSONDecodeError as e:
             raise KeyLoadError(
-                f"OIDC discovery endpoint {self._discovery_url!r} returned "
-                f"non-JSON body: {e}."
+                f"OIDC discovery endpoint {self._discovery_url!r} returned non-JSON body: {e}."
             ) from e
 
         jwks_uri: str | None = config.get("jwks_uri")

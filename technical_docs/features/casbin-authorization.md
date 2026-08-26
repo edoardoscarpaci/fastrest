@@ -66,8 +66,8 @@ from providify import DIContainer
 from varco_casbin.di import bootstrap, enable_policy_authorizer
 from varco_core.auth import PolicyEngine, PolicyManagement
 
-container = bootstrap(DIContainer())     # CasbinPolicyEngine → PolicyEngine + PolicyManagement
-enable_policy_authorizer(container)      # OPT-IN: PolicyEngineAuthorizer → AbstractAuthorizer
+container = bootstrap(DIContainer())  # CasbinPolicyEngine → PolicyEngine + PolicyManagement
+enable_policy_authorizer(container)  # OPT-IN: PolicyEngineAuthorizer → AbstractAuthorizer
 
 engine = await container.aget(PolicyEngine)
 await engine.add_role_for_user("alice", "admin")
@@ -107,6 +107,7 @@ single-process only.
 
 ```python
 from varco_casbin.router import build_policy_router
+
 app.include_router(build_policy_router(engine, server_auth=jwt_auth))
 ```
 
@@ -140,8 +141,8 @@ from varco_core.auth import Action, AuthContext, Resource, PolicyEngineAuthorize
 async with CasbinPolicyEngine(CasbinSettings(model_preset="abac")) as engine:
     authz = PolicyEngineAuthorizer(engine)
     owner = AuthContext(user_id="u1")
-    post  = Post(pk="1", owner_id="u1")           # a loaded DomainModel
-    await authz.authorize(owner, Action.UPDATE, Resource(Post, post))   # ✅ owner
+    post = Post(pk="1", owner_id="u1")  # a loaded DomainModel
+    await authz.authorize(owner, Action.UPDATE, Resource(Post, post))  # ✅ owner
     # AuthContext(user_id="u2") on the same post → ServiceAuthorizationError (403)
 ```
 

@@ -19,9 +19,7 @@ class _CountingProvisioner:
         if self._fail:
             raise RuntimeError("boom")
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         if not confirm_destroy:
             from varco_core.tenancy.provisioner import DestructiveOperationRefused
 
@@ -94,9 +92,7 @@ async def test_exhausted_retry_lands_in_dlq_with_tenant_id_in_source_ref() -> No
     dlq = InMemoryDeadLetterQueue()
     bus = InMemoryEventBus()
     consumer = TenantProvisionConsumer(control_service=control_service)
-    consumer.register_to(
-        bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq
-    )
+    consumer.register_to(bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq)
 
     event = TenantProvisionRequested(tenant_id="acme")
     await bus.publish(event, channel="varco.tenancy")
@@ -120,9 +116,7 @@ async def test_deprovision_without_confirm_is_rejected_and_dlqd() -> None:
     control_service, _bus, _producer = _make_control_service()
 
     consumer = TenantProvisionConsumer(control_service=control_service)
-    consumer.register_to(
-        bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq
-    )
+    consumer.register_to(bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq)
 
     event = TenantDeprovisionRequested(tenant_id="acme", confirm=False)
     await bus.publish(event, channel="varco.tenancy")
@@ -168,9 +162,7 @@ async def test_provisioner_and_catalog_shim_warns_and_still_updates_catalog() ->
         )
     consumer.register_to(bus)
 
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel="varco.tenancy"
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel="varco.tenancy")
     await bus.drain()
 
     descriptor = await catalog.get("acme")
@@ -192,9 +184,7 @@ async def test_shim_without_producer_logs_exactly_one_warning(caplog) -> None:
     consumer.register_to(bus)
 
     caplog.set_level("WARNING")
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel="varco.tenancy"
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel="varco.tenancy")
     await bus.drain()
 
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]
@@ -218,13 +208,9 @@ async def test_provision_over_bus_does_not_re_emit_provision_requested() -> None
     consumer.register_to(bus)
 
     received: list[TenantProvisionRequested] = []
-    bus.subscribe(
-        TenantProvisionRequested, lambda e: received.append(e), channel="varco.tenancy"
-    )
+    bus.subscribe(TenantProvisionRequested, lambda e: received.append(e), channel="varco.tenancy")
 
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel="varco.tenancy"
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel="varco.tenancy")
     await bus.drain()
 
     # Exactly the one we published ourselves — none re-emitted by provision().

@@ -128,8 +128,7 @@ async def _outbox_table_exists(engine) -> bool:
     async with engine.connect() as conn:
         count = await conn.scalar(
             sa.text(
-                "SELECT count(*) FROM information_schema.tables "
-                "WHERE table_name = 'varco_outbox'"
+                "SELECT count(*) FROM information_schema.tables WHERE table_name = 'varco_outbox'"
             )
         )
     return bool(count)
@@ -313,18 +312,14 @@ async def test_two_concurrent_lifespans_exactly_one_migrates_schema_not_corrupte
         None,
         routers=[_PingRouter],
         migrations=migrator_a,
-        migration_settings=MigrationSettings(
-            mode="upgrade", lock_timeout=30.0, timeout=60.0
-        ),
+        migration_settings=MigrationSettings(mode="upgrade", lock_timeout=30.0, timeout=60.0),
         validate=False,
     )
     app_b = create_varco_app(
         None,
         routers=[_PingRouter],
         migrations=migrator_b,
-        migration_settings=MigrationSettings(
-            mode="upgrade", lock_timeout=30.0, timeout=60.0
-        ),
+        migration_settings=MigrationSettings(mode="upgrade", lock_timeout=30.0, timeout=60.0),
         validate=False,
     )
 
@@ -336,9 +331,7 @@ async def test_two_concurrent_lifespans_exactly_one_migrates_schema_not_corrupte
                 results[label] = "served"
         except MigrationLockTimeout:
             results[label] = "lock_timeout"
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 — any other real failure is a test failure
+        except Exception as exc:  # noqa: BLE001 — any other real failure is a test failure
             results[label] = f"error: {exc!r}"
 
     # Start both lifespans concurrently — genuine contention on the same
@@ -351,9 +344,7 @@ async def test_two_concurrent_lifespans_exactly_one_migrates_schema_not_corrupte
     # or a MigrationLockTimeout naming the contended lock. What must NOT
     # happen is a raw "relation already exists" (concurrent DDL corruption).
     for label, outcome in results.items():
-        assert not outcome.startswith(
-            "error:"
-        ), f"{label}: unexpected failure: {outcome}"
+        assert not outcome.startswith("error:"), f"{label}: unexpected failure: {outcome}"
         assert outcome in ("served", "lock_timeout"), f"{label}: {outcome}"
 
     assert await _outbox_table_exists(engine)

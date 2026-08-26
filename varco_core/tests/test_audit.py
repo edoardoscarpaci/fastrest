@@ -87,9 +87,7 @@ class InMemoryAuditRepository(AuditRepository):
             Filtered entries ordered by ``occurred_at`` descending.
         """
         filtered = [
-            e
-            for e in self.entries
-            if e.entity_type == entity_type and e.entity_id == entity_id
+            e for e in self.entries if e.entity_type == entity_type and e.entity_id == entity_id
         ]
         if tenant_id is not None:
             filtered = [e for e in filtered if e.tenant_id == tenant_id]
@@ -244,9 +242,7 @@ class _FakeReadDTO:
 class _FakeAuthContext:
     """Minimal AuthContext stand-in."""
 
-    def __init__(
-        self, sub: str = "user:test", tenant_id: str | None = "tenant:test"
-    ) -> None:
+    def __init__(self, sub: str = "user:test", tenant_id: str | None = "tenant:test") -> None:
         self.sub = sub
         self.metadata: dict[str, Any] = {}
         if tenant_id is not None:
@@ -287,9 +283,7 @@ class _ServiceBase:
     async def _after_create(self, entity: Any, read_dto: Any, ctx: Any) -> None:
         return
 
-    async def _after_update(
-        self, before_dto: Any, entity: Any, read_dto: Any, ctx: Any
-    ) -> None:
+    async def _after_update(self, before_dto: Any, entity: Any, read_dto: Any, ctx: Any) -> None:
         return
 
     async def _after_delete(self, pk: Any, ctx: Any) -> None:
@@ -559,9 +553,7 @@ class _WidgetUoWProvider(IUoWProvider):
 # ── Assembler for _Widget ─────────────────────────────────────────────────────
 
 
-class _WidgetAssembler(
-    AbstractDTOAssembler[_Widget, _WidgetCreate, _WidgetRead, _WidgetUpdate]
-):
+class _WidgetAssembler(AbstractDTOAssembler[_Widget, _WidgetCreate, _WidgetRead, _WidgetUpdate]):
     def to_domain(self, dto: _WidgetCreate) -> _Widget:
         return _Widget(name=dto.name)
 
@@ -583,9 +575,7 @@ class _AllowAllAuthorizer(AbstractAuthorizer):
 # ── Spy service — records hook calls ─────────────────────────────────────────
 
 
-class _HookSpyService(
-    AsyncService[_Widget, UUID, _WidgetCreate, _WidgetRead, _WidgetUpdate]
-):
+class _HookSpyService(AsyncService[_Widget, UUID, _WidgetCreate, _WidgetRead, _WidgetUpdate]):
     """Service that records _after_* hook invocations."""
 
     def __init__(self) -> None:
@@ -684,9 +674,7 @@ async def test_after_create_not_called_on_create_failure() -> None:
         async def authorize(self, ctx, action, resource) -> None:
             raise ServiceAuthorizationError("denied")
 
-    class _DeniedService(
-        AsyncService[_Widget, UUID, _WidgetCreate, _WidgetRead, _WidgetUpdate]
-    ):
+    class _DeniedService(AsyncService[_Widget, UUID, _WidgetCreate, _WidgetRead, _WidgetUpdate]):
         def __init__(self) -> None:
             super().__init__(
                 uow_provider=_WidgetUoWProvider(),
@@ -812,9 +800,7 @@ async def test_audit_consumer_always_failing_handler_lands_in_dlq(
     assert entries[0].source == DeadLetterSource.CONSUMER
 
 
-async def test_audit_consumer_explicit_none_retry_policy_restores_fire_and_forget() -> (
-    None
-):
+async def test_audit_consumer_explicit_none_retry_policy_restores_fire_and_forget() -> None:
     bus = InMemoryEventBus()
 
     class _AlwaysFailingAuditRepository(InMemoryAuditRepository):
@@ -850,9 +836,7 @@ class _BareAuditRepository(AuditRepository):
 
     async def save(self, entry: AuditEntry) -> None: ...
 
-    async def list_for_entity(
-        self, entity_type, entity_id, *, limit=100, tenant_id=None
-    ):
+    async def list_for_entity(self, entity_type, entity_id, *, limit=100, tenant_id=None):
         return []
 
 

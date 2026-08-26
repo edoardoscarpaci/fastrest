@@ -115,10 +115,7 @@ class TestAbstractJobStoreTryClaimLeaseKwargs:
 
         lease_store = _LeaseAwareStore()
         assert await lease_store.try_claim(uuid4()) is None
-        assert (
-            await lease_store.try_claim(uuid4(), owner_id="worker-1", lease_ttl=30.0)
-            is None
-        )
+        assert await lease_store.try_claim(uuid4(), owner_id="worker-1", lease_ttl=30.0) is None
 
 
 class TestAbstractJobStoreNewConcreteMethods:

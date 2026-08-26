@@ -61,15 +61,11 @@ class OrderService:
     async def delete(self, pk: Any, auth: Any = None) -> None:
         return None
 
-    async def cancel_order(
-        self, order_id: UUID, limit: int, reason: OrderCreate
-    ) -> dict:
+    async def cancel_order(self, order_id: UUID, limit: int, reason: OrderCreate) -> dict:
         return {"order_id": str(order_id), "limit": limit, "reason": reason.name}
 
 
-class OrderRouter(
-    CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]
-):
+class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
     """CRUD router (6 standard routes) + one custom route with a path param
     (``order_id: UUID``), a query param (``limit: int``), and a Pydantic body
     (``reason: OrderCreate``) — used across Phase 0/7/8 tests."""

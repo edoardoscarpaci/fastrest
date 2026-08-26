@@ -36,26 +36,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     export_p.set_defaults(_run=_run_export_contract)
     export_p.add_argument("target", help="module:RouterClass")
-    export_p.add_argument(
-        "-o", "--output", default=None, help="Output path (default: stdout)"
-    )
+    export_p.add_argument("-o", "--output", default=None, help="Output path (default: stdout)")
     export_p.add_argument("--service-name", default=None)
     export_p.add_argument("--service-version", default=None)
     export_p.add_argument("--strict", action="store_true")
 
-    gen_p = subparsers.add_parser(
-        "gen-client", help="Generate a standalone typed client module"
-    )
+    gen_p = subparsers.add_parser("gen-client", help="Generate a standalone typed client module")
     gen_p.set_defaults(_run=_run_gen_client)
-    gen_p.add_argument(
-        "-c", "--contract", required=True, help="Path to a .contract.json"
-    )
+    gen_p.add_argument("-c", "--contract", required=True, help="Path to a .contract.json")
     gen_p.add_argument("-o", "--output", required=True, help="Output .py path")
     gen_p.add_argument("--class-name", default=None)
 
-    stubs_p = subparsers.add_parser(
-        "gen-client-stubs", help="Generate/check a .pyi client stub"
-    )
+    stubs_p = subparsers.add_parser("gen-client-stubs", help="Generate/check a .pyi client stub")
     stubs_p.set_defaults(_run=_run_gen_client_stubs)
     stubs_p.add_argument("target", nargs="?", default=None, help="module:RouterClass")
     stubs_p.add_argument(
@@ -66,9 +58,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     stubs_p.add_argument("-o", "--output", required=True, help="Output .pyi path")
     stubs_p.add_argument("--class-name", default=None)
-    stubs_p.add_argument(
-        "--check", action="store_true", help="Exit 1 on drift instead of writing"
-    )
+    stubs_p.add_argument("--check", action="store_true", help="Exit 1 on drift instead of writing")
 
 
 def _resolve_target(target: str) -> Any:
@@ -145,9 +135,7 @@ def _run_gen_client_stubs(args: argparse.Namespace) -> int:
             return 2
         contract = build_contract(router_cls)
     else:
-        print(
-            "Specify either a target (module:Router) or -c/--contract.", file=sys.stderr
-        )
+        print("Specify either a target (module:Router) or -c/--contract.", file=sys.stderr)
         return 2
 
     class_name = args.class_name or f"{contract.service_name}Client"

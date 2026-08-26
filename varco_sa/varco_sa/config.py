@@ -86,9 +86,7 @@ class SAConfig:
     # Extra keyword args for async_sessionmaker.
     # DESIGN: default expire_on_commit=False — prevents implicit lazy-load
     # errors after commit in async contexts where I/O is not allowed.
-    session_options: dict[str, Any] = field(
-        default_factory=lambda: {"expire_on_commit": False}
-    )
+    session_options: dict[str, Any] = field(default_factory=lambda: {"expire_on_commit": False})
 
 
 __all__ = ["SAConfig"]

@@ -238,9 +238,7 @@ def test_none_field_raises_value_error():
     object.__setattr__(node, "field", None)
     object.__setattr__(node, "op", Operation.EQUAL)
     object.__setattr__(node, "value", 1)
-    object.__setattr__(
-        node, "type", node.__class__.__dataclass_fields__["type"].default
-    )
+    object.__setattr__(node, "type", node.__class__.__dataclass_fields__["type"].default)
     with pytest.raises((ValueError, AttributeError)):
         _compile(node)
 
@@ -324,9 +322,7 @@ class TestJoinTraversal:
         """A path whose first segment is not a declared relationship must raise."""
         compiler = _join_compiler()
         node = _join_cmp("nonexistent_rel.field", Operation.EQUAL, "x")
-        with pytest.raises(
-            OperationNotSupported, match="not a declared SA relationship"
-        ):
+        with pytest.raises(OperationNotSupported, match="not a declared SA relationship"):
             compiler.visit(node)
 
     def test_unknown_leaf_column_raises_field_not_found(self):
@@ -366,9 +362,7 @@ class TestJoinTraversal:
         """
         compiler = _join_compiler()
         node = _join_cmp("__class__.__mro__", Operation.EQUAL, "x")
-        with pytest.raises(
-            OperationNotSupported, match="not a declared SA relationship"
-        ):
+        with pytest.raises(OperationNotSupported, match="not a declared SA relationship"):
             compiler.visit(node)
 
     def test_dotted_path_with_allowed_fields_whitelist(self):

@@ -163,11 +163,7 @@ def _apply_strip(items: Any, prefix: str | None) -> Any:
     if not prefix or not isinstance(items, list):
         return items
     return [
-        (
-            item[len(prefix) :]
-            if isinstance(item, str) and item.startswith(prefix)
-            else item
-        )
+        (item[len(prefix) :] if isinstance(item, str) and item.startswith(prefix) else item)
         for item in items
     ]
 
@@ -265,8 +261,7 @@ def _normalize_grants(value: Any, *, strict: bool, target: str) -> list[dict[str
         return []
     if not isinstance(value, list):
         raise ClaimTransformError(
-            f"Claim {target!r} (grants) must be a list, got "
-            f"{type(value).__name__}: {value!r}."
+            f"Claim {target!r} (grants) must be a list, got {type(value).__name__}: {value!r}."
         )
     for index, item in enumerate(value):
         if not isinstance(item, Mapping):
@@ -276,13 +271,11 @@ def _normalize_grants(value: Any, *, strict: bool, target: str) -> list[dict[str
             )
         if "resource" not in item:
             raise ClaimTransformError(
-                f"grants[{index}] is missing the required key 'resource': "
-                f"{dict(item)!r}."
+                f"grants[{index}] is missing the required key 'resource': {dict(item)!r}."
             )
         if "actions" not in item:
             raise ClaimTransformError(
-                f"grants[{index}] is missing the required key 'actions': "
-                f"{dict(item)!r}."
+                f"grants[{index}] is missing the required key 'actions': {dict(item)!r}."
             )
     return value
 

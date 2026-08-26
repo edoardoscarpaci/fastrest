@@ -213,15 +213,11 @@ class TestCapabilityShimForTenantOnlyStores:
             async def load(self, kid: str) -> EncryptionKeyEntry | None:
                 return self._entries.get(kid)
 
-            async def load_for_tenant(
-                self, tenant_id: str | None
-            ) -> list[EncryptionKeyEntry]:
+            async def load_for_tenant(self, tenant_id: str | None) -> list[EncryptionKeyEntry]:
                 return [e for e in self._entries.values() if e.tenant_id == tenant_id]
 
             async def list_tenants(self) -> list[str]:
-                return sorted(
-                    {e.tenant_id for e in self._entries.values() if e.tenant_id}
-                )
+                return sorted({e.tenant_id for e in self._entries.values() if e.tenant_id})
 
             async def delete(self, kid: str) -> None:
                 self._entries.pop(kid, None)

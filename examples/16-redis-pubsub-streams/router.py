@@ -134,8 +134,7 @@ def build_router(
             - Returns ``[]`` if no events have been received yet.
         """
         return [
-            NotificationItem(order_id=ev.order_id, amount=ev.amount)
-            for ev in consumer.received
+            NotificationItem(order_id=ev.order_id, amount=ev.amount) for ev in consumer.received
         ]
 
     @router.get("/health")

@@ -55,12 +55,12 @@ An `OrderConsumer` listens on the `"orders"` channel and appends every
 ```python
 class OrderConsumer(EventConsumer):
     def __init__(self, bus: AbstractEventBus) -> None:
-        self._bus = bus         # store ref — NOT for publishing
+        self._bus = bus  # store ref — NOT for publishing
         self.received = []
 
     @PostConstruct
     def _setup(self) -> None:
-        self.register_to(self._bus)   # subscriptions created HERE
+        self.register_to(self._bus)  # subscriptions created HERE
 
     @listen(OrderPlacedEvent, channel="orders")
     async def on_order(self, event: OrderPlacedEvent) -> None:

@@ -24,17 +24,13 @@ def _empty_migrator() -> InMemoryMigrator:
 
 
 def _raising_migrator() -> InMemoryMigrator:
-    return InMemoryMigrator(
-        revisions=[Revision(id="0001", label="init")], fail_on_upgrade_call=1
-    )
+    return InMemoryMigrator(revisions=[Revision(id="0001", label="init")], fail_on_upgrade_call=1)
 
 
 async def test_pending_exits_1_when_revisions_pending() -> None:
     from varco_core.cli.main import main
 
-    exit_code = main(
-        ["migrate", "pending", "-t", "tests.test_cli_migrate:_pending_migrator"]
-    )
+    exit_code = main(["migrate", "pending", "-t", "tests.test_cli_migrate:_pending_migrator"])
 
     assert exit_code == 1
 
@@ -42,9 +38,7 @@ async def test_pending_exits_1_when_revisions_pending() -> None:
 async def test_pending_exits_0_when_nothing_pending() -> None:
     from varco_core.cli.main import main
 
-    exit_code = main(
-        ["migrate", "pending", "-t", "tests.test_cli_migrate:_empty_migrator"]
-    )
+    exit_code = main(["migrate", "pending", "-t", "tests.test_cli_migrate:_empty_migrator"])
 
     assert exit_code == 0
 
@@ -52,9 +46,7 @@ async def test_pending_exits_0_when_nothing_pending() -> None:
 async def test_upgrade_on_inmemory_target_applies_and_exits_0() -> None:
     from varco_core.cli.main import main
 
-    exit_code = main(
-        ["migrate", "upgrade", "-t", "tests.test_cli_migrate:_pending_migrator"]
-    )
+    exit_code = main(["migrate", "upgrade", "-t", "tests.test_cli_migrate:_pending_migrator"])
 
     assert exit_code == 0
 
@@ -64,9 +56,7 @@ async def test_upgrade_on_raising_migrator_exits_1_with_error_on_stderr(
 ) -> None:
     from varco_core.cli.main import main
 
-    exit_code = main(
-        ["migrate", "upgrade", "-t", "tests.test_cli_migrate:_raising_migrator"]
-    )
+    exit_code = main(["migrate", "upgrade", "-t", "tests.test_cli_migrate:_raising_migrator"])
 
     captured = capsys.readouterr()
     assert exit_code == 1

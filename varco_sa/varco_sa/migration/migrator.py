@@ -200,9 +200,7 @@ class AlembicMigrator(AbstractMigrator):
         config.set_main_option("script_location", effective_script_location)
         if version_locations:
             config.set_main_option("path_separator", "os")
-            config.set_main_option(
-                "version_locations", os.pathsep.join(version_locations)
-            )
+            config.set_main_option("version_locations", os.pathsep.join(version_locations))
 
         script = ScriptDirectory.from_config(config)
         self._config, self._script = config, script
@@ -240,9 +238,7 @@ class AlembicMigrator(AbstractMigrator):
         from alembic.runtime.migration import MigrationContext
 
         opts = self._schema_configure_kwargs()
-        return tuple(
-            MigrationContext.configure(sync_conn, opts=opts or None).get_current_heads()
-        )
+        return tuple(MigrationContext.configure(sync_conn, opts=opts or None).get_current_heads())
 
     def _sync_upgrade(self, sync_conn: Connection, target: str) -> None:
         from alembic.runtime.environment import EnvironmentContext
@@ -252,9 +248,7 @@ class AlembicMigrator(AbstractMigrator):
         def _fn(rev: Any, context: Any) -> Any:
             return script._upgrade_revs(target, rev)
 
-        with EnvironmentContext(
-            config, script, fn=_fn, destination_rev=target
-        ) as env_ctx:
+        with EnvironmentContext(config, script, fn=_fn, destination_rev=target) as env_ctx:
             env_ctx.configure(
                 connection=sync_conn,
                 target_metadata=None,
@@ -273,9 +267,7 @@ class AlembicMigrator(AbstractMigrator):
         def _fn(rev: Any, context: Any) -> Any:
             return script._downgrade_revs(target, rev)
 
-        with EnvironmentContext(
-            config, script, fn=_fn, destination_rev=target
-        ) as env_ctx:
+        with EnvironmentContext(config, script, fn=_fn, destination_rev=target) as env_ctx:
             env_ctx.configure(
                 connection=sync_conn,
                 target_metadata=None,
@@ -294,9 +286,7 @@ class AlembicMigrator(AbstractMigrator):
         def _fn(rev: Any, context: Any) -> Any:
             return script._stamp_revs(target, rev)
 
-        with EnvironmentContext(
-            config, script, fn=_fn, destination_rev=target
-        ) as env_ctx:
+        with EnvironmentContext(config, script, fn=_fn, destination_rev=target) as env_ctx:
             env_ctx.configure(
                 connection=sync_conn,
                 target_metadata=None,
@@ -305,9 +295,7 @@ class AlembicMigrator(AbstractMigrator):
             with env_ctx.begin_transaction():
                 env_ctx.run_migrations()
 
-    def _pending_revisions(
-        self, script: Any, current: tuple[str, ...]
-    ) -> tuple[Revision, ...]:
+    def _pending_revisions(self, script: Any, current: tuple[str, ...]) -> tuple[Revision, ...]:
         """Return pending ``Revision``s in application order (oldest first)."""
         lower: Any = current if current else "base"
         script_revs = list(script.iterate_revisions("heads", lower))
@@ -329,16 +317,12 @@ class AlembicMigrator(AbstractMigrator):
         pending = self._pending_revisions(script, current)
         return MigrationPlan(current=current, pending=pending)
 
-    async def upgrade(
-        self, target: str = "heads", *, dry_run: bool = False
-    ) -> MigrationReport:
+    async def upgrade(self, target: str = "heads", *, dry_run: bool = False) -> MigrationReport:
         start = time.monotonic()
 
         if dry_run:
             plan = await self.plan()
-            return MigrationReport(
-                applied=plan.pending, duration_s=time.monotonic() - start
-            )
+            return MigrationReport(applied=plan.pending, duration_s=time.monotonic() - start)
 
         plan = await self.plan()
         if plan.is_empty:
@@ -356,9 +340,7 @@ class AlembicMigrator(AbstractMigrator):
                 if to_apply:
                     async with self._engine.connect() as conn:
                         await conn.run_sync(self._sync_upgrade, target)
-                return MigrationReport(
-                    applied=to_apply, duration_s=time.monotonic() - start
-                )
+                return MigrationReport(applied=to_apply, duration_s=time.monotonic() - start)
         except MigrationLockTimeout:
             replanned = await self.plan()
             if replanned.is_empty:
@@ -375,9 +357,7 @@ class AlembicMigrator(AbstractMigrator):
             await conn.run_sync(self._sync_downgrade, target)
 
         plan_after = await self.plan()
-        reversed_ids = {r.id for r in plan_after.pending} - {
-            r.id for r in plan_before.pending
-        }
+        reversed_ids = {r.id for r in plan_after.pending} - {r.id for r in plan_before.pending}
         applied = tuple(r for r in plan_after.pending if r.id in reversed_ids)
         return MigrationReport(applied=applied, duration_s=time.monotonic() - start)
 

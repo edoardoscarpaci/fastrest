@@ -215,9 +215,7 @@ class RedisBulkhead:
             ValueError: ``slot_ttl <= 0``.
         """
         if slot_ttl <= 0:
-            raise ValueError(
-                f"RedisBulkhead.slot_ttl must be positive; got {slot_ttl}."
-            )
+            raise ValueError(f"RedisBulkhead.slot_ttl must be positive; got {slot_ttl}.")
         self.config = config or BulkheadConfig(max_concurrent=10)
         self.settings = settings or RedisEventBusSettings()
         self.slot_ttl = slot_ttl
@@ -374,9 +372,7 @@ class RedisBulkhead:
                 str(key_ttl),
             )
             if claimed:
-                _logger.debug(
-                    "RedisBulkhead '%s' slot acquired (token=%s).", self.name, token
-                )
+                _logger.debug("RedisBulkhead '%s' slot acquired (token=%s).", self.name, token)
                 return token
 
             if self.config.max_wait <= 0.0 or time.monotonic() >= deadline:
@@ -385,13 +381,9 @@ class RedisBulkhead:
                     self.name,
                     self.config.max_concurrent,
                 )
-                raise BulkheadFullError(
-                    self.name, self.config.max_concurrent, self.config.max_wait
-                )
+                raise BulkheadFullError(self.name, self.config.max_concurrent, self.config.max_wait)
 
-            await asyncio.sleep(
-                min(self._POLL_INTERVAL, max(0.0, deadline - time.monotonic()))
-            )
+            await asyncio.sleep(min(self._POLL_INTERVAL, max(0.0, deadline - time.monotonic())))
 
     async def _release(self, token: str) -> None:
         """
@@ -402,9 +394,7 @@ class RedisBulkhead:
         try:
             redis = self._require_redis()
             await redis.eval(_RELEASE_SCRIPT, 1, self._key(), token)  # type: ignore[misc]
-            _logger.debug(
-                "RedisBulkhead '%s' slot released (token=%s).", self.name, token
-            )
+            _logger.debug("RedisBulkhead '%s' slot released (token=%s).", self.name, token)
         except Exception as exc:  # noqa: BLE001
             _logger.error(
                 "RedisBulkhead '%s' release failed for token=%s: %s",
@@ -487,9 +477,7 @@ class RedisBulkheadConfiguration:
     """
 
     @Provider(singleton=True)
-    async def redis_bulkhead(
-        self, settings: Inject[RedisEventBusSettings]
-    ) -> RedisBulkhead:
+    async def redis_bulkhead(self, settings: Inject[RedisEventBusSettings]) -> RedisBulkhead:
         """
         Create and connect the default ``RedisBulkhead`` singleton.
 
@@ -502,8 +490,7 @@ class RedisBulkheadConfiguration:
         instance = RedisBulkhead(settings=settings)
         await instance.connect()
         _logger.info(
-            "RedisBulkheadConfiguration: RedisBulkhead connected "
-            "(max_concurrent=%d).",
+            "RedisBulkheadConfiguration: RedisBulkhead connected (max_concurrent=%d).",
             instance.config.max_concurrent,
         )
         return instance

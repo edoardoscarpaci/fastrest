@@ -238,9 +238,7 @@ def _safe(fn: Any, *args: Any, **kwargs: Any) -> None:
 
 def record_dlq_push(*, source: str, channel: str, ok: bool) -> None:
     """Record one DLQ push attempt. ``ok=False`` marks a swallowed push failure."""
-    _safe(
-        _dlq_pushed.add, source=source, channel=channel, status="ok" if ok else "failed"
-    )
+    _safe(_dlq_pushed.add, source=source, channel=channel, status="ok" if ok else "failed")
 
 
 def record_dlq_redrive(*, source: str, ok: bool) -> None:
@@ -324,9 +322,7 @@ def _dlq_depth_callback(_options: Any) -> list[Observation]:
                     if channel_count < 0:
                         continue
                     observations.append(
-                        Observation(
-                            channel_count, attributes={"dlq": name, "channel": channel}
-                        )
+                        Observation(channel_count, attributes={"dlq": name, "channel": channel})
                     )
     return observations
 

@@ -30,9 +30,7 @@ async def engine():
 
 @pytest_asyncio.fixture
 async def chained_repo(engine) -> SAAuditRepository:
-    return SAAuditRepository(
-        async_sessionmaker(engine, expire_on_commit=False), hash_chain=True
-    )
+    return SAAuditRepository(async_sessionmaker(engine, expire_on_commit=False), hash_chain=True)
 
 
 def _entry(**kwargs) -> AuditEntry:
@@ -62,9 +60,7 @@ class TestManualTamperDetected:
         # Directly corrupt one row's diff via raw SQL -- bypasses the
         # repository's own hash-chain bookkeeping entirely.
         async with engine.begin() as conn:
-            await conn.execute(
-                sa.text("UPDATE varco_audit_log SET diff = '{\"tampered\": true}'")
-            )
+            await conn.execute(sa.text("UPDATE varco_audit_log SET diff = '{\"tampered\": true}'"))
 
         entries = await chained_repo.list(limit=10)
         assert AuditRepository.verify_chain(entries) is not True

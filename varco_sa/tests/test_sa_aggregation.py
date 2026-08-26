@@ -57,9 +57,7 @@ def test_applicator_count_star_no_group_by() -> None:
     SQL should contain COUNT(*) and no GROUP BY clause.
     """
     agg = AggregationQuery(
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
     )
     stmt = select(OrderModel)
     applicator = SQLAlchemyAggregationApplicator(OrderModel)
@@ -76,9 +74,7 @@ def test_applicator_count_with_group_by() -> None:
     """
     agg = AggregationQuery(
         group_by=("status",),
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
     )
     stmt = select(OrderModel)
     applicator = SQLAlchemyAggregationApplicator(OrderModel)
@@ -96,9 +92,7 @@ def test_applicator_sum_aggregation() -> None:
     """
     agg = AggregationQuery(
         group_by=("customer_id",),
-        aggregations=(
-            AggregationExpression(AggregationFunc.SUM, field="amount", alias="total"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.SUM, field="amount", alias="total"),),
     )
     stmt = select(OrderModel)
     applicator = SQLAlchemyAggregationApplicator(OrderModel)
@@ -139,9 +133,7 @@ def test_applicator_having_clause() -> None:
     """
     agg = AggregationQuery(
         group_by=("status",),
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
         having=ComparisonNode(field="id", op=Operation.GREATER_THAN, value=0),
     )
     stmt = select(OrderModel)
@@ -157,9 +149,7 @@ def test_applicator_limit_and_offset() -> None:
     limit and offset are both applied to the resulting query.
     """
     agg = AggregationQuery(
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
         limit=10,
         offset=5,
     )
@@ -178,9 +168,7 @@ def test_applicator_unknown_group_by_field_raises() -> None:
     """
     agg = AggregationQuery(
         group_by=("nonexistent_col",),
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
     )
     stmt = select(OrderModel)
     applicator = SQLAlchemyAggregationApplicator(OrderModel)
@@ -194,9 +182,7 @@ def test_applicator_unknown_aggregate_field_raises() -> None:
     An aggregate field that does not exist on the model raises FieldNotFound.
     """
     agg = AggregationQuery(
-        aggregations=(
-            AggregationExpression(AggregationFunc.SUM, field="nonexistent", alias="s"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.SUM, field="nonexistent", alias="s"),),
     )
     stmt = select(OrderModel)
     applicator = SQLAlchemyAggregationApplicator(OrderModel)
@@ -227,9 +213,7 @@ def test_applicator_does_not_mutate_original_stmt() -> None:
     apply() must return a NEW Select — the original statement must be unchanged.
     """
     agg = AggregationQuery(
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
     )
     stmt = select(OrderModel)
     original_sql = sql(stmt)

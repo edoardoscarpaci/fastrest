@@ -29,9 +29,7 @@ def test_async_cache_protocol_unchanged_no_bulk_methods() -> None:
 def test_bulk_cache_is_a_new_runtime_checkable_protocol() -> None:
     from varco_core.cache.base import BulkCache
 
-    assert hasattr(BulkCache, "_is_runtime_protocol") or hasattr(
-        BulkCache, "__protocol_attrs__"
-    )
+    assert hasattr(BulkCache, "_is_runtime_protocol") or hasattr(BulkCache, "__protocol_attrs__")
 
 
 async def test_in_memory_cache_satisfies_bulk_cache_via_portable_defaults() -> None:

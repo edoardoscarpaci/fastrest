@@ -158,9 +158,9 @@ class TestPolicyManagement:
 
         # Rule should appear in list.
         policies = await engine.list_policies()
-        assert any(
-            r[0] == role and r[1] == resource and r[2] == action for r in policies
-        ), f"Expected ({role}, {resource}, {action}) in {policies}"
+        assert any(r[0] == role and r[1] == resource and r[2] == action for r in policies), (
+            f"Expected ({role}, {resource}, {action}) in {policies}"
+        )
 
         # Remove the rule.
         removed = await engine.remove_policy(role, resource, action)
@@ -168,9 +168,7 @@ class TestPolicyManagement:
 
         # Should no longer be enforced.
         assert (
-            await engine.enforce(
-                EnforcementRequest(subject=role, object=resource, action=action)
-            )
+            await engine.enforce(EnforcementRequest(subject=role, object=resource, action=action))
             is False
         )
 
@@ -318,9 +316,7 @@ class TestRoleAssignment:
 
         # Confirm access before revocation.
         assert (
-            await engine.enforce(
-                EnforcementRequest(subject=user, object=resource, action="read")
-            )
+            await engine.enforce(EnforcementRequest(subject=user, object=resource, action="read"))
             is True
         )
 
@@ -330,9 +326,7 @@ class TestRoleAssignment:
 
         # Access should now be denied.
         assert (
-            await engine.enforce(
-                EnforcementRequest(subject=user, object=resource, action="read")
-            )
+            await engine.enforce(EnforcementRequest(subject=user, object=resource, action="read"))
             is False
         )
 
@@ -388,15 +382,15 @@ class TestPolicyPersistence:
                 is True
             )
 
-            assert role in await reader.roles_for_user(
-                user
-            ), f"Role {role!r} not found after engine restart"
+            assert role in await reader.roles_for_user(user), (
+                f"Role {role!r} not found after engine restart"
+            )
 
             # Also verify that the persisted policy appears in list.
             policies = await reader.list_policies()
-            assert any(
-                p[0] == role and p[1] == resource and p[2] == "read" for p in policies
-            ), f"Policy not found after restart in {policies}"
+            assert any(p[0] == role and p[1] == resource and p[2] == "read" for p in policies), (
+                f"Policy not found after restart in {policies}"
+            )
 
 
 # ── Test 7: HTTP endpoint + Casbin enforcement (end-to-end) ──────────────────
@@ -422,9 +416,9 @@ class TestHttpEndpointWithCasbin:
             json={"title": "Forbidden"},
             headers=_user_header("no-policy-user"),
         )
-        assert (
-            resp.status_code == 403
-        ), f"Expected 403 without Casbin policy, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 403, (
+            f"Expected 403 without Casbin policy, got {resp.status_code}: {resp.text}"
+        )
 
     async def test_create_document_allowed_with_policy(self, db_url: str) -> None:
         """
@@ -467,9 +461,9 @@ class TestHttpEndpointWithCasbin:
                     json={"title": "Allowed Doc", "content": "Hello Casbin"},
                     headers=_user_header(user),
                 )
-                assert (
-                    resp.status_code == 201
-                ), f"Expected 201 with Casbin policy, got {resp.status_code}: {resp.text}"
+                assert resp.status_code == 201, (
+                    f"Expected 201 with Casbin policy, got {resp.status_code}: {resp.text}"
+                )
                 body = resp.json()
                 assert body["title"] == "Allowed Doc"
                 assert "pk" in body

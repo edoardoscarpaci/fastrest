@@ -532,6 +532,7 @@ from varco_core import LEGACY_ERROR_CODE_MAP
 
 _NEW_TO_OLD = {new: old for old, new in LEGACY_ERROR_CODE_MAP.items()}
 
+
 def translate(code: str, locale: str) -> str | None:
     """Look up ``code``, falling back to its pre-2.0 spelling."""
     catalog = CATALOGS[locale]

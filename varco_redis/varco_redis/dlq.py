@@ -307,8 +307,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
 
         except Exception as exc:  # noqa: BLE001 — push MUST NOT propagate
             _logger.error(
-                "RedisDLQ.push() failed unexpectedly — entry dropped "
-                "(entry_id=%s): %s",
+                "RedisDLQ.push() failed unexpectedly — entry dropped (entry_id=%s): %s",
                 entry.entry_id,
                 exc,
                 exc_info=True,
@@ -353,9 +352,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
 
         # ZRANGE with BYSCORE would give a time range; here we just want the
         # N oldest entries regardless of their score — ZRANGE 0 N-1 (rank-based).
-        entry_id_bytes: list[bytes] = await self._redis.zrange(
-            self._queue_key, 0, limit - 1
-        )
+        entry_id_bytes: list[bytes] = await self._redis.zrange(self._queue_key, 0, limit - 1)
 
         if not entry_id_bytes:
             # Queue is empty — common case in low-failure systems.
@@ -364,9 +361,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
         entry_ids = [b.decode("utf-8") for b in entry_id_bytes]
 
         # Fetch payloads from Hash in a single round-trip (HMGET).
-        payloads: list[bytes | None] = await self._redis.hmget(
-            self._entries_key, *entry_ids
-        )
+        payloads: list[bytes | None] = await self._redis.hmget(self._entries_key, *entry_ids)
 
         entries: list[DeadLetterEntry] = []
         for entry_id_str, payload in zip(entry_ids, payloads):
@@ -388,8 +383,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
                 entries.append(entry)
             except Exception as exc:  # noqa: BLE001
                 _logger.warning(
-                    "RedisDLQ.pop_batch: failed to deserialize entry_id=%s: %s — "
-                    "skipping.",
+                    "RedisDLQ.pop_batch: failed to deserialize entry_id=%s: %s — skipping.",
                     entry_id_str,
                     exc,
                     exc_info=True,
@@ -598,9 +592,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
                 continue
             try:
                 entry = self._deserialize_entry(entry_id_str, payload)
-            except (
-                Exception
-            ) as exc:  # noqa: BLE001 — skip corrupted entries, matches pop_batch()
+            except Exception as exc:  # noqa: BLE001 — skip corrupted entries, matches pop_batch()
                 _logger.warning(
                     "RedisDLQ.list_entries: failed to deserialize entry_id=%s: %s — skipping.",
                     entry_id_str,
@@ -631,12 +623,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
         limit: int | None = None,
     ) -> int:
         """Bulk delete matching entries — one predicate is required."""
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "

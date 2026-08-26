@@ -204,12 +204,7 @@ class LockHandle:
         await self.release()
 
     def __repr__(self) -> str:
-        return (
-            f"LockHandle("
-            f"key={self.key!r}, "
-            f"token={self.token}, "
-            f"released={self._released})"
-        )
+        return f"LockHandle(key={self.key!r}, token={self.token}, released={self._released})"
 
 
 # ── AbstractDistributedLock ───────────────────────────────────────────────────
@@ -351,9 +346,7 @@ class AbstractDistributedLock(ABC):
         if ttl <= 0:
             raise ValueError(f"Lock TTL must be positive; got ttl={ttl}.")
         if timeout < 0:
-            raise ValueError(
-                f"Lock timeout must be non-negative; got timeout={timeout}."
-            )
+            raise ValueError(f"Lock timeout must be non-negative; got timeout={timeout}.")
 
         # Track wall-clock time via asyncio's event-loop clock to avoid
         # issues with system clock adjustments during long waits.

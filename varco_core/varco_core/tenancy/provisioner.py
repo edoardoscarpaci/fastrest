@@ -39,9 +39,7 @@ class AbstractTenantProvisioner:
         """Provision storage for ``tenant_id``. Must be idempotent."""
         raise NotImplementedError
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         """
         Destroy storage for ``tenant_id``.
 
@@ -71,7 +69,5 @@ class ExternalTenantProvisioner(AbstractTenantProvisioner):
     async def provision(self, tenant_id: str, **kwargs: object) -> None:
         return None
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         await super().deprovision(tenant_id, confirm_destroy=confirm_destroy)

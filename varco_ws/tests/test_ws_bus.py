@@ -405,9 +405,7 @@ async def test_ws_bus_per_connection_policy_override() -> None:
     connect() accepts per-connection backpressure policy overrides.
     """
     underlying_bus = InMemoryEventBus()
-    ws_bus = WebSocketEventBus(
-        underlying_bus, backpressure_policy=BackpressurePolicy.BLOCK
-    )
+    ws_bus = WebSocketEventBus(underlying_bus, backpressure_policy=BackpressurePolicy.BLOCK)
     await ws_bus.start()
 
     mock_ws = MockWebSocket()
@@ -424,9 +422,7 @@ async def test_ws_bus_per_connection_policy_override() -> None:
 async def test_ws_bus_repr_includes_policy() -> None:
     """repr includes the default backpressure policy."""
     underlying_bus = InMemoryEventBus()
-    ws_bus = WebSocketEventBus(
-        underlying_bus, backpressure_policy=BackpressurePolicy.DROP_OLDEST
-    )
+    ws_bus = WebSocketEventBus(underlying_bus, backpressure_policy=BackpressurePolicy.DROP_OLDEST)
     r = repr(ws_bus)
     assert "drop_oldest" in r
 

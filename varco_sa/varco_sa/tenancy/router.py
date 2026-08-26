@@ -118,9 +118,9 @@ class SASchemaRouter:
         class as ``SAAdvisoryLock``'s session-scoped release).
         """
         schema_name = self.schema_name_for(tenant_id)
-        return sa.text(
-            "SELECT set_config('search_path', :schema_name, true)"
-        ).bindparams(schema_name=schema_name)
+        return sa.text("SELECT set_config('search_path', :schema_name, true)").bindparams(
+            schema_name=schema_name
+        )
 
     @property
     def mechanism(self) -> str:

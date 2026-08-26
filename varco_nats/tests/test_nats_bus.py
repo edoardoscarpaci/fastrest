@@ -93,9 +93,7 @@ class TestLifecycle:
         bus = NatsEventBus(NatsEventBusSettings())
         await bus.stop()  # must not raise
 
-    async def test_context_manager_starts_and_stops(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_context_manager_starts_and_stops(self, fake_nc: FakeNatsClient) -> None:
         async with _started_bus(fake_nc, NatsEventBusSettings()) as bus:
             assert bus._started
         assert not bus._started
@@ -153,9 +151,7 @@ class TestPublish:
     async def test_exactly_once_attaches_msg_id_header(
         self, fake_nc: FakeNatsClient, fake_js: FakeJetStream
     ) -> None:
-        config = NatsEventBusSettings(
-            delivery_semantics=NatsDeliverySemantics.EXACTLY_ONCE
-        )
+        config = NatsEventBusSettings(delivery_semantics=NatsDeliverySemantics.EXACTLY_ONCE)
         event = OrderPlacedEvent(order_id="1")
         async with _started_bus(fake_nc, config) as bus:
             await bus.publish(event, channel="orders")
@@ -170,9 +166,7 @@ class TestPublish:
             await bus.publish(OrderPlacedEvent(order_id="1"), channel="orders")
         assert fake_js.published[0][2] is None
 
-    async def test_publish_many(
-        self, fake_nc: FakeNatsClient, fake_js: FakeJetStream
-    ) -> None:
+    async def test_publish_many(self, fake_nc: FakeNatsClient, fake_js: FakeJetStream) -> None:
         async with _started_bus(fake_nc, NatsEventBusSettings()) as bus:
             await bus.publish_many(
                 [
@@ -187,9 +181,7 @@ class TestPublish:
 
 
 class TestSubscribe:
-    async def test_subscribe_returns_subscription(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_subscribe_returns_subscription(self, fake_nc: FakeNatsClient) -> None:
         async def handler(e: Event) -> None: ...
 
         async with _started_bus(fake_nc, NatsEventBusSettings()) as bus:
@@ -218,9 +210,7 @@ class TestSubscribe:
             assert bus._jetstream_subs == {}
             assert fake_js.push_subs == {}
 
-    async def test_specific_channel_opens_one_consumer(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_specific_channel_opens_one_consumer(self, fake_nc: FakeNatsClient) -> None:
         async def handler(e: Event) -> None: ...
 
         async with _started_bus(
@@ -251,9 +241,7 @@ class TestSubscribe:
 
 
 class TestConsumerDispatch:
-    async def test_published_event_reaches_handler(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_published_event_reaches_handler(self, fake_nc: FakeNatsClient) -> None:
         received: list[Event] = []
 
         async def handler(e: Event) -> None:
@@ -292,9 +280,7 @@ class TestConsumerDispatch:
 
         assert len(received) == 1
 
-    async def test_subscribe_after_start_opens_consumer(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_subscribe_after_start_opens_consumer(self, fake_nc: FakeNatsClient) -> None:
         received: list[Event] = []
 
         async def handler(e: Event) -> None:
@@ -336,9 +322,7 @@ class TestAckSemantics:
 
     async def test_at_most_once_acks_before_dispatch(self) -> None:
         ack_state_at_handler_time: list[bool] = []
-        config = NatsEventBusSettings(
-            delivery_semantics=NatsDeliverySemantics.AT_MOST_ONCE
-        )
+        config = NatsEventBusSettings(delivery_semantics=NatsDeliverySemantics.AT_MOST_ONCE)
         bus = NatsEventBus(config)
 
         msg = self._msg(OrderPlacedEvent(order_id="1"))

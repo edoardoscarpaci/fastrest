@@ -277,9 +277,9 @@ async def test_delete_post_returns_204_and_subsequent_get_404(
 
         # GET after DELETE — must be 404 (DB row gone, cache evicted).
         get_resp = await auth_client.get(f"/v1/posts/{pk}", headers=headers)
-        assert (
-            get_resp.status_code == 404
-        ), f"Expected 404 after delete, got {get_resp.status_code}: {get_resp.text}"
+        assert get_resp.status_code == 404, (
+            f"Expected 404 after delete, got {get_resp.status_code}: {get_resp.text}"
+        )
 
 
 @pytest.mark.integration
@@ -403,18 +403,16 @@ async def test_list_pagination_limit_and_offset(client: httpx.AsyncClient) -> No
     # If the same pk appears in both pages, OFFSET is not working correctly.
     pks1 = {p["pk"] for p in body1["results"]}
     pks2 = {p["pk"] for p in body2["results"]}
-    assert not pks1.intersection(
-        pks2
-    ), f"Page 1 and page 2 overlap — OFFSET did not advance: {pks1 & pks2}"
+    assert not pks1.intersection(pks2), (
+        f"Page 1 and page 2 overlap — OFFSET did not advance: {pks1 & pks2}"
+    )
 
     # ── 5. total_count must reflect all 5 posts ───────────────────────────────
     # Both pages share the same filter, so total_count should be identical.
-    assert (
-        body1.get("total_count") == 5
-    ), f"Expected total_count=5, got {body1.get('total_count')}"
-    assert (
-        body2.get("total_count") == 5
-    ), f"Expected total_count=5 on page 2, got {body2.get('total_count')}"
+    assert body1.get("total_count") == 5, f"Expected total_count=5, got {body1.get('total_count')}"
+    assert body2.get("total_count") == 5, (
+        f"Expected total_count=5 on page 2, got {body2.get('total_count')}"
+    )
 
 
 # ── Filter tests ───────────────────────────────────────────────────────────────
@@ -446,15 +444,11 @@ async def test_list_filter_exact_title_match(client: httpx.AsyncClient) -> None:
     decoy_title = f"FILT-EQ-TARGET-{uid}-DECOY"
 
     # Create both posts.
-    r1 = await client.post(
-        "/v1/posts", json={"title": target_title, "body": "exact match body"}
-    )
+    r1 = await client.post("/v1/posts", json={"title": target_title, "body": "exact match body"})
     assert r1.status_code == 201
     target_pk = r1.json()["pk"]
 
-    r2 = await client.post(
-        "/v1/posts", json={"title": decoy_title, "body": "decoy body"}
-    )
+    r2 = await client.post("/v1/posts", json={"title": decoy_title, "body": "decoy body"})
     assert r2.status_code == 201
 
     # Filter by exact title — grammar: field = "value"  (double-quoted ESCAPED_STRING)
@@ -466,18 +460,18 @@ async def test_list_filter_exact_title_match(client: httpx.AsyncClient) -> None:
     body = resp.json()
 
     returned_pks = {p["pk"] for p in body["results"]}
-    assert (
-        target_pk in returned_pks
-    ), f"Target post {target_pk!r} missing from filtered results: {returned_pks}"
+    assert target_pk in returned_pks, (
+        f"Target post {target_pk!r} missing from filtered results: {returned_pks}"
+    )
     # Decoy must NOT be present — the equality filter is strict.
     _ = returned_pks - {target_pk}
     non_target_titles = {p["title"] for p in body["results"] if p["pk"] != target_pk}
-    assert (
-        decoy_title not in non_target_titles
-    ), f"Decoy {decoy_title!r} unexpectedly returned by exact-match filter"
-    assert (
-        body.get("total_count") == 1
-    ), f"Expected total_count=1 for exact title filter, got {body.get('total_count')}"
+    assert decoy_title not in non_target_titles, (
+        f"Decoy {decoy_title!r} unexpectedly returned by exact-match filter"
+    )
+    assert body.get("total_count") == 1, (
+        f"Expected total_count=1 for exact title filter, got {body.get('total_count')}"
+    )
 
 
 @pytest.mark.integration
@@ -524,16 +518,16 @@ async def test_list_filter_like_pattern(client: httpx.AsyncClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
 
-    assert (
-        body.get("total_count") == 3
-    ), f"Expected total_count=3 for LIKE filter, got {body.get('total_count')}"
+    assert body.get("total_count") == 3, (
+        f"Expected total_count=3 for LIKE filter, got {body.get('total_count')}"
+    )
     assert body["count"] == 3
     returned_titles = {p["title"] for p in body["results"]}
     for i in range(3):
         expected = f"{prefix}-Item-{i}"
-        assert (
-            expected in returned_titles
-        ), f"{expected!r} missing from LIKE-filtered results: {returned_titles}"
+        assert expected in returned_titles, (
+            f"{expected!r} missing from LIKE-filtered results: {returned_titles}"
+        )
 
 
 # ── Sort tests ─────────────────────────────────────────────────────────────────
@@ -794,9 +788,9 @@ async def test_sse_receives_post_created_event(
         # ── Assert event payload ──────────────────────────────────────────────
         assert event["event_type"] == "PostCreatedEvent"
         data = event["data"]
-        assert (
-            str(data["post_id"]) == post_id
-        ), f"Event post_id {data['post_id']!r} != created post pk {post_id!r}"
+        assert str(data["post_id"]) == post_id, (
+            f"Event post_id {data['post_id']!r} != created post pk {post_id!r}"
+        )
         # author_id is None for anonymous requests.
         assert "author_id" in data, "author_id field missing from PostCreatedEvent data"
 
@@ -902,13 +896,13 @@ async def test_sse_receives_post_deleted_event(
         # ── 5. Assert event payload ───────────────────────────────────────────
         assert event["event_type"] == "PostDeletedEvent"
         data = event["data"]
-        assert (
-            str(data["post_id"]) == post_id
-        ), f"Event post_id {data['post_id']!r} != deleted post pk {post_id!r}"
+        assert str(data["post_id"]) == post_id, (
+            f"Event post_id {data['post_id']!r} != deleted post pk {post_id!r}"
+        )
         # PostDeletedEvent carries only post_id — no author_id (post is gone).
-        assert (
-            "author_id" not in data or data["author_id"] is None
-        ), "PostDeletedEvent should NOT carry author_id — the post is already deleted"
+        assert "author_id" not in data or data["author_id"] is None, (
+            "PostDeletedEvent should NOT carry author_id — the post is already deleted"
+        )
 
     finally:
         stop_event.set()

@@ -134,9 +134,7 @@ def _schema_to_type(
         required_fields: list[str] = schema.get("required", [])
         field_defs: dict[str, Any] = {}
         for field_name, field_schema in props.items():
-            field_type = _schema_to_type(
-                field_schema, models, f"{name_hint}_{field_name}"
-            )
+            field_type = _schema_to_type(field_schema, models, f"{name_hint}_{field_name}")
             if field_name in required_fields:
                 field_defs[field_name] = (field_type, ...)
             else:
@@ -269,9 +267,7 @@ def _build_operation_method(
         json_content = content.get("application/json", {})
         body_schema = _resolve_refs(json_content.get("schema", {}), root)
         if body_schema:
-            body_type = _schema_to_type(
-                body_schema, models, name_hint=f"{method_name}_body"
-            )
+            body_type = _schema_to_type(body_schema, models, name_hint=f"{method_name}_body")
 
     # Resolve response type from 200 or 201
     response_type: Any = None
@@ -286,8 +282,7 @@ def _build_operation_method(
             if resp_schema:
                 # Look up named $ref model if available
                 ref_title = (
-                    resp_schema.get("title")
-                    or resp_schema.get("$ref", "").rsplit("/", 1)[-1]
+                    resp_schema.get("title") or resp_schema.get("$ref", "").rsplit("/", 1)[-1]
                 )
                 if ref_title and ref_title in models:
                     response_type = models[ref_title]
@@ -305,9 +300,7 @@ def _build_operation_method(
     _body_type = body_type
     _response_type = response_type
 
-    async def operation_method(
-        self: Any, *args: Any, body: Any = None, **kwargs: Any
-    ) -> Any:
+    async def operation_method(self: Any, *args: Any, body: Any = None, **kwargs: Any) -> Any:
         """Auto-generated method from OpenAPI spec."""
         # Map positional args to path parameter names
         path_kwargs: dict[str, Any] = {}
@@ -318,9 +311,7 @@ def _build_operation_method(
                 path_kwargs[param_name] = kwargs.pop(param_name)
 
         # Remaining kwargs are query parameters
-        query_kwargs: dict[str, str] = {
-            k: str(v) for k, v in kwargs.items() if v is not None
-        }
+        query_kwargs: dict[str, str] = {k: str(v) for k, v in kwargs.items() if v is not None}
 
         # Build the resolved path
         resolved_path = _path
@@ -596,9 +587,7 @@ class OpenAPIClient:
                 resolved_base = servers[0].get("url", "")
 
         # Build Pydantic models from components/schemas
-        schemas: dict[str, dict[str, Any]] = spec.get("components", {}).get(
-            "schemas", {}
-        )
+        schemas: dict[str, dict[str, Any]] = spec.get("components", {}).get("schemas", {})
         models = _build_models(schemas, spec)
 
         # Generate methods for every path operation

@@ -102,9 +102,7 @@ class TestBackplaneMultiPodCoherence:
         # eviction to the shared L2 (would nuke shared state fleet-wide).
         assert await shared_l2.get("k") == "v"
 
-    async def test_echo_suppression_node_does_not_evict_its_own_write(
-        self, shared_l2
-    ) -> None:
+    async def test_echo_suppression_node_does_not_evict_its_own_write(self, shared_l2) -> None:
         from varco_core.cache.backplane import InMemoryBackplane
 
         bp = InMemoryBackplane(bus_name="pods")
@@ -145,9 +143,7 @@ class TestBackplaneMultiPodCoherence:
 
         assert order == ["l2_write", "publish"]
 
-    async def test_publish_that_raises_does_not_propagate_out_of_set(
-        self, shared_l2
-    ) -> None:
+    async def test_publish_that_raises_does_not_propagate_out_of_set(self, shared_l2) -> None:
         from varco_core.cache.backplane import CacheBackplane, InvalidationMessage
 
         class RaisingBackplane(CacheBackplane):
@@ -192,9 +188,7 @@ class TestBackplaneMultiPodCoherence:
 
 
 class TestBackplaneConstructionGuard:
-    async def test_backplane_without_promote_ttl_raises_value_error(
-        self, shared_l2
-    ) -> None:
+    async def test_backplane_without_promote_ttl_raises_value_error(self, shared_l2) -> None:
         from varco_core.cache.backplane import InMemoryBackplane
         from varco_core.cache.layered import LayeredCache
 

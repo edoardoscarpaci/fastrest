@@ -115,9 +115,7 @@ R = TypeVar("R", bound=ReadDTO)
 U = TypeVar("U", bound=UpdateDTO)
 
 
-class ValidatorServiceMixin(
-    ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]
-):
+class ValidatorServiceMixin(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]):
     """
     ``AsyncService`` mixin that runs a DI-injected ``Validator[D]`` before
     every ``create`` and ``update`` persist call.

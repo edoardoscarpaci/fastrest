@@ -86,9 +86,7 @@ class TestDemotedNamesShim:
             "generate_client",
         ],
     )
-    def test_demoted_name_raises_attribute_error_naming_new_path(
-        self, name: str
-    ) -> None:
+    def test_demoted_name_raises_attribute_error_naming_new_path(self, name: str) -> None:
         import varco_fastapi.client as client_pkg
 
         with pytest.raises(AttributeError, match="advanced"):

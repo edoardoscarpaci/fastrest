@@ -76,9 +76,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         self._error_level = error_level
         self._skip_paths = skip_paths or set()
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
         Log the request and response.
 

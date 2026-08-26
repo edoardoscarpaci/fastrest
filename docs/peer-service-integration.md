@@ -20,7 +20,7 @@ export ORDERS_SVC_TOKEN="eyJ..."                       # the actual token, read 
 from varco_fastapi.client.peer import PeerRegistry
 
 registry = PeerRegistry.from_env()
-client = registry.client("orders", OrderRouter)   # importable-router topology
+client = registry.client("orders", OrderRouter)  # importable-router topology
 order = await client.read(order_id)
 ```
 
@@ -62,7 +62,7 @@ client = registry.client("orders", OrderRouter)
 
 # Cross-repo peer — set VARCO_PEER_ORDERS_CONTRACT to a checked-in
 # order.contract.json, no router import needed:
-client = registry.client("orders")   # router_cls omitted
+client = registry.client("orders")  # router_cls omitted
 ```
 
 `registry.client(name, router_cls=None)` picks `client_for()` when
@@ -87,7 +87,7 @@ registry, created once, reused across every `client()` call for that peer
 
 ```python
 client = registry.client("orders", OrderRouter)
-client._circuit_breaker   # the same CircuitBreaker instance every call returns
+client._circuit_breaker  # the same CircuitBreaker instance every call returns
 ```
 
 ## Custom profiles
@@ -96,9 +96,11 @@ client._circuit_breaker   # the same CircuitBreaker instance every call returns
 from varco_fastapi.client.peer import PeerRegistry
 from varco_fastapi.client.base import ClientProfile
 
-registry = PeerRegistry.from_env(profiles={
-    "aggressive-retry": ClientProfile(middleware=(...), timeout=5.0),
-})
+registry = PeerRegistry.from_env(
+    profiles={
+        "aggressive-retry": ClientProfile(middleware=(...), timeout=5.0),
+    }
+)
 ```
 
 Set `VARCO_PEER_ORDERS_PROFILE=aggressive-retry` to opt one peer into it;

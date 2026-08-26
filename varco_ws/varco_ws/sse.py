@@ -311,9 +311,7 @@ class SSEEventBus:
         """
         conn = SSEConnection(max_queue_size=self._max_queue_size)
         self._connections.add(conn)
-        _logger.debug(
-            "SSEEventBus: subscriber connected (%d total)", len(self._connections)
-        )
+        _logger.debug("SSEEventBus: subscriber connected (%d total)", len(self._connections))
         try:
             yield conn
         finally:

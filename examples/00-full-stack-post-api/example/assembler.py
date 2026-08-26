@@ -124,11 +124,7 @@ class PostAssembler(AbstractDTOAssembler[Post, PostCreate, PostRead, PostUpdate]
             # updated_at mirrors created_at when no updates have been applied.
             # The SA repository sets updated_at via an ORM column default
             # (server_onupdate=func.now()); the stub uses created_at as a fallback.
-            updated_at=(
-                entity.updated_at
-                if entity.updated_at is not None
-                else entity.created_at
-            ),
+            updated_at=(entity.updated_at if entity.updated_at is not None else entity.created_at),
         )
 
     def apply_update(self, entity: Post, dto: PostUpdate) -> Post:

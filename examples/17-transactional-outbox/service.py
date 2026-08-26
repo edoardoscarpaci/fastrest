@@ -72,9 +72,7 @@ class OrderService(AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate
         self,
         uow_provider: Inject[IUoWProvider],
         authorizer: Inject[AbstractAuthorizer],
-        assembler: Inject[
-            AbstractDTOAssembler[Order, OrderCreate, OrderRead, OrderUpdate]
-        ],
+        assembler: Inject[AbstractDTOAssembler[Order, OrderCreate, OrderRead, OrderUpdate]],
     ) -> None:
         """
         Args:

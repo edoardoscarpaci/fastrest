@@ -170,9 +170,7 @@ class AuditEntry:
         payload = {
             "entry_id": str(self.entry_id),
             "occurred_at": (
-                self.occurred_at.astimezone(UTC).isoformat()
-                if self.occurred_at
-                else None
+                self.occurred_at.astimezone(UTC).isoformat() if self.occurred_at else None
             ),
             "action": self.action,
             "entity_type": self.entity_type,
@@ -183,9 +181,7 @@ class AuditEntry:
             "diff": self.diff,
             "prev_hash": self.prev_hash,
         }
-        canonical = json.dumps(
-            payload, sort_keys=True, separators=(",", ":"), default=str
-        )
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @classmethod
@@ -378,9 +374,7 @@ class AuditRepository(ABC):
                 "(older_than/entity_type/tenant_id) — refusing to delete "
                 "every entry."
             )
-        raise NotImplementedError(
-            f"{type(self).__name__} does not implement delete_where()."
-        )
+        raise NotImplementedError(f"{type(self).__name__} does not implement delete_where().")
 
     @staticmethod
     def verify_chain(
@@ -417,25 +411,17 @@ class AuditRepository(ABC):
         # here so verify_chain() never depends on the caller's own query
         # ordering. Entries with seq=None (unchained deployment) sort last,
         # stably, in whatever relative order they arrived.
-        entries = sorted(
-            entries, key=lambda e: (e.seq is None, e.seq if e.seq is not None else 0)
-        )
+        entries = sorted(entries, key=lambda e: (e.seq is None, e.seq if e.seq is not None else 0))
 
         findings: list[ChainGap | HashMismatch] = []
         prev_entry: AuditEntry | None = None
         prev_computed_hash: str | None = None
 
         for entry in entries:
-            if (
-                prev_entry is not None
-                and prev_entry.seq is not None
-                and entry.seq is not None
-            ):
+            if prev_entry is not None and prev_entry.seq is not None and entry.seq is not None:
                 expected_seq = prev_entry.seq + 1
                 if entry.seq != expected_seq:
-                    findings.append(
-                        ChainGap(expected_seq=expected_seq, found_seq=entry.seq)
-                    )
+                    findings.append(ChainGap(expected_seq=expected_seq, found_seq=entry.seq))
 
             expected_prev_hash = prev_computed_hash if prev_entry is not None else None
             if entry.prev_hash != expected_prev_hash:
@@ -730,9 +716,7 @@ class AuditConsumer(EventConsumer):
         effective_retry_policy = (
             self._default_retry_policy if retry_policy is _UNSET else retry_policy
         )
-        return super().register_to(
-            bus, retry_policy=effective_retry_policy, dlq=effective_dlq
-        )
+        return super().register_to(bus, retry_policy=effective_retry_policy, dlq=effective_dlq)
 
     def _subscribe_fire_and_forget(self, bus: AbstractEventBus) -> Subscription:
         """Subscribe ``on_audit_event`` wrapped to swallow-and-log any

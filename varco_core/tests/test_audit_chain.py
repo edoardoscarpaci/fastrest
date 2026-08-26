@@ -35,18 +35,14 @@ class TestAuditEntryHashFields:
 
     def test_entry_hash_changes_when_diff_changes(self) -> None:
         entry_a = _entry(seq=1, prev_hash=None, diff={"total": 1})
-        entry_b = _entry(
-            seq=1, prev_hash=None, diff={"total": 2}, entry_id=entry_a.entry_id
-        )
+        entry_b = _entry(seq=1, prev_hash=None, diff={"total": 2}, entry_id=entry_a.entry_id)
         assert entry_a.entry_hash() != entry_b.entry_hash()
 
     def test_genesis_entry_hashes_prev_hash_as_json_null(self) -> None:
         """Genesis entry: prev_hash=None, hashed as the JSON literal null."""
         entry = _entry(seq=1, prev_hash=None)
         # Sanity: changing prev_hash to a non-null value changes the hash.
-        chained = _entry(
-            seq=1, prev_hash="deadbeef", entry_id=entry.entry_id, diff=entry.diff
-        )
+        chained = _entry(seq=1, prev_hash="deadbeef", entry_id=entry.entry_id, diff=entry.diff)
         assert entry.entry_hash() != chained.entry_hash()
 
 
@@ -84,6 +80,4 @@ class TestVerifyChainNegative:
 
         result = AuditRepository.verify_chain([e1, e3])
         assert result is not True
-        assert any(isinstance(f, ChainGap) for f in result) or isinstance(
-            result, ChainGap
-        )
+        assert any(isinstance(f, ChainGap) for f in result) or isinstance(result, ChainGap)

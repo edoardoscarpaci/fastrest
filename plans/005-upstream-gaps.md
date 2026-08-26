@@ -214,7 +214,7 @@ Destruction is a **tombstone**, not a delete: the entry's `key_material` is blan
        ```python
        async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]: ...
        async def list_scopes(self) -> list[str]: ...
-       async def destroy_scope(self, scope: str) -> tuple[str, ...]: ...   # returns destroyed kids
+       async def destroy_scope(self, scope: str) -> tuple[str, ...]: ...  # returns destroyed kids
        ```
        `destroy_scope` is the store-level primitive: tombstone every entry for `scope`, return their
        kids. It must be idempotent (a second call returns `()`), and must never delete the tombstone.
@@ -222,7 +222,8 @@ Destruction is a **tombstone**, not a delete: the entry's `key_material` is blan
        three natively.
 9. [ ] `varco_core/varco_core/encryption.py` — add:
        ```python
-       class KeyDestroyedError(EncryptionError): ...       # near EncryptionError, line ~156
+       class KeyDestroyedError(EncryptionError): ...  # near EncryptionError, line ~156
+
 
        @dataclass(frozen=True)
        class DestroyReceipt:
@@ -230,6 +231,7 @@ Destruction is a **tombstone**, not a delete: the entry's `key_material` is blan
            kids: tuple[str, ...]
            destroyed_at: datetime
            actor: str | None = None
+
            def to_dict(self) -> dict[str, object]: ...
        ```
        ⚠️ The register sketches `DestroyReceipt` as a `NamedTuple`; use a frozen dataclass — repo
@@ -374,10 +376,11 @@ register's re-scope is right. What is missing is (a) the relay leg, (b) safe-by-
             OUTBOX_RELAY = "outbox_relay"
             JOB = "job"
 
+
         # DeadLetterEntry gains, all defaulted:
         source: DeadLetterSource = DeadLetterSource.CONSUMER
-        source_ref: str | None = None      # outbox entry_id / job_id, as str
-        payload: bytes | None = None       # raw bytes when `event` could not be deserialized
+        source_ref: str | None = None  # outbox entry_id / job_id, as str
+        payload: bytes | None = None  # raw bytes when `event` could not be deserialized
         ```
         and `event: DomainEvent` becomes `DomainEvent | None`. Every existing construction site and
         `InMemoryDeadLetterQueue` (`:298-451`) keep working untouched.
@@ -393,8 +396,8 @@ register's re-scope is right. What is missing is (a) the relay leg, (b) safe-by-
 34. [ ] `varco_core/varco_core/resilience/retry.py` — add a named preset:
         ```python
         @classmethod
-        def durable_delivery(cls) -> RetryPolicy:   # max_attempts=20, base_delay=15.0,
-            ...                                     # max_delay=3600.0, jitter=True
+        def durable_delivery(cls) -> RetryPolicy:  # max_attempts=20, base_delay=15.0,
+            ...  # max_delay=3600.0, jitter=True
         ```
         U-6 §3 says the shipped `max_attempts=3` default (≈7 s total) is poor for durable delivery
         but is **"report, do not request"** — so **do not change the global default**. The preset
@@ -500,16 +503,16 @@ caller gets today's behaviour exactly**.
         `is_terminal`. Update the state-machine diagram in the docstring.
 46. [ ] `varco_core/varco_core/job/base.py:114-197` — `Job` gains, all defaulted:
         ```python
-        run_at: datetime | None = None            # U-17 §1
-        attempt: int = 0                          # U-17 §3
-        max_attempts: int = 1                     # U-17 §3 — 1 == today's terminal-on-failure
-        owner_id: str | None = None               # U-11
+        run_at: datetime | None = None  # U-17 §1
+        attempt: int = 0  # U-17 §3
+        max_attempts: int = 1  # U-17 §3 — 1 == today's terminal-on-failure
+        owner_id: str | None = None  # U-11
         lease_expires_at: datetime | None = None  # U-11
-        lease_epoch: int = 0                      # U-11 fencing token
-        expires_at: datetime | None = None        # U-18 (column now, API in Phase 6)
-        request_issuer: str | None = None         # U-19 (column now, API in Phase 6)
-        request_subject: str | None = None        # U-19
-        request_token_hash: str | None = None     # U-19
+        lease_epoch: int = 0  # U-11 fencing token
+        expires_at: datetime | None = None  # U-18 (column now, API in Phase 6)
+        request_issuer: str | None = None  # U-19 (column now, API in Phase 6)
+        request_subject: str | None = None  # U-19
+        request_token_hash: str | None = None  # U-19
         ```
         plus transitions `as_retry(next_run_at)` and `as_dead(error)`.
 47. [ ] `varco_core/varco_core/job/base.py:517` — `try_claim` gains keyword-only
@@ -520,20 +523,27 @@ caller gets today's behaviour exactly**.
 48. [ ] `varco_core/varco_core/job/base.py` — new `AbstractJobStore` methods, **concrete on the ABC**
         (not `@abstractmethod`) so external subclasses keep importing:
         ```python
-        async def claim_next(self, *, owner_id: str | None = None,
-                             lease_ttl: float | None = None,
-                             now: datetime | None = None) -> Job | None: ...
+        async def claim_next(
+            self,
+            *,
+            owner_id: str | None = None,
+            lease_ttl: float | None = None,
+            now: datetime | None = None,
+        ) -> Job | None:
+            ...
             # claims the oldest eligible PENDING row honouring
             #   AND (run_at IS NULL OR run_at <= now)
             # default impl: list_by_status(PENDING) + try_claim loop (correct, slower)
 
-        async def renew(self, job_id: UUID, *, owner_id: str, epoch: int,
-                        lease_ttl: float) -> Job | None: ...
+
+        async def renew(self, job_id: UUID, *, owner_id: str, epoch: int, lease_ttl: float) -> Job | None:
+            ...
             # heartbeat; returns None when the epoch is stale (fenced out)
             # default impl: raise NotImplementedError("<cls> does not support leases")
 
-        async def reap_expired_leases(self, *, now: datetime | None = None,
-                                      limit: int = 100) -> list[Job]: ...
+
+        async def reap_expired_leases(self, *, now: datetime | None = None, limit: int = 100) -> list[Job]:
+            ...
             # RUNNING rows whose lease_expires_at <= now → PENDING, lease_epoch += 1
             # default impl: raise NotImplementedError("<cls> does not support leases")
         ```
@@ -638,7 +648,8 @@ sibling; do not change the existing class's behaviour.
         `_key_to_int64` (`:78`) unchanged:
         ```python
         @asynccontextmanager
-        async def xact(self, key: str, session: AsyncSession) -> AsyncIterator[bool]: ...
+        async def xact(self, key: str, session: AsyncSession) -> AsyncIterator[bool]:
+            ...
             # SELECT pg_try_advisory_xact_lock(:key_int) on the CALLER's session;
             # yields True/False; released by the caller's COMMIT/ROLLBACK. Primary API.
         ```
@@ -686,10 +697,14 @@ request" — plan it as a **small self-contained addition**, not a redesign of t
         all raises `ValueError` (refuse to truncate the table by accident).
 68. [ ] `varco_core/varco_core/job/base.py:503-514` — add alongside `delete(job_id)`:
         ```python
-        async def delete_where(self, *, status: JobStatus | Sequence[JobStatus] | None = None,
-                               completed_before: datetime | None = None,
-                               expires_before: datetime | None = None,
-                               limit: int | None = None) -> int: ...
+        async def delete_where(
+            self,
+            *,
+            status: JobStatus | Sequence[JobStatus] | None = None,
+            completed_before: datetime | None = None,
+            expires_before: datetime | None = None,
+            limit: int | None = None,
+        ) -> int: ...
         ```
         Concrete on the ABC with a portable default over `list_by_status` + `delete` (correct, just
         slower) so external stores keep working. `limit` exists specifically for the pool-pressure
@@ -759,8 +774,9 @@ stay mounted for one minor release.
         class SkillSource(Protocol):
             def skills(self) -> list[SkillDefinition]: ...
             def agent_metadata(self) -> AgentMetadata: ...
-            async def invoke(self, skill_id: str, payload: dict[str, Any], *,
-                             ctx: AuthContext | None = None) -> Any: ...
+            async def invoke(
+                self, skill_id: str, payload: dict[str, Any], *, ctx: AuthContext | None = None
+            ) -> Any: ...
         ```
         `ctx` is U-3's per-request auth passthrough: the adapter must surface the verified caller
         identity so the three caller classes (end user / another agent / integrating platform) are
@@ -831,11 +847,16 @@ tenancy layer.
            plainly; it is the whole point.
 85. [ ] `varco_sa/varco_sa/rls.py` (new, small and self-contained — helpers only, no wiring):
         ```python
-        def enable_rls_ddl(table: str, *, tenant_column: str = "tenant_id",
-                           setting: str = "rls.tenant_id") -> list[str]: ...
+        def enable_rls_ddl(
+            table: str, *, tenant_column: str = "tenant_id", setting: str = "rls.tenant_id"
+        ) -> list[str]:
+            ...
             # returns the DDL strings for use in an Alembic revision;
             # MUST emit the (SELECT current_setting(..., true)) InitPlan form
-        async def set_tenant_local(session: AsyncSession, tenant_id: str) -> None: ...
+
+
+        async def set_tenant_local(session: AsyncSession, tenant_id: str) -> None:
+            ...
             # SELECT set_config(:setting, :value, true)  — transaction-scoped
         ```
         Nothing is applied to generated tables by default — RLS stays opt-in per table.

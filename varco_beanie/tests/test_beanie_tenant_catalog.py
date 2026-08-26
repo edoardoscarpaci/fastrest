@@ -34,9 +34,7 @@ async def test_list_tenants_filters_active_by_default() -> None:
 
     catalog = BeanieTenantCatalog()
     await catalog.add(TenantDescriptor(tenant_id="acme", status=TenantStatus.ACTIVE))
-    await catalog.add(
-        TenantDescriptor(tenant_id="pending-1", status=TenantStatus.PENDING)
-    )
+    await catalog.add(TenantDescriptor(tenant_id="pending-1", status=TenantStatus.PENDING))
 
     result = await catalog.list_tenants()
 

@@ -137,16 +137,12 @@ class TestMemcachedCacheSettings:
 
 
 class TestMemcachedCacheLifecycle:
-    async def test_not_started_raises_on_get(
-        self, settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_not_started_raises_on_get(self, settings: MemcachedCacheSettings) -> None:
         c = MemcachedCache(settings)
         with pytest.raises(RuntimeError, match="not started"):
             await c.get("k")
 
-    async def test_not_started_raises_on_set(
-        self, settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_not_started_raises_on_set(self, settings: MemcachedCacheSettings) -> None:
         c = MemcachedCache(settings)
         with pytest.raises(RuntimeError, match="not started"):
             await c.set("k", "v")
@@ -161,9 +157,7 @@ class TestMemcachedCacheLifecycle:
                 await c.start()
             await c.stop()
 
-    async def test_stop_before_start_noop(
-        self, settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_stop_before_start_noop(self, settings: MemcachedCacheSettings) -> None:
         c = MemcachedCache(settings)
         await c.stop()  # must not raise
 
@@ -266,9 +260,7 @@ class TestMemcachedCacheSetGet:
                 assert fake_mc._exptime.get(mc_key) == 60
 
     async def test_key_prefix_applied_in_storage(self, fake_mc: FakeMemcached) -> None:
-        settings = MemcachedCacheSettings(
-            host="fake-mc", port=11211, key_prefix="myapp:"
-        )
+        settings = MemcachedCacheSettings(host="fake-mc", port=11211, key_prefix="myapp:")
         with patch("varco_memcached.cache.aiomcache.Client", return_value=fake_mc):
             async with MemcachedCache(settings) as cache:
                 await cache.set("user:1", "Alice")
@@ -391,9 +383,7 @@ class TestMemcachedCacheConfiguration:
 
             await container.ashutdown()
 
-    async def test_singleton_returns_same_instance(
-        self, fake_mc: FakeMemcached
-    ) -> None:
+    async def test_singleton_returns_same_instance(self, fake_mc: FakeMemcached) -> None:
         from providify import DIContainer
         from varco_core.cache import CacheBackend
 

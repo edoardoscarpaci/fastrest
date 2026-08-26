@@ -158,9 +158,7 @@ async def test_timeout_exceeded_raises_with_elapsed_time_in_message() -> None:
         migrator, settings=MigrationSettings(mode="upgrade", timeout=0.05)
     )
 
-    with pytest.raises(
-        Exception
-    ) as exc:  # noqa: B017 — asyncio.TimeoutError or wrapper
+    with pytest.raises(Exception) as exc:  # noqa: B017 — asyncio.TimeoutError or wrapper
         await lifecycle.start()
 
     assert "0.05" in str(exc.value) or "timeout" in str(exc.value).lower()

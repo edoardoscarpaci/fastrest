@@ -43,9 +43,7 @@ async def test_upgrade_varco_at_head_creates_all_nine_framework_tables(
     await migrator.upgrade("varco@head")
 
     async with engine.connect() as conn:
-        table_names = set(
-            await conn.run_sync(lambda c: sa_inspect(c).get_table_names())
-        )
+        table_names = set(await conn.run_sync(lambda c: sa_inspect(c).get_table_names()))
     assert FRAMEWORK_TABLE_NAMES.issubset(table_names)
     await migrator.close()
 

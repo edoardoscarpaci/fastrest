@@ -84,9 +84,7 @@ class TenantPost(AuditedDomainModel):
     is declared with an ``init``-parameter default.
     """
 
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     title: str = ""
     # Row-level tenant discriminator — stamped by the service, not the assembler.
     tenant_id: str = ""
@@ -126,9 +124,7 @@ class UpdateTenantPostDTO(UpdateDTO):
 
 
 class TenantPostAssembler(
-    AbstractDTOAssembler[
-        TenantPost, CreateTenantPostDTO, TenantPostReadDTO, UpdateTenantPostDTO
-    ]
+    AbstractDTOAssembler[TenantPost, CreateTenantPostDTO, TenantPostReadDTO, UpdateTenantPostDTO]
 ):
     """
     Concrete assembler for TenantPost.
@@ -409,9 +405,7 @@ class DenyAllAuthorizer(AbstractAuthorizer):
 
 
 class ConcreteTenantService(
-    TenantAwareService[
-        TenantPost, str, CreateTenantPostDTO, TenantPostReadDTO, UpdateTenantPostDTO
-    ]
+    TenantAwareService[TenantPost, str, CreateTenantPostDTO, TenantPostReadDTO, UpdateTenantPostDTO]
 ):
     """
     Minimal concrete TenantAwareService for testing.
@@ -948,9 +942,7 @@ class TestTenantAwareServiceUpdate:
         ctx_acme: AuthContext,
     ) -> None:
         _seed(uow_provider.repo, "p1", "Old title", "acme")
-        result = await svc.update(
-            "p1", UpdateTenantPostDTO(title="New title"), ctx_acme
-        )
+        result = await svc.update("p1", UpdateTenantPostDTO(title="New title"), ctx_acme)
         assert result.title == "New title"
 
     async def test_update_preserves_tenant_id_after_mutation(

@@ -350,8 +350,7 @@ class RedisLock(AbstractDistributedLock):
             )
             if result == 0:
                 _logger.debug(
-                    "RedisLock.release: key=%r token=%s — "
-                    "token mismatch or key expired (no-op).",
+                    "RedisLock.release: key=%r token=%s — token mismatch or key expired (no-op).",
                     key,
                     token,
                 )

@@ -234,8 +234,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
             )
         except Exception as exc:  # noqa: BLE001 — push MUST NOT propagate
             _logger.error(
-                "SADeadLetterQueue.push() failed unexpectedly — entry dropped "
-                "(entry_id=%s): %s",
+                "SADeadLetterQueue.push() failed unexpectedly — entry dropped (entry_id=%s): %s",
                 entry.entry_id,
                 exc,
                 exc_info=True,
@@ -277,9 +276,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
         """
         async with self._engine.begin() as conn:
             await conn.execute(
-                sa.delete(_dead_letters_table).where(
-                    _dead_letters_table.c.entry_id == entry_id
-                )
+                sa.delete(_dead_letters_table).where(_dead_letters_table.c.entry_id == entry_id)
             )
         _logger.debug("SADeadLetterQueue.ack: acknowledged entry_id=%s", entry_id)
 
@@ -290,18 +287,14 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
         Async safety: ✅ Uses ``engine.connect()`` — read-only, no commit.
         """
         async with self._engine.connect() as conn:
-            result = await conn.execute(
-                sa.select(sa.func.count()).select_from(_dead_letters_table)
-            )
+            result = await conn.execute(sa.select(sa.func.count()).select_from(_dead_letters_table))
             return int(result.scalar_one())
 
     async def get(self, entry_id: UUID) -> DeadLetterEntry | None:
         """Fetch one entry by id without removing it. ``None`` if absent."""
         async with self._engine.connect() as conn:
             result = await conn.execute(
-                sa.select(_dead_letters_table).where(
-                    _dead_letters_table.c.entry_id == entry_id
-                )
+                sa.select(_dead_letters_table).where(_dead_letters_table.c.entry_id == entry_id)
             )
             row = result.fetchone()
         return self._row_to_entry(row) if row is not None else None
@@ -318,9 +311,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
         newer_than: datetime | None = None,
     ) -> list[DeadLetterEntry]:
         """Non-destructive, filtered, paginated read — see ABC docstring."""
-        stmt = sa.select(_dead_letters_table).order_by(
-            _dead_letters_table.c.first_failed_at.asc()
-        )
+        stmt = sa.select(_dead_letters_table).order_by(_dead_letters_table.c.first_failed_at.asc())
         if channel is not None:
             stmt = stmt.where(_dead_letters_table.c.channel == channel)
         if source is not None:
@@ -353,12 +344,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
         ``0`` (the documented chunked-sweep recipe — each call is its own
         short transaction, safe under a transaction-mode pooler).
         """
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "
@@ -369,15 +355,11 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
 
         select_stmt = sa.select(_dead_letters_table.c.entry_id)
         if older_than is not None:
-            select_stmt = select_stmt.where(
-                _dead_letters_table.c.last_failed_at < older_than
-            )
+            select_stmt = select_stmt.where(_dead_letters_table.c.last_failed_at < older_than)
         if channel is not None:
             select_stmt = select_stmt.where(_dead_letters_table.c.channel == channel)
         if tenant_id is not None:
-            select_stmt = select_stmt.where(
-                _dead_letters_table.c.tenant_id == tenant_id
-            )
+            select_stmt = select_stmt.where(_dead_letters_table.c.tenant_id == tenant_id)
         if source is not None:
             sources = source if isinstance(source, (list, tuple, set)) else [source]
             select_stmt = select_stmt.where(
@@ -391,9 +373,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
             if not ids:
                 return 0
             await conn.execute(
-                sa.delete(_dead_letters_table).where(
-                    _dead_letters_table.c.entry_id.in_(ids)
-                )
+                sa.delete(_dead_letters_table).where(_dead_letters_table.c.entry_id.in_(ids))
             )
         return len(ids)
 

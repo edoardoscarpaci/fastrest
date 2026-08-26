@@ -146,8 +146,7 @@ def make_sa_provider(
         from providify import Provider  # noqa: PLC0415
     except ImportError:
         raise ImportError(
-            "make_sa_provider requires providify. "
-            "Install it with: pip install providify"
+            "make_sa_provider requires providify. Install it with: pip install providify"
         ) from None
 
     from sqlalchemy.ext.asyncio import create_async_engine  # noqa: PLC0415
@@ -169,11 +168,7 @@ def make_sa_provider(
             entity_classes=_entity_classes,
             # When session_options is None, let SAConfig use its own default
             # ({"expire_on_commit": False}) by not passing the field at all.
-            **(
-                {"session_options": _session_options}
-                if _session_options is not None
-                else {}
-            ),
+            **({"session_options": _session_options} if _session_options is not None else {}),
         )
 
     return _sa_config_factory

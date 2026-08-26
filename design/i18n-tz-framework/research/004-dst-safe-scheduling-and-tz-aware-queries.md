@@ -69,10 +69,14 @@ print(local.fold)  # 0 (zoneinfo set it)
 from dateutil.tz import datetime_ambiguous, datetime_exists
 
 # Detect if a time is ambiguous (fold occurs)
-is_ambiguous = datetime_ambiguous(dt.datetime(2024, 11, 3, 1, 30, tzinfo=ZoneInfo("America/Los_Angeles")))
+is_ambiguous = datetime_ambiguous(
+    dt.datetime(2024, 11, 3, 1, 30, tzinfo=ZoneInfo("America/Los_Angeles"))
+)
 
 # Detect if a time is nonexistent (gap)
-is_nonexistent = not datetime_exists(dt.datetime(2024, 3, 10, 2, 30, tzinfo=ZoneInfo("America/Los_Angeles")))
+is_nonexistent = not datetime_exists(
+    dt.datetime(2024, 3, 10, 2, 30, tzinfo=ZoneInfo("America/Los_Angeles"))
+)
 ```
 
 — [Python 3 zoneinfo documentation](https://docs.python.org/3/library/zoneinfo.html), [PEP 495 — Local Time Disambiguation](https://peps.python.org/pep-0495/), [dateutil tz module](https://dateutil.readthedocs.io/en/stable/tz.html)

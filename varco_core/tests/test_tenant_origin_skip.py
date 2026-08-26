@@ -101,9 +101,7 @@ async def test_consumer_handles_event_with_other_origin() -> None:
     assert provisioner.provision_calls == 1
 
 
-async def test_bundled_round_trip_provision_then_request_provision_is_exactly_one_ddl() -> (
-    None
-):
+async def test_bundled_round_trip_provision_then_request_provision_is_exactly_one_ddl() -> None:
     """Full bundled round-trip: operator calls provision() (local DDL) then
     request_provision() (broadcast) on one bus with one consumer — the
     consumer's own broadcast must be skipped via origin, so exactly one DDL

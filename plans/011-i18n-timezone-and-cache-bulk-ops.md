@@ -341,9 +341,9 @@ two divergent copies of the same precedence chain" the backlog asked for.
 `varco_core/varco_core/job/base.py:249-280`:
 
 ```python
-run_at_wall: datetime | None = None   # naive local wall-clock, no tzinfo
-run_at_tz:   str | None    = None     # IANA zone name, e.g. "America/New_York"
-run_at_fold: int           = 0        # PEP 495 fold, disambiguates the overlap
+run_at_wall: datetime | None = None  # naive local wall-clock, no tzinfo
+run_at_tz: str | None = None  # IANA zone name, e.g. "America/New_York"
+run_at_fold: int = 0  # PEP 495 fold, disambiguates the overlap
 ```
 
 `run_at: datetime | None` (`job/base.py:249`) **keeps its exact current
@@ -403,8 +403,9 @@ is a Non-goal here. A separate `Schedule` entity is the right home for RRULE
 ```python
 def datetime_exists(wall: datetime, zone: ZoneInfo) -> bool: ...
 def datetime_ambiguous(wall: datetime, zone: ZoneInfo) -> bool: ...
-def resolve_zoned(wall, zone, *, fold=0, gap=GapPolicy.NEXT_VALID,
-                  overlap=OverlapPolicy.FIRST) -> datetime: ...
+def resolve_zoned(
+    wall, zone, *, fold=0, gap=GapPolicy.NEXT_VALID, overlap=OverlapPolicy.FIRST
+) -> datetime: ...
 ```
 
 **No `dateutil` dependency.** Brief 004 §A2 demonstrates detection with
@@ -486,7 +487,7 @@ The contract ships as a frozen `DatetimeCoercionPolicy`:
 
 ```python
 assume: Literal["naive", "utc", "context"] = "naive"
-log_naive: bool = True         # one DEBUG line per coerced naive bound
+log_naive: bool = True  # one DEBUG line per coerced naive bound
 ```
 
 - **`"naive"` (default) — byte-identical to today.** The value is returned
@@ -784,7 +785,7 @@ their tenant-default step.
 class AmbientVar(Generic[T]):
     def __init__(self, name: str, *, default: T | None = None) -> None: ...
     def get(self) -> T | None: ...
-    def set_for_task(self, value: T) -> Token[T | None]: ...   # explicit token API
+    def set_for_task(self, value: T) -> Token[T | None]: ...  # explicit token API
     @contextmanager
     def scope(self, value: T) -> Iterator[T]: ...
     @asynccontextmanager
@@ -892,10 +893,12 @@ specific to this occurrence").
 class MessageCatalog(abc.ABC):
     @abc.abstractmethod
     def get_message(self, key: str, locale: str) -> str | None: ...
-    def format_message(self, key: str, locale: str,
-                       params: Mapping[str, Any] | None = None) -> str | None:
+    def format_message(
+        self, key: str, locale: str, params: Mapping[str, Any] | None = None
+    ) -> str | None:
         """Concrete default: get_message() + str.format_map with a
         missing-key-tolerant mapping. Override for gettext plurals / ICU."""
+
     def available_locales(self) -> frozenset[str]: ...
     async def start(self) -> None: ...
     async def stop(self) -> None: ...
@@ -1704,10 +1707,10 @@ table** (`varco_jobs`, one of the ten). Everything here follows from D-7's rule:
 `varco_sa/varco_sa/migrations/versions/0004_job_zoned_schedule.py`:
 
 ```python
-revision       = "0004_job_zoned_schedule"
-down_revision  = "0003_audit_hash_chain"
-branch_labels  = None          # the ("varco",) label is on 0001 and labels the branch
-depends_on     = None
+revision = "0004_job_zoned_schedule"
+down_revision = "0003_audit_hash_chain"
+branch_labels = None  # the ("varco",) label is on 0001 and labels the branch
+depends_on = None
 ```
 
 It adds three nullable/defaulted columns to `varco_jobs` behind the **same

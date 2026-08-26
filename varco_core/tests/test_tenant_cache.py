@@ -62,9 +62,7 @@ class Post(AuditedDomainModel):
     ``STR_ASSIGNED`` pk so we can control pk values in fixtures.
     """
 
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     title: str = ""
 
     class Meta:
@@ -89,9 +87,7 @@ class UpdatePostDTO(UpdateDTO):
 # ── Assembler ──────────────────────────────────────────────────────────────────
 
 
-class PostAssembler(
-    AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     """Stateless DTO assembler — converts between Post and its DTOs."""
 
     def to_domain(self, dto: CreatePostDTO) -> Post:
@@ -200,9 +196,7 @@ class FakeUoWProvider(IUoWProvider):
 
 
 class AllowAllAuthorizer(AbstractAuthorizer):
-    async def authorize(
-        self, ctx: AuthContext, action: Action, resource: Resource
-    ) -> None:
+    async def authorize(self, ctx: AuthContext, action: Action, resource: Resource) -> None:
         return
 
 
@@ -287,9 +281,7 @@ def seeded_post(repo: InMemoryPostRepository) -> Post:
 class TestCacheKey:
     """Unit tests for ``CacheServiceMixin._cache_key()``."""
 
-    def test_key_without_tenant_is_backward_compatible(
-        self, svc: CachedPostService
-    ) -> None:
+    def test_key_without_tenant_is_backward_compatible(self, svc: CachedPostService) -> None:
         """
         Keys built without ``tenant_id`` keep the pre-existing format
         ``"<namespace>:<operation>:<suffix>"``.
@@ -300,9 +292,7 @@ class TestCacheKey:
         key = svc._cache_key("get", "123")
         assert key == "post:get:123"
 
-    def test_key_with_tenant_includes_tenant_segment(
-        self, svc: CachedPostService
-    ) -> None:
+    def test_key_with_tenant_includes_tenant_segment(self, svc: CachedPostService) -> None:
         """
         Keys built with ``tenant_id`` follow
         ``"<namespace>:<tenant_id>:<operation>:<suffix>"``.
@@ -313,9 +303,7 @@ class TestCacheKey:
         key = svc._cache_key("get", "123", tenant_id="acme")
         assert key == "post:acme:get:123"
 
-    def test_different_tenants_produce_different_keys(
-        self, svc: CachedPostService
-    ) -> None:
+    def test_different_tenants_produce_different_keys(self, svc: CachedPostService) -> None:
         """
         The same pk for two different tenants produces two distinct keys —
         no cross-tenant cache collision.
@@ -334,9 +322,7 @@ class TestCacheKey:
         # Key must start with the tenant-scoped namespace prefix.
         assert key.startswith("post:acme:list:")
 
-    def test_list_key_without_tenant_has_no_tenant_segment(
-        self, svc: CachedPostService
-    ) -> None:
+    def test_list_key_without_tenant_has_no_tenant_segment(self, svc: CachedPostService) -> None:
         """
         ``_cache_list_key()`` without ``tenant_id`` keeps the original
         ``"<namespace>:list:<hash>"`` format.
@@ -461,9 +447,7 @@ class TestCacheServiceMixinTenantIsolation:
         acme_key = svc._cache_key("get", "shared-1", tenant_id="acme")
         assert await svc._cache.get(acme_key) is not None
 
-    async def test_create_only_invalidates_own_tenant_list(
-        self, svc: CachedPostService
-    ) -> None:
+    async def test_create_only_invalidates_own_tenant_list(self, svc: CachedPostService) -> None:
         """
         A ``create()`` by tenant "acme" only evicts "acme" list entries.
 
@@ -490,9 +474,7 @@ class TestCacheServiceMixinTenantIsolation:
         # "globex" list cache must survive.
         assert await svc._cache.get(globex_list_key) == ["globex-item"]
 
-    async def test_create_without_tenant_clears_all(
-        self, svc: CachedPostService
-    ) -> None:
+    async def test_create_without_tenant_clears_all(self, svc: CachedPostService) -> None:
         """
         A ``create()`` without a tenant context falls back to ``cache.clear()``
         — the full-flush behaviour for single-tenant / non-tenant services.

@@ -207,9 +207,7 @@ def create_app() -> FastAPI:
     ws_bootstrap(container)  # WebSocket + SSE adapters
     # setup_producer=True binds AbstractEventProducer → BusEventProducer so
     # PostService._produce() publishes events to the Redis bus instead of no-op.
-    fastapi_bootstrap(
-        container, setup_producer=True
-    )  # FastAPI defaults + event producer
+    fastapi_bootstrap(container, setup_producer=True)  # FastAPI defaults + event producer
 
     # ── 5. Domain module ──────────────────────────────────────────────────────
     # container.scan() discovers @Singleton-decorated classes in the example

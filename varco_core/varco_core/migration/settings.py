@@ -85,8 +85,7 @@ class MigrationSettings:
         mode = source.get("VARCO_MIGRATE_MODE", "off")
         if mode not in _LEGAL_MODES:
             raise ValueError(
-                f"Invalid VARCO_MIGRATE_MODE={mode!r}. "
-                f"Legal values are: {', '.join(_LEGAL_MODES)}."
+                f"Invalid VARCO_MIGRATE_MODE={mode!r}. Legal values are: {', '.join(_LEGAL_MODES)}."
             )
 
         on_failure = source.get("VARCO_MIGRATE_ON_FAILURE", "fail")
@@ -103,8 +102,7 @@ class MigrationSettings:
             lock_timeout=float(source.get("VARCO_MIGRATE_LOCK_TIMEOUT", "30.0")),
             timeout=float(source.get("VARCO_MIGRATE_TIMEOUT", "300.0")),
             target=source.get("VARCO_MIGRATE_TARGET_REV", "heads"),
-            dry_run=source.get("VARCO_MIGRATE_DRY_RUN", "false").lower()
-            in ("1", "true", "yes"),
+            dry_run=source.get("VARCO_MIGRATE_DRY_RUN", "false").lower() in ("1", "true", "yes"),
         )
 
 

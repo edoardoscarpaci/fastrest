@@ -63,9 +63,7 @@ def mongo_url(request: pytest.FixtureRequest) -> str:
 
     override = os.environ.get("VARCO_TEST_MONGO_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("mongo", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("mongo", override))
         yield override
         return
 

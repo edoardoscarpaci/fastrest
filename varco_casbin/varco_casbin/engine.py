@@ -279,9 +279,7 @@ class CasbinPolicyEngine(PolicyEngine, PolicyManagement):
     async def remove_policy(self, *values: str, ptype: str = "p") -> bool:
         """Remove a ``ptype`` policy rule; ``False`` if no match existed."""
         async with self._get_lock():
-            return bool(
-                await self._require_enforcer().remove_named_policy(ptype, *values)
-            )
+            return bool(await self._require_enforcer().remove_named_policy(ptype, *values))
 
     async def list_policies(self, ptype: str = "p") -> list[tuple[str, ...]]:
         """List ``ptype`` policy rules as token tuples."""
@@ -299,9 +297,7 @@ class CasbinPolicyEngine(PolicyEngine, PolicyManagement):
         async with self._get_lock():
             enforcer = self._require_enforcer()
             if domain is not None:
-                return bool(
-                    await enforcer.add_role_for_user_in_domain(user, role, domain)
-                )
+                return bool(await enforcer.add_role_for_user_in_domain(user, role, domain))
             return bool(await enforcer.add_role_for_user(user, role))
 
     async def remove_role_for_user(

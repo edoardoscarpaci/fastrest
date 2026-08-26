@@ -74,9 +74,7 @@ def _fake_doc_for_job(job: Job) -> JobDocument:
         auth_snapshot=job.auth_snapshot,
         request_token=job.request_token,
         job_metadata=job.metadata,
-        task_payload=(
-            job.task_payload.to_dict() if job.task_payload is not None else None
-        ),
+        task_payload=(job.task_payload.to_dict() if job.task_payload is not None else None),
     )
 
 
@@ -297,9 +295,7 @@ class TestSerializationRoundTrip:
         assert restored.error == "oops"
 
     def test_task_payload_round_trips(self) -> None:
-        payload = TaskPayload(
-            task_name="orders.create", args=[1, 2], kwargs={"k": True}
-        )
+        payload = TaskPayload(task_name="orders.create", args=[1, 2], kwargs={"k": True})
         job = _pending_job(task_payload=payload)
         doc = _job_to_doc(job)
         restored = _doc_to_job(doc)
@@ -577,9 +573,7 @@ class TestBeanieJobStoreTryClaim:
         job = _pending_job()
         running_doc = _fake_doc_for_job(job.as_running())
 
-        with _patch_doc_attrs(
-            **self._try_claim_patches(_make_try_claim_chain(running_doc))
-        ):
+        with _patch_doc_attrs(**self._try_claim_patches(_make_try_claim_chain(running_doc))):
             result = await store.try_claim(job.job_id)
 
         assert result is not None
@@ -625,8 +619,7 @@ class TestBeanieJobStoreTryClaim:
 
         assert captured_kwargs, "update_one must have been called"
         assert any(
-            kw.get("response_type") == UpdateResponse.NEW_DOCUMENT
-            for kw in captured_kwargs
+            kw.get("response_type") == UpdateResponse.NEW_DOCUMENT for kw in captured_kwargs
         ), f"Expected response_type=NEW_DOCUMENT in update_one kwargs but got: {captured_kwargs!r}"
 
     async def test_try_claim_filter_includes_two_expressions(self) -> None:
@@ -652,9 +645,7 @@ class TestBeanieJobStoreTryClaim:
         assert find_one_args, "find_one must have been called"
         # Verify both id and status filter expressions are passed.
         args = find_one_args[0]
-        assert (
-            len(args) >= 2
-        ), f"Expected find_one to receive id + status filters, got: {args!r}"
+        assert len(args) >= 2, f"Expected find_one to receive id + status filters, got: {args!r}"
 
     async def test_try_claim_unknown_id_returns_none(self) -> None:
         """try_claim() with an unknown job_id returns None without raising."""
@@ -672,9 +663,7 @@ class TestBeanieJobStoreTryClaim:
         running = job.as_running()
         running_doc = _fake_doc_for_job(running)
 
-        with _patch_doc_attrs(
-            **self._try_claim_patches(_make_try_claim_chain(running_doc))
-        ):
+        with _patch_doc_attrs(**self._try_claim_patches(_make_try_claim_chain(running_doc))):
             result = await store.try_claim(job.job_id)
 
         assert result is not None
@@ -756,9 +745,7 @@ class TestBeanieJobStoreLifecycleMocked:
         # ── delete ─────────────────────────────────────────────────────────
         delete_chain = _make_find_chain([])
 
-        with _patch_doc_attrs(
-            id=MagicMock(), find=MagicMock(return_value=delete_chain)
-        ):
+        with _patch_doc_attrs(id=MagicMock(), find=MagicMock(return_value=delete_chain)):
             await store.delete(job.job_id)
 
         delete_chain.delete.assert_awaited_once()

@@ -263,8 +263,7 @@ async def list_products(
         paginated = paginated[:limit]
 
     logger.debug(
-        "list_products: q=%r sort=%r limit=%r offset=%d "
-        "total=%d filtered=%d paginated=%d",
+        "list_products: q=%r sort=%r limit=%r offset=%d total=%d filtered=%d paginated=%d",
         q,
         sort,
         limit,

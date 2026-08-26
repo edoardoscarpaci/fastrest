@@ -390,9 +390,7 @@ class TestJwtParser:
         assert "svc-b" in tok.aud
 
     def test_parse_extra_claims_captured(self):
-        signed = (
-            JwtBuilder().subject("usr_1").claim("tenant_id", "t_abc").encode(_SECRET)
-        )
+        signed = JwtBuilder().subject("usr_1").claim("tenant_id", "t_abc").encode(_SECRET)
         tok = JwtParser.parse(signed, _SECRET)
         assert tok.extra_claims.get("tenant_id") == "t_abc"
 

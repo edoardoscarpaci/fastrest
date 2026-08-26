@@ -59,9 +59,7 @@ async def test_disabled_by_default_no_headers():
     settings = ProfilingSettings(enabled=False)
     app = make_app(settings)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/fast")
 
     assert resp.status_code == 200
@@ -70,14 +68,10 @@ async def test_disabled_by_default_no_headers():
 
 async def test_enabled_attach_headers():
     """When enabled=True and attach_headers=True, X-Profile-* headers appear."""
-    settings = ProfilingSettings(
-        enabled=True, attach_headers=True, slow_threshold_ms=0.0
-    )
+    settings = ProfilingSettings(enabled=True, attach_headers=True, slow_threshold_ms=0.0)
     app = make_app(settings)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/fast")
 
     assert resp.status_code == 200
@@ -95,9 +89,7 @@ async def test_enabled_logs_report(caplog):
     app = make_app(settings)
 
     with caplog.at_level(logging.INFO, logger="varco_fastapi.middleware.profiling"):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/fast")
 
     assert resp.status_code == 200
@@ -114,9 +106,7 @@ async def test_skip_paths_not_profiled():
     )
     app = make_app(settings)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/health")
 
     assert resp.status_code == 200
@@ -135,9 +125,7 @@ async def test_threshold_gating_no_log_for_fast_request(caplog):
     app = make_app(settings)
 
     with caplog.at_level(logging.INFO, logger="varco_core.profiling.engine"):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/fast")
 
     assert resp.status_code == 200
@@ -158,9 +146,7 @@ async def test_concurrent_request_passes_through_unprofiled():
     results = []
 
     async def fetch(path: str):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             t0 = time.perf_counter()
             resp = await c.get(path)
             elapsed = time.perf_counter() - t0
@@ -184,14 +170,10 @@ async def test_concurrent_request_passes_through_unprofiled():
 
 async def test_attach_headers_false_no_profile_headers():
     """attach_headers=False means no X-Profile-* headers even when profiling runs."""
-    settings = ProfilingSettings(
-        enabled=True, attach_headers=False, slow_threshold_ms=0.0
-    )
+    settings = ProfilingSettings(enabled=True, attach_headers=False, slow_threshold_ms=0.0)
     app = make_app(settings)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         resp = await c.get("/fast")
 
     assert resp.status_code == 200
@@ -228,7 +210,5 @@ async def test_profiling_does_not_suppress_application_errors():
     # Without an outer error handler the ValueError propagates through ASGI
     # transport to the test.  This is correct — the middleware did NOT swallow it.
     with pytest.raises(Exception, match="intentional"):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as c:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             await c.get("/boom")

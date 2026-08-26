@@ -156,23 +156,15 @@ class TenancySettings:
         return cls(
             isolation=TenantIsolation(isolation),
             enforce_rls=_bool("VARCO_TENANCY_ENFORCE_RLS", defaults.enforce_rls),
-            schema_template=source.get(
-                "VARCO_TENANCY_SCHEMA_TEMPLATE", defaults.schema_template
-            ),
+            schema_template=source.get("VARCO_TENANCY_SCHEMA_TEMPLATE", defaults.schema_template),
             db_template=source.get("VARCO_TENANCY_DB_TEMPLATE", defaults.db_template),
-            max_entries=int(
-                source.get("VARCO_TENANCY_MAX_ENTRIES", defaults.max_entries)
-            ),
+            max_entries=int(source.get("VARCO_TENANCY_MAX_ENTRIES", defaults.max_entries)),
             idle_ttl_s=float(source.get("VARCO_TENANCY_IDLE_TTL", defaults.idle_ttl_s)),
-            catalog_ttl_s=float(
-                source.get("VARCO_TENANCY_CATALOG_TTL", defaults.catalog_ttl_s)
-            ),
+            catalog_ttl_s=float(source.get("VARCO_TENANCY_CATALOG_TTL", defaults.catalog_ttl_s)),
             fanout_framework_tables=_bool(
                 "VARCO_TENANCY_FANOUT_FRAMEWORK_TABLES",
                 defaults.fanout_framework_tables,
             ),
             global_dsn=source.get("VARCO_TENANCY_GLOBAL_DSN", defaults.global_dsn),
-            global_writable=_bool(
-                "VARCO_TENANCY_GLOBAL_WRITABLE", defaults.global_writable
-            ),
+            global_writable=_bool("VARCO_TENANCY_GLOBAL_WRITABLE", defaults.global_writable),
         )

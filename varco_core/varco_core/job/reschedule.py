@@ -108,9 +108,7 @@ class ScheduleRematerializer:
         from zoneinfo import ZoneInfo
 
         zone = ZoneInfo(job.run_at_tz)
-        new_run_at = resolve_zoned(
-            job.run_at_wall, zone, fold=job.run_at_fold
-        ).astimezone(UTC)
+        new_run_at = resolve_zoned(job.run_at_wall, zone, fold=job.run_at_fold).astimezone(UTC)
 
         if job.run_at is not None and new_run_at == job.run_at:
             return 0

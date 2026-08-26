@@ -172,9 +172,7 @@ def _scan_module(module: ModuleType) -> list[type[DomainModel]]:
           imported from.
     """
     if hasattr(module, "__path__"):
-        for info in pkgutil.walk_packages(
-            module.__path__, prefix=module.__name__ + "."
-        ):
+        for info in pkgutil.walk_packages(module.__path__, prefix=module.__name__ + "."):
             importlib.import_module(info.name)
 
     base = module.__name__

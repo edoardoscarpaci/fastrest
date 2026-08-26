@@ -90,11 +90,7 @@ class DocumentAssembler(
             content=entity.content,
             # Defensive fallback: updated_at should never be None after save().
             created_at=entity.created_at,
-            updated_at=(
-                entity.updated_at
-                if entity.updated_at is not None
-                else entity.created_at
-            ),
+            updated_at=(entity.updated_at if entity.updated_at is not None else entity.created_at),
         )
 
     def apply_update(self, entity: Document, dto: DocumentUpdate) -> Document:

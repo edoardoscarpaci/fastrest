@@ -73,9 +73,7 @@ def build_audit_router(
     ) -> list[dict[str, Any]]:
         limit = min(limit, 1000)
         if occurred_from and occurred_to and occurred_from > occurred_to:
-            raise HTTPException(
-                status_code=422, detail="occurred_from must be <= occurred_to."
-            )
+            raise HTTPException(status_code=422, detail="occurred_from must be <= occurred_to.")
         try:
             entries = await audit_repo.list(
                 actor_id=actor_id,
@@ -84,12 +82,8 @@ def build_audit_router(
                 entity_id=entity_id,
                 tenant_id=tenant_id,
                 correlation_id=correlation_id,
-                occurred_from=(
-                    datetime.fromisoformat(occurred_from) if occurred_from else None
-                ),
-                occurred_to=(
-                    datetime.fromisoformat(occurred_to) if occurred_to else None
-                ),
+                occurred_from=(datetime.fromisoformat(occurred_from) if occurred_from else None),
+                occurred_to=(datetime.fromisoformat(occurred_to) if occurred_to else None),
                 limit=limit,
                 offset=offset,
             )
@@ -112,9 +106,7 @@ def build_audit_router(
     async def get_for_entity(
         entity_type: str, entity_id: str, limit: int = 100
     ) -> list[dict[str, Any]]:
-        entries = await audit_repo.list_for_entity(
-            entity_type, entity_id, limit=min(limit, 1000)
-        )
+        entries = await audit_repo.list_for_entity(entity_type, entity_id, limit=min(limit, 1000))
         return [_entry_to_dict(e) for e in entries]
 
     @router.post("/verify-chain")
@@ -182,9 +174,7 @@ def build_audit_router(
         ) -> dict[str, Any]:
             try:
                 count = await audit_repo.delete_where(
-                    older_than=(
-                        datetime.fromisoformat(older_than) if older_than else None
-                    ),
+                    older_than=(datetime.fromisoformat(older_than) if older_than else None),
                     entity_type=entity_type,
                     tenant_id=tenant_id,
                     limit=limit,

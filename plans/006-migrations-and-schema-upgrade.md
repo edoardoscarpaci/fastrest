@@ -383,11 +383,12 @@ Depends on: nothing. Blocks: Phase 2 (`framework_metadata()` is what the baselin
        alias. Keep `_metadata` as-is so nothing internal moves.
 5. [ ] `varco_sa/varco_sa/metadata.py` (new) — the single aggregated export:
        ```python
-       _FRAMEWORK_METADATA: dict[str, MetaData] = {}   # module-qualified name → MetaData
+       _FRAMEWORK_METADATA: dict[str, MetaData] = {}  # module-qualified name → MetaData
+
 
        def register_framework_metadata(name: str, md: MetaData) -> None: ...
-       def framework_metadata() -> MetaData: ...          # one merged MetaData, all framework tables
-       def framework_table_names() -> frozenset[str]: ... # cheap; used by include_object
+       def framework_metadata() -> MetaData: ...  # one merged MetaData, all framework tables
+       def framework_table_names() -> frozenset[str]: ...  # cheap; used by include_object
        ```
        Each of the eight owning modules (`outbox`, `inbox`, `job_store`, `saga`, `conversation`,
        `deduplication`, `audit`, `dlq`, `encryption_store`) calls `register_framework_metadata` at
@@ -445,24 +446,29 @@ honestly (its "revisions" are sortable version strings).
         ```python
         @dataclass(frozen=True)
         class Revision:
-            id: str                       # alembic rev hash, or beanie version string
-            label: str                    # human name / message
-            branch: str | None = None     # "varco" for framework revisions, None for app
+            id: str  # alembic rev hash, or beanie version string
+            label: str  # human name / message
+            branch: str | None = None  # "varco" for framework revisions, None for app
+
 
         @dataclass(frozen=True)
         class MigrationPlan:
-            current: tuple[str, ...]      # heads currently applied ( () on a virgin DB )
+            current: tuple[str, ...]  # heads currently applied ( () on a virgin DB )
             pending: tuple[Revision, ...]
+
             @property
             def is_empty(self) -> bool: ...
             def format(self) -> str: ...
+
 
         @dataclass(frozen=True)
         class MigrationReport:
             applied: tuple[Revision, ...]
             duration_s: float
-            skipped_locked: bool = False   # another holder did the work
+            skipped_locked: bool = False  # another holder did the work
+
             def format(self) -> str: ...
+
 
         class AbstractMigrator(ABC):
             @abstractmethod
@@ -473,8 +479,8 @@ honestly (its "revisions" are sortable version strings).
             async def downgrade(self, target: str) -> MigrationReport: ...
             @abstractmethod
             async def stamp(self, target: str = "heads") -> None: ...
-            async def check(self) -> MigrationPlan: ...          # concrete: plan() + raise if pending
-            async def close(self) -> None: ...                   # concrete no-op; engines override
+            async def check(self) -> MigrationPlan: ...  # concrete: plan() + raise if pending
+            async def close(self) -> None: ...  # concrete no-op; engines override
         ```
         `check()` and `close()` are **concrete** (not abstract) so a third-party migrator is not broken
         by their addition — same rule Plan 005 applied to `AbstractJobStore`.
@@ -490,13 +496,14 @@ honestly (its "revisions" are sortable version strings).
         ```python
         @dataclass(frozen=True)
         class MigrationSettings:
-            mode: Literal["off", "check", "upgrade"] = "off"          # VARCO_MIGRATE_MODE
-            on_failure: Literal["fail", "warn"] = "fail"              # VARCO_MIGRATE_ON_FAILURE
-            lock_key: str = "varco:migrate"                           # VARCO_MIGRATE_LOCK_KEY
-            lock_timeout: float = 30.0                                # VARCO_MIGRATE_LOCK_TIMEOUT
-            timeout: float = 300.0                                    # VARCO_MIGRATE_TIMEOUT
-            target: str = "heads"                                     # VARCO_MIGRATE_TARGET_REV
-            dry_run: bool = False                                     # VARCO_MIGRATE_DRY_RUN
+            mode: Literal["off", "check", "upgrade"] = "off"  # VARCO_MIGRATE_MODE
+            on_failure: Literal["fail", "warn"] = "fail"  # VARCO_MIGRATE_ON_FAILURE
+            lock_key: str = "varco:migrate"  # VARCO_MIGRATE_LOCK_KEY
+            lock_timeout: float = 30.0  # VARCO_MIGRATE_LOCK_TIMEOUT
+            timeout: float = 300.0  # VARCO_MIGRATE_TIMEOUT
+            target: str = "heads"  # VARCO_MIGRATE_TARGET_REV
+            dry_run: bool = False  # VARCO_MIGRATE_DRY_RUN
+
             @classmethod
             def from_env(cls, env: Mapping[str, str] | None = None) -> MigrationSettings: ...
         ```
@@ -544,10 +551,10 @@ swapped — Alembic's documented async recipe is `connection.run_sync`, use that
                 self,
                 engine: AsyncEngine,
                 *,
-                script_location: str | Path | None = None,   # app's alembic/ dir; None → framework only
+                script_location: str | Path | None = None,  # app's alembic/ dir; None → framework only
                 version_locations: Sequence[str | Path] = (),
                 include_framework_branch: bool = True,
-                lock: AbstractDistributedLock | None = None, # None → SAXactAdvisoryLock(engine)
+                lock: AbstractDistributedLock | None = None,  # None → SAXactAdvisoryLock(engine)
                 settings: MigrationSettings | None = None,
             ) -> None: ...
         ```
@@ -626,17 +633,21 @@ Depends on: Phase 1. Independent of Phase 2.
 32. [ ] `varco_beanie/varco_beanie/migration/base.py` (new):
         ```python
         class Migration(ABC):
-            version: ClassVar[str]        # sortable, e.g. "20260812_001"
+            version: ClassVar[str]  # sortable, e.g. "20260812_001"
             name: ClassVar[str]
+
             @abstractmethod
             async def up(self, db: Any) -> None: ...
-            async def down(self, db: Any) -> None:     # concrete → raises IrreversibleMigrationError
+            async def down(self, db: Any) -> None:  # concrete → raises IrreversibleMigrationError
                 raise IrreversibleMigrationError(...)
+
 
         class MigrationRegistry:
             def register(self, *migrations: type[Migration]) -> None: ...
-            def discover(self, package: str) -> None: ...   # importlib walk, mirrors container.scan
-            def ordered(self) -> tuple[type[Migration], ...]: ...   # sorted by version; duplicate → ValueError
+            def discover(self, package: str) -> None: ...  # importlib walk, mirrors container.scan
+            def ordered(
+                self,
+            ) -> tuple[type[Migration], ...]: ...  # sorted by version; duplicate → ValueError
         ```
         `version` uniqueness and sortability are validated in `register()`, not at apply time — a
         duplicate version is a developer error that must surface at import.
@@ -653,14 +664,14 @@ Depends on: Phase 1. Independent of Phase 2.
         class BeanieMigrator(AbstractMigrator):
             def __init__(
                 self,
-                db: Any,                                   # AsyncDatabase
+                db: Any,  # AsyncDatabase
                 registry: MigrationRegistry,
                 *,
                 index_guard: BeanieIndexGuard | None = None,
                 index_mode: Literal["off", "check", "create"] = "check",
                 settings: MigrationSettings | None = None,
                 verify_checksums: bool = True,
-                owner_id: str | None = None,               # None → f"{hostname}:{pid}"
+                owner_id: str | None = None,  # None → f"{hostname}:{pid}"
             ) -> None: ...
         ```
         `upgrade()` acquires the lock document, starts a heartbeat task (interval = `ttl / 3`), applies
@@ -724,10 +735,10 @@ nothing touches a table that does not exist yet. `varco_fastapi` imports only
             def __init__(
                 self,
                 *migrators: AbstractMigrator,
-                settings: MigrationSettings | None = None,   # None → MigrationSettings.from_env()
+                settings: MigrationSettings | None = None,  # None → MigrationSettings.from_env()
             ) -> None: ...
-            async def start(self) -> None: ...   # the whole algorithm above
-            async def stop(self) -> None: ...    # close() each migrator, log-and-swallow
+            async def start(self) -> None: ...  # the whole algorithm above
+            async def stop(self) -> None: ...  # close() each migrator, log-and-swallow
         ```
         Satisfies `AbstractLifecycle` structurally (`lifespan.py:70-88`) — no inheritance needed.
         `start()` wraps the run in `asyncio.timeout(settings.timeout)`; `stop()` never raises

@@ -33,9 +33,7 @@ def metric_reader():
     reader = InMemoryMetricReader()
     provider = MeterProvider(metric_readers=[reader])
     _instrument_cache.clear()
-    with mock.patch(
-        "opentelemetry.metrics._internal.get_meter_provider", return_value=provider
-    ):
+    with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
         yield reader
     _instrument_cache.clear()
 
@@ -86,9 +84,7 @@ class TestRecordDlqPush:
         def _boom(*args, **kwargs):
             raise RuntimeError("instrument exploded")
 
-        monkeypatch.setattr(
-            "varco_core.observability.reliability._dlq_pushed.add", _boom
-        )
+        monkeypatch.setattr("varco_core.observability.reliability._dlq_pushed.add", _boom)
         # Must not raise -- a metrics failure is never worth a dropped dead letter.
         record_dlq_push(source="consumer", channel="orders", ok=True)
 
@@ -138,9 +134,7 @@ class TestInstallReliabilityMetricsDepthGauge:
             async def count(self) -> int:  # type: ignore[override]
                 if asyncio.get_running_loop() is not self._loop:
                     # Verbatim shape of the real redis.asyncio failure.
-                    raise RuntimeError(
-                        "got Future <Future pending> attached to a different loop"
-                    )
+                    raise RuntimeError("got Future <Future pending> attached to a different loop")
                 # A genuine await, so the coroutine really has to be driven by
                 # that loop rather than merely constructed on it.
                 await asyncio.sleep(0)
@@ -150,9 +144,7 @@ class TestInstallReliabilityMetricsDepthGauge:
         install_reliability_metrics(dlq=dlq, dlq_name="loop-bound-dlq")
 
         # Collect off the event loop — the production topology.
-        points = await asyncio.to_thread(
-            _collect_points, metric_reader, "varco.dlq.depth"
-        )
+        points = await asyncio.to_thread(_collect_points, metric_reader, "varco.dlq.depth")
 
         assert any(p.value == 7 for p in points), (
             "depth gauge emitted no observation for a loop-bound DLQ — "
@@ -172,9 +164,7 @@ class TestInstallReliabilityMetricsDepthGauge:
         points = _collect_points(metric_reader, "varco.dlq.depth")
         assert points == [] or all(p.value != -1 for p in points)
 
-    async def test_count_raising_emits_nothing_and_logs_debug(
-        self, metric_reader, caplog
-    ) -> None:
+    async def test_count_raising_emits_nothing_and_logs_debug(self, metric_reader, caplog) -> None:
         from varco_core.observability.reliability import install_reliability_metrics
 
         class _BrokenDLQ(InMemoryDeadLetterQueue):

@@ -38,9 +38,7 @@ class PendingMigrationsError(MigrationError):
 
     def __init__(self, plan: MigrationPlan) -> None:
         self.plan = plan
-        super().__init__(
-            f"Pending migrations detected — schema is behind:\n{plan.format()}"
-        )
+        super().__init__(f"Pending migrations detected — schema is behind:\n{plan.format()}")
 
 
 class MigrationLockTimeout(MigrationError):

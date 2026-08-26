@@ -209,9 +209,7 @@ def build_policy_router(
         _: AuthContext = admin,
     ) -> dict[str, bool]:
         """Grant a role to a user; ``{"added": false}`` if already assigned."""
-        added = await backend.add_role_for_user(
-            assignment.user, assignment.role, assignment.domain
-        )
+        added = await backend.add_role_for_user(assignment.user, assignment.role, assignment.domain)
         return {"added": added}
 
     @router.delete("/roles")

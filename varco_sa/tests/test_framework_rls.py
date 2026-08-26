@@ -140,10 +140,7 @@ class TestFrameworkRlsPostgresIntegration:
         async with _pg_engine.begin() as conn:
             await conn.run_sync(dead_letters_metadata.create_all, checkfirst=True)
             await conn.execute(
-                sa.text(
-                    "ALTER TABLE varco_dead_letters "
-                    "ADD COLUMN IF NOT EXISTS tenant_id UUID"
-                )
+                sa.text("ALTER TABLE varco_dead_letters ADD COLUMN IF NOT EXISTS tenant_id UUID")
             )
 
         dlq = SADeadLetterQueue(_pg_engine)
@@ -173,9 +170,7 @@ class TestFrameworkRlsPostgresIntegration:
 
         async with _pg_engine.connect() as conn:
             await set_tenant_local(conn, tenant_a)
-            result = await conn.execute(
-                sa.text("SELECT tenant_id FROM varco_dead_letters")
-            )
+            result = await conn.execute(sa.text("SELECT tenant_id FROM varco_dead_letters"))
             rows = [str(r[0]) for r in result.fetchall()]
             assert rows == [tenant_a]
 
@@ -199,10 +194,7 @@ class TestFrameworkRlsPostgresIntegration:
 
         async with _pg_engine.connect() as conn:
             result = await conn.execute(
-                sa.text(
-                    "SELECT qual FROM pg_policies WHERE tablename = "
-                    "'varco_dead_letters'"
-                )
+                sa.text("SELECT qual FROM pg_policies WHERE tablename = 'varco_dead_letters'")
             )
             row = result.fetchone()
             assert row is not None

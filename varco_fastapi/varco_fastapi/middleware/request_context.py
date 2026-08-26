@@ -113,9 +113,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         self._tenant_field = tenant_field
         self._enable_tenant_context = enable_tenant_context
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
         Set up all request-scoped ContextVars, call next, then clean up.
 

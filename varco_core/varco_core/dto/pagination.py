@@ -313,9 +313,7 @@ def paged_response(
     from varco_core.query.params import QueryParams as _QueryParams  # noqa: PLC0415
 
     if not isinstance(params, _QueryParams):
-        raise TypeError(
-            f"paged_response() requires a QueryParams instance, got {type(params)!r}."
-        )
+        raise TypeError(f"paged_response() requires a QueryParams instance, got {type(params)!r}.")
 
     count = len(results)
     current_offset = params.offset or 0
@@ -341,9 +339,7 @@ def paged_response(
 
     if has_next:
         # Convert domain SortField objects to Pydantic-native SortCursorField
-        sort_cursor = [
-            SortCursorField(field=s.field, order=s.order) for s in params.sort
-        ]
+        sort_cursor = [SortCursorField(field=s.field, order=s.order) for s in params.sort]
         next_cursor: PageCursor | None = PageCursor(
             limit=params.limit,  # type: ignore[arg-type]  # limit is not None here
             offset=next_offset,

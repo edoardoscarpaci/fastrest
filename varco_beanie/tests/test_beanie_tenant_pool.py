@@ -16,9 +16,7 @@ async def test_eviction_does_not_close_a_shared_client() -> None:
             closed.append("shared")
 
     shared_client = _FakeSharedClient()
-    pool = BeanieTenantPool(
-        client=shared_client, client_per_tenant=False, max_entries=1
-    )
+    pool = BeanieTenantPool(client=shared_client, client_per_tenant=False, max_entries=1)
 
     await pool.ensure("acme")
     await pool.ensure("globex")  # evicts "acme"'s binding, must not close shared_client
@@ -35,9 +33,7 @@ async def test_client_per_tenant_mode_closes_on_eviction() -> None:
         client = type("C", (), {"close": lambda self: closed.append(tenant_id)})()
         return client
 
-    pool = BeanieTenantPool(
-        client_factory=_client_factory, client_per_tenant=True, max_entries=1
-    )
+    pool = BeanieTenantPool(client_factory=_client_factory, client_per_tenant=True, max_entries=1)
 
     await pool.ensure("acme")
     await pool.ensure("globex")
@@ -52,9 +48,7 @@ async def test_clone_count_bounded_by_max_entries() -> None:
         def close(self):
             pass
 
-    pool = BeanieTenantPool(
-        client=_FakeSharedClient(), client_per_tenant=False, max_entries=2
-    )
+    pool = BeanieTenantPool(client=_FakeSharedClient(), client_per_tenant=False, max_entries=2)
 
     await pool.ensure("a")
     await pool.ensure("b")

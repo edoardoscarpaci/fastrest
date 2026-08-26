@@ -137,8 +137,7 @@ def build_router(
               after a consumer reconnect.
         """
         return [
-            NotificationItem(order_id=ev.order_id, amount=ev.amount)
-            for ev in consumer.received
+            NotificationItem(order_id=ev.order_id, amount=ev.amount) for ev in consumer.received
         ]
 
     @router.get("/health")

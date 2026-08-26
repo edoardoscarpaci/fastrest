@@ -45,8 +45,7 @@ def emit_to_otel(report: ProfileReport) -> None:
         )
     except ImportError:
         _logger.debug(
-            "varco_core.profiling.otel: observability helpers not available; "
-            "OTel bridge skipped."
+            "varco_core.profiling.otel: observability helpers not available; OTel bridge skipped."
         )
         return
 

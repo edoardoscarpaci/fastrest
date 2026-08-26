@@ -186,9 +186,7 @@ class InMemoryCache(CacheBackend):
         self,
         settings: CacheSettings | None = None,
         *,
-        strategy: Annotated[
-            InvalidationStrategy | None, InjectMeta(optional=True)
-        ] = None,
+        strategy: Annotated[InvalidationStrategy | None, InjectMeta(optional=True)] = None,
         max_size: int | None = None,
         serializer: Serializer[Any] | None = None,
     ) -> None:
@@ -223,8 +221,7 @@ class InMemoryCache(CacheBackend):
         """
         if self._started:
             raise RuntimeError(
-                "InMemoryCache.start() called on an already-started cache. "
-                "Call stop() first."
+                "InMemoryCache.start() called on an already-started cache. Call stop() first."
             )
         if self._strategy is not None:
             await self._strategy.start()

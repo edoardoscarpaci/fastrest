@@ -95,18 +95,14 @@ class ProfileReport:
 
         if self.top_functions:
             lines.append("  Top functions (cpu):")
-            lines.append(
-                f"    {'ncalls':>8}  {'tottime_ms':>12}  {'cumtime_ms':>12}  function"
-            )
+            lines.append(f"    {'ncalls':>8}  {'tottime_ms':>12}  {'cumtime_ms':>12}  function")
             for fn in self.top_functions:
                 lines.append(
                     f"    {fn.ncalls:>8}  {fn.tottime_ms:>12.3f}  "
                     f"{fn.cumtime_ms:>12.3f}  {fn.function}"
                 )
 
-        rss_str = (
-            f"{self.rss_delta_bytes:+,}B" if self.rss_delta_bytes is not None else "n/a"
-        )
+        rss_str = f"{self.rss_delta_bytes:+,}B" if self.rss_delta_bytes is not None else "n/a"
         lines.append(
             f"  Memory: delta={self.mem_delta_bytes:+,}B  "
             f"peak={self.mem_peak_bytes:,}B  rss_delta={rss_str}"
@@ -115,9 +111,7 @@ class ProfileReport:
         if self.top_allocations:
             lines.append("  Top allocations:")
             for alloc in self.top_allocations[:5]:
-                lines.append(
-                    f"    {alloc.size_bytes:>+12,}B  x{alloc.count}  {alloc.location}"
-                )
+                lines.append(f"    {alloc.size_bytes:>+12,}B  x{alloc.count}  {alloc.location}")
 
         if self.artifacts:
             kinds = ", ".join(a.kind for a in self.artifacts)
@@ -162,8 +156,7 @@ class ProfileReport:
                 for a in self.top_allocations
             ],
             "artifacts": [
-                {"kind": art.kind, "media_type": art.media_type}
-                for art in self.artifacts
+                {"kind": art.kind, "media_type": art.media_type} for art in self.artifacts
             ],
         }
 

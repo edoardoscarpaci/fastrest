@@ -82,14 +82,10 @@ class TestSAConversationStoreAppendGet:
         assert turns[0].role == "user"
         assert turns[0].content == "Hello!"
 
-    async def test_get_unknown_task_returns_empty(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_get_unknown_task_returns_empty(self, store: SAConversationStore) -> None:
         assert await store.get("no-such-task") == []
 
-    async def test_append_multiple_turns_preserves_order(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_append_multiple_turns_preserves_order(self, store: SAConversationStore) -> None:
         """Turns are returned in oldest-first order via turn_ts ASC."""
         turns_in = [
             ConversationTurn(
@@ -117,9 +113,7 @@ class TestSAConversationStoreAppendGet:
         assert turns_out[1].content == "Hi there"
         assert turns_out[2].content == "How are you?"
 
-    async def test_different_tasks_are_isolated(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_different_tasks_are_isolated(self, store: SAConversationStore) -> None:
         """Turns from different task_ids do not interfere."""
         await store.append("task-A", _turn(content="A1"))
         await store.append("task-B", _turn(content="B1"))
@@ -134,9 +128,7 @@ class TestSAConversationStoreAppendGet:
         assert len(b_turns) == 1
         assert b_turns[0].content == "B1"
 
-    async def test_json_dict_content_round_trips(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_json_dict_content_round_trips(self, store: SAConversationStore) -> None:
         """dict content (A2A message format) survives JSON serialization."""
         content = {"parts": [{"text": "Hello"}, {"type": "data", "value": 42}]}
         await store.append("task-1", _turn(content=content))
@@ -174,14 +166,10 @@ class TestSAConversationStoreDelete:
 
         assert await store.get("task-1") == []
 
-    async def test_delete_unknown_task_is_noop(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_delete_unknown_task_is_noop(self, store: SAConversationStore) -> None:
         await store.delete("no-such-task")  # must not raise
 
-    async def test_delete_does_not_affect_other_tasks(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_delete_does_not_affect_other_tasks(self, store: SAConversationStore) -> None:
         await store.append("task-A", _turn(content="A"))
         await store.append("task-B", _turn(content="B"))
 
@@ -195,14 +183,10 @@ class TestSAConversationStoreDelete:
 
 
 class TestSAConversationStoreTurnCount:
-    async def test_turn_count_zero_for_unknown_task(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_turn_count_zero_for_unknown_task(self, store: SAConversationStore) -> None:
         assert await store.turn_count("unknown") == 0
 
-    async def test_turn_count_matches_appended_turns(
-        self, store: SAConversationStore
-    ) -> None:
+    async def test_turn_count_matches_appended_turns(self, store: SAConversationStore) -> None:
         for i in range(5):
             await store.append("task-1", _turn(content=str(i)))
 

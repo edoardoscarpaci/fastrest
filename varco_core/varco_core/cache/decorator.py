@@ -200,11 +200,7 @@ def cached(
         effective_policy: CachePolicy | None = policy
         if effective_policy is None and singleflight:
             effective_policy = CachePolicy(ttl=ttl, singleflight=True)
-        elif (
-            effective_policy is not None
-            and singleflight
-            and not effective_policy.singleflight
-        ):
+        elif effective_policy is not None and singleflight and not effective_policy.singleflight:
             effective_policy = dataclasses.replace(effective_policy, singleflight=True)
 
         # One Singleflight per decorated function, created at decoration
@@ -248,9 +244,7 @@ def cached(
                     _logger.debug("@cached[%s]: hit for key %r.", ns, cache_key)
                     return cached_val
 
-                _logger.debug(
-                    "@cached[%s]: miss for key %r, calling function.", ns, cache_key
-                )
+                _logger.debug("@cached[%s]: miss for key %r, calling function.", ns, cache_key)
                 result = await func(*args, **kwargs)
                 if result is not None:
                     await _cache.set(cache_key, result, ttl=ttl)

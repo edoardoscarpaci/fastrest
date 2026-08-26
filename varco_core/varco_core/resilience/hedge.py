@@ -131,9 +131,7 @@ class HedgeConfig:
         if self.delay <= 0:
             raise ValueError(f"HedgeConfig.delay must be > 0, got {self.delay}.")
         if self.max_hedges < 1:
-            raise ValueError(
-                f"HedgeConfig.max_hedges must be ≥ 1, got {self.max_hedges}."
-            )
+            raise ValueError(f"HedgeConfig.max_hedges must be ≥ 1, got {self.max_hedges}.")
 
     def __repr__(self) -> str:
         return f"HedgeConfig(delay={self.delay}, max_hedges={self.max_hedges})"

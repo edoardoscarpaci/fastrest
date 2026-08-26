@@ -226,8 +226,7 @@ class LayeredCache(CacheBackend):
         """
         if self._started:
             raise RuntimeError(
-                "LayeredCache.start() called on an already-started cache. "
-                "Call stop() first."
+                "LayeredCache.start() called on an already-started cache. Call stop() first."
             )
         for layer in self._layers:
             # A layer MAY already be started — the multi-pod backplane
@@ -355,9 +354,7 @@ class LayeredCache(CacheBackend):
             )
         elif self._write_mode == "write-through":
             # All layers updated concurrently — untouched by backplane wiring.
-            await asyncio.gather(
-                *(layer.set(key, value, ttl=ttl) for layer in self._layers)
-            )
+            await asyncio.gather(*(layer.set(key, value, ttl=ttl) for layer in self._layers))
         else:
             # write-around — only the slowest (authoritative) layer is written.
             await self._layers[-1].set(key, value, ttl=ttl)
@@ -391,9 +388,7 @@ class LayeredCache(CacheBackend):
     # `kind="keys"` — a Plan-010-era subscriber must keep decoding every
     # message in a mixed-version fleet (see the DESIGN block below).
 
-    async def get_many(
-        self, keys: list[Any], *, type_hint: type | None = None
-    ) -> dict[Any, Any]:
+    async def get_many(self, keys: list[Any], *, type_hint: type | None = None) -> dict[Any, Any]:
         """
         Bulk read walking L1 -> Ln, per key — a key hit at L1 short-circuits;
         a key only found deeper is promoted back to faster layers (same
@@ -407,9 +402,7 @@ class LayeredCache(CacheBackend):
                 result[key] = value
         return result
 
-    async def set_many(
-        self, items: dict[Any, Any], *, ttl: float | None = None
-    ) -> None:
+    async def set_many(self, items: dict[Any, Any], *, ttl: float | None = None) -> None:
         """
         Bulk write. ``set_many({})`` is a no-op — no round trip, no
         backplane message (RD-1's edge case: empty input never touches the
@@ -421,9 +414,7 @@ class LayeredCache(CacheBackend):
         keys = list(items.keys())
         if self._backplane is not None and self._write_mode == "write-through":
             # Authoritative (last) layer first — see set()'s DESIGN note.
-            await asyncio.gather(
-                *(self._layers[-1].set(k, v, ttl=ttl) for k, v in items.items())
-            )
+            await asyncio.gather(*(self._layers[-1].set(k, v, ttl=ttl) for k, v in items.items()))
             await asyncio.gather(
                 *(
                     layer.set(k, v, ttl=ttl)
@@ -434,17 +425,11 @@ class LayeredCache(CacheBackend):
             )
         elif self._write_mode == "write-through":
             await asyncio.gather(
-                *(
-                    layer.set(k, v, ttl=ttl)
-                    for layer in self._layers
-                    for k, v in items.items()
-                )
+                *(layer.set(k, v, ttl=ttl) for layer in self._layers for k, v in items.items())
             )
         else:
             # write-around — only the slowest (authoritative) layer.
-            await asyncio.gather(
-                *(self._layers[-1].set(k, v, ttl=ttl) for k, v in items.items())
-            )
+            await asyncio.gather(*(self._layers[-1].set(k, v, ttl=ttl) for k, v in items.items()))
             if self._backplane is not None:
                 await asyncio.gather(*(self._publish("key", str(k)) for k in keys))
 
@@ -460,9 +445,7 @@ class LayeredCache(CacheBackend):
                 *(self._publish("key", str(k)) for k in keys),
             )
         else:
-            await asyncio.gather(
-                *(layer.delete(k) for layer in self._layers for k in keys)
-            )
+            await asyncio.gather(*(layer.delete(k) for layer in self._layers for k in keys))
 
     async def exists(self, key: Any) -> bool:
         """
@@ -532,9 +515,7 @@ class LayeredCache(CacheBackend):
             )
         else:
             # All layers are updated concurrently — consistent with delete() / clear().
-            await asyncio.gather(
-                *(layer.delete_prefix(prefix) for layer in self._layers)
-            )
+            await asyncio.gather(*(layer.delete_prefix(prefix) for layer in self._layers))
         _logger.debug(
             "LayeredCache: delete_prefix(%r) across %d layers.",
             prefix,
@@ -556,9 +537,7 @@ class LayeredCache(CacheBackend):
         try:
             await self._backplane.publish(message)
             record_backplane_published(kind=kind)
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 - publish() must never raise (design rule 1)
+        except Exception as exc:  # noqa: BLE001 - publish() must never raise (design rule 1)
             # Defense in depth — well-behaved implementations already
             # swallow internally, but the authoritative write has already
             # landed by the time this runs, so a misbehaving backplane must
@@ -580,13 +559,9 @@ class LayeredCache(CacheBackend):
             return
         local_layers = self._layers[:-1]
         if message.kind == "key":
-            await asyncio.gather(
-                *(layer.delete(message.payload) for layer in local_layers)
-            )
+            await asyncio.gather(*(layer.delete(message.payload) for layer in local_layers))
         elif message.kind == "prefix":
-            await asyncio.gather(
-                *(layer.delete_prefix(message.payload) for layer in local_layers)
-            )
+            await asyncio.gather(*(layer.delete_prefix(message.payload) for layer in local_layers))
         else:  # "clear"
             await asyncio.gather(*(layer.clear() for layer in local_layers))
         for i in range(len(local_layers)):

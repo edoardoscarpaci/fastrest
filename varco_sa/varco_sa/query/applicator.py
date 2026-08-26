@@ -84,15 +84,13 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
         """
         self.model_cls = model_cls
 
-        if query_compiler is not None and not isinstance(
-            query_compiler, SQLAlchemyQueryCompiler
-        ):
+        if query_compiler is not None and not isinstance(query_compiler, SQLAlchemyQueryCompiler):
             raise ValueError(
                 "query_compiler must be an instance of SQLAlchemyQueryCompiler "
                 f"(got {type(query_compiler).__name__!r})"
             )
-        self.query_visitor: SQLAlchemyQueryCompiler = (
-            query_compiler or SQLAlchemyQueryCompiler(model=model_cls)
+        self.query_visitor: SQLAlchemyQueryCompiler = query_compiler or SQLAlchemyQueryCompiler(
+            model=model_cls
         )
 
         # Propagate allowed_fields to the compiler when it has none of its own

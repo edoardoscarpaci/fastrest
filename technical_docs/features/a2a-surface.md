@@ -69,7 +69,7 @@ never registered) — name the flip in your release notes if you own an app
 built on `varco_fastapi`.
 
 ```python
-adapter.mount(app, base_url="https://api.example.com")                  # both surfaces
+adapter.mount(app, base_url="https://api.example.com")  # both surfaces
 adapter.mount(app, base_url="https://api.example.com", legacy_paths=False)  # v1.0.0 only
 ```
 
@@ -78,6 +78,7 @@ adapter.mount(app, base_url="https://api.example.com", legacy_paths=False)  # v1
 ```python
 from typing import Any, Protocol, runtime_checkable
 from varco_core.auth.base import AuthContext
+
 
 @runtime_checkable
 class SkillSource(Protocol):
@@ -109,6 +110,7 @@ on a router-backed adapter and returns `None` for a non-router `source`.
 from varco_fastapi.router.a2a.source import AgentMetadata, SkillDefinition
 from varco_fastapi.router.skill import SkillAdapter
 
+
 class ReportSkillSource:
     def skills(self) -> list[SkillDefinition]:
         return [
@@ -118,7 +120,7 @@ class ReportSkillSource:
                 description="Builds a PDF summary for the given date range",
                 input_modes=("application/json",),
                 output_modes=("application/json",),
-                route=None,   # no VarcoRouter route backs this skill
+                route=None,  # no VarcoRouter route backs this skill
             )
         ]
 
@@ -127,6 +129,7 @@ class ReportSkillSource:
 
     async def invoke(self, skill_id, payload, *, ctx=None):
         return {"report_url": await build_report(payload, requested_by=ctx)}
+
 
 adapter = SkillAdapter(
     None,

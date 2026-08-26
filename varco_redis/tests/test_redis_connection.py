@@ -39,9 +39,7 @@ class TestRedisConnectionSettings:
         assert ":secret@" in conn.to_url()
 
     def test_to_url_with_username_and_password(self) -> None:
-        conn = RedisConnectionSettings.model_validate(
-            {"username": "alice", "password": "secret"}
-        )
+        conn = RedisConnectionSettings.model_validate({"username": "alice", "password": "secret"})
         url = conn.to_url()
         assert "alice:secret@" in url
 

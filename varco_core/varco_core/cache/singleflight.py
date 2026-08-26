@@ -76,9 +76,7 @@ class SingleflightProtocol(Protocol):
     ``read_through()``'s call sites.
     """
 
-    async def do(
-        self, key: str, loader: Callable[[], Awaitable[Any]]
-    ) -> tuple[Any, bool]: ...
+    async def do(self, key: str, loader: Callable[[], Awaitable[Any]]) -> tuple[Any, bool]: ...
 
     def spawn_refresh(self, key: str, loader: Callable[[], Awaitable[Any]]) -> None: ...
 
@@ -118,9 +116,7 @@ class Singleflight:
         """Number of keys with an active (leader-owned) recompute in flight."""
         return len(self._in_flight)
 
-    async def do(
-        self, key: str, loader: Callable[[], Awaitable[Any]]
-    ) -> tuple[Any, bool]:
+    async def do(self, key: str, loader: Callable[[], Awaitable[Any]]) -> tuple[Any, bool]:
         """
         Coalesce concurrent calls for ``key``.
 
@@ -202,9 +198,7 @@ class Singleflight:
         async def _runner() -> None:
             try:
                 await self.do(key, loader)
-            except (
-                Exception
-            ) as exc:  # noqa: BLE001 - background task must not crash the loop
+            except Exception as exc:  # noqa: BLE001 - background task must not crash the loop
                 _logger.debug(
                     "Singleflight[%s]: background refresh for %r failed: %s",
                     self._name,

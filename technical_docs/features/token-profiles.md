@@ -33,11 +33,11 @@ grants:
 @dataclass(frozen=True)
 class TokenProfile:
     name: str
-    issuers: frozenset[str] = frozenset()          # any-of; empty = any issuer
-    token_type: str | None = None                  # exact match when set
-    audiences: frozenset[str] = frozenset()        # any-of against token.aud
+    issuers: frozenset[str] = frozenset()  # any-of; empty = any issuer
+    token_type: str | None = None  # exact match when set
+    audiences: frozenset[str] = frozenset()  # any-of against token.aud
     required_claims: frozenset[str] = frozenset()  # canonical or raw claim names
-    implied_roles: frozenset[str] = frozenset()    # merged into AuthContext.roles
+    implied_roles: frozenset[str] = frozenset()  # merged into AuthContext.roles
     implied_scopes: frozenset[str] = frozenset()
 ```
 
@@ -54,7 +54,7 @@ token_type → audience → required_claims, in that order) — useful when diag
 ```python
 class TokenProfileRegistry:
     def register(self, profile: TokenProfile) -> None: ...
-    def get(self, name: str) -> TokenProfile: ...            # raises TokenProfileError
+    def get(self, name: str) -> TokenProfile: ...  # raises TokenProfileError
     def names(self) -> tuple[str, ...]: ...
     def resolve(self, token: JsonWebToken) -> TokenProfile | None: ...  # first match wins
     def matches(self, name: str, token: JsonWebToken) -> bool: ...
@@ -110,17 +110,17 @@ base token — the same funnel both SEAM 1 (`JwtParser.parse()`) and SEAM 2
 
 ```python
 tok = JwtParser.parse(raw_token, secret)
-tok.auth_ctx.metadata["token_profile"]   # "internal" (if matched)
-tok.auth_ctx.roles                       # includes any implied_roles merged in
+tok.auth_ctx.metadata["token_profile"]  # "internal" (if matched)
+tok.auth_ctx.roles  # includes any implied_roles merged in
 ```
 
 ### `JwtUtil` helpers
 
 ```python
 util = JwtUtil(tok)
-util.matches_profile("internal")   # bool
-util.profile_name()                # first matching profile's name, or None
-util.assert_profile("internal")    # raises TokenProfileError if no match
+util.matches_profile("internal")  # bool
+util.profile_name()  # first matching profile's name, or None
+util.assert_profile("internal")  # raises TokenProfileError if no match
 ```
 
 ### `JwtBuilder.as_profile()`
@@ -131,7 +131,7 @@ For minting tokens that should match a given profile (tests, internal signing):
 token = (
     JwtBuilder()
     .subject("svc_1")
-    .as_profile(internal_profile)   # sets iss (first of profile.issuers), token_type, aud
+    .as_profile(internal_profile)  # sets iss (first of profile.issuers), token_type, aud
     .encode(secret)
 )
 ```
@@ -150,6 +150,7 @@ from varco_fastapi.router.presets import GenericRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.auth import JwtBearerAuth
 from varco_fastapi.auth.guard import require_token_profile
+
 
 class MeshRouter(GenericRouter):
     _prefix = "/mesh"

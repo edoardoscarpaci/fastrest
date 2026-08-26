@@ -31,7 +31,7 @@ cache = MemcachedCache(settings)
 await cache.start()
 
 await cache.set("user:42", {"name": "Ada"}, ttl=300)
-value = await cache.get("user:42")   # {"name": "Ada"}
+value = await cache.get("user:42")  # {"name": "Ada"}
 
 await cache.stop()
 ```
@@ -88,10 +88,10 @@ from providify import DIContainer
 from varco_core.cache import CacheBackend
 from varco_memcached.di import async_bootstrap
 
-container = await async_bootstrap()          # installs MemcachedCacheConfiguration
-cache = await container.aget(CacheBackend)    # started MemcachedCache singleton
+container = await async_bootstrap()  # installs MemcachedCacheConfiguration
+cache = await container.aget(CacheBackend)  # started MemcachedCache singleton
 await cache.set("key", "value", ttl=60)
-await container.ashutdown()                   # stops the cache via @PreDestroy
+await container.ashutdown()  # stops the cache via @PreDestroy
 ```
 
 Or manually:
@@ -111,9 +111,11 @@ Override settings by registering a higher-priority `@Provider` **before**
 ```python
 from providify import Provider
 
+
 @Provider(singleton=True)
 def memcached_cache_settings() -> MemcachedCacheSettings:
     return MemcachedCacheSettings(host=os.environ["MEMCACHED_HOST"], key_prefix="myapp:")
+
 
 container.provide(memcached_cache_settings)
 await container.ainstall(MemcachedCacheConfiguration)

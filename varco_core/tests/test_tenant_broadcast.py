@@ -17,9 +17,7 @@ class _CountingProvisioner:
     async def provision(self, tenant_id: str, **kwargs) -> None:
         self.provision_calls += 1
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         self.deprovision_calls += 1
 
 
@@ -75,9 +73,7 @@ async def test_request_provision_emits_exactly_one_command_with_origin_and_no_lo
     service, bus, catalog, provisioner = _make_service()
 
     received: list[TenantProvisionRequested] = []
-    bus.subscribe(
-        TenantProvisionRequested, lambda e: received.append(e), channel=CHANNEL_TENANCY
-    )
+    bus.subscribe(TenantProvisionRequested, lambda e: received.append(e), channel=CHANNEL_TENANCY)
 
     await service.request_provision("acme")
     await bus.drain()

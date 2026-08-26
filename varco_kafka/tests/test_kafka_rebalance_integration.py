@@ -37,9 +37,7 @@ class RebalanceOrderEvent(Event):
     order_id: str
 
 
-def _settings(
-    kafka_bootstrap: str, *, group_id: str, prefix: str
-) -> KafkaEventBusSettings:
+def _settings(kafka_bootstrap: str, *, group_id: str, prefix: str) -> KafkaEventBusSettings:
     return KafkaEventBusSettings(
         bootstrap_servers=kafka_bootstrap,
         group_id=group_id,
@@ -96,18 +94,13 @@ async def test_two_consumers_share_partitions_then_survivor_takes_over(
     await asyncio.sleep(_REBALANCE_SETTLE)
 
     total = 20
-    publish_settings = _settings(
-        kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix
-    )
+    publish_settings = _settings(kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix)
     async with KafkaEventBus(publish_settings) as pub_bus:
         for i in range(total):
             await pub_bus.publish(RebalanceOrderEvent(order_id=str(i)), channel=channel)
 
     deadline = asyncio.get_event_loop().time() + _JOIN_TIMEOUT
-    while (
-        len(received_a) + len(received_b) < total
-        and asyncio.get_event_loop().time() < deadline
-    ):
+    while len(received_a) + len(received_b) < total and asyncio.get_event_loop().time() < deadline:
         await asyncio.sleep(0.3)
 
     all_received = received_a + received_b
@@ -137,9 +130,7 @@ async def test_two_consumers_share_partitions_then_survivor_takes_over(
     await bus_a.stop()
 
     all_received_after = received_a + received_b
-    assert sorted(all_received_after, key=int) == [
-        str(i) for i in range(total + more)
-    ], (
+    assert sorted(all_received_after, key=int) == [str(i) for i in range(total + more)], (
         "expected every post-rebalance message to be delivered exactly once, "
         f"survivor took over: a={received_a} b={received_b}"
     )

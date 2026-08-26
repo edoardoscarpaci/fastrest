@@ -121,9 +121,7 @@ class TestSAJobStoreSave:
 
     async def test_save_preserves_task_payload(self, store: SAJobStore) -> None:
         """``task_payload`` serializes and deserializes correctly."""
-        payload = TaskPayload(
-            task_name="orders.create", args=["a", 1], kwargs={"k": True}
-        )
+        payload = TaskPayload(task_name="orders.create", args=["a", 1], kwargs={"k": True})
         job = _pending_job(task_payload=payload)
         await store.save(job)
 
@@ -287,9 +285,7 @@ class TestSAJobStoreTryClaim:
         result = await store.try_claim(job.job_id)
         assert result is None
 
-    async def test_try_claim_completed_job_returns_none(
-        self, store: SAJobStore
-    ) -> None:
+    async def test_try_claim_completed_job_returns_none(self, store: SAJobStore) -> None:
         """try_claim() on a COMPLETED job returns None (terminal state)."""
         job = _pending_job().as_running().as_completed(result=b"ok")
         await store.save(job)
@@ -319,9 +315,7 @@ class TestSAJobStoreTryClaim:
 
 
 class TestSAJobStoreLifecycle:
-    async def test_full_pending_running_completed_delete(
-        self, store: SAJobStore
-    ) -> None:
+    async def test_full_pending_running_completed_delete(self, store: SAJobStore) -> None:
         """End-to-end lifecycle: save PENDING → claim → complete → delete."""
         job = _pending_job(
             task_payload=TaskPayload(task_name="test.task"),
@@ -431,9 +425,9 @@ class TestSAJobStoreTryClaimSkipLocked:
         select_sqls = [s for s in captured if s.strip().upper().startswith("SELECT")]
         assert select_sqls, "Expected at least one SELECT during try_claim"
         for sql in select_sqls:
-            assert (
-                "FOR UPDATE" not in sql.upper()
-            ), f"SQLite try_claim must not use FOR UPDATE but got: {sql!r}"
+            assert "FOR UPDATE" not in sql.upper(), (
+                f"SQLite try_claim must not use FOR UPDATE but got: {sql!r}"
+            )
 
     async def test_postgresql_dialect_uses_skip_locked(self, engine) -> None:
         """
@@ -485,12 +479,12 @@ class TestSAJobStoreTryClaimSkipLocked:
                 # whether with_for_update was called with skip_locked=True.
                 pass
 
-        assert (
-            with_for_update_calls
-        ), "try_claim() on a postgresql dialect must call with_for_update()"
-        assert any(
-            call.get("skip_locked") is True for call in with_for_update_calls
-        ), f"Expected with_for_update(skip_locked=True) but got: {with_for_update_calls!r}"
+        assert with_for_update_calls, (
+            "try_claim() on a postgresql dialect must call with_for_update()"
+        )
+        assert any(call.get("skip_locked") is True for call in with_for_update_calls), (
+            f"Expected with_for_update(skip_locked=True) but got: {with_for_update_calls!r}"
+        )
 
     async def test_non_pending_returns_none_regardless_of_dialect(self, engine) -> None:
         """try_claim() on a non-PENDING job returns None on both dialect paths."""
@@ -516,9 +510,9 @@ class TestSAJobStoreTryClaimSkipLocked:
         SQLite path (dialect.name != "postgresql") still claims jobs.
         """
         store = SAJobStore(engine)
-        assert (
-            engine.dialect.name != "postgresql"
-        ), "This test requires a non-PostgreSQL dialect (SQLite)"
+        assert engine.dialect.name != "postgresql", (
+            "This test requires a non-PostgreSQL dialect (SQLite)"
+        )
 
         job = _pending_job()
         await store.save(job)
@@ -569,9 +563,7 @@ class TestSAJobStoreRunAtGating:
 
 
 class TestSAJobStoreLease:
-    async def test_try_claim_with_lease_ttl_sets_lease_expires_at_and_epoch(
-        self, store
-    ) -> None:
+    async def test_try_claim_with_lease_ttl_sets_lease_expires_at_and_epoch(self, store) -> None:
         job = _pending_job()
         await store.save(job)
 
@@ -608,9 +600,7 @@ class TestSAJobStoreLease:
         )
         assert result is None
 
-    async def test_write_with_stale_expected_epoch_raises_stale_lease_error(
-        self, store
-    ) -> None:
+    async def test_write_with_stale_expected_epoch_raises_stale_lease_error(self, store) -> None:
         from varco_core.job.base import StaleLeaseError
 
         job = _pending_job()
@@ -621,15 +611,11 @@ class TestSAJobStoreLease:
         with pytest.raises(StaleLeaseError):
             await store.save(stale, expected_epoch=claimed.lease_epoch - 1)  # type: ignore[call-arg]
 
-    async def test_reap_expired_leases_moves_expired_running_row_to_pending(
-        self, store
-    ) -> None:
+    async def test_reap_expired_leases_moves_expired_running_row_to_pending(self, store) -> None:
 
         job = _pending_job()
         await store.save(job)
-        claimed = await store.try_claim(
-            job.job_id, owner_id="worker-1", lease_ttl=0.001
-        )
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=0.001)
 
         import asyncio
 

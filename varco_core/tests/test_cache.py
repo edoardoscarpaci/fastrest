@@ -201,10 +201,7 @@ class TestInMemoryCacheLifecycle:
 class TestTTLStrategy:
     def test_no_ttl_never_invalidates(self) -> None:
         s = TTLStrategy(default_ttl=None)
-        assert (
-            s.should_invalidate("k", {"stored_at": time.time() - 10000, "ttl": None})
-            is False
-        )
+        assert s.should_invalidate("k", {"stored_at": time.time() - 10000, "ttl": None}) is False
 
     def test_expired_entry_invalidated(self) -> None:
         s = TTLStrategy(default_ttl=1)
@@ -332,10 +329,7 @@ class TestCompositeStrategy:
         ttl = TTLStrategy(default_ttl=300)
         explicit = ExplicitStrategy()
         composite = CompositeStrategy(ttl, explicit)
-        assert (
-            composite.should_invalidate("k", {"stored_at": time.time(), "ttl": None})
-            is False
-        )
+        assert composite.should_invalidate("k", {"stored_at": time.time(), "ttl": None}) is False
 
     async def test_start_stop_propagates_to_children(self) -> None:
         started = []
@@ -523,9 +517,7 @@ class TestEventDrivenStrategy:
             await cache.set("product:5", "Widget")
 
             await bus.publish(
-                CacheInvalidated(
-                    keys=["product:5"], namespace="product", operation="update"
-                ),
+                CacheInvalidated(keys=["product:5"], namespace="product", operation="update"),
                 channel="cache-events",
             )
             await asyncio.sleep(0)
@@ -543,9 +535,7 @@ class TestEventDrivenStrategy:
             await cache.set("order:1", "pending")
 
             await bus.publish(
-                CacheInvalidated(
-                    keys=["order:1"], namespace="order", operation="delete"
-                ),
+                CacheInvalidated(keys=["order:1"], namespace="order", operation="delete"),
                 channel="cache-events",
             )
             await asyncio.sleep(0)
@@ -719,8 +709,6 @@ class TestLayeredCacheLifecycle:
         await cache.stop()  # must not raise
 
     async def test_repr_contains_class_and_mode(self) -> None:
-        cache = LayeredCache(
-            InMemoryCache(), InMemoryCache(), write_mode="write-around"
-        )
+        cache = LayeredCache(InMemoryCache(), InMemoryCache(), write_mode="write-around")
         assert "LayeredCache" in repr(cache)
         assert "write-around" in repr(cache)

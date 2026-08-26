@@ -66,9 +66,7 @@ def build_contract(
           (``SchemaCollector`` dedupes by model name).
     """
     type_args = _resolve_type_args(router_cls)
-    resolved = introspect_routes(
-        router_cls, enabled_routes=enabled_routes, type_args=type_args
-    )
+    resolved = introspect_routes(router_cls, enabled_routes=enabled_routes, type_args=type_args)
 
     collector = SchemaCollector()
     routes: list[RouteContract] = [

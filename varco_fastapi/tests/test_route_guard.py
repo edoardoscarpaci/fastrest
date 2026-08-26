@@ -55,9 +55,7 @@ ADMIN = _ctx(
     roles=frozenset({"admin"}),
     scopes=frozenset({"admin:read", "admin:write"}),
 )
-READER = _ctx(
-    user_id="reader_1", roles=frozenset({"reader"}), scopes=frozenset({"reports:read"})
-)
+READER = _ctx(user_id="reader_1", roles=frozenset({"reader"}), scopes=frozenset({"reports:read"}))
 GRANTED = _ctx(
     user_id="usr_granted",
     grants=(ResourceGrant(resource="reports", actions=frozenset({Action.READ})),),

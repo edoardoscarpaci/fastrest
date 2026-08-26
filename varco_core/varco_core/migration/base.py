@@ -135,9 +135,7 @@ class AbstractMigrator(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def upgrade(
-        self, target: str = "heads", *, dry_run: bool = False
-    ) -> MigrationReport:
+    async def upgrade(self, target: str = "heads", *, dry_run: bool = False) -> MigrationReport:
         """
         Apply pending revisions up to ``target``.
 

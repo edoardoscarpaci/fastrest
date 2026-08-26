@@ -409,9 +409,7 @@ class BeanieConversationStore(AbstractConversationStore):
         return count
 
     def __repr__(self) -> str:
-        return (
-            f"BeanieConversationStore(" f"session={'set' if self._session else 'None'})"
-        )
+        return f"BeanieConversationStore(session={'set' if self._session else 'None'})"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

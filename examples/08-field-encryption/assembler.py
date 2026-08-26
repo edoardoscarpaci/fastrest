@@ -38,9 +38,7 @@ from varco_core.model import domain_replace
 
 
 @Singleton
-class PatientAssembler(
-    AbstractDTOAssembler[Patient, PatientCreate, PatientRead, PatientUpdate]
-):
+class PatientAssembler(AbstractDTOAssembler[Patient, PatientCreate, PatientRead, PatientUpdate]):
     """
     Assembler for the ``Patient`` entity.
 

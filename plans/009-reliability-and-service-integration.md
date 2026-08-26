@@ -292,24 +292,28 @@ suggested first cut (R2 + R3 + C1) as Phases 1–3.
 @dataclass(frozen=True)
 class ParamSpec:
     """One resolved handler parameter, classified for client generation."""
+
     name: str
     kind: Literal["path", "query", "body", "header"]
-    annotation: type | None          # runtime type, None when unresolvable
+    annotation: type | None  # runtime type, None when unresolvable
     required: bool
     default: Any = None
     description: str | None = None
 
+
 # varco_fastapi/contract/model.py
 CONTRACT_VERSION: Final[str] = "1.0"
+
 
 @dataclass(frozen=True)
 class ParamContract:
     name: str
-    kind: str                        # "path" | "query" | "body" | "header"
-    schema: dict[str, Any]           # JSON Schema fragment (may be a $ref)
+    kind: str  # "path" | "query" | "body" | "header"
+    schema: dict[str, Any]  # JSON Schema fragment (may be a $ref)
     required: bool = True
     default: Any = None
     description: str | None = None
+
 
 @dataclass(frozen=True)
 class RouteContract:
@@ -317,7 +321,7 @@ class RouteContract:
     method: str
     path: str
     params: tuple[ParamContract, ...] = ()
-    request_schema: dict[str, Any] | None = None    # JSON Schema or $ref
+    request_schema: dict[str, Any] | None = None  # JSON Schema or $ref
     response_schema: dict[str, Any] | None = None
     status_code: int = 200
     is_crud: bool = False
@@ -327,6 +331,7 @@ class RouteContract:
     summary: str | None = None
     description: str | None = None
     tags: tuple[str, ...] = ()
+
 
 @dataclass(frozen=True)
 class ServiceContract:
@@ -344,9 +349,11 @@ class ServiceContract:
     def from_dict(cls, data: Mapping[str, Any]) -> ServiceContract: ...
     @classmethod
     def from_json(cls, raw: str | bytes) -> ServiceContract: ...
-    def route(self, name: str) -> RouteContract: ...   # KeyError with route list
+    def route(self, name: str) -> RouteContract: ...  # KeyError with route list
+
 
 class ContractVersionError(ValueError): ...
+
 
 # varco_fastapi/contract/build.py
 def build_contract(
@@ -437,9 +444,10 @@ the `$ref` rule, the version policy.
 class ReliabilityMetricsConfig:
     enabled: bool = True
     meter_name: str = "varco"
-    depth_by_channel: bool = False      # RD-3 — opt-in cardinality
-    include_tenant: bool = False        # RD-3 — off by default
-    depth_poll: bool = True             # register the ObservableGauge at all
+    depth_by_channel: bool = False  # RD-3 — opt-in cardinality
+    include_tenant: bool = False  # RD-3 — off by default
+    depth_poll: bool = True  # register the ObservableGauge at all
+
 
 def install_reliability_metrics(
     *,
@@ -449,9 +457,10 @@ def install_reliability_metrics(
     config: ReliabilityMetricsConfig | None = None,
 ) -> None: ...
 
+
 def record_dlq_push(*, source: str, channel: str, ok: bool) -> None: ...
 def record_outbox_published(*, channel: str) -> None: ...
-def record_outbox_failure(*, reason: str) -> None: ...     # "deserialize"|"publish"
+def record_outbox_failure(*, reason: str) -> None: ...  # "deserialize"|"publish"
 def record_audit_write(*, action: str, entity_type: str, ok: bool) -> None: ...
 def record_job_lease_reap(*, count: int) -> None: ...
 ```
@@ -542,9 +551,11 @@ section with the table above and the alerting recipes (`varco.dlq.depth > 0 for 
 # AbstractDeadLetterQueue
 supports_random_access: ClassVar[bool] = False
 
+
 async def delete(self, entry_id: UUID) -> None:
     """Portable default: delegates to ``ack(entry_id)``."""
     await self.ack(entry_id)
+
 
 async def delete_where(
     self,
@@ -552,13 +563,15 @@ async def delete_where(
     older_than: datetime | None = None,
     source: DeadLetterSource | Sequence[DeadLetterSource] | None = None,
     channel: str | None = None,
-    tenant_id: str | None = None,      # populated in Phase 6
+    tenant_id: str | None = None,  # populated in Phase 6
     limit: int | None = None,
 ) -> int:
     """Concrete-but-raising. Raises ValueError with no predicate at all."""
 
+
 async def count_by_channel(self) -> dict[str, int]:
     """Concrete-but-raising."""
+
 
 # AuditRepository
 async def delete_where(
@@ -658,6 +671,7 @@ section each; `README.md` CLI table gains `varco retention prune`.
 def client_class_for(router_cls: type) -> type[AsyncVarcoClient]:
     """Return (and memoize) the generated client CLASS for a router."""
 
+
 def client_for(
     router_cls: type,
     base_url: str | None = None,
@@ -669,6 +683,7 @@ def client_for(
     headers: Mapping[str, str] | None = None,
 ) -> AsyncVarcoClient:
     """THE documented way to get a client for a varco service."""
+
 
 # varco_fastapi/di.py
 def bind_clients_from(container: Any, *router_classes: type) -> None:
@@ -761,6 +776,7 @@ passes after `bind_clients_from` (the per-package bootstrap-health test pattern)
 async def get(self, entry_id: UUID) -> DeadLetterEntry | None:
     """Concrete-but-raising — random access is not portable (RD-4)."""
 
+
 async def list_entries(
     self,
     *,
@@ -768,14 +784,16 @@ async def list_entries(
     offset: int = 0,
     channel: str | None = None,
     source: DeadLetterSource | None = None,
-    tenant_id: str | None = None,       # Phase 6
+    tenant_id: str | None = None,  # Phase 6
     older_than: datetime | None = None,
     newer_than: datetime | None = None,
 ) -> list[DeadLetterEntry]:
     """Concrete-but-raising. NON-DESTRUCTIVE read — unlike pop_batch()."""
 
+
 # varco_core/event/redrive.py
 class DeadLetterNotAddressable(RuntimeError): ...
+
 
 @dataclass(frozen=True)
 class RedriveOutcome:
@@ -784,6 +802,7 @@ class RedriveOutcome:
     acked: bool
     error: str | None = None
 
+
 @dataclass(frozen=True)
 class RedriveReport:
     attempted: int
@@ -791,6 +810,7 @@ class RedriveReport:
     failed: int
     outcomes: tuple[RedriveOutcome, ...] = ()
     dry_run: bool = False
+
 
 class DlqRedriver:
     def __init__(
@@ -909,7 +929,7 @@ the stream-backend limitation table); `CLAUDE.md` layer rule updated to list
 
 ```python
 class DeadLetterDocument(Document):
-    entry_id: UUID = Field(default_factory=uuid4)   # also the Mongo _id
+    entry_id: UUID = Field(default_factory=uuid4)  # also the Mongo _id
     source: str
     source_ref: str | None = None
     channel: str
@@ -921,20 +941,22 @@ class DeadLetterDocument(Document):
     attempts: int
     first_failed_at: datetime
     last_failed_at: datetime
-    tenant_id: str | None = None                    # Phase 6
+    tenant_id: str | None = None  # Phase 6
 
     class Settings:
-        name = "varco_dead_letters"                 # RD-2
-        indexes = [                                 # DECLARED, not built here
+        name = "varco_dead_letters"  # RD-2
+        indexes = [  # DECLARED, not built here
             [("channel", 1), ("last_failed_at", -1)],
             [("source", 1), ("last_failed_at", -1)],
             [("tenant_id", 1), ("last_failed_at", -1)],
         ]
 
+
 class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
     supports_random_access: ClassVar[bool] = True
 
     def __init__(self, *, ttl_seconds: int | None = None) -> None: ...
+
     # push / pop_batch / ack / count / get / list_entries / delete_where /
     # count_by_channel — all implemented
 ```
@@ -1011,8 +1033,10 @@ rationale is stated inline, not just in this plan.
 # varco_sa/rls_framework.py
 FRAMEWORK_RLS_TABLES: Final[tuple[str, ...]] = ("varco_audit_log", "varco_dead_letters")
 
-def framework_rls_upgrade(op: Any, *, tables: Sequence[str] = FRAMEWORK_RLS_TABLES,
-                          tenant_column: str = "tenant_id") -> None: ...
+
+def framework_rls_upgrade(
+    op: Any, *, tables: Sequence[str] = FRAMEWORK_RLS_TABLES, tenant_column: str = "tenant_id"
+) -> None: ...
 def framework_rls_downgrade(op: Any, *, tables: Sequence[str] = FRAMEWORK_RLS_TABLES) -> None: ...
 ```
 
@@ -1092,11 +1116,14 @@ class TypeResolver(Protocol):
     def resolve(self, schema: Mapping[str, Any] | None) -> type | None:
         """Map a contract JSON-Schema fragment to a runtime type (or None)."""
 
-class ImportedTypeResolver:      # in-process: schema $ref → the real Pydantic class
+
+class ImportedTypeResolver:  # in-process: schema $ref → the real Pydantic class
     def __init__(self, contract: ServiceContract, router_cls: type) -> None: ...
 
-class SynthesizedTypeResolver:   # cross-repo: schema → pydantic.create_model()
+
+class SynthesizedTypeResolver:  # cross-repo: schema → pydantic.create_model()
     def __init__(self, contract: ServiceContract) -> None: ...
+
 
 def build_client_method(
     route: RouteContract,
@@ -1105,6 +1132,7 @@ def build_client_method(
     async_capable_returns_job: bool = True,
 ) -> Callable[..., Awaitable[Any]]:
     """Synthesize one client method with a real __signature__ + __annotations__."""
+
 
 # varco_fastapi/client/stubs.py
 def render_stub(contract: ServiceContract, *, class_name: str) -> str: ...
@@ -1192,7 +1220,9 @@ def contract_client(
 ) -> AsyncVarcoClient:
     """Build a live client from an exported contract — no service import."""
 
+
 def contract_client_class(contract: ServiceContract, *, name: str | None = None) -> type: ...
+
 
 # varco_fastapi/contract/codegen.py
 def render_client_module(contract: ServiceContract, *, class_name: str) -> str:
@@ -1296,14 +1326,16 @@ class ReliabilityPreset:
     def durable(cls, *, dlq: AbstractDeadLetterQueue) -> ReliabilityPreset:
         """retry_policy=RetryPolicy.durable_delivery(), outbox+audit+metrics on."""
 
+
 # varco_core/reliability/wiring.py
 def set_default_reliability_preset(preset: ReliabilityPreset) -> None: ...
 def get_default_reliability_preset() -> ReliabilityPreset: ...
 
+
 # varco_fastapi/reliability.py
 class ReliabilityLifecycle:
     def __init__(self, preset: ReliabilityPreset, *, container: Any) -> None: ...
-    async def startup(self) -> None: ...   # metrics + OutboxRelay + AuditConsumer
+    async def startup(self) -> None: ...  # metrics + OutboxRelay + AuditConsumer
     async def shutdown(self) -> None: ...
 ```
 
@@ -1391,6 +1423,7 @@ async def list(
 ) -> list[AuditEntry]:
     """Concrete-but-raising — no portable scan primitive exists on the ABC."""
 
+
 # varco_fastapi/admin/audit_router.py
 def build_audit_router(
     audit_repo: AuditRepository,
@@ -1400,6 +1433,7 @@ def build_audit_router(
     prefix: str = "/audit",
     allow_delete: bool = False,
 ) -> APIRouter: ...
+
 
 # varco_fastapi/admin/dlq_router.py
 def build_dlq_router(
@@ -1411,6 +1445,7 @@ def build_dlq_router(
     prefix: str = "/dlq",
 ) -> APIRouter: ...
 
+
 # varco_fastapi/admin/mount.py
 def mount_reliability_admin(
     app: FastAPI,
@@ -1418,7 +1453,7 @@ def mount_reliability_admin(
     audit_repo: AuditRepository | None = None,
     dlq: AbstractDeadLetterQueue | None = None,
     redriver: DlqRedriver | None = None,
-    acknowledge_bundled_admin: bool = False,   # RD-9 — ValueError if False
+    acknowledge_bundled_admin: bool = False,  # RD-9 — ValueError if False
     server_auth: Any | None = None,
     admin_role: str = "reliability-admin",
     prefix: str = "/reliability",
@@ -1505,10 +1540,12 @@ class PeerConfig:
     verify: bool | str = True
     profile_name: str | None = None
     contract_path: str | None = None
-    token_ref: str | None = None            # RD-5 — a REFERENCE, never a secret
+    token_ref: str | None = None  # RD-5 — a REFERENCE, never a secret
+
 
 class SecretResolver(Protocol):
     def resolve(self, ref: str) -> str | None: ...
+
 
 class PeerRegistry:
     def __init__(
@@ -1527,8 +1564,10 @@ class PeerRegistry:
     def client(self, name: str, router_cls: type | None = None) -> AsyncVarcoClient: ...
     def names(self) -> tuple[str, ...]: ...
 
-def bind_peers(container: Any, mapping: Mapping[str, type], *,
-               registry: PeerRegistry | None = None) -> None:
+
+def bind_peers(
+    container: Any, mapping: Mapping[str, type], *, registry: PeerRegistry | None = None
+) -> None:
     """Bind AsyncVarcoClient[RouterCls] for each peer name → router class."""
 ```
 

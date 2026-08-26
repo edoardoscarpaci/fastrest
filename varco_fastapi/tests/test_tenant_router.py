@@ -91,7 +91,5 @@ def test_delete_without_confirm_is_400_and_performs_nothing() -> None:
 def test_build_tenant_router_refuses_without_server_auth() -> None:
     from varco_fastapi.tenancy.router import build_tenant_router
 
-    with pytest.raises(
-        Exception
-    ):  # noqa: B017 - a guard that can never be satisfied is a startup error
+    with pytest.raises(Exception):  # noqa: B017 - a guard that can never be satisfied is a startup error
         build_tenant_router(_FakeControlService(), server_auth=None)

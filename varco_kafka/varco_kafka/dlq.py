@@ -516,8 +516,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         #      approximate for Kafka — -1 signals "not available"
         #   ❌ -1 is not the same as "empty" or "non-empty" — callers must handle it
         _logger.debug(
-            "KafkaDLQ.count(): Kafka consumer lag not available without AdminClient "
-            "— returning -1."
+            "KafkaDLQ.count(): Kafka consumer lag not available without AdminClient — returning -1."
         )
         return -1
 
@@ -550,12 +549,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
                 ``retention.ms`` (the topic-level retention setting) as the
                 correct mechanism (RD-4).
         """
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "
@@ -785,8 +779,7 @@ class KafkaDLQConfiguration:
                                 unreachable at startup time.
         """
         _logger.info(
-            "KafkaDLQConfiguration: starting KafkaDLQ "
-            "(brokers=%s, dlq_topic=%s__dlq__)",
+            "KafkaDLQConfiguration: starting KafkaDLQ (brokers=%s, dlq_topic=%s__dlq__)",
             settings.bootstrap_servers,
             settings.channel_prefix,
         )

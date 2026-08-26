@@ -135,9 +135,7 @@ class DISessionMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self._container = container or DIContainer.current()
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """Store the container in the ContextVar for this request."""
         session_id = request.headers.get(_REQUEST_ID_HEADER) or _generate_session_id()
         async with self._container.asession(session_id):

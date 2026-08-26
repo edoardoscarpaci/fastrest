@@ -260,9 +260,7 @@ class NatsEventBusSettings(EventBusSettings):
               returned unchanged after the prefix-strip attempts — callers
               should not normally see such subjects.
         """
-        return subject.removeprefix(f"{self.subject_prefix}.").removeprefix(
-            self.channel_prefix
-        )
+        return subject.removeprefix(f"{self.subject_prefix}.").removeprefix(self.channel_prefix)
 
     def durable_for(self, channel: str) -> str:
         """
@@ -283,10 +281,7 @@ class NatsEventBusSettings(EventBusSettings):
         """
         # NATS durable/consumer names disallow the subject token separators.
         safe_channel = (
-            channel.replace(".", "_")
-            .replace("*", "_")
-            .replace(">", "_")
-            .replace(" ", "_")
+            channel.replace(".", "_").replace("*", "_").replace(">", "_").replace(" ", "_")
         )
         return f"{self.durable_name}-{safe_channel}"
 

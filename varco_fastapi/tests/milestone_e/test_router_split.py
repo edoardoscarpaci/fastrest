@@ -76,9 +76,7 @@ class TestVarcoRouterBase:
     def test_no_crud_dispatch_without_service(self):
         """VarcoRouter without _service returns noop (501) for CRUD routes."""
 
-        class PureRouter(
-            ListMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-        ):
+        class PureRouter(ListMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
             _prefix = "/pure"
 
         from fastapi import FastAPI
@@ -99,9 +97,7 @@ class TestVarcoRouterBase:
     def test_crud_dispatch_with_class_var_service(self):
         """VarcoRouter with _service ClassVar still dispatches CRUD (backward compat)."""
 
-        class CompatRouter(
-            ReadMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-        ):
+        class CompatRouter(ReadMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
             _prefix = "/compat"
             _service = _MockService()
 
@@ -126,9 +122,7 @@ class TestVarcoCRUDRouter:
     def test_instantiable_with_class_var_service(self):
         """VarcoCRUDRouter(service=None) uses the ClassVar _service fallback."""
 
-        class MyRouter(
-            ReadMixin, VarcoCRUDRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-        ):
+        class MyRouter(ReadMixin, VarcoCRUDRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
             _prefix = "/my"
             _service = _MockService()
 
@@ -138,9 +132,7 @@ class TestVarcoCRUDRouter:
     def test_crud_dispatch_via_make_http_handler(self):
         """VarcoCRUDRouter dispatches CRUD actions to typed factory functions."""
 
-        class MyRouter(
-            CreateMixin, VarcoCRUDRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-        ):
+        class MyRouter(CreateMixin, VarcoCRUDRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
             _prefix = "/items"
             _service = _MockService()
 

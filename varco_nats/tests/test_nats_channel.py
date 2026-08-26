@@ -117,9 +117,7 @@ class TestChannelExists:
         async with _started_manager(fake_nc) as mgr:
             assert await mgr.channel_exists("orders") is False
 
-    async def test_false_when_channel_has_no_messages(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_false_when_channel_has_no_messages(self, fake_nc: FakeNatsClient) -> None:
         async with _started_manager(fake_nc) as mgr:
             await mgr.declare_channel("orders")
             # Stream exists but the channel carries no messages → False.

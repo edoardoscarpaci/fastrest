@@ -269,8 +269,9 @@ def test_di_config_path_matches_from_components_state() -> None:
 
     # Patch async_sessionmaker so the DI path yields our session_factory, and
     # SAModelFactory so no real ORM generation runs.
-    with patch("varco_sa.provider.SAModelFactory"), patch(
-        "varco_sa.provider.async_sessionmaker", return_value=session_factory
+    with (
+        patch("varco_sa.provider.SAModelFactory"),
+        patch("varco_sa.provider.async_sessionmaker", return_value=session_factory),
     ):
         di_provider = SQLAlchemyRepositoryProvider(config)
         direct_provider = SQLAlchemyRepositoryProvider.from_components(
@@ -279,9 +280,5 @@ def test_di_config_path_matches_from_components_state() -> None:
 
     # Same base + session factory; both start with an empty build cache.
     assert di_provider._base is direct_provider._base is base
-    assert (
-        di_provider._session_factory
-        is direct_provider._session_factory
-        is session_factory
-    )
+    assert di_provider._session_factory is direct_provider._session_factory is session_factory
     assert di_provider._built == direct_provider._built == {}

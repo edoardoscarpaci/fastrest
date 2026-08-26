@@ -10,9 +10,7 @@ from providify import DIContainer
 from varco_conformance.providify_health import assert_no_structural_di_issues
 
 
-async def test_container_scan_varco_sa_with_migration_module_validates_bindings() -> (
-    None
-):
+async def test_container_scan_varco_sa_with_migration_module_validates_bindings() -> None:
     # Importing the migration package must not break DI bootstrap health for
     # the rest of varco_sa — e.g. a quoted @Provider return annotation would
     # silently disable injection container-wide (CLAUDE.md pitfall table).

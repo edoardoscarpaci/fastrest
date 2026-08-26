@@ -154,9 +154,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
             raise ValueError(
                 f"Cannot delete {type(entity).__name__}: not yet persisted (pk is None)."
             )
-        raw: Any = entity._raw_orm or await self._session.get(
-            self._mapper._orm_cls, entity.pk
-        )
+        raw: Any = entity._raw_orm or await self._session.get(self._mapper._orm_cls, entity.pk)
         if raw is not None:
             await self._session.delete(raw)
             await self._session.flush()
@@ -195,9 +193,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         # Apply ORDER BY for each sort directive
         for sort_field in params.sort:
             col = self._resolve_column(sort_field.field)
-            stmt = stmt.order_by(
-                desc(col) if sort_field.order == SortOrder.DESC else asc(col)
-            )
+            stmt = stmt.order_by(desc(col) if sort_field.order == SortOrder.DESC else asc(col))
 
         # Apply pagination
         if params.limit is not None:
@@ -307,9 +303,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
 
         for sort_field in params.sort:
             col = self._resolve_column(sort_field.field)
-            stmt = stmt.order_by(
-                desc(col) if sort_field.order == SortOrder.DESC else asc(col)
-            )
+            stmt = stmt.order_by(desc(col) if sort_field.order == SortOrder.DESC else asc(col))
 
         if params.limit is not None:
             stmt = stmt.limit(params.limit)
@@ -431,8 +425,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         for entity in entities:
             if not entity.is_persisted():
                 raise ValueError(
-                    f"Cannot delete {type(entity).__name__}: "
-                    "not yet persisted (pk is None)."
+                    f"Cannot delete {type(entity).__name__}: not yet persisted (pk is None)."
                 )
 
         # Resolve the ORM primary-key column for the WHERE IN clause.

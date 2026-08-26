@@ -108,8 +108,10 @@ override recipe — equal-priority bindings resolve to the first registered):
 def my_lock(config: Inject[SAConfig]) -> AbstractDistributedLock:
     return SAXactAdvisoryLock(config.engine)
 
-container.provide(my_lock)                    # registered FIRST — wins
+
+container.provide(my_lock)  # registered FIRST — wins
 container.scan("varco_sa", recursive=True)
+
 
 # Option B — explicit higher priority, order-independent
 @Provider(singleton=True, priority=100)

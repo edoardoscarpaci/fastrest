@@ -63,9 +63,7 @@ def render_stub(contract: Any, *, class_name: str) -> str:
         if other_params or route.async_capable:
             params.append("*")
             for p in other_params:
-                params.append(
-                    f"{p.name}: Any" if p.required else f"{p.name}: Any = ..."
-                )
+                params.append(f"{p.name}: Any" if p.required else f"{p.name}: Any = ...")
             if route.async_capable:
                 params.append("with_async: bool = ...")
 

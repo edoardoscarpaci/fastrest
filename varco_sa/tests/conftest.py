@@ -86,9 +86,7 @@ def postgres_url(request: pytest.FixtureRequest, postgres_container: Any) -> str
     """
     override = os.environ.get("VARCO_TEST_POSTGRES_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("postgres", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("postgres", override))
         return override
     return asyncpg_url(postgres_container)
 
@@ -186,9 +184,9 @@ def asyncpg_url(container: Any) -> str:
         is handled identically; the explicit keyword always wins.
     """
     url = container.get_connection_url(driver="asyncpg")
-    assert url.startswith(
-        "postgresql+asyncpg://"
-    ), f"expected an asyncpg DSN from the container, got: {url}"
+    assert url.startswith("postgresql+asyncpg://"), (
+        f"expected an asyncpg DSN from the container, got: {url}"
+    )
     return url
 
 
@@ -276,15 +274,10 @@ async def provision_rls_app_url(container: Any) -> str:
             )
             if not exists:
                 await conn.execute(
-                    sa.text(
-                        f"CREATE ROLE {RLS_APP_ROLE} LOGIN "
-                        f"PASSWORD '{RLS_APP_PASSWORD}'"
-                    )
+                    sa.text(f"CREATE ROLE {RLS_APP_ROLE} LOGIN PASSWORD '{RLS_APP_PASSWORD}'")
                 )
             # PG15+: CREATE on schema public is no longer granted to PUBLIC.
-            await conn.execute(
-                sa.text(f"GRANT CREATE, USAGE ON SCHEMA public TO {RLS_APP_ROLE}")
-            )
+            await conn.execute(sa.text(f"GRANT CREATE, USAGE ON SCHEMA public TO {RLS_APP_ROLE}"))
     finally:
         await admin_engine.dispose()
 

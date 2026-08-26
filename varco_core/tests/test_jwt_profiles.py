@@ -224,9 +224,7 @@ class TestParserProfileIntegration:
         from varco_core.jwt.profile import TokenProfile, TokenProfileRegistry
 
         profiles = TokenProfileRegistry()
-        profiles.register(
-            TokenProfile(name="internal", issuers=frozenset({"mesh-signer"}))
-        )
+        profiles.register(TokenProfile(name="internal", issuers=frozenset({"mesh-signer"})))
         signed = JwtBuilder().subject("svc_1").issuer("mesh-signer").encode(_SECRET)
         token = JwtParser.parse(signed, _SECRET, profiles=profiles)
         assert token.auth_ctx is None
@@ -310,6 +308,4 @@ class TestJwtBuilderAsProfile:
         token = JwtBuilder().subject("svc_1").as_profile(profile).build()
         assert token.iss == "mesh-signer"
         assert token.token_type == "system"
-        assert token.aud == "orders" or (
-            isinstance(token.aud, frozenset) and "orders" in token.aud
-        )
+        assert token.aud == "orders" or (isinstance(token.aud, frozenset) and "orders" in token.aud)

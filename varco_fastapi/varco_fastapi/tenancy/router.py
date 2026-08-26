@@ -153,9 +153,7 @@ def build_tenant_router(
         return _JSONWithStatus(descriptor, status_code)
 
     @router.get("/tenants")
-    async def list_tenants(
-        status: str | None = None, _ctx: AuthContext = admin
-    ) -> list[dict]:
+    async def list_tenants(status: str | None = None, _ctx: AuthContext = admin) -> list[dict]:
         parsed_status = TenantStatus(status) if status else None
         descriptors = await control_service.list_tenants(status=parsed_status)
         return [_descriptor_to_dict(d) for d in descriptors]
@@ -222,9 +220,7 @@ def build_tenant_router(
         return {"tenant_id": tenant_id, "migrated": True}
 
     @router.post("/tenants/{tenant_id}/request-provision", status_code=202)
-    async def request_provision_tenant(
-        tenant_id: str, _ctx: AuthContext = admin
-    ) -> dict:
+    async def request_provision_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
         """
         Broadcast-only (RD-14): emits ``TenantProvisionRequested`` fleet-wide
         without any local catalog write or provisioner call. Pairs with
@@ -246,9 +242,7 @@ def build_tenant_router(
     if coordinator is not None:
 
         @router.get("/tenants/{tenant_id}/readiness")
-        async def get_tenant_readiness(
-            tenant_id: str, _ctx: AuthContext = admin
-        ) -> dict:
+        async def get_tenant_readiness(tenant_id: str, _ctx: AuthContext = admin) -> dict:
             """
             Readiness snapshot (Plan 008, Phase 3).
 
@@ -283,16 +277,12 @@ def _descriptor_to_dict(descriptor: Any) -> dict:
         "schema": descriptor.schema,
         "database": descriptor.database,
         "status": (
-            descriptor.status.value
-            if hasattr(descriptor.status, "value")
-            else descriptor.status
+            descriptor.status.value if hasattr(descriptor.status, "value") else descriptor.status
         ),
     }
 
 
-def _JSONWithStatus(
-    descriptor: Any, status_code: int
-) -> Any:  # noqa: N802 - internal helper
+def _JSONWithStatus(descriptor: Any, status_code: int) -> Any:  # noqa: N802 - internal helper
     # Returns a starlette JSONResponse, not a dict — FastAPI special-cases a
     # returned Response subclass (bypasses normal serialization), which is
     # exactly the point (see below). Typed Any rather than JSONResponse to
@@ -303,6 +293,4 @@ def _JSONWithStatus(
     # default without needing two separate route functions.
     from fastapi.responses import JSONResponse
 
-    return JSONResponse(
-        status_code=status_code, content=_descriptor_to_dict(descriptor)
-    )
+    return JSONResponse(status_code=status_code, content=_descriptor_to_dict(descriptor))

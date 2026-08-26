@@ -308,7 +308,7 @@ class JobHandle:
 
     def __repr__(self) -> str:
         """Return a concise string representation for debugging."""
-        return f"JobHandle(" f"job_id={self.job_id}, " f"poll_url={self.poll_url!r})"
+        return f"JobHandle(job_id={self.job_id}, poll_url={self.poll_url!r})"
 
 
 __all__ = [

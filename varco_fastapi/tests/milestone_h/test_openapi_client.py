@@ -58,9 +58,7 @@ PETSTORE_SPEC: dict[str, Any] = {
                 "responses": {
                     "201": {
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Pet"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}
                         }
                     }
                 },
@@ -75,9 +73,7 @@ PETSTORE_SPEC: dict[str, Any] = {
                 "responses": {
                     "200": {
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Pet"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Pet"}}
                         }
                     }
                 },
@@ -168,9 +164,7 @@ def test_from_dict_uses_servers_url_as_fallback():
 
 
 def test_from_dict_explicit_base_url_overrides_servers():
-    client = OpenAPIClient.from_dict(
-        PETSTORE_SPEC, base_url="https://override.example.com"
-    )
+    client = OpenAPIClient.from_dict(PETSTORE_SPEC, base_url="https://override.example.com")
     assert client._client_instance._base_url == "https://override.example.com"
 
 

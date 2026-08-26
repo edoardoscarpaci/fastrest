@@ -111,9 +111,7 @@ class TestRedisEventBusSettingsCharacterization:
         container = DIContainer()
         container.scan("varco_redis", recursive=True)
 
-        assert container.get(RedisEventBusSettings) is container.get(
-            RedisEventBusSettings
-        )
+        assert container.get(RedisEventBusSettings) is container.get(RedisEventBusSettings)
 
     async def test_characterization_event_bus_resolves_with_injected_settings(
         self, monkeypatch: pytest.MonkeyPatch

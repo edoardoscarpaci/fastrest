@@ -39,9 +39,7 @@ _JSON_TO_PY: dict[str, str] = {
 }
 
 
-def _py_type_for_schema(
-    schema: dict[str, Any] | None, *, known_models: set[str]
-) -> str:
+def _py_type_for_schema(schema: dict[str, Any] | None, *, known_models: set[str]) -> str:
     """Render a Python type annotation (as source text) for a schema fragment."""
     if not schema:
         return "Any"
@@ -113,9 +111,7 @@ def _render_route_method(route: Any, *, known_models: set[str]) -> str:
     response_ann = _py_type_for_schema(route.response_schema, known_models=known_models)
     sig = ", ".join(sig_parts)
 
-    path_kwargs = ", ".join(
-        f'"{p.name}": {safe(p.name)}' for p in route.params if p.kind == "path"
-    )
+    path_kwargs = ", ".join(f'"{p.name}": {safe(p.name)}' for p in route.params if p.kind == "path")
     query_kwargs = ", ".join(
         f'"{p.name}": {safe(p.name)}' for p in route.params if p.kind == "query"
     )

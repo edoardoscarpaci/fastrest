@@ -12,9 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def warn_if_admin_dsn_unmounted(
-    *, admin_dsn_present: bool, admin_mounted: bool
-) -> None:
+def warn_if_admin_dsn_unmounted(*, admin_dsn_present: bool, admin_mounted: bool) -> None:
     """
     Log one WARNING when a traffic-serving process has an admin DSN
     configured but never mounted the admin surface.

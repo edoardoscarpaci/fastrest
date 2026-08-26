@@ -68,9 +68,7 @@ async def resolve_locale(
         tenant_default = _supported(defaults.locale)
 
     accept_language = (
-        negotiate_locale(
-            accept_language_header, supported_locales, default=default_locale
-        )
+        negotiate_locale(accept_language_header, supported_locales, default=default_locale)
         if accept_language_header
         else None
     )

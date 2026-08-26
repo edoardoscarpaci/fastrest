@@ -57,9 +57,7 @@ def install_global_readonly_translation(
     return wrapped
 
 
-def install_tenant_passthrough(
-    call: Callable[..., Awaitable[T]]
-) -> Callable[..., Awaitable[T]]:
+def install_tenant_passthrough(call: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
     """
     Identity wrapper for the **tenant** UoW's call path.
 

@@ -77,9 +77,7 @@ def client() -> httpx.AsyncClient:
 class TestListProductsHTTP:
     """Full round-trip tests via ASGITransport + httpx."""
 
-    async def test_no_filters_returns_all_products(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_no_filters_returns_all_products(self, client: httpx.AsyncClient) -> None:
         """
         ``GET /v1/products`` with no filters must return all 20 catalog items.
         """
@@ -216,12 +214,8 @@ class TestListProductsHTTP:
         non-overlapping pages.
         """
         async with client as c:
-            page1 = (
-                await c.get("/v1/products", params={"limit": "3", "offset": "0"})
-            ).json()
-            page2 = (
-                await c.get("/v1/products", params={"limit": "3", "offset": "3"})
-            ).json()
+            page1 = (await c.get("/v1/products", params={"limit": "3", "offset": "0"})).json()
+            page2 = (await c.get("/v1/products", params={"limit": "3", "offset": "3"})).json()
 
         ids_page1 = {p["id"] for p in page1}
         ids_page2 = {p["id"] for p in page2}
@@ -280,9 +274,7 @@ class TestListProductsHTTP:
         assert resp.status_code == 200
         assert resp.json() == []
 
-    async def test_offset_beyond_end_returns_empty(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_offset_beyond_end_returns_empty(self, client: httpx.AsyncClient) -> None:
         """
         An ``offset`` larger than the total number of products returns an empty list.
         """
@@ -564,12 +556,8 @@ class TestInMemoryFilterVisitor:
         node = ComparisonNode(field="category", op=Operation.EQUAL, value="electronics")
         predicate = InMemoryFilterVisitor().visit(node)
 
-        p_match = Product(
-            id=1, name="X", price=10.0, category="electronics", in_stock=True
-        )
-        p_no_match = Product(
-            id=2, name="Y", price=10.0, category="books", in_stock=True
-        )
+        p_match = Product(id=1, name="X", price=10.0, category="electronics", in_stock=True)
+        p_no_match = Product(id=2, name="Y", price=10.0, category="books", in_stock=True)
 
         assert predicate(p_match) is True
         assert predicate(p_no_match) is False
@@ -578,14 +566,10 @@ class TestInMemoryFilterVisitor:
         """``!=`` must match when different, not match when equal."""
         from models import Product
 
-        node = ComparisonNode(
-            field="category", op=Operation.NOT_EQUAL, value="electronics"
-        )
+        node = ComparisonNode(field="category", op=Operation.NOT_EQUAL, value="electronics")
         predicate = InMemoryFilterVisitor().visit(node)
 
-        p_elec = Product(
-            id=1, name="X", price=10.0, category="electronics", in_stock=True
-        )
+        p_elec = Product(id=1, name="X", price=10.0, category="electronics", in_stock=True)
         p_books = Product(id=2, name="Y", price=10.0, category="books", in_stock=True)
 
         assert predicate(p_elec) is False
@@ -598,14 +582,8 @@ class TestInMemoryFilterVisitor:
         node = ComparisonNode(field="price", op=Operation.GREATER_EQUAL, value=50.0)
         predicate = InMemoryFilterVisitor().visit(node)
 
-        assert (
-            predicate(Product(id=1, name="X", price=50.0, category="x", in_stock=True))
-            is True
-        )
-        assert (
-            predicate(Product(id=2, name="Y", price=49.99, category="x", in_stock=True))
-            is False
-        )
+        assert predicate(Product(id=1, name="X", price=50.0, category="x", in_stock=True)) is True
+        assert predicate(Product(id=2, name="Y", price=49.99, category="x", in_stock=True)) is False
 
     def test_lte(self) -> None:
         """``price <= 50.0`` must match exactly-50 and below, not above."""
@@ -614,14 +592,8 @@ class TestInMemoryFilterVisitor:
         node = ComparisonNode(field="price", op=Operation.LESS_EQUAL, value=50.0)
         predicate = InMemoryFilterVisitor().visit(node)
 
-        assert (
-            predicate(Product(id=1, name="X", price=50.0, category="x", in_stock=True))
-            is True
-        )
-        assert (
-            predicate(Product(id=2, name="Y", price=50.01, category="x", in_stock=True))
-            is False
-        )
+        assert predicate(Product(id=1, name="X", price=50.0, category="x", in_stock=True)) is True
+        assert predicate(Product(id=2, name="Y", price=50.01, category="x", in_stock=True)) is False
 
     def test_like_case_insensitive(self) -> None:
         """``name LIKE 'widget'`` must match regardless of case in the name."""
@@ -631,27 +603,15 @@ class TestInMemoryFilterVisitor:
         predicate = InMemoryFilterVisitor().visit(node)
 
         assert (
-            predicate(
-                Product(
-                    id=1, name="Widget Pro", price=10.0, category="x", in_stock=True
-                )
-            )
+            predicate(Product(id=1, name="Widget Pro", price=10.0, category="x", in_stock=True))
             is True
         )
         assert (
-            predicate(
-                Product(
-                    id=2, name="WIDGET 3000", price=10.0, category="x", in_stock=True
-                )
-            )
+            predicate(Product(id=2, name="WIDGET 3000", price=10.0, category="x", in_stock=True))
             is True
         )
         assert (
-            predicate(
-                Product(
-                    id=3, name="Coffee Maker", price=10.0, category="x", in_stock=True
-                )
-            )
+            predicate(Product(id=3, name="Coffee Maker", price=10.0, category="x", in_stock=True))
             is False
         )
 
@@ -659,16 +619,12 @@ class TestInMemoryFilterVisitor:
         """``category IN ['books', 'home']`` must match listed categories only."""
         from models import Product
 
-        node = ComparisonNode(
-            field="category", op=Operation.IN, value=["books", "home"]
-        )
+        node = ComparisonNode(field="category", op=Operation.IN, value=["books", "home"])
         predicate = InMemoryFilterVisitor().visit(node)
 
         p_books = Product(id=1, name="X", price=10.0, category="books", in_stock=True)
         p_home = Product(id=2, name="Y", price=10.0, category="home", in_stock=True)
-        p_elec = Product(
-            id=3, name="Z", price=10.0, category="electronics", in_stock=True
-        )
+        p_elec = Product(id=3, name="Z", price=10.0, category="electronics", in_stock=True)
 
         assert predicate(p_books) is True
         assert predicate(p_home) is True
@@ -708,9 +664,7 @@ class TestInMemoryFilterVisitor:
         predicate = InMemoryFilterVisitor().visit(and_node)
 
         p_both = Product(id=1, name="X", price=100.0, category="x", in_stock=True)
-        p_only_price = Product(
-            id=2, name="Y", price=100.0, category="x", in_stock=False
-        )
+        p_only_price = Product(id=2, name="Y", price=100.0, category="x", in_stock=False)
         p_only_stock = Product(id=3, name="Z", price=10.0, category="x", in_stock=True)
         p_neither = Product(id=4, name="W", price=10.0, category="x", in_stock=False)
 
@@ -731,9 +685,7 @@ class TestInMemoryFilterVisitor:
 
         p_books = Product(id=1, name="X", price=10.0, category="books", in_stock=True)
         p_home = Product(id=2, name="Y", price=10.0, category="home", in_stock=True)
-        p_elec = Product(
-            id=3, name="Z", price=10.0, category="electronics", in_stock=True
-        )
+        p_elec = Product(id=3, name="Z", price=10.0, category="electronics", in_stock=True)
 
         assert predicate(p_books) is True
         assert predicate(p_home) is True
@@ -749,9 +701,7 @@ class TestInMemoryFilterVisitor:
         predicate = InMemoryFilterVisitor().visit(not_node)
 
         p_in_stock = Product(id=1, name="X", price=10.0, category="x", in_stock=True)
-        p_out_of_stock = Product(
-            id=2, name="Y", price=10.0, category="x", in_stock=False
-        )
+        p_out_of_stock = Product(id=2, name="Y", price=10.0, category="x", in_stock=False)
 
         assert predicate(p_in_stock) is False
         assert predicate(p_out_of_stock) is True

@@ -260,9 +260,7 @@ async def running_server(
             if asyncio.get_event_loop().time() > deadline:
                 server.should_exit = True
                 await server_task
-                raise TimeoutError(
-                    f"uvicorn did not start within 15 seconds on port {port}"
-                )
+                raise TimeoutError(f"uvicorn did not start within 15 seconds on port {port}")
             await asyncio.sleep(0.05)
 
         base_url = f"http://127.0.0.1:{port}"
@@ -337,9 +335,7 @@ async def alice_token(running_server: str) -> str:
         - If the server fails to issue the token, all auth-dependent tests fail
           with a clear ``AssertionError`` here rather than a silent 401 later.
     """
-    async with httpx.AsyncClient(
-        base_url=running_server, timeout=httpx.Timeout(30.0)
-    ) as http:
+    async with httpx.AsyncClient(base_url=running_server, timeout=httpx.Timeout(30.0)) as http:
         resp = await http.post(
             "/auth/login",
             json={"username": "alice", "password": "alice123"},
@@ -359,9 +355,7 @@ async def bob_token(running_server: str) -> str:
     Returns:
         Bob's RS256 JWT access token string.
     """
-    async with httpx.AsyncClient(
-        base_url=running_server, timeout=httpx.Timeout(30.0)
-    ) as http:
+    async with httpx.AsyncClient(base_url=running_server, timeout=httpx.Timeout(30.0)) as http:
         resp = await http.post(
             "/auth/login",
             json={"username": "bob", "password": "bob123"},

@@ -54,9 +54,7 @@ class TestNegativeCaching:
         assert second is None
         assert calls == 1  # second call short-circuits without invoking loader
 
-    async def test_negative_entry_returns_raw_none_not_the_envelope(
-        self, cache
-    ) -> None:
+    async def test_negative_entry_returns_raw_none_not_the_envelope(self, cache) -> None:
         async def loader():
             return None
 
@@ -104,10 +102,7 @@ class TestNegativeCaching:
 
         with mock.patch("varco_core.cache.readthrough.record_cache_hit") as mocked_hit:
             await read_through(cache, "k", loader, policy)
-            assert any(
-                call.kwargs.get("kind") == "negative"
-                for call in mocked_hit.call_args_list
-            )
+            assert any(call.kwargs.get("kind") == "negative" for call in mocked_hit.call_args_list)
 
     async def test_negative_entry_invalidated_by_delete(self, cache) -> None:
         calls = 0

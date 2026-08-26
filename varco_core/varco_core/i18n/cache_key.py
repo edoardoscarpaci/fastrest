@@ -19,9 +19,7 @@ from varco_core.context.request import current_locale, current_timezone
 __all__ = ["localization_cache_key"]
 
 
-def localization_cache_key(
-    base: str, *, locale: bool = False, timezone: bool = False
-) -> str:
+def localization_cache_key(base: str, *, locale: bool = False, timezone: bool = False) -> str:
     """
     Compose the ambient locale/timezone into ``base``.
 

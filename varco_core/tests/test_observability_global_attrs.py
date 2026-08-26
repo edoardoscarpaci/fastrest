@@ -151,9 +151,7 @@ class TestProviders:
         registry.snapshot()
         assert len(calls) == 3
 
-    def test_provider_ttl_expiry_reevaluates(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_provider_ttl_expiry_reevaluates(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from varco_core.observability import attributes as attrs_mod
 
         registry = attrs_mod.global_attributes()
@@ -211,9 +209,7 @@ class TestProviders:
         assert snap["present"] == "yes"
         assert "absent" not in snap
 
-    def test_provider_returning_non_mapping_skipped(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_provider_returning_non_mapping_skipped(self, caplog: pytest.LogCaptureFixture) -> None:
         from varco_core.observability.attributes import global_attributes
 
         registry = global_attributes()

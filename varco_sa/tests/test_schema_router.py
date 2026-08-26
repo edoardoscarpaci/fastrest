@@ -38,9 +38,7 @@ def test_session_factory_binds_schema_translate_map() -> None:
     session = session_factory()
 
     bind = session.get_bind()
-    assert bind.get_execution_options().get("schema_translate_map") == {
-        "tenant": "t_acme"
-    }
+    assert bind.get_execution_options().get("schema_translate_map") == {"tenant": "t_acme"}
 
 
 def test_search_path_mechanism_emits_set_config_never_bare_set() -> None:

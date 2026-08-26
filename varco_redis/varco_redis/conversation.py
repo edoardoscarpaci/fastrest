@@ -178,9 +178,7 @@ class RedisConversationStore(AbstractConversationStore):
         await self._client.rpush(key, _turn_to_json(turn))  # type: ignore[misc]
         if self._ttl is not None:
             await self._client.expire(key, self._ttl)
-        _logger.debug(
-            "RedisConversationStore.append: task_id=%s role=%s", task_id, turn.role
-        )
+        _logger.debug("RedisConversationStore.append: task_id=%s role=%s", task_id, turn.role)
 
     async def get(self, task_id: str) -> list[ConversationTurn]:
         """
@@ -205,8 +203,7 @@ class RedisConversationStore(AbstractConversationStore):
                 turns.append(_json_to_turn(raw))
             except Exception as exc:
                 _logger.warning(
-                    "RedisConversationStore.get: failed to deserialise turn for "
-                    "task_id=%s: %s",
+                    "RedisConversationStore.get: failed to deserialise turn for task_id=%s: %s",
                     task_id,
                     exc,
                 )
@@ -249,11 +246,7 @@ class RedisConversationStore(AbstractConversationStore):
         return result if result is not None else 0
 
     def __repr__(self) -> str:
-        return (
-            f"RedisConversationStore("
-            f"prefix={self._prefix!r}, "
-            f"ttl={self._ttl!r})"
-        )
+        return f"RedisConversationStore(prefix={self._prefix!r}, ttl={self._ttl!r})"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

@@ -193,14 +193,10 @@ def build_client_method(
         kinds[safe] = p.kind
         annotation = resolver.resolve(p.schema) or Any
         default = P.empty if p.required else p.default
-        params.append(
-            P(safe, kind=P.KEYWORD_ONLY, default=default, annotation=annotation)
-        )
+        params.append(P(safe, kind=P.KEYWORD_ONLY, default=default, annotation=annotation))
 
     if route.async_capable and async_capable_returns_job:
-        params.append(
-            P("with_async", kind=P.KEYWORD_ONLY, default=False, annotation=bool)
-        )
+        params.append(P("with_async", kind=P.KEYWORD_ONLY, default=False, annotation=bool))
 
     response_type = resolver.resolve(route.response_schema)
     signature = inspect.Signature(params, return_annotation=response_type)
@@ -242,9 +238,7 @@ def build_client_method(
 
     _method.__signature__ = signature  # type: ignore[attr-defined]
     _method.__name__ = route.name
-    _method.__annotations__ = {
-        p.name: p.annotation for p in params if p.annotation is not P.empty
-    }
+    _method.__annotations__ = {p.name: p.annotation for p in params if p.annotation is not P.empty}
     return _method
 
 

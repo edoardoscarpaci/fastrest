@@ -96,9 +96,7 @@ class TestReliabilityPresetDurable:
         with pytest.raises(ValueError):
             ReliabilityPreset(outbox_max_attempts=5)
 
-    async def test_durable_preset_gives_bare_listen_retry_and_dlq(
-        self, instant_backoff
-    ) -> None:
+    async def test_durable_preset_gives_bare_listen_retry_and_dlq(self, instant_backoff) -> None:
         from varco_core.reliability import (
             ReliabilityPreset,
             set_default_reliability_preset,

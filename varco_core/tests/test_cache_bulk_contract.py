@@ -27,11 +27,7 @@ EXPECTED_ASYNC_CACHE_MEMBERS = {
 
 
 def test_async_cache_protocol_member_set_is_frozen() -> None:
-    members = {
-        name
-        for name, value in inspect.getmembers(AsyncCache)
-        if not name.startswith("_")
-    }
+    members = {name for name, value in inspect.getmembers(AsyncCache) if not name.startswith("_")}
     assert members == EXPECTED_ASYNC_CACHE_MEMBERS
 
 

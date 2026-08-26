@@ -42,11 +42,7 @@ class FakeRedis:
     async def rpush(self, key: str, *values: str) -> int:
         lst = self._lists.setdefault(key, [])
         for v in values:
-            lst.append(
-                v
-                if isinstance(v, str)
-                else v.decode() if isinstance(v, bytes) else str(v)
-            )
+            lst.append(v if isinstance(v, str) else v.decode() if isinstance(v, bytes) else str(v))
         return len(lst)
 
     async def lrange(self, key: str, start: int, stop: int) -> list[bytes]:
@@ -111,9 +107,7 @@ class TestRedisConversationStoreAppendGet:
         t0 = datetime.now(tz=UTC)
         turns_in = [
             ConversationTurn(role="user", content="Hello", timestamp=t0),
-            ConversationTurn(
-                role="agent", content="Hi", timestamp=t0 + timedelta(seconds=1)
-            ),
+            ConversationTurn(role="agent", content="Hi", timestamp=t0 + timedelta(seconds=1)),
             ConversationTurn(
                 role="user", content="How are you?", timestamp=t0 + timedelta(seconds=2)
             ),
@@ -252,12 +246,8 @@ class TestRedisConversationStoreLifecycle:
         """End-to-end: append → get → turn_count → delete."""
         _, store = _make_store()
 
-        await store.append(
-            "task-1", ConversationTurn(role="user", content="Order pizza")
-        )
-        await store.append(
-            "task-1", ConversationTurn(role="agent", content="Which size?")
-        )
+        await store.append("task-1", ConversationTurn(role="user", content="Order pizza"))
+        await store.append("task-1", ConversationTurn(role="agent", content="Which size?"))
         await store.append("task-1", ConversationTurn(role="user", content="Large"))
 
         turns = await store.get("task-1")

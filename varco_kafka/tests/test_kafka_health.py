@@ -251,9 +251,7 @@ def test_regression_constructor_takes_settings_not_bootstrap_servers() -> None:
 def test_regression_settings_is_positional_and_timeout_keyword_only() -> None:
     """``timeout`` is keyword-only so it can never be mistaken for settings."""
     with pytest.raises(TypeError):
-        KafkaHealthCheck(
-            KafkaEventBusSettings(bootstrap_servers="b1:9092"), 3.0
-        )  # type: ignore[misc]
+        KafkaHealthCheck(KafkaEventBusSettings(bootstrap_servers="b1:9092"), 3.0)  # type: ignore[misc]
 
 
 # ── Integration: real Kafka ───────────────────────────────────────────────────
@@ -272,9 +270,7 @@ async def test_integration_healthy_against_real_kafka(kafka_bootstrap: str) -> N
     # above uses.  The old `bootstrap_servers=` kwarg predates the
     # settings-object constructor (varco_core.connection settings pattern)
     # and only survived here because this test never ran without Docker.
-    check = KafkaHealthCheck(
-        KafkaEventBusSettings(bootstrap_servers=kafka_bootstrap), timeout=10.0
-    )
+    check = KafkaHealthCheck(KafkaEventBusSettings(bootstrap_servers=kafka_bootstrap), timeout=10.0)
     result = await check.check()
     assert result.status is HealthStatus.HEALTHY
     assert result.latency_ms is not None

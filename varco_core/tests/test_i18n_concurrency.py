@@ -31,9 +31,7 @@ async def test_200_concurrent_tasks_each_see_only_their_own_locale() -> None:
         assert message == f"v{i}"
 
 
-async def test_shared_catalog_read_from_loop_and_executor_thread_no_corruption() -> (
-    None
-):
+async def test_shared_catalog_read_from_loop_and_executor_thread_no_corruption() -> None:
     catalog = DictMessageCatalog({"en": {"k": "value"}})
 
     def read_in_thread() -> str | None:

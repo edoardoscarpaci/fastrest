@@ -57,9 +57,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     ):
         vp = verb_parsers.add_parser(verb)
         vp.add_argument("-t", "--target", required=True, help="module:callable target")
-        vp.add_argument(
-            "--json", action="store_true", help="emit machine-readable JSON"
-        )
+        vp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
         if verb in ("upgrade", "stamp"):
             vp.add_argument("--to", default="heads", dest="to")
             vp.add_argument("--dry-run", action="store_true", dest="dry_run")
@@ -78,9 +76,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
                 dest="all_tenants",
                 help="Fan out across every active/suspended tenant (global-first).",
             )
-            vp.add_argument(
-                "--tenant", dest="tenant", default=None, help="Target one tenant only."
-            )
+            vp.add_argument("--tenant", dest="tenant", default=None, help="Target one tenant only.")
             vp.add_argument(
                 "--skip-global",
                 action="store_true",
@@ -113,17 +109,13 @@ def _resolve_target(target: str) -> AbstractMigrator | None:
 def _plan_to_json(plan: MigrationPlan) -> dict[str, Any]:
     return {
         "current": list(plan.current),
-        "pending": [
-            {"id": r.id, "label": r.label, "branch": r.branch} for r in plan.pending
-        ],
+        "pending": [{"id": r.id, "label": r.label, "branch": r.branch} for r in plan.pending],
     }
 
 
 def _report_to_json(report: MigrationReport) -> dict[str, Any]:
     return {
-        "applied": [
-            {"id": r.id, "label": r.label, "branch": r.branch} for r in report.applied
-        ],
+        "applied": [{"id": r.id, "label": r.label, "branch": r.branch} for r in report.applied],
         "duration_s": report.duration_s,
         "skipped_locked": report.skipped_locked,
     }
@@ -201,9 +193,7 @@ async def _run_async(args: argparse.Namespace) -> int:
             if args.json:
                 print(json.dumps(list(adopted)))
             else:
-                print(
-                    f"Adopted {len(adopted)} table(s): {', '.join(adopted) or '(none)'}"
-                )
+                print(f"Adopted {len(adopted)} table(s): {', '.join(adopted) or '(none)'}")
             return 0
 
         if args.verb == "ddl":

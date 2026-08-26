@@ -118,7 +118,7 @@ Each backend package ships a `di.py` with a `bootstrap()` helper that runs `cont
 ```python
 # Typical app bootstrap
 container = DIContainer()
-container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus @Singletons
+container.scan("varco_kafka", recursive=True)  # discovers the Kafka bus @Singletons
 container.install(SAModule)
 bind_repositories(container, User, Post)
 ```
@@ -405,8 +405,8 @@ trade-offs): `technical_docs/features/casbin-authorization.md`.
 
 **Wiring** (`varco_casbin.di`):
 ```python
-container = bootstrap(DIContainer())     # binds CasbinPolicyEngine → PolicyEngine + PolicyManagement
-enable_policy_authorizer(container)      # OPT-IN: binds PolicyEngineAuthorizer → AbstractAuthorizer
+container = bootstrap(DIContainer())  # binds CasbinPolicyEngine → PolicyEngine + PolicyManagement
+enable_policy_authorizer(container)  # OPT-IN: binds PolicyEngineAuthorizer → AbstractAuthorizer
 ```
 
 **Rules**:
@@ -592,6 +592,7 @@ subclass overriding the abstract fixture:
 
 ```python
 from varco_conformance.event_bus import EventBusConformance
+
 
 class TestRedisEventBusConformance(EventBusConformance):
     @pytest.fixture

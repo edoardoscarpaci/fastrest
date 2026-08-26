@@ -24,9 +24,7 @@ class _CountingProvisioner:
         if self._fail:
             raise RuntimeError("provision failed")
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         if not confirm_destroy:
             from varco_core.tenancy.provisioner import DestructiveOperationRefused
 
@@ -34,9 +32,7 @@ class _CountingProvisioner:
         self.deprovision_calls += 1
 
 
-def _make_control_service(
-    *, provisioner=None, catalog=None, supervisor=None, pool=None
-):
+def _make_control_service(*, provisioner=None, catalog=None, supervisor=None, pool=None):
     from varco_core.event.memory import InMemoryEventBus
     from varco_core.event.producer import BusEventProducer
     from varco_core.tenancy.catalog import StaticTenantCatalog
@@ -70,9 +66,7 @@ async def test_provision_requested_over_bus_makes_tenant_routable() -> None:
     consumer = TenantProvisionConsumer(control_service=control_service)
     consumer.register_to(bus)
 
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY)
     await bus.drain()
 
     catalog = control_service._catalog  # type: ignore[attr-defined]
@@ -84,9 +78,7 @@ async def test_provision_requested_over_bus_makes_tenant_routable() -> None:
     assert provisioner.provision_calls == 1
 
 
-async def test_provision_requested_over_bus_emits_catalog_changed_exactly_once() -> (
-    None
-):
+async def test_provision_requested_over_bus_emits_catalog_changed_exactly_once() -> None:
     from varco_core.tenancy.control.consumer import TenantProvisionConsumer
     from varco_core.tenancy.control.events import (
         CHANNEL_TENANCY,
@@ -99,13 +91,9 @@ async def test_provision_requested_over_bus_emits_catalog_changed_exactly_once()
     consumer.register_to(bus)
 
     received: list[TenantCatalogChanged] = []
-    bus.subscribe(
-        TenantCatalogChanged, lambda e: received.append(e), channel=CHANNEL_TENANCY
-    )
+    bus.subscribe(TenantCatalogChanged, lambda e: received.append(e), channel=CHANNEL_TENANCY)
 
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY)
     await bus.drain()
 
     assert len(received) == 1
@@ -130,9 +118,7 @@ async def test_deprovision_symmetry_supervisor_and_pool_called_before_destructiv
     call_log: list[str] = []
 
     class _LoggingProvisioner(_CountingProvisioner):
-        async def deprovision(
-            self, tenant_id: str, *, confirm_destroy: bool = False
-        ) -> None:
+        async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
             await super().deprovision(tenant_id, confirm_destroy=confirm_destroy)
             call_log.append("provisioner.deprovision")
 
@@ -144,9 +130,7 @@ async def test_deprovision_symmetry_supervisor_and_pool_called_before_destructiv
         async def evict(self, tenant_id: str) -> None:
             call_log.append("pool.evict")
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.ACTIVE)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.ACTIVE)])
     provisioner = _LoggingProvisioner()
     control_service, bus = _make_control_service(
         provisioner=provisioner,
@@ -176,9 +160,7 @@ async def test_deprovision_symmetry_supervisor_and_pool_called_before_destructiv
     assert decision.http_status == 404
 
 
-async def test_deprovision_without_confirm_over_bus_still_dlqs_and_calls_nothing() -> (
-    None
-):
+async def test_deprovision_without_confirm_over_bus_still_dlqs_and_calls_nothing() -> None:
     from varco_core.event.dlq import InMemoryDeadLetterQueue
     from varco_core.resilience import RetryPolicy
     from varco_core.tenancy.control.consumer import TenantProvisionConsumer
@@ -191,9 +173,7 @@ async def test_deprovision_without_confirm_over_bus_still_dlqs_and_calls_nothing
     control_service, bus = _make_control_service(provisioner=provisioner)
     dlq = InMemoryDeadLetterQueue()
     consumer = TenantProvisionConsumer(control_service=control_service)
-    consumer.register_to(
-        bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq
-    )
+    consumer.register_to(bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq)
 
     await bus.publish(
         TenantDeprovisionRequested(tenant_id="acme", confirm=False),
@@ -206,9 +186,7 @@ async def test_deprovision_without_confirm_over_bus_still_dlqs_and_calls_nothing
     assert provisioner.deprovision_calls == 0
 
 
-async def test_provisioner_failure_over_bus_leaves_pending_and_dlqs_with_source_ref() -> (
-    None
-):
+async def test_provisioner_failure_over_bus_leaves_pending_and_dlqs_with_source_ref() -> None:
     from varco_core.event.dlq import InMemoryDeadLetterQueue
     from varco_core.resilience import RetryPolicy
     from varco_core.tenancy.control.consumer import TenantProvisionConsumer
@@ -222,13 +200,9 @@ async def test_provisioner_failure_over_bus_leaves_pending_and_dlqs_with_source_
     control_service, bus = _make_control_service(provisioner=provisioner)
     dlq = InMemoryDeadLetterQueue()
     consumer = TenantProvisionConsumer(control_service=control_service)
-    consumer.register_to(
-        bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq
-    )
+    consumer.register_to(bus, retry_policy=RetryPolicy(max_attempts=1, base_delay=0.0), dlq=dlq)
 
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY)
     await bus.drain()
 
     catalog = control_service._catalog  # type: ignore[attr-defined]
@@ -259,9 +233,7 @@ async def test_event_path_and_rest_path_produce_byte_identical_catalog_state() -
     event_service, event_bus = _make_control_service()
     consumer = TenantProvisionConsumer(control_service=event_service)
     consumer.register_to(event_bus)
-    await event_bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY
-    )
+    await event_bus.publish(TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY)
     await event_bus.drain()
     event_catalog = event_service._catalog  # type: ignore[attr-defined]
     event_descriptor = await event_catalog.get("acme")

@@ -81,9 +81,7 @@ class TestJobPollerFallsBackToAgeThresholdWithoutLeaseSupport:
         # lease support) must fall back to today's wall-clock age check.
         class _NoLeaseStore(InMemoryJobStore):
             async def reap_expired_leases(self, *, now=None, limit: int = 100):
-                raise NotImplementedError(
-                    f"{type(self).__name__} does not support leases"
-                )
+                raise NotImplementedError(f"{type(self).__name__} does not support leases")
 
         store = _NoLeaseStore()
         job_id = uuid4()

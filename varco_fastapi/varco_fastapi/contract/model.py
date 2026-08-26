@@ -205,11 +205,7 @@ def _param_from_dict(data: Mapping[str, Any]) -> ParamContract:
 
 
 def _route_to_dict(r: RouteContract) -> dict[str, Any]:
-    d = {
-        f.name: getattr(r, f.name)
-        for f in fields(r)
-        if f.name != "params" and f.name != "tags"
-    }
+    d = {f.name: getattr(r, f.name) for f in fields(r) if f.name != "params" and f.name != "tags"}
     d["params"] = [_param_to_dict(p) for p in r.params]
     d["tags"] = list(r.tags)
     return d

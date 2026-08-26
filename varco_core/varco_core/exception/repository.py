@@ -27,9 +27,7 @@ class RepositoryClassCreationFailed(RepositoryException):
         repository_cls: The domain class for which generation was attempted.
     """
 
-    def __init__(
-        self, message: str, repository_cls: type, *args: Any, **kwargs: Any
-    ) -> None:
+    def __init__(self, message: str, repository_cls: type, *args: Any, **kwargs: Any) -> None:
         """
         Args:
             message:        Human-readable description of the failure.

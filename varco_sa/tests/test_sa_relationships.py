@@ -402,9 +402,7 @@ async def session_with_rels(base, factory):
     await engine.dispose()
 
 
-async def test_relationship_loads_related_objects(
-    base, factory, session_with_rels
-) -> None:
+async def test_relationship_loads_related_objects(base, factory, session_with_rels) -> None:
     """
     End-to-end: insert an Author + Post via raw ORM, then load the Author and
     verify that the 'posts' relationship collection is populated.

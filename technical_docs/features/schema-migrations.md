@@ -51,7 +51,7 @@ migrator = AlembicMigrator(engine, script_location="alembic")
 app = create_varco_app(
     container,
     routers=[...],
-    migrations=migrator,          # ← the only new argument
+    migrations=migrator,  # ← the only new argument
 )
 ```
 
@@ -84,17 +84,20 @@ passed in, exactly like `AbstractEventBus`.
 ```python
 @dataclass(frozen=True)
 class Revision:
-    id: str                       # alembic rev hash, or a Beanie version string
-    label: str                    # human name / message
-    branch: str | None = None     # "varco" for framework revisions, None for app
+    id: str  # alembic rev hash, or a Beanie version string
+    label: str  # human name / message
+    branch: str | None = None  # "varco" for framework revisions, None for app
+
 
 @dataclass(frozen=True)
 class MigrationPlan:
-    current: tuple[str, ...]      # heads currently applied ( () on a virgin DB )
+    current: tuple[str, ...]  # heads currently applied ( () on a virgin DB )
     pending: tuple[Revision, ...]
+
     @property
     def is_empty(self) -> bool: ...
     def format(self) -> str: ...
+
 
 @dataclass(frozen=True)
 class MigrationReport:
@@ -102,13 +105,14 @@ class MigrationReport:
     duration_s: float
     skipped_locked: bool = False  # another holder did the work — not a failure
 
+
 class AbstractMigrator(ABC):
-    async def plan(self) -> MigrationPlan: ...                       # abstract
-    async def upgrade(self, target="heads", *, dry_run=False) -> MigrationReport: ...   # abstract
-    async def downgrade(self, target: str) -> MigrationReport: ...   # abstract
-    async def stamp(self, target: str = "heads") -> None: ...        # abstract
-    async def check(self) -> MigrationPlan: ...   # CONCRETE — plan() + raise if pending
-    async def close(self) -> None: ...            # CONCRETE no-op; engines override
+    async def plan(self) -> MigrationPlan: ...  # abstract
+    async def upgrade(self, target="heads", *, dry_run=False) -> MigrationReport: ...  # abstract
+    async def downgrade(self, target: str) -> MigrationReport: ...  # abstract
+    async def stamp(self, target: str = "heads") -> None: ...  # abstract
+    async def check(self) -> MigrationPlan: ...  # CONCRETE — plan() + raise if pending
+    async def close(self) -> None: ...  # CONCRETE no-op; engines override
 ```
 
 `check()` and `close()` are **concrete, not abstract**, so a third-party migrator
@@ -134,8 +138,8 @@ silent collision, the schema-migration versions are deliberately **not** re-expo
 from `varco_core`. Import them from the submodule:
 
 ```python
-from varco_core.migration import MigrationError, MigrationPlan   # ✅ schema migrations
-from varco_core import MigrationError                            # ⚠️ the OTHER one (varco_core.migrator)
+from varco_core.migration import MigrationError, MigrationPlan  # ✅ schema migrations
+from varco_core import MigrationError  # ⚠️ the OTHER one (varco_core.migrator)
 ```
 
 Everything else — `AbstractMigrator`, `Revision`, `MigrationReport`,
@@ -294,8 +298,8 @@ from varco_sa.migration.env_template import include_object, configure_kwargs
 context.configure(
     connection=connection,
     target_metadata=target_metadata,
-    include_object=include_object,      # ← filters out framework-owned tables
-    **configure_kwargs(),               # ← transaction_per_migration=True, compare_type=True
+    include_object=include_object,  # ← filters out framework-owned tables
+    **configure_kwargs(),  # ← transaction_per_migration=True, compare_type=True
 )
 ```
 
@@ -362,7 +366,7 @@ varco migrate adopt -t myapp.db:migrator
 or, in code:
 
 ```python
-adopted = await migrator.adopt_framework_tables()   # → ['varco_jobs', 'varco_outbox', …]
+adopted = await migrator.adopt_framework_tables()  # → ['varco_jobs', 'varco_outbox', …]
 ```
 
 It inspects the live database; if framework tables exist and the `varco` branch has no
@@ -388,15 +392,17 @@ Two independent mechanisms sit behind one `AbstractMigrator`:
 ```python
 from varco_beanie.migration import Migration, MigrationRegistry, BeanieMigrator
 
+
 class BackfillOrderStatus(Migration):
-    version = "20260812_001"       # sortable; uniqueness validated at register() time
+    version = "20260812_001"  # sortable; uniqueness validated at register() time
     name = "backfill order status"
 
     async def up(self, db) -> None:
         await db.orders.update_many({"status": None}, {"$set": {"status": "pending"}})
 
-    async def down(self, db) -> None:      # optional — omit and downgrade raises
+    async def down(self, db) -> None:  # optional — omit and downgrade raises
         await db.orders.update_many({"status": "pending"}, {"$set": {"status": None}})
+
 
 registry = MigrationRegistry()
 registry.register(BackfillOrderStatus)
@@ -625,8 +631,10 @@ Row-Level Security DDL belongs in a reviewed revision, never a startup hook:
 ```python
 from varco_sa.migration.ops import rls_upgrade, rls_downgrade
 
+
 def upgrade() -> None:
     rls_upgrade(op, "orders")
+
 
 def downgrade() -> None:
     rls_downgrade(op, "orders")

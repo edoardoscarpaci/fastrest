@@ -108,11 +108,7 @@ class CachePolicy:
             raise ValueError(
                 f"CachePolicy.ttl_jitter must be in [0.0, 1.0); got {self.ttl_jitter!r}."
             )
-        if (
-            self.soft_ttl is not None
-            and self.ttl is not None
-            and self.soft_ttl >= self.ttl
-        ):
+        if self.soft_ttl is not None and self.ttl is not None and self.soft_ttl >= self.ttl:
             raise ValueError(
                 f"CachePolicy.soft_ttl ({self.soft_ttl!r}) must be strictly less "
                 f"than ttl ({self.ttl!r}) — a soft TTL at or beyond the hard TTL "
@@ -136,9 +132,7 @@ class CachePolicy:
             or self.stale_if_error is not None
         )
 
-    def effective_ttl(
-        self, *, rng: _random_module.Random | None = None
-    ) -> float | None:
+    def effective_ttl(self, *, rng: _random_module.Random | None = None) -> float | None:
         """
         Apply symmetric fractional jitter to ``ttl``.
 

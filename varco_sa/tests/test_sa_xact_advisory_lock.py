@@ -65,9 +65,7 @@ class TestSAXactAdvisoryLockImportability:
 
 
 class TestSAXactAdvisoryLockContention:
-    async def test_two_sessions_contend_exactly_one_acquires(
-        self, session_factory
-    ) -> None:
+    async def test_two_sessions_contend_exactly_one_acquires(self, session_factory) -> None:
         from varco_sa.advisory_lock import SAXactAdvisoryLock
 
         lock = SAXactAdvisoryLock()
@@ -83,9 +81,7 @@ class TestSAXactAdvisoryLockContention:
 
 
 class TestSAXactAdvisoryLockReleaseSemantics:
-    async def test_lock_released_at_commit_with_no_release_call(
-        self, session_factory
-    ) -> None:
+    async def test_lock_released_at_commit_with_no_release_call(self, session_factory) -> None:
         from varco_sa.advisory_lock import SAXactAdvisoryLock
 
         lock = SAXactAdvisoryLock()

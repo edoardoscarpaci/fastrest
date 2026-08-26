@@ -943,6 +943,7 @@ class OrderConsumer(EventConsumer):
 
     async def on_order(self, event: OrderPlacedEvent): ...
 
+
 # ✅ CORRECT: Metadata at class-definition time, subscribe at @PostConstruct
 class OrderConsumer(EventConsumer):
     def __init__(self, bus: AbstractEventBus):
@@ -970,6 +971,7 @@ class UserService(
     def _get_repo(self, uow: AsyncUnitOfWork) -> AsyncRepository[User, UUID]:
         return uow.get_repository(User)
 
+
 # Method resolution order (MRO):
 # UserService → CacheServiceMixin → TenantAwareService → ValidatorServiceMixin
 #   → AsyncService → ...
@@ -987,14 +989,10 @@ class UserService(
 
 ```python
 # TTL: evict after 60 seconds
-cache = await InMemoryCache(
-    invalidation_strategy=TTLStrategy(ttl_seconds=60)
-).__aenter__()
+cache = await InMemoryCache(invalidation_strategy=TTLStrategy(ttl_seconds=60)).__aenter__()
 
 # Tag-based: invalidate by tag
-cache = await InMemoryCache(
-    invalidation_strategy=TaggedStrategy()
-).__aenter__()
+cache = await InMemoryCache(invalidation_strategy=TaggedStrategy()).__aenter__()
 # cache.set(key, value, tags=["user:123", "order:456"])
 # cache.invalidate_by_tag("user:123")  # evicts all entries with that tag
 
@@ -1008,11 +1006,13 @@ cache = await InMemoryCache(
 
 # Composite: combine multiple strategies
 cache = await InMemoryCache(
-    invalidation_strategy=CompositeStrategy([
-        TTLStrategy(ttl_seconds=300),
-        TaggedStrategy(),
-        EventDrivenStrategy(bus, mappings),
-    ])
+    invalidation_strategy=CompositeStrategy(
+        [
+            TTLStrategy(ttl_seconds=300),
+            TaggedStrategy(),
+            EventDrivenStrategy(bus, mappings),
+        ]
+    )
 ).__aenter__()
 ```
 
@@ -1023,9 +1023,9 @@ cache = await InMemoryCache(
 container = DIContainer()
 
 # Register backends: scan discovers @Singleton bus classes; cache is opt-in
-container.scan("varco_kafka", recursive=True)         # discovers Kafka bus
-container.install(SAModule)                            # sync setup
-await container.ainstall(RedisCacheConfiguration)     # async opt-in cache
+container.scan("varco_kafka", recursive=True)  # discovers Kafka bus
+container.install(SAModule)  # sync setup
+await container.ainstall(RedisCacheConfiguration)  # async opt-in cache
 
 # Bind repositories (auto-derived from DomainModel fields)
 bind_repositories(container, User, Order, Product)
@@ -1174,9 +1174,7 @@ await producer.produce(UserCreatedEvent(user.id))  # ← can fail!
 # ✅ CORRECT: persists event in same DB transaction
 async with uow:
     user = await repo.save(User(...))
-    await outbox_repo.save_outbox(OutboxEntry.from_event(
-        UserCreatedEvent(user.id)
-    ))
+    await outbox_repo.save_outbox(OutboxEntry.from_event(UserCreatedEvent(user.id)))
 # ← DB committed with both user and outbox entry
 # OutboxRelay polls and publishes asynchronously
 ```
@@ -1243,7 +1241,7 @@ filtered_query = transformer.transform(base_query, params, User)
 
   engine = create_async_engine("postgresql+asyncpg://...")
   store = SAEncryptionKeyStore(engine)
-  await store.ensure_table()   # idempotent — uses CREATE TABLE IF NOT EXISTS
+  await store.ensure_table()  # idempotent — uses CREATE TABLE IF NOT EXISTS
   manager = EncryptionKeyManager(store, master_encryptor=kek)
   registry = await manager.build_tenant_registry()
   ```
@@ -1305,12 +1303,12 @@ filtered_query = transformer.transform(base_query, params, User)
   from varco_ws.di import bootstrap, bind_websocket_adapter, bind_sse_adapter
   from myapp.events import OrderEvent
 
-  bootstrap(container)                                             # scans varco_ws
+  bootstrap(container)  # scans varco_ws
   bind_websocket_adapter(container, event_type=OrderEvent, channel="orders")
   bind_sse_adapter(container, event_type=OrderEvent, channel="orders")
 
   # Start/stop in the FastAPI lifespan handler (create_varco_app does this automatically)
-  orders_ws  = container.get(WebSocketEventBus)
+  orders_ws = container.get(WebSocketEventBus)
   orders_sse = container.get(SSEEventBus)
   ```
 
@@ -1431,7 +1429,7 @@ GET /metrics  ← Prometheus scraper
 OtelConfig(
     service_name="myapp",
     otlp_endpoint="http://otel-collector:4317",  # push to Grafana Cloud / Datadog
-    prometheus_enabled=True,                      # pull from /metrics
+    prometheus_enabled=True,  # pull from /metrics
 )
 ```
 
@@ -1471,14 +1469,16 @@ this memory"* via deep per-call introspection.
 ```python
 from varco_core.profiling import profile, profiled, set_profiling_enabled
 
-set_profiling_enabled(True)   # or set VARCO_PROFILING_ENABLED=true
+set_profiling_enabled(True)  # or set VARCO_PROFILING_ENABLED=true
+
 
 @profile()
 async def slow_query() -> list[Row]: ...
 
+
 async with profiled("batch_job") as s:
     await process()
-print(s.report.format())   # human-readable table
+print(s.report.format())  # human-readable table
 ```
 
 **Adding a new backend** (e.g. pyinstrument):
@@ -1486,10 +1486,13 @@ print(s.report.format())   # human-readable table
 ```python
 from varco_core.profiling import CpuProfilerBackend, register_cpu_backend
 
+
 class PyinstrumentBackend:
     name = "pyinstrument"
+
     def start(self) -> None: ...
     def collect(self, top_n, sort_by) -> CpuProfileResult: ...
+
 
 register_cpu_backend("pyinstrument", PyinstrumentBackend)
 # Then: ProfileConfig(cpu_backend="pyinstrument")
@@ -1508,7 +1511,9 @@ profiles one HTTP request at a time:
 ```python
 app = create_varco_app(container, enable_profiling=True)
 # or:
-app.add_middleware(ProfilingMiddleware, settings=ProfilingSettings(enabled=True, attach_headers=True))
+app.add_middleware(
+    ProfilingMiddleware, settings=ProfilingSettings(enabled=True, attach_headers=True)
+)
 ```
 
 **Middleware stack placement** (innermost — closest to route handler):
@@ -1584,18 +1589,29 @@ adapter.mount(app)  # v1.0.0 (/.well-known/agent-card.json, /a2a) + legacy paths
 # SkillSource path — no VarcoRouter required (U-3)
 from varco_fastapi.router.a2a.source import AgentMetadata, SkillDefinition
 
+
 class ReportSkillSource:
     def skills(self) -> list[SkillDefinition]: ...
     def agent_metadata(self) -> AgentMetadata: ...
     async def invoke(self, skill_id, payload, *, ctx=None): ...
 
-adapter = SkillAdapter(None, source=ReportSkillSource(), agent_name="ReportAgent",
-                       agent_description="Generates PDF reports")
+
+adapter = SkillAdapter(
+    None,
+    source=ReportSkillSource(),
+    agent_name="ReportAgent",
+    agent_description="Generates PDF reports",
+)
 adapter.mount(app, legacy_paths=False)  # v1.0.0 surface only
 
 # DI-friendly usage
-bind_skill_adapter(container, OrderRouter, agent_name="OrderAgent",
-                   agent_description="Manages orders", client_cls=OrderClient)
+bind_skill_adapter(
+    container,
+    OrderRouter,
+    agent_name="OrderAgent",
+    agent_description="Manages orders",
+    client_cls=OrderClient,
+)
 # Inject[SkillAdapter] now resolves to the adapter
 ```
 
@@ -1635,7 +1651,7 @@ from varco_fastapi.router.mcp import MCPAdapter, bind_mcp_adapter
 
 # Option A: mount as HTTP+SSE endpoint on an existing FastAPI app
 adapter = MCPAdapter(OrderRouter, client=OrderClient(base_url="http://localhost:8080"))
-adapter.mount(app)           # registers POST /mcp + GET /mcp/sse
+adapter.mount(app)  # registers POST /mcp + GET /mcp/sse
 
 # Option B: run as standalone stdio MCP server (for local LLMs)
 server = adapter.to_mcp_server()

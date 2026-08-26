@@ -254,8 +254,7 @@ class TenantProvisionConsumer(EventConsumer):
         assert isinstance(event, TenantProvisionRequested)
         if self._is_own_broadcast(event.origin):
             logger.debug(
-                "TenantProvisionConsumer skipping own broadcast (origin=%r) "
-                "for tenant %r",
+                "TenantProvisionConsumer skipping own broadcast (origin=%r) for tenant %r",
                 event.origin,
                 event.tenant_id,
             )
@@ -283,8 +282,7 @@ class TenantProvisionConsumer(EventConsumer):
         assert isinstance(event, TenantDeprovisionRequested)
         if self._is_own_broadcast(event.origin):
             logger.debug(
-                "TenantProvisionConsumer skipping own broadcast (origin=%r) "
-                "for tenant %r",
+                "TenantProvisionConsumer skipping own broadcast (origin=%r) for tenant %r",
                 event.origin,
                 event.tenant_id,
             )
@@ -334,9 +332,7 @@ def _make_tenant_retry_wrapper(
                 last_exc = exc
 
                 if attempt < max_attempts:
-                    delay = (
-                        policy.compute_delay(attempt - 1) if policy is not None else 0.0
-                    )
+                    delay = policy.compute_delay(attempt - 1) if policy is not None else 0.0
                     logger.warning(
                         "TenantProvisionConsumer handler %r failed (attempt "
                         "%d/%d) on channel %r — retrying in %.2fs: %s",
@@ -353,8 +349,7 @@ def _make_tenant_retry_wrapper(
         assert first_failed_at is not None
 
         logger.error(
-            "TenantProvisionConsumer handler %r exhausted %d attempt(s) on "
-            "channel %r: %s",
+            "TenantProvisionConsumer handler %r exhausted %d attempt(s) on channel %r: %s",
             handler_name,
             max_attempts,
             channel,

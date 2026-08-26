@@ -44,9 +44,7 @@ from providify.testing import ContainerOverrides
 # NOTE: this test intentionally runs FIRST in file/definition order (pytest's
 # default collection order) so that no other test in this module has had a
 # chance to install a global container via `di_global` yet.
-def test_requesting_no_providify_fixture_observes_no_container_related_global_state() -> (
-    None
-):
+def test_requesting_no_providify_fixture_observes_no_container_related_global_state() -> None:
     """
     A test that requests none of the four fixtures must see the same
     absence of global DI state as if providify's pytest plugin were not
@@ -163,9 +161,9 @@ def test_di_global_fixture_restores_previous_global_at_teardown() -> None:
     except StopIteration:
         pass
 
-    assert (
-        DIContainer._global is previous_global
-    ), "di_global must restore the previous global container at teardown"
+    assert DIContainer._global is previous_global, (
+        "di_global must restore the previous global container at teardown"
+    )
 
     try:
         next(container_gen)

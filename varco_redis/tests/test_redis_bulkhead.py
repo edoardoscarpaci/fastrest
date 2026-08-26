@@ -60,9 +60,7 @@ async def bulkhead(redis_url):
     prefix = f"test:{uuid.uuid4().hex[:8]}:"
     settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     cfg = BulkheadConfig(max_concurrent=3, max_wait=0.0)
-    async with RedisBulkhead(
-        cfg, settings=settings, name=f"bh-{uuid.uuid4().hex[:8]}"
-    ) as bh:
+    async with RedisBulkhead(cfg, settings=settings, name=f"bh-{uuid.uuid4().hex[:8]}") as bh:
         yield bh
 
 
@@ -116,9 +114,7 @@ async def test_nplus1_concurrent_acquirers_waits_when_max_wait_positive(
     settings = RedisEventBusSettings(url=redis_url, channel_prefix=prefix)
     cfg = BulkheadConfig(max_concurrent=2, max_wait=2.0)
 
-    async with RedisBulkhead(
-        cfg, settings=settings, name=f"bh-wait-{uuid.uuid4().hex[:8]}"
-    ) as bh:
+    async with RedisBulkhead(cfg, settings=settings, name=f"bh-wait-{uuid.uuid4().hex[:8]}") as bh:
         release_gate = asyncio.Event()
 
         async def hold() -> str:

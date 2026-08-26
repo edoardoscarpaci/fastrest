@@ -53,9 +53,7 @@ async def test_worker_provision_never_calls_update_status_or_add() -> None:
             calls.append("update_status")
             await super().update_status(tenant_id, status)
 
-    catalog = _SpyCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = _SpyCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, _bus, _provisioner = _make_worker_service(catalog)
 
     await service.provision("acme")
@@ -63,22 +61,16 @@ async def test_worker_provision_never_calls_update_status_or_add() -> None:
     assert calls == []
 
 
-async def test_worker_provision_emits_tenant_node_ready_with_configured_store_id() -> (
-    None
-):
+async def test_worker_provision_emits_tenant_node_ready_with_configured_store_id() -> None:
     from varco_core.tenancy.catalog import StaticTenantCatalog, TenantDescriptor
     from varco_core.tenancy.control.events import CHANNEL_TENANCY, TenantNodeReady
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, bus, _provisioner = _make_worker_service(catalog)
 
     received: list[TenantNodeReady] = []
-    bus.subscribe(
-        TenantNodeReady, lambda e: received.append(e), channel=CHANNEL_TENANCY
-    )
+    bus.subscribe(TenantNodeReady, lambda e: received.append(e), channel=CHANNEL_TENANCY)
 
     await service.provision("acme")
     await bus.drain()
@@ -92,9 +84,7 @@ async def test_worker_refuses_deleted_tenant_without_calling_provisioner() -> No
     from varco_core.tenancy.catalog import StaticTenantCatalog, TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.DELETED)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.DELETED)])
     service, _bus, provisioner = _make_worker_service(catalog)
 
     await service.provision("acme")
@@ -108,9 +98,7 @@ async def test_worker_double_provision_is_a_noop_via_provisioner_idempotency_not
     from varco_core.tenancy.catalog import StaticTenantCatalog, TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, _bus, provisioner = _make_worker_service(catalog)
 
     await service.provision("acme")

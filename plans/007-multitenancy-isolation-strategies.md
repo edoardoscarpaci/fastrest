@@ -160,8 +160,8 @@ since Plan 008's decisions constrain and amend these. See
 
 ```python
 class TenantIsolation(StrEnum):
-    SHARED   = "shared"    # one schema/db/collection + discriminator
-    SCHEMA   = "schema"    # one Postgres schema per tenant   (Postgres only)
+    SHARED = "shared"  # one schema/db/collection + discriminator
+    SCHEMA = "schema"  # one Postgres schema per tenant   (Postgres only)
     DATABASE = "database"  # one logical database per tenant  (Postgres + Mongo)
 ```
 
@@ -172,8 +172,8 @@ only by it. Keeps the enum backend-neutral and avoids six near-duplicate values.
 
 ```python
 class TenantScope(StrEnum):
-    TENANT = "tenant"   # default — routed per tenant under SCHEMA/DATABASE
-    GLOBAL = "global"   # one shared copy; every tenant reads it
+    TENANT = "tenant"  # default — routed per tenant under SCHEMA/DATABASE
+    GLOBAL = "global"  # one shared copy; every tenant reads it
 ```
 
 **DESIGN: declared as `Meta.tenant_scope`, normalised into `ParsedMeta.tenant_scope`**
@@ -471,15 +471,15 @@ STANDALONE (default, recommended)          BUNDLED (explicit opt-in)
 ```python
 from varco_fastapi.tenancy import mount_tenant_admin
 
-app = create_varco_app(container, routers=[...])       # tenant traffic
-mount_tenant_admin(                                     # ← privileged surface, opt-in
+app = create_varco_app(container, routers=[...])  # tenant traffic
+mount_tenant_admin(  # ← privileged surface, opt-in
     app,
     control_service,
-    acknowledge_bundled_admin=True,   # required; ValueError without it
+    acknowledge_bundled_admin=True,  # required; ValueError without it
     server_auth=auth,
-    admin_role="tenant-admin",        # distinct from a generic "admin"
+    admin_role="tenant-admin",  # distinct from a generic "admin"
     prefix="/tenancy",
-    dependencies=[Depends(ip_allowlist)],   # optional extra network-level gate
+    dependencies=[Depends(ip_allowlist)],  # optional extra network-level gate
 )
 ```
 

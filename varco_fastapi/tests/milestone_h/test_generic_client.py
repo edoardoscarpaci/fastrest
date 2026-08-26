@@ -91,9 +91,7 @@ async def test_get_dispatches_correctly():
     client = GenericClient("https://api.example.com")
     _patched_client(client, _mock_response(200, {"id": 1, "name": "thing"}))
 
-    with patch.object(
-        client, "_request", new=AsyncMock(return_value={"id": 1})
-    ) as mock_req:
+    with patch.object(client, "_request", new=AsyncMock(return_value={"id": 1})) as mock_req:
         await client.get("/items")
         mock_req.assert_called_once()
         call = mock_req.call_args

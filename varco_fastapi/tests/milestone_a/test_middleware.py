@@ -32,9 +32,7 @@ async def test_error_middleware_maps_service_not_found_to_404():
     async def missing_route():
         raise ServiceNotFoundError(entity_id="abc", entity_cls=object)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/missing")
 
     assert resp.status_code == 404
@@ -51,9 +49,7 @@ async def test_error_middleware_returns_500_for_unexpected_exception():
     async def boom():
         raise RuntimeError("unexpected!")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/boom")
 
     assert resp.status_code == 500
@@ -69,9 +65,7 @@ async def test_error_middleware_includes_detail_in_debug_mode():
     async def debug_boom():
         raise ValueError("specific error message")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/debug-boom")
 
     assert resp.status_code == 500
@@ -88,9 +82,7 @@ async def test_error_middleware_maps_timeout_error_to_504():
         # Simulates a downstream await that exceeded its deadline (e.g. @timeout decorator)
         raise TimeoutError
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/timeout")
 
     assert resp.status_code == 504
@@ -120,9 +112,7 @@ async def test_error_middleware_unwraps_exception_group_with_http_exception():
             [HTTPException(status_code=401, detail="Unauthorized")],
         )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/auth-wrapped")
 
     assert resp.status_code == 401
@@ -148,9 +138,7 @@ async def test_error_middleware_unwraps_exception_group_with_service_exception()
             [ServiceNotFoundError(entity_id="xyz", entity_cls=object)],
         )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/wrapped-service-error")
 
     assert resp.status_code == 404
@@ -168,9 +156,7 @@ async def test_error_middleware_maps_query_exception_to_400():
     async def bad_query():
         raise OperationNotSupported("nested traversal not supported")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/bad-query")
 
     assert resp.status_code == 400
@@ -197,9 +183,7 @@ async def test_request_context_middleware_sets_auth_context():
         ctx = get_auth_context()
         return {"user_id": ctx.user_id}
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/me", headers={"X-API-Key": "test-key"})
 
     assert resp.status_code == 200
@@ -215,9 +199,7 @@ async def test_request_context_middleware_adds_request_id_header():
     async def ping():
         return {"ok": True}
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/ping")
 
     assert "x-request-id" in resp.headers
@@ -232,9 +214,7 @@ async def test_request_context_middleware_propagates_request_id():
     async def ping():
         return {"ok": True}
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/ping", headers={"X-Request-ID": "custom-id-123"})
 
     assert resp.headers["x-request-id"] == "custom-id-123"
@@ -253,9 +233,7 @@ def test_cors_config_default_values():
 
 def test_cors_config_from_env(monkeypatch):
     """CORSConfig.from_env() reads VARCO_CORS_* env vars."""
-    monkeypatch.setenv(
-        "VARCO_CORS_ORIGINS", "https://app.example.com,http://localhost:3000"
-    )
+    monkeypatch.setenv("VARCO_CORS_ORIGINS", "https://app.example.com,http://localhost:3000")
     monkeypatch.setenv("VARCO_CORS_CREDENTIALS", "false")
     monkeypatch.setenv("VARCO_CORS_MAX_AGE", "300")
 
@@ -281,9 +259,7 @@ async def test_install_cors_adds_cors_headers():
     async def data():
         return {"ok": True}
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.options(
             "/data",
             headers={

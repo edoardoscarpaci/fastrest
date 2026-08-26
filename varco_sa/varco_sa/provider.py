@@ -195,9 +195,7 @@ class SQLAlchemyRepositoryProvider(RepositoryProvider):
         # mypy misreading the lambda's defaulted extra param as a second
         # required positional.
         repo_factories: dict[str, Any] = {
-            _repo_attr(cls): (
-                lambda s, m=mapper: AsyncSQLAlchemyRepository(session=s, mapper=m)
-            )
+            _repo_attr(cls): (lambda s, m=mapper: AsyncSQLAlchemyRepository(session=s, mapper=m))
             for cls, (_, mapper) in self._built.items()
         }
         return SQLAlchemyUnitOfWork(

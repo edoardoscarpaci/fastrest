@@ -94,9 +94,7 @@ async def _run_prune(args: argparse.Namespace, target: Any) -> int:
     total = 0
     try:
         while True:
-            deleted = await target.delete_where(
-                older_than=cutoff, limit=args.limit or args.chunk
-            )
+            deleted = await target.delete_where(older_than=cutoff, limit=args.limit or args.chunk)
             total += deleted
             if deleted == 0 or args.limit is not None:
                 break

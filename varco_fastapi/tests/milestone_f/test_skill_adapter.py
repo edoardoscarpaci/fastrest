@@ -128,9 +128,7 @@ def test_auto_skill_id_crud():
 
 def test_auto_skill_id_custom_route():
     """Non-CRUD route → method name."""
-    route_obj = ResolvedRoute(
-        name="ship", method="POST", path="/{id}/ship", is_crud=False
-    )
+    route_obj = ResolvedRoute(name="ship", method="POST", path="/{id}/ship", is_crud=False)
     assert _auto_skill_id(route_obj, "order") == "ship"
 
 
@@ -211,9 +209,7 @@ def test_default_modes_when_not_specified():
 
 
 def test_agent_card_name_and_description():
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="OrderAgent", agent_description="Manages orders"
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="OrderAgent", agent_description="Manages orders")
     card = adapter.agent_card(base_url="https://api.example.com")
     assert card["name"] == "OrderAgent"
     assert card["description"] == "Manages orders"
@@ -282,13 +278,9 @@ def _make_task(skill_id: str, data: dict, task_id: str = "t1") -> dict:
 async def test_handle_task_create_dispatches_to_client():
     mock_client = MagicMock()
     mock_client.create = AsyncMock(return_value={"id": "new"})
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
-    result = await adapter.handle_task(
-        _make_task("place_order", {"name": "X", "amount": 5.0})
-    )
+    result = await adapter.handle_task(_make_task("place_order", {"name": "X", "amount": 5.0}))
 
     mock_client.create.assert_called_once_with({"name": "X", "amount": 5.0})
     assert result["status"]["state"] == "completed"
@@ -298,9 +290,7 @@ async def test_handle_task_create_dispatches_to_client():
 async def test_handle_task_read_dispatches_to_client():
     mock_client = MagicMock()
     mock_client.read = AsyncMock(return_value={"id": "abc", "name": "X", "amount": 1.0})
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
     result = await adapter.handle_task(_make_task("read_order", {"id": "abc"}))
 
@@ -311,13 +301,9 @@ async def test_handle_task_read_dispatches_to_client():
 async def test_handle_task_list_dispatches_with_filters():
     mock_client = MagicMock()
     mock_client.list = AsyncMock(return_value=[])
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
-    await adapter.handle_task(
-        _make_task("list_order", {"q": "status=active", "limit": 20})
-    )
+    await adapter.handle_task(_make_task("list_order", {"q": "status=active", "limit": 20}))
 
     mock_client.list.assert_called_once()
     call_kwargs = mock_client.list.call_args[1]
@@ -328,9 +314,7 @@ async def test_handle_task_list_dispatches_with_filters():
 async def test_handle_task_unknown_skill_returns_failed():
     """Unknown ``skill_id`` → TaskResponse with ``state: failed``, not a raised exception."""
     mock_client = MagicMock()
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
     result = await adapter.handle_task(_make_task("nonexistent_skill", {}))
 
@@ -343,13 +327,9 @@ async def test_handle_task_execution_error_returns_failed():
     """Client error is caught and wrapped in a failed TaskResponse."""
     mock_client = MagicMock()
     mock_client.create = AsyncMock(side_effect=RuntimeError("DB down"))
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
-    result = await adapter.handle_task(
-        _make_task("place_order", {"name": "X", "amount": 1.0})
-    )
+    result = await adapter.handle_task(_make_task("place_order", {"name": "X", "amount": 1.0}))
 
     assert result["status"]["state"] == "failed"
     assert "DB down" in result["status"]["message"]
@@ -367,13 +347,9 @@ async def test_handle_task_preserves_caller_task_id():
     """Task ID from the request body is echoed back in the response."""
     mock_client = MagicMock()
     mock_client.create = AsyncMock(return_value={"id": "x"})
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
-    result = await adapter.handle_task(
-        _make_task("place_order", {}, task_id="caller-42")
-    )
+    result = await adapter.handle_task(_make_task("place_order", {}, task_id="caller-42"))
 
     assert result["id"] == "caller-42"
 
@@ -382,9 +358,7 @@ async def test_handle_task_generates_id_when_absent():
     """Missing ``id`` in task request → adapter generates a UUID."""
     mock_client = MagicMock()
     mock_client.create = AsyncMock(return_value={})
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
     request_without_id = {
         "skill_id": "place_order",
@@ -402,13 +376,9 @@ async def test_handle_task_generates_id_when_absent():
 async def test_completed_response_serialises_pydantic_model():
     """Pydantic model result is serialised via ``model_dump(mode='json')``."""
     mock_client = MagicMock()
-    order_read = OrderRead(
-        id=UUID("00000000-0000-0000-0000-000000000001"), name="X", amount=9.99
-    )
+    order_read = OrderRead(id=UUID("00000000-0000-0000-0000-000000000001"), name="X", amount=9.99)
     mock_client.read = AsyncMock(return_value=order_read)
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
 
     result = await adapter.handle_task(_make_task("read_order", {"id": "some-id"}))
 
@@ -453,9 +423,7 @@ def test_mount_agent_card_uses_request_base_url_when_no_base_url():
     app = FastAPI()
     adapter.mount(app)  # base_url defaults to ''
 
-    client = TestClient(
-        app, base_url="http://testserver", raise_server_exceptions=False
-    )
+    client = TestClient(app, base_url="http://testserver", raise_server_exceptions=False)
     resp = client.get("/.well-known/agent.json")
     assert resp.status_code == 200
     body = resp.json()
@@ -497,9 +465,7 @@ def test_mount_tasks_send_returns_200():
 def test_mount_tasks_get_returns_404():
     """GET /tasks/{id} in v1 (synchronous mode) returns 404."""
     mock_client = MagicMock()
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
     app = FastAPI()
     adapter.mount(app)
 
@@ -511,9 +477,7 @@ def test_mount_tasks_get_returns_404():
 def test_mount_bad_json_returns_400():
     """Malformed body to POST /tasks/send → 400."""
     mock_client = MagicMock()
-    adapter = SkillAdapter(
-        OrderRouter, agent_name="A", agent_description="D", client=mock_client
-    )
+    adapter = SkillAdapter(OrderRouter, agent_name="A", agent_description="D", client=mock_client)
     app = FastAPI()
     adapter.mount(app)
 

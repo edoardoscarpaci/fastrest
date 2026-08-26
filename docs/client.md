@@ -8,13 +8,13 @@ class to subclass, no manual httpx wiring.
 
 ```python
 from varco_fastapi.client import client_for
-from orders_service.routers import OrderRouter   # the peer's router class — importable
+from orders_service.routers import OrderRouter  # the peer's router class — importable
 
 client = client_for(OrderRouter, "https://orders.internal")
 
-order = await client.read(order_id)          # typed CRUD method
-orders = await client.list(limit=20)          # paginated list
-await client.cancel(order_id, reason="oos")   # custom @route method
+order = await client.read(order_id)  # typed CRUD method
+orders = await client.list(limit=20)  # paginated list
+await client.cancel(order_id, reason="oos")  # custom @route method
 ```
 
 `client_for(router_cls, base_url=None, *, profile=None, timeout=None,
@@ -45,6 +45,7 @@ from providify import Inject
 from varco_fastapi.client import VarcoClient
 
 bind_clients_from(container, OrderRouter, UserRouter)
+
 
 class ReportService:
     def __init__(self, orders: Inject[VarcoClient[OrderRouter]]) -> None:

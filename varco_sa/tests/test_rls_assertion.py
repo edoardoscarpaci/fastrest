@@ -100,9 +100,7 @@ async def test_enforce_false_never_queries() -> None:
 
     # enforce=False still returns the missing list without emitting DDL —
     # the only forbidden thing is a write/DDL statement, never a read.
-    assert not any(
-        "CREATE" in stmt.upper() or "ALTER" in stmt.upper() for stmt in conn.executed
-    )
+    assert not any("CREATE" in stmt.upper() or "ALTER" in stmt.upper() for stmt in conn.executed)
 
 
 async def test_non_postgres_dialect_skips_with_one_warning(

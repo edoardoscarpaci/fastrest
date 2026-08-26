@@ -94,9 +94,7 @@ class TestBeanieDatabaseProvisionerBehaviour:
 
     async def test_db_template_is_honoured(self) -> None:
         client = _FakeClient()
-        provisioner = BeanieDatabaseProvisioner(
-            client=client, db_template="tenant-{tenant_id}-db"
-        )
+        provisioner = BeanieDatabaseProvisioner(client=client, db_template="tenant-{tenant_id}-db")
 
         await provisioner.deprovision("globex", confirm_destroy=True)
 

@@ -210,9 +210,7 @@ class PeerRegistry:
         try:
             return self._peers[name]
         except KeyError:
-            raise KeyError(
-                f"Unknown peer {name!r}. Known peers: {self.names()}"
-            ) from None
+            raise KeyError(f"Unknown peer {name!r}. Known peers: {self.names()}") from None
 
     def _breaker_for(self, name: str) -> CircuitBreaker:
         """Return (creating once) the shared ``CircuitBreaker`` for peer ``name``."""
@@ -275,9 +273,7 @@ class PeerRegistry:
         if cached is not None:
             return cached
 
-        profile = self._profiles.get(
-            cfg.profile_name or ""
-        ) or self._default_profile_for(cfg)
+        profile = self._profiles.get(cfg.profile_name or "") or self._default_profile_for(cfg)
 
         headers: dict[str, str] = {}
         if cfg.token_ref:

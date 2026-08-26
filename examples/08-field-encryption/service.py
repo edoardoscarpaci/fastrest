@@ -48,9 +48,7 @@ if TYPE_CHECKING:
 
 
 @Singleton
-class PatientService(
-    AsyncService[Patient, UUID, PatientCreate, PatientRead, PatientUpdate]
-):
+class PatientService(AsyncService[Patient, UUID, PatientCreate, PatientRead, PatientUpdate]):
     """
     CRUD service for ``Patient`` entities backed by PostgreSQL.
 
@@ -71,9 +69,7 @@ class PatientService(
         # Concrete generic alias so providify resolves the correct PatientAssembler
         # binding (registered under AbstractDTOAssembler[Patient, PatientCreate,
         # PatientRead, PatientUpdate]).
-        assembler: Inject[
-            AbstractDTOAssembler[Patient, PatientCreate, PatientRead, PatientUpdate]
-        ],
+        assembler: Inject[AbstractDTOAssembler[Patient, PatientCreate, PatientRead, PatientUpdate]],
     ) -> None:
         """
         Args:

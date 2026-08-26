@@ -182,9 +182,7 @@ def _has_encrypted_dto_marker(annotation: Any) -> bool:
     return any(isinstance(m, EncryptedDTOField) for m in annotation.__metadata__)
 
 
-_FIELD_CACHE: weakref.WeakKeyDictionary[type, frozenset[str]] = (
-    weakref.WeakKeyDictionary()
-)
+_FIELD_CACHE: weakref.WeakKeyDictionary[type, frozenset[str]] = weakref.WeakKeyDictionary()
 
 
 # ════════════════════════════════════════════════════════════════════════════════

@@ -101,18 +101,14 @@ async def test_under_limit_does_not_route_to_dlq() -> None:
     exc = RuntimeError("transient")
 
     # First failure (count becomes 1) — under limit.
-    await bus._handle_dispatch_failure(
-        "stream:orders", msg_id, OrderEvent(), "orders", exc
-    )
+    await bus._handle_dispatch_failure("stream:orders", msg_id, OrderEvent(), "orders", exc)
 
     assert bus._delivery_counts[msg_id] == 1
     bus._redis.xack.assert_not_called()
     assert await dlq.count() == 0
 
     # Second failure (count becomes 2) — still under limit.
-    await bus._handle_dispatch_failure(
-        "stream:orders", msg_id, OrderEvent(), "orders", exc
-    )
+    await bus._handle_dispatch_failure("stream:orders", msg_id, OrderEvent(), "orders", exc)
 
     assert bus._delivery_counts[msg_id] == 2
     bus._redis.xack.assert_not_called()
@@ -243,12 +239,8 @@ async def test_successful_dispatch_clears_counters() -> None:
     exc = RuntimeError("transient")
 
     # Two failures — populates counter and first_failure_times.
-    await bus._handle_dispatch_failure(
-        "stream:orders", msg_id, OrderEvent(), "orders", exc
-    )
-    await bus._handle_dispatch_failure(
-        "stream:orders", msg_id, OrderEvent(), "orders", exc
-    )
+    await bus._handle_dispatch_failure("stream:orders", msg_id, OrderEvent(), "orders", exc)
+    await bus._handle_dispatch_failure("stream:orders", msg_id, OrderEvent(), "orders", exc)
     assert bus._delivery_counts[msg_id] == 2
 
     # Simulate a successful dispatch via _process_message (the success path).

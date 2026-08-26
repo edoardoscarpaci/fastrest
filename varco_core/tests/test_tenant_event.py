@@ -62,9 +62,7 @@ class Post(AuditedDomainModel):
     ``STR_ASSIGNED`` pk so we can control pk values in tests.
     """
 
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     title: str = ""
 
     class Meta:
@@ -89,9 +87,7 @@ class UpdatePostDTO(UpdateDTO):
 # ── Assembler ──────────────────────────────────────────────────────────────────
 
 
-class PostAssembler(
-    AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     """Stateless DTO assembler — converts between Post and its DTOs."""
 
     def to_domain(self, dto: CreatePostDTO) -> Post:
@@ -209,9 +205,7 @@ class FakeUoWProvider(IUoWProvider):
 class AllowAllAuthorizer(AbstractAuthorizer):
     """Allows every authorization check unconditionally."""
 
-    async def authorize(
-        self, ctx: AuthContext, action: Action, resource: Resource
-    ) -> None:
+    async def authorize(self, ctx: AuthContext, action: Action, resource: Resource) -> None:
         return  # Never raises.
 
 
@@ -235,9 +229,7 @@ class CapturingProducer(AbstractEventProducer):
         """Append (event, channel) to the captured list."""
         self.events.append((event, channel))
 
-    async def _produce_many(
-        self, events: list[Any], *, channel: str = "default"
-    ) -> None:
+    async def _produce_many(self, events: list[Any], *, channel: str = "default") -> None:
         for e in events:
             await self._produce(e, channel=channel)
 
@@ -245,9 +237,7 @@ class CapturingProducer(AbstractEventProducer):
 # ── Concrete service ───────────────────────────────────────────────────────────
 
 
-class ConcretePostService(
-    AsyncService[Post, str, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class ConcretePostService(AsyncService[Post, str, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     """Minimal AsyncService subclass for testing tenant event propagation."""
 
     def __init__(
@@ -283,9 +273,7 @@ def producer() -> CapturingProducer:
 
 
 @pytest.fixture()
-def svc(
-    repo: InMemoryPostRepository, producer: CapturingProducer
-) -> ConcretePostService:
+def svc(repo: InMemoryPostRepository, producer: CapturingProducer) -> ConcretePostService:
     """Fully-wired service with capturing producer."""
     return ConcretePostService(FakeUoWProvider(repo), producer)
 
@@ -364,9 +352,7 @@ class TestEntityEventTenantId:
 
     def test_entity_event_is_instance_of_base(self) -> None:
         """``isinstance`` check — subclass relationship is preserved."""
-        event = EntityCreatedEvent(
-            entity_type="Post", pk=1, tenant_id="acme", payload={}
-        )
+        event = EntityCreatedEvent(entity_type="Post", pk=1, tenant_id="acme", payload={})
         assert isinstance(event, EntityEvent)
 
 

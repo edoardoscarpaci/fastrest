@@ -633,6 +633,4 @@ class TestRedisEncryptionKeyStoreScopeIntegration:
     """Requires a real Redis instance for atomic Lua destroy_scope correctness."""
 
     async def test_destroy_scope_atomic_across_entries(self) -> None:
-        pytest.skip(
-            "requires a real Redis instance — not available in this environment"
-        )
+        pytest.skip("requires a real Redis instance — not available in this environment")

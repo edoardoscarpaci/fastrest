@@ -88,8 +88,8 @@ installed and before `set_param_capture_defaults()` could ever be called. So:
 ```python
 # per-call fast path, no inspect.signature()
 if _capture_enabled():
-    plan = _plan or _build_plan_now()          # memoised closure cell
-    attrs = plan.extract(args, kwargs)         # zip + dict lookups only
+    plan = _plan or _build_plan_now()  # memoised closure cell
+    attrs = plan.extract(args, kwargs)  # zip + dict lookups only
 ```
 
 `CapturePlan.extract` never calls `Signature.bind` — the plan precomputes an ordered tuple of
@@ -102,16 +102,16 @@ plus a keyword allow-set, so extraction is a `zip()` over `args` and a filtered 
 ```python
 @dataclass(frozen=True)
 class ParamCaptureConfig:
-    enabled: bool | None = None            # None → inherit process default
+    enabled: bool | None = None  # None → inherit process default
     prefix: str = "param."
-    include: tuple[str, ...] = ()          # allow-list; empty = "all params"
-    exclude: tuple[str, ...] = ()          # deny-list; applied after include
+    include: tuple[str, ...] = ()  # allow-list; empty = "all params"
+    exclude: tuple[str, ...] = ()  # deny-list; applied after include
     value_mode: Literal["scalars", "repr"] = "scalars"
     max_value_length: int = 256
     max_params: int = 32
     max_sequence_items: int = 10
-    capture_varargs: bool = False          # *args / **kwargs extras
-    capture_self: bool = False             # self / cls
+    capture_varargs: bool = False  # *args / **kwargs extras
+    capture_self: bool = False  # self / cls
     redact_patterns: tuple[str, ...] = DEFAULT_REDACT_PATTERNS
     redaction_placeholder: str = "[REDACTED]"
 ```
@@ -294,17 +294,21 @@ Instruments are created lazily and cached in `metrics._instrument_cache` and han
 ```python
 class GlobalAttrInstrument:
     """Transparent proxy that merges global attributes into every measurement."""
+
     __slots__ = ("_inner",)
 
     def add(self, amount, attributes=None, context=None):
         g = current_global_attributes()
         if g:
-            attributes = {**g, **(attributes or {})}      # caller wins on conflict
+            attributes = {**g, **(attributes or {})}  # caller wins on conflict
         self._inner.add(amount, attributes=attributes, context=context)
 
-    def record(self, value, attributes=None, context=None): ...   # same shape
-    def unwrap(self): return self._inner
-    def __getattr__(self, item): return getattr(self._inner, item)
+    def record(self, value, attributes=None, context=None): ...  # same shape
+    def unwrap(self):
+        return self._inner
+
+    def __getattr__(self, item):
+        return getattr(self._inner, item)
 ```
 
 `wrap_instrument(instrument)` returns the **raw** instrument when
@@ -339,12 +343,12 @@ framework invariant and must never be shadowed.
 ### New `OtelConfig` fields (all defaulted — backwards compatible)
 
 ```python
-capture_params: bool | None = None                    # None → env/default (true)
-param_capture: ParamCaptureConfig | None = None       # full structural override
+capture_params: bool | None = None  # None → env/default (true)
+param_capture: ParamCaptureConfig | None = None  # full structural override
 global_attributes: dict[str, str] = field(default_factory=dict)
 global_attributes_on_spans: bool = True
 global_attributes_on_metrics: bool = True
-promote_global_attrs_to_resource: bool = False        # also merge statics into the Resource
+promote_global_attrs_to_resource: bool = False  # also merge statics into the Resource
 ```
 
 `OtelConfiguration` (di.py) applies them in a new `@Provider(singleton=True)`

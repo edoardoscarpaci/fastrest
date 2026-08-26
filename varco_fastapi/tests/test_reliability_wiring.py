@@ -33,9 +33,7 @@ class _InMemoryAuditRepository:
     """Minimal test double satisfying AuditRepository's abstract surface."""
 
     async def save(self, entry) -> None: ...
-    async def list_for_entity(
-        self, entity_type, entity_id, *, limit=100, tenant_id=None
-    ) -> list:
+    async def list_for_entity(self, entity_type, entity_id, *, limit=100, tenant_id=None) -> list:
         return []
 
 

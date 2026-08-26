@@ -154,9 +154,7 @@ class TestProviderReturnAnnotations:
                 offenders.append(f"{qual} at {loc}: no resolvable return type")
             elif not isinstance(iface, type) and get_origin(iface) is None:
                 offenders.append(f"{qual} at {loc}: interface {iface!r} is not a type")
-        assert not offenders, "\n  ".join(
-            ["Broken @Provider return types:", *offenders]
-        )
+        assert not offenders, "\n  ".join(["Broken @Provider return types:", *offenders])
 
 
 class TestContainerLocalnsHealth:
@@ -192,9 +190,7 @@ class TestVarcoFastApiModuleWithOtelConfiguration:
     """The literal scenario from the bug report."""
 
     @pytest.mark.parametrize("otel_first", [False, True])
-    def test_regression_tracer_provider_resolves_with_both_modules(
-        self, otel_first: bool
-    ) -> None:
+    def test_regression_tracer_provider_resolves_with_both_modules(self, otel_first: bool) -> None:
         otel_config = _composite_otel_config
 
         container = DIContainer()
@@ -350,9 +346,7 @@ def test_regression_no_function_local_provider_with_unresolvable_return_type() -
                 continue
             patched = _annotation_patched_providers(node)
             for child in ast.walk(node):
-                if child is node or not isinstance(
-                    child, (ast.FunctionDef, ast.AsyncFunctionDef)
-                ):
+                if child is node or not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     continue
                 if not any(_is_provider_decorator(d) for d in child.decorator_list):
                     continue

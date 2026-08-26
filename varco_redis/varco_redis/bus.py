@@ -137,9 +137,7 @@ class RedisEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[
-            Serializer[Event] | None, InjectMeta(optional=True)
-        ] = None,
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -160,9 +158,7 @@ class RedisEventBus(AbstractEventBus):
         elif isinstance(middleware, list):
             self._middleware = middleware
         else:
-            self._middleware = (
-                list(middleware.get_all()) if middleware.resolvable() else []
-            )
+            self._middleware = list(middleware.get_all()) if middleware.resolvable() else []
 
         # Use provided serializer or fall back to JSON.
         self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
@@ -180,9 +176,7 @@ class RedisEventBus(AbstractEventBus):
         self._listener_task: asyncio.Task | None = None
         self._started = False
 
-        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = (
-            self._build_chain()
-        )
+        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = self._build_chain()
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -282,9 +276,7 @@ class RedisEventBus(AbstractEventBus):
         redis_channel = self._config.channel_name(channel)
         value = self._serializer.serialize(event)
         await self._redis.publish(redis_channel, value)
-        _logger.debug(
-            "Published %s to Redis channel %s", type(event).__name__, redis_channel
-        )
+        _logger.debug("Published %s to Redis channel %s", type(event).__name__, redis_channel)
         return None
 
     def subscribe(
@@ -397,9 +389,7 @@ class RedisEventBus(AbstractEventBus):
                     redis_channel: str = message["channel"]
                     if isinstance(redis_channel, bytes):
                         redis_channel = redis_channel.decode("utf-8")
-                    logical_channel = redis_channel.removeprefix(
-                        self._config.channel_prefix
-                    )
+                    logical_channel = redis_channel.removeprefix(self._config.channel_prefix)
                     await self._chain(event, logical_channel)
                 except asyncio.CancelledError:
                     raise
@@ -445,8 +435,7 @@ class RedisEventBus(AbstractEventBus):
                     errors.append(exc)
                 elif self._error_policy is ErrorPolicy.FIRE_FORGET:
                     _logger.warning(
-                        "Redis event handler %r raised and was ignored "
-                        "(FIRE_FORGET): %s",
+                        "Redis event handler %r raised and was ignored (FIRE_FORGET): %s",
                         entry.handler,
                         exc,
                         exc_info=True,

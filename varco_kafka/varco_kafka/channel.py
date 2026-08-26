@@ -373,9 +373,7 @@ class KafkaChannelManager(ChannelManager):
     def __repr__(self) -> str:
         started = self._admin is not None
         return (
-            f"KafkaChannelManager("
-            f"brokers={self._settings.bootstrap_servers!r}, "
-            f"started={started})"
+            f"KafkaChannelManager(brokers={self._settings.bootstrap_servers!r}, started={started})"
         )
 
 

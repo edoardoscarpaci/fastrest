@@ -53,9 +53,7 @@ class ItemUpdate(BaseModel):
     name: str | None = None
 
 
-class ItemRouter(
-    AllRouteMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-):
+class ItemRouter(AllRouteMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
     _prefix = "/items"
     _tags = ["items"]
     _service = MagicMock()
@@ -307,9 +305,9 @@ def test_varco_client_generates_crud_methods():
         pass
 
     for method_name in ("create", "read", "update", "patch", "delete", "list"):
-        assert callable(
-            getattr(ItemClient, method_name, None)
-        ), f"Method '{method_name}' not generated on ItemClient"
+        assert callable(getattr(ItemClient, method_name, None)), (
+            f"Method '{method_name}' not generated on ItemClient"
+        )
 
 
 def test_varco_client_no_url_raises():
@@ -423,9 +421,7 @@ async def test_job_handle_status_calls_poll_url():
     job_id = uuid4()
 
     mock_client = MagicMock()
-    mock_client._request = AsyncMock(
-        return_value={"status": "running", "progress": 0.5}
-    )
+    mock_client._request = AsyncMock(return_value={"status": "running", "progress": 0.5})
 
     handle = JobHandle(
         job_id=job_id,
@@ -575,9 +571,9 @@ def test_async_varco_client_satisfies_client_protocol():
     client = ItemClient("https://api.example.com")
     # Verify all protocol methods exist on the client
     for method_name in ("create", "read", "update", "patch", "delete", "list"):
-        assert callable(
-            getattr(client, method_name, None)
-        ), f"ItemClient missing protocol method '{method_name}'"
+        assert callable(getattr(client, method_name, None)), (
+            f"ItemClient missing protocol method '{method_name}'"
+        )
 
 
 # ── bind_clients ──────────────────────────────────────────────────────────────

@@ -49,9 +49,7 @@ class Resolved(Generic[T]):
     source: str
 
 
-def resolve_precedence(
-    candidates: Sequence[tuple[str, T | None]]
-) -> Resolved[T] | None:
+def resolve_precedence(candidates: Sequence[tuple[str, T | None]]) -> Resolved[T] | None:
     """
     Return the first non-``None`` candidate, wrapped with its source name.
 

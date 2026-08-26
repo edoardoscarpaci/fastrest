@@ -187,9 +187,7 @@ async def test_user_turn_content_is_raw_message():
     task_id = str(uuid4())
     message = {"role": "user", "parts": [{"type": "data", "data": {"text": "hello"}}]}
 
-    await adapter.handle_task(
-        {"id": task_id, "skill_id": "create_note", "message": message}
-    )
+    await adapter.handle_task({"id": task_id, "skill_id": "create_note", "message": message})
 
     turns = await store.get(task_id)
     assert turns[0].role == "user"
@@ -298,12 +296,8 @@ async def test_history_endpoint_returns_turns():
 
     task_id = str(uuid4())
     # Populate turns directly
-    await store.append(
-        task_id, ConversationTurn(role="user", content={"text": "hello"})
-    )
-    await store.append(
-        task_id, ConversationTurn(role="agent", content={"result": "ok"})
-    )
+    await store.append(task_id, ConversationTurn(role="user", content={"text": "hello"}))
+    await store.append(task_id, ConversationTurn(role="agent", content={"result": "ok"}))
 
     resp = http_client.get(f"/tasks/{task_id}/history")
     assert resp.status_code == 200

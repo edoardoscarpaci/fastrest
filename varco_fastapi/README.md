@@ -33,7 +33,7 @@ time.  Instead, you supply a prefix when loading from env:
 
 ```python
 payment = HttpConnectionSettings.from_env(prefix="PAYMENT_API_")
-notify  = HttpConnectionSettings.from_env(prefix="NOTIF_API_")
+notify = HttpConnectionSettings.from_env(prefix="NOTIF_API_")
 ```
 
 ### Plain connection (no auth, no TLS)
@@ -63,7 +63,7 @@ NOTIF_API_TIMEOUT=10.0
 
 ```python
 payment = HttpConnectionSettings.from_env(prefix="PAYMENT_API_")
-notify  = HttpConnectionSettings.from_env(prefix="NOTIF_API_")
+notify = HttpConnectionSettings.from_env(prefix="NOTIF_API_")
 
 async with httpx.AsyncClient(**payment.to_httpx_kwargs()) as client:
     await client.post("/charge", json={"amount": 9.99})
@@ -180,7 +180,7 @@ async with httpx.AsyncClient(**conn.to_httpx_kwargs()) as client:
 ### Bridge to `TrustStore` (legacy `ClientProfile`)
 
 ```python
-trust_store = conn.to_trust_store()   # None when ssl is not set
+trust_store = conn.to_trust_store()  # None when ssl is not set
 # use with ClientProfile.production(trust_store=trust_store)
 ```
 
@@ -215,6 +215,7 @@ actions, and auto-registers named tasks for `?with_async=true` recovery.
 ```python
 from varco_fastapi.router.presets import CRUDRouter
 
+
 class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
     _prefix = "/orders"
     _service = container.get(OrderService)  # AsyncService[Order, UUID, C, R, U]
@@ -232,8 +233,10 @@ visible to the type checker with zero per-subclass boilerplate (no cast, no hand
 ```python
 from varco_fastapi.router.endpoint import route
 
+
 class OrderService(AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
     async def cancel_order(self, order_id: UUID) -> None: ...
+
 
 class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
     _prefix = "/orders"
@@ -258,6 +261,7 @@ class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, O
   ```python
   from typing import cast
 
+
   class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
       _prefix = "/orders"
       _service = container.get(OrderService)
@@ -281,6 +285,7 @@ from varco_fastapi.router.endpoint import route
 from varco_fastapi.auth import JwtBearerAuth
 from varco_fastapi.auth.guard import require_scopes, require_roles, allow_anonymous
 
+
 class ReportRouter(GenericRouter):
     _prefix = "/reports"
     _auth = JwtBearerAuth(...)
@@ -298,6 +303,7 @@ class ReportRouter(GenericRouter):
     @route("GET", "/status", requires=allow_anonymous())
     async def status(self, ctx) -> dict:
         return {"ok": True}
+
 
 app = create_varco_app(routers=[ReportRouter])
 ```
@@ -328,8 +334,10 @@ from pydantic import BaseModel
 
 from varco_core.auth.base import AuthContext
 
+
 class SummaryFilter(BaseModel):
     since: str | None = None
+
 
 class ReportRouter(GenericRouter):
     _prefix = "/reports"
@@ -338,13 +346,13 @@ class ReportRouter(GenericRouter):
     @route("POST", "/{report_id}/summary", requires=require_scopes("reports:read"))
     async def summary(
         self,
-        report_id: int,                       # typed path param — coerced to int
-        ctx: AuthContext,                     # injected from _auth
+        report_id: int,  # typed path param — coerced to int
+        ctx: AuthContext,  # injected from _auth
         window: int = Query(30, ge=1, le=365),  # validated query param (422 on bad input)
-        filters: SummaryFilter = Body(...),   # Pydantic request body
-        repo: Repo = Depends(get_repo),       # arbitrary FastAPI dependency
-        request: Request = None,              # raw request if you want it
-    ) -> SummaryResponse:                     # → OpenAPI response model
+        filters: SummaryFilter = Body(...),  # Pydantic request body
+        repo: Repo = Depends(get_repo),  # arbitrary FastAPI dependency
+        request: Request = None,  # raw request if you want it
+    ) -> SummaryResponse:  # → OpenAPI response model
         ...
 ```
 
@@ -392,6 +400,7 @@ from varco_fastapi.auth.guard import require_token_profile
 # VARCO_JWT_PROFILE__INTERNAL__TOKEN_TYPE=system
 # VARCO_JWT_PROFILE__INTERNAL__ROLES=internal
 
+
 class MeshRouter(GenericRouter):
     _prefix = "/mesh"
     _auth = JwtBearerAuth(registry)
@@ -416,13 +425,15 @@ prefixes.
 ```python
 from varco_fastapi import create_composite_app, ServiceMount
 
-from orders_service.app import app as orders_app      # its own create_varco_app()
-from billing_service.app import app as billing_app     # its own container + DB
+from orders_service.app import app as orders_app  # its own create_varco_app()
+from billing_service.app import app as billing_app  # its own container + DB
 
-composite = create_composite_app([
-    ServiceMount("/orders", orders_app),
-    ServiceMount("/billing", billing_app),
-])
+composite = create_composite_app(
+    [
+        ServiceMount("/orders", orders_app),
+        ServiceMount("/billing", billing_app),
+    ]
+)
 # uvicorn composite:composite
 #   /orders/...   → orders service (own docs at /orders/docs)
 #   /billing/...  → billing service (own docs at /billing/docs)
@@ -442,10 +453,12 @@ is build-time env-name collisions. Either namespace env vars per service
 ```python
 from varco_fastapi import build_service
 
-orders = build_service("/orders", create_orders_app,
-                        env={"DATABASE_URL": "postgresql+asyncpg://.../orders"})
-billing = build_service("/billing", create_billing_app,
-                        env={"DATABASE_URL": "postgresql+asyncpg://.../billing"})
+orders = build_service(
+    "/orders", create_orders_app, env={"DATABASE_URL": "postgresql+asyncpg://.../orders"}
+)
+billing = build_service(
+    "/billing", create_billing_app, env={"DATABASE_URL": "postgresql+asyncpg://.../billing"}
+)
 composite = create_composite_app([orders, billing])
 ```
 

@@ -124,9 +124,7 @@ class InMemoryFilterVisitor(BinaryWalkingVisitor):
 
     # ── Comparison leaf ───────────────────────────────────────────────────────
 
-    def _visit_comparison(
-        self, node: ComparisonNode, args: Any = None, **kwargs: Any
-    ) -> Any:
+    def _visit_comparison(self, node: ComparisonNode, args: Any = None, **kwargs: Any) -> Any:
         """
         Build a predicate for a single field comparison.
 
@@ -179,10 +177,7 @@ class InMemoryFilterVisitor(BinaryWalkingVisitor):
                 # LIKE = case-insensitive substring match (SQL LIKE with wildcards
                 # is replaced here by a simple substring check — sufficient for
                 # this example and intuitive for REST API consumers).
-                return (
-                    expected is not None
-                    and str(expected).lower() in str(actual).lower()
-                )
+                return expected is not None and str(expected).lower() in str(actual).lower()
 
             if op == Operation.IN:
                 # expected is a list (enforced by ComparisonNode.__post_init__)

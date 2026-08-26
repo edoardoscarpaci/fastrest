@@ -872,9 +872,7 @@ class AbstractJobStore(ABC):
         for candidate in candidates:
             if candidate.run_at is not None and candidate.run_at > current:
                 continue
-            claimed = await self.try_claim(
-                candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl
-            )
+            claimed = await self.try_claim(candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl)
             if claimed is not None:
                 return claimed
         return None
@@ -1019,15 +1017,11 @@ class AbstractJobStore(ABC):
         Returns:
             Matching jobs, unordered.
         """
-        candidates = await self.list_by_status(
-            JobStatus.PENDING, limit=max(limit, 1000)
-        )
+        candidates = await self.list_by_status(JobStatus.PENDING, limit=max(limit, 1000))
         return [
             job
             for job in candidates
-            if job.run_at_tz is not None
-            and job.run_at is not None
-            and job.run_at < before
+            if job.run_at_tz is not None and job.run_at is not None and job.run_at < before
         ][:limit]
 
     async def renew(
@@ -1265,8 +1259,7 @@ class AbstractJobRunner(ABC):
         # misuse in this function raises.
         if run_at_wall is None:
             raise ValueError(
-                "enqueue() received tz= without run_at_wall= — a zoned "
-                "schedule requires both."
+                "enqueue() received tz= without run_at_wall= — a zoned schedule requires both."
             )
 
         from zoneinfo import ZoneInfo

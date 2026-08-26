@@ -382,13 +382,9 @@ async def test_execute_list_calls_client_list_with_params():
     mock_client.list = AsyncMock(return_value=[])
     adapter = MCPAdapter(OrderRouter, client=mock_client)
 
-    await adapter.execute(
-        "list_order", {"q": "status=active", "limit": 10, "offset": 0}
-    )
+    await adapter.execute("list_order", {"q": "status=active", "limit": 10, "offset": 0})
 
-    mock_client.list.assert_called_once_with(
-        q="status=active", sort=None, limit=10, offset=0
-    )
+    mock_client.list.assert_called_once_with(q="status=active", sort=None, limit=10, offset=0)
 
 
 async def test_execute_custom_route_calls_client_request():

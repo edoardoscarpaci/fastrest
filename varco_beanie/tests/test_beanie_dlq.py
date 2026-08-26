@@ -70,8 +70,7 @@ class TestBeanieDeadLetterQueueConstruction:
         with caplog.at_level(logging.WARNING):
             BeanieDeadLetterQueue(ttl_seconds=3600)
         assert any(
-            "data loss" in r.message.lower() or "ttl" in r.message.lower()
-            for r in caplog.records
+            "data loss" in r.message.lower() or "ttl" in r.message.lower() for r in caplog.records
         )
 
 

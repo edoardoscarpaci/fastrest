@@ -25,14 +25,17 @@ uv add varco-redis
 from varco_redis import RedisEventBus, RedisEventBusSettings
 from varco_core.event import BusEventProducer, EventConsumer, listen, Event
 
+
 # Define your events
 class OrderPlacedEvent(Event):
     __event_type__ = "order.placed"
     order_id: str
     total: float
 
+
 # Configure the bus
 settings = RedisEventBusSettings(url="redis://localhost:6379/0")
+
 
 async def main():
     async with RedisEventBus(settings) as bus:
@@ -46,6 +49,7 @@ async def main():
 
         # Give the Pub/Sub subscription time to establish
         import asyncio
+
         await asyncio.sleep(0.1)
 
         # --- Producer side ---
@@ -64,9 +68,9 @@ async def main():
 from varco_redis import RedisEventBusSettings
 
 settings = RedisEventBusSettings(
-    url="redis://redis.internal:6379/0",   # Redis connection URL
-    channel_prefix="prod:",               # optional — "orders" → "prod:orders"
-    socket_timeout=5.0,                   # seconds, None = no timeout
+    url="redis://redis.internal:6379/0",  # Redis connection URL
+    channel_prefix="prod:",  # optional — "orders" → "prod:orders"
+    socket_timeout=5.0,  # seconds, None = no timeout
 )
 ```
 
@@ -85,9 +89,9 @@ settings = RedisEventBusSettings(
 ```python
 # Explicit lifecycle
 bus = RedisEventBus(settings)
-await bus.start()    # connects to Redis, starts listener task
+await bus.start()  # connects to Redis, starts listener task
 # ... use bus ...
-await bus.stop()     # cancels listener, closes connection
+await bus.stop()  # cancels listener, closes connection
 
 # Context manager (recommended)
 async with RedisEventBus(settings) as bus:
@@ -118,15 +122,15 @@ from varco_redis.cache import RedisCache, RedisCacheSettings
 
 cache_settings = RedisCacheSettings(
     url="redis://localhost:6379/0",
-    key_prefix="myapp:",   # all keys stored as "myapp:<key>"
-    default_ttl=300,       # seconds; None = no expiry
+    key_prefix="myapp:",  # all keys stored as "myapp:<key>"
+    default_ttl=300,  # seconds; None = no expiry
 )
 
 async with RedisCache(cache_settings) as cache:
     await cache.set("user:42", {"name": "Alice"})
-    user = await cache.get("user:42")    # returns dict or None
+    user = await cache.get("user:42")  # returns dict or None
     await cache.delete("user:42")
-    await cache.clear()                  # removes all "myapp:*" keys
+    await cache.clear()  # removes all "myapp:*" keys
 ```
 
 ---
@@ -161,7 +165,7 @@ settings = RedisCacheSettings(
 from varco_core.cache import InMemoryCache, LayeredCache, TTLStrategy
 from varco_redis.cache import RedisCache, RedisCacheSettings
 
-l1 = InMemoryCache(strategy=TTLStrategy(60))       # fast in-process layer
+l1 = InMemoryCache(strategy=TTLStrategy(60))  # fast in-process layer
 l2 = RedisCache(RedisCacheSettings(key_prefix="app:"))  # shared Redis layer
 
 async with LayeredCache(l1, l2, promote_ttl=60) as cache:
@@ -196,12 +200,12 @@ async with (
         cache,
         namespace="posts",
         default_ttl=300,
-        bus=bus,                           # publish invalidation events
-        bus_channel="posts.invalidations", # other nodes subscribe here
+        bus=bus,  # publish invalidation events
+        bus_channel="posts.invalidations",  # other nodes subscribe here
     )
 
-    post = await cached.get(42)           # cached
-    posts = await cached.list()           # cached
+    post = await cached.get(42)  # cached
+    posts = await cached.list()  # cached
     await cached.update(42, {"title": "New"})  # invalidates + publishes event
 ```
 
@@ -220,6 +224,7 @@ from varco_redis.rate_limit import RedisRateLimiter
 from varco_core.resilience import RateLimitConfig
 
 limiter = RedisRateLimiter(redis_client, RateLimitConfig(rate=100, period=1.0))
+
 
 @rate_limit(limiter)
 async def call_external() -> None: ...
@@ -250,6 +255,7 @@ db_bulkhead = RedisBulkhead(BulkheadConfig(max_concurrent=10, max_wait=0.5))
 await db_bulkhead.connect()
 
 result = await db_bulkhead.call(fetch_user, user_id)
+
 
 @db_bulkhead.protect
 async def fetch_order(order_id: str) -> Order: ...
@@ -426,7 +432,8 @@ await container.ainstall(RedisEventBusConfiguration)
 
 # After (2.0)
 from varco_redis.di import bootstrap
-bootstrap(container)            # or: container.scan("varco_redis", recursive=True)
+
+bootstrap(container)  # or: container.scan("varco_redis", recursive=True)
 ```
 
 The opt-in cache (`RedisCacheConfiguration`, `RedisLayeredCacheConfiguration`)

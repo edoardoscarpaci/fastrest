@@ -350,7 +350,8 @@ class SAInboxRepository(InboxRepository):
             .where(
                 InboxEntryModel.entry_id == entry_id,
                 InboxEntryModel.processed_at.is_(None),
-            ).values(processed_at=now)
+            )
+            .values(processed_at=now)
             # Avoid loading the ORM object into the identity map — we only
             # need the UPDATE to execute, not the updated row's state.
             .execution_options(synchronize_session=False)
@@ -390,7 +391,8 @@ class SAInboxRepository(InboxRepository):
             # Filter on NULL processed_at — the sentinel for unprocessed entries.
             .where(InboxEntryModel.processed_at.is_(None))
             # Oldest-first — FIFO replay order within a channel.
-            .order_by(InboxEntryModel.received_at.asc()).limit(limit)
+            .order_by(InboxEntryModel.received_at.asc())
+            .limit(limit)
         )
         result = await self._session.execute(stmt)
         rows = result.scalars().all()
@@ -554,7 +556,8 @@ class SAPollerInboxRepository(InboxRepository):
                 .where(
                     InboxEntryModel.entry_id == entry_id,
                     InboxEntryModel.processed_at.is_(None),
-                ).values(processed_at=now)
+                )
+                .values(processed_at=now)
                 # No ORM state sync needed — UPDATE only; no result row returned.
                 .execution_options(synchronize_session=False)
             )
@@ -562,8 +565,7 @@ class SAPollerInboxRepository(InboxRepository):
             # Commit here — poller has no session context to commit later.
             await session.commit()
         _logger.debug(
-            "SAPollerInboxRepository.mark_processed: committed optimistic update "
-            "for entry_id=%s",
+            "SAPollerInboxRepository.mark_processed: committed optimistic update for entry_id=%s",
             entry_id,
         )
 

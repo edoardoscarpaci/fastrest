@@ -37,9 +37,7 @@ class TestJwtBearerAuthRequiresAudienceByDefault:
         # Message must name both the env var and the opt-out, per Step 27.
         message = str(exc.value)
         assert "VARCO_JWT_AUDIENCE" in message
-        assert (
-            "allow_any_audience" in message or "VARCO_JWT_ALLOW_ANY_AUDIENCE" in message
-        )
+        assert "allow_any_audience" in message or "VARCO_JWT_ALLOW_ANY_AUDIENCE" in message
 
     def test_allow_any_audience_true_constructs_and_logs_warning(
         self,

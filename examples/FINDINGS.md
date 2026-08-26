@@ -371,8 +371,8 @@ connects to Redis it immediately calls `pubsub.subscribe(*_subscribed_channels)`
 This means the correct test fixture ordering is:
 
 ```python
-consumer._setup()   # register_to(bus) — subscription stored in _subscribed_channels
-await bus.start()   # connects, subscribes to channels, starts listener task
+consumer._setup()  # register_to(bus) — subscription stored in _subscribed_channels
+await bus.start()  # connects, subscribes to channels, starts listener task
 ```
 
 If you call `_setup()` **after** `start()`, `subscribe()` calls
@@ -613,8 +613,8 @@ raises `ValueError: cannot retire the active signing key`.
 **Rule**: always `rotate()` to the new key first, then `retire()` the old one:
 
 ```python
-multi.rotate(new_authority)   # svc:B becomes active signer
-multi.retire("svc:A")         # safe — svc:B is now signing
+multi.rotate(new_authority)  # svc:B becomes active signer
+multi.retire("svc:A")  # safe — svc:B is now signing
 ```
 
 **Severity**: Non-breaking (correct design — enforces the invariant that there is always an
@@ -688,6 +688,7 @@ second create with `400 Bad Request: consumer already exists`.
 
 ```python
 from uuid import uuid4
+
 durable = f"test-{uuid4().hex[:8]}"
 settings = NatsEventBusSettings(..., durable_name=durable)
 ```
@@ -728,13 +729,16 @@ The only concrete event base class is `Event` (a frozen Pydantic `BaseModel`):
 # ❌ Wrong — DomainEvent does not exist
 from varco_core.event.base import DomainEvent
 
+
 @dataclass(frozen=True)
 class OrderCreatedEvent(DomainEvent):
     event_id: UUID = field(default_factory=uuid4)
     order_id: str = ""
 
+
 # ✅ Correct — subclass the Pydantic Event; event_id is already inherited
 from varco_core.event import Event
+
 
 class OrderCreatedEvent(Event):
     __event_type__ = "order.created"

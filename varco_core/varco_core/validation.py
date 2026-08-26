@@ -225,9 +225,7 @@ class ValidationResult:
             raise ServiceValidationError(err.message, err.field)
 
         # Multiple errors — join into one message; no single field to blame
-        joined = "; ".join(
-            f"{e.field}: {e.message}" if e.field else e.message for e in self.errors
-        )
+        joined = "; ".join(f"{e.field}: {e.message}" if e.field else e.message for e in self.errors)
         raise ServiceValidationError(f"Multiple validation errors: {joined}")
 
     @staticmethod
@@ -281,9 +279,7 @@ class ValidationResult:
     def __repr__(self) -> str:
         if self.is_valid:
             return "ValidationResult(ok)"
-        error_strs = [
-            f"{e.field}: {e.message}" if e.field else e.message for e in self.errors
-        ]
+        error_strs = [f"{e.field}: {e.message}" if e.field else e.message for e in self.errors]
         return f"ValidationResult(errors=[{', '.join(error_strs)!r}])"
 
 

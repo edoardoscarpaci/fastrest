@@ -258,9 +258,7 @@ class SSLConfig(BaseModel):
         # Step 3: load ca_folder
         if self.ca_folder is not None:
             folder = Path(self.ca_folder)
-            for cert_path in sorted(
-                list(folder.glob("*.pem")) + list(folder.glob("*.crt"))
-            ):
+            for cert_path in sorted(list(folder.glob("*.pem")) + list(folder.glob("*.crt"))):
                 ctx.load_verify_locations(cafile=str(cert_path))
 
         # Step 4: load explicit ca_cert

@@ -276,7 +276,7 @@ class BeanieAdapter(AsyncAdapter):
         # created before the loop starts raise RuntimeError), and keeps this
         # adapter free of a direct motor import.
         _logger.debug(
-            "BeanieAdapter.create_table: calling init_beanie " "db_url=%s db_name=%s",
+            "BeanieAdapter.create_table: calling init_beanie db_url=%s db_name=%s",
             self._db_url,
             self._db_name,
         )
@@ -504,9 +504,7 @@ class BeanieAdapter(AsyncAdapter):
     # ── Repr ──────────────────────────────────────────────────────────────────
 
     def __repr__(self) -> str:
-        return (
-            f"BeanieAdapter(" f"db_url={self._db_url!r}, " f"db_name={self._db_name!r})"
-        )
+        return f"BeanieAdapter(db_url={self._db_url!r}, db_name={self._db_name!r})"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

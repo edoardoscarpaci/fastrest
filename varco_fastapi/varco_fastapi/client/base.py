@@ -211,20 +211,14 @@ class ClientProfile:
         timeout = float(os.environ.get("VARCO_CLIENT_TIMEOUT", "30"))
         retry_max = int(os.environ.get("VARCO_CLIENT_RETRY_MAX", "0"))
         retry_delay = float(os.environ.get("VARCO_CLIENT_RETRY_DELAY", "0.5"))
-        otel_enabled = (
-            os.environ.get("VARCO_CLIENT_OTEL_ENABLED", "true").lower() == "true"
-        )
+        otel_enabled = os.environ.get("VARCO_CLIENT_OTEL_ENABLED", "true").lower() == "true"
 
         mw: list[AbstractClientMiddleware] = []
         if otel_enabled:
             mw.append(OTelClientMiddleware())
         mw.append(CorrelationIdMiddleware())
         if retry_max > 0:
-            mw.append(
-                RetryMiddleware(
-                    RetryPolicy(max_attempts=retry_max, base_delay=retry_delay)
-                )
-            )
+            mw.append(RetryMiddleware(RetryPolicy(max_attempts=retry_max, base_delay=retry_delay)))
 
         return cls(middleware=tuple(mw), timeout=timeout)
 
@@ -775,9 +769,7 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
             resolved_profile = resolved_profile.with_timeout(timeout)
 
         self._resolved_profile = resolved_profile
-        self._proxy_url: str | None = (
-            _configurator.get_proxy() if _configurator else None
-        )
+        self._proxy_url: str | None = _configurator.get_proxy() if _configurator else None
 
         # httpx.AsyncClient is created lazily (or in __aenter__)
         self._client: httpx.AsyncClient | None = None
@@ -982,14 +974,8 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
 
     def __repr__(self) -> str:
         """Return a concise string representation for debugging."""
-        router_name = (
-            getattr(self._router_class, "__name__", "?") if self._router_class else "?"
-        )
-        return (
-            f"{type(self).__name__}("
-            f"router={router_name}, "
-            f"url={self._base_url!r})"
-        )
+        router_name = getattr(self._router_class, "__name__", "?") if self._router_class else "?"
+        return f"{type(self).__name__}(router={router_name}, url={self._base_url!r})"
 
 
 # Public alias — VarcoClient[R] works identically to AsyncVarcoClient[R]

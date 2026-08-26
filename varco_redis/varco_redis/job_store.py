@@ -115,9 +115,7 @@ def _job_to_json(job: Job) -> str:
             "auth_snapshot": job.auth_snapshot,
             "request_token": job.request_token,
             "metadata": job.metadata,
-            "task_payload": (
-                job.task_payload.to_dict() if job.task_payload is not None else None
-            ),
+            "task_payload": (job.task_payload.to_dict() if job.task_payload is not None else None),
             "run_at": _dt_to_str(job.run_at),
             "attempt": job.attempt,
             "max_attempts": job.max_attempts,
@@ -292,9 +290,7 @@ class RedisJobStore(AbstractJobStore):
             async with self._client.pipeline(transaction=True) as pipe:
                 await pipe.watch(job_key)
                 existing_raw = await pipe.get(job_key)
-                current_job = (
-                    _json_to_job(existing_raw) if existing_raw is not None else None
-                )
+                current_job = _json_to_job(existing_raw) if existing_raw is not None else None
                 if current_job is None or current_job.lease_epoch != expected_epoch:
                     await pipe.reset()
                     raise StaleLeaseError(
@@ -371,9 +367,7 @@ class RedisJobStore(AbstractJobStore):
         try:
             return _json_to_job(raw)
         except Exception as exc:
-            _logger.error(
-                "RedisJobStore.get: failed to deserialize job_id=%s: %s", job_id, exc
-            )
+            _logger.error("RedisJobStore.get: failed to deserialize job_id=%s: %s", job_id, exc)
             return None
 
     async def list_by_status(
@@ -639,9 +633,7 @@ class RedisJobStore(AbstractJobStore):
                 )
             await self.save(running_job)
 
-            _logger.debug(
-                "RedisJobStore.try_claim: claimed job_id=%s → RUNNING", job_id
-            )
+            _logger.debug("RedisJobStore.try_claim: claimed job_id=%s → RUNNING", job_id)
             return running_job
 
         except Exception:
@@ -682,9 +674,7 @@ class RedisJobStore(AbstractJobStore):
         for candidate in candidates:
             if candidate.run_at is not None and candidate.run_at > current:
                 continue
-            claimed = await self.try_claim(
-                candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl
-            )
+            claimed = await self.try_claim(candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl)
             if claimed is not None:
                 return claimed
         return None

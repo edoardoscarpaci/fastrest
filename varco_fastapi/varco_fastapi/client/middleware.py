@@ -67,9 +67,7 @@ class PreparedRequest:
     url: str
     headers: dict[str, str] = field(default_factory=dict, compare=False, hash=False)
     body: bytes | None = None
-    query_params: dict[str, str] = field(
-        default_factory=dict, compare=False, hash=False
-    )
+    query_params: dict[str, str] = field(default_factory=dict, compare=False, hash=False)
 
     def with_header(self, key: str, value: str) -> PreparedRequest:
         """
@@ -374,9 +372,7 @@ class JwtMiddleware(AbstractClientMiddleware):
 
     async def _mint_token(self) -> str:
         """Sign a new JWT using the authority."""
-        builder = (
-            self._authority.token().subject(self._subject).expires_in(self._expires_in)
-        )
+        builder = self._authority.token().subject(self._subject).expires_in(self._expires_in)
         if self._audience:
             builder = builder.audience(self._audience)
         for key, value in self._extra_claims.items():

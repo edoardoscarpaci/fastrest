@@ -322,9 +322,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         # defensive consistency with TracingMiddleware's pattern.
         self._otel_enabled = _otel_available()
         if not self._otel_enabled:
-            _logger.debug(
-                "MetricsMiddleware: opentelemetry SDK not installed — metrics disabled."
-            )
+            _logger.debug("MetricsMiddleware: opentelemetry SDK not installed — metrics disabled.")
 
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         """
@@ -385,15 +383,11 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                 # Status code as string per OTel HTTP semconv
                 "http.response.status_code": str(status_code),
             }
-            _get_duration_histogram(self._meter_name).record(
-                elapsed, attributes=duration_attrs
-            )
+            _get_duration_histogram(self._meter_name).record(elapsed, attributes=duration_attrs)
 
             # Decrement active counter — must balance the pre-call increment.
             # Same attribute set as the increment (method only, no route).
-            _get_active_requests(self._meter_name).add(
-                -1, {"http.request.method": method}
-            )
+            _get_active_requests(self._meter_name).add(-1, {"http.request.method": method})
 
             # Record request body size if Content-Length is present.
             # Many GET requests have no body — skip gracefully if absent.

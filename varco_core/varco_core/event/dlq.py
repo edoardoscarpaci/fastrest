@@ -472,12 +472,7 @@ class AbstractDeadLetterQueue(ABC):
             ValueError: no predicate at all was given — refuses to silently
                 delete every entry (mirrors ``AbstractJobStore.delete_where``).
         """
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "
@@ -501,9 +496,7 @@ class AbstractDeadLetterQueue(ABC):
         Raises:
             NotImplementedError: unless overridden.
         """
-        raise NotImplementedError(
-            f"{type(self).__name__} does not support count_by_channel()."
-        )
+        raise NotImplementedError(f"{type(self).__name__} does not support count_by_channel().")
 
 
 # ── InMemoryDeadLetterQueue ───────────────────────────────────────────────────
@@ -553,9 +546,7 @@ class InMemoryDeadLetterQueue(AbstractDeadLetterQueue):
             ValueError: ``max_size`` < 1.
         """
         if max_size < 1:
-            raise ValueError(
-                f"InMemoryDeadLetterQueue.max_size must be ≥ 1, got {max_size}."
-            )
+            raise ValueError(f"InMemoryDeadLetterQueue.max_size must be ≥ 1, got {max_size}.")
         # deque with maxlen auto-evicts oldest entries when full — no manual
         # size management needed.
         self._entries: deque[DeadLetterEntry] = deque(maxlen=max_size)
@@ -715,12 +706,7 @@ class InMemoryDeadLetterQueue(AbstractDeadLetterQueue):
         limit: int | None = None,
     ) -> int:
         """Bulk delete matching entries directly from the deque."""
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "
@@ -760,8 +746,4 @@ class InMemoryDeadLetterQueue(AbstractDeadLetterQueue):
         return counts
 
     def __repr__(self) -> str:
-        return (
-            f"InMemoryDeadLetterQueue("
-            f"entries={len(self._entries)}, "
-            f"max_size={self._max_size})"
-        )
+        return f"InMemoryDeadLetterQueue(entries={len(self._entries)}, max_size={self._max_size})"

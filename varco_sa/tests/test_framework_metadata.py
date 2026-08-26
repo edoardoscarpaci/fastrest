@@ -51,9 +51,7 @@ def _walk_module_level_metadata_objects() -> list[MetaData]:
     collected: list[MetaData] = []
     seen_ids: set[int] = set()
 
-    for _finder, name, _ispkg in pkgutil.walk_packages(
-        varco_sa.__path__, prefix="varco_sa."
-    ):
+    for _finder, name, _ispkg in pkgutil.walk_packages(varco_sa.__path__, prefix="varco_sa."):
         if "tests" in name:
             continue
         module = importlib.import_module(name)

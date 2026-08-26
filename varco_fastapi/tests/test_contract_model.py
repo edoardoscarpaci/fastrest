@@ -31,12 +31,8 @@ class TestServiceContractRoundTrip:
                     method="POST",
                     path="/orders/{order_id}/cancel",
                     params=(
-                        ParamContract(
-                            name="order_id", kind="path", schema={"type": "string"}
-                        ),
-                        ParamContract(
-                            name="limit", kind="query", schema={"type": "integer"}
-                        ),
+                        ParamContract(name="order_id", kind="path", schema={"type": "string"}),
+                        ParamContract(name="limit", kind="query", schema={"type": "integer"}),
                     ),
                     crud_action=None,
                 ),
@@ -89,9 +85,7 @@ class TestServiceContractVersioning:
         with caplog.at_level(logging.WARNING):
             contract = ServiceContract.from_dict(data)
         assert contract.service_name == "orders"
-        assert any(
-            "999" in r.message or "minor" in r.message.lower() for r in caplog.records
-        )
+        assert any("999" in r.message or "minor" in r.message.lower() for r in caplog.records)
 
 
 class TestServiceContractFrozen:
@@ -127,9 +121,7 @@ class TestServiceContractRouteLookup:
             ServiceContract,
         )
 
-        route_c = RouteContract(
-            name="cancel", method="POST", path="/orders/{id}/cancel"
-        )
+        route_c = RouteContract(name="cancel", method="POST", path="/orders/{id}/cancel")
         contract = ServiceContract(
             contract_version=CONTRACT_VERSION,
             service_name="orders",
@@ -147,9 +139,7 @@ class TestServiceContractRouteLookup:
         contract = ServiceContract(
             contract_version=CONTRACT_VERSION,
             service_name="orders",
-            routes=(
-                RouteContract(name="cancel", method="POST", path="/orders/{id}/cancel"),
-            ),
+            routes=(RouteContract(name="cancel", method="POST", path="/orders/{id}/cancel"),),
         )
         with pytest.raises(KeyError, match="cancel"):
             contract.route("does-not-exist")

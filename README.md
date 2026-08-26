@@ -187,6 +187,7 @@ from typing import Annotated
 from varco_core import AuditedDomainModel
 from varco_core.meta import FieldHint, PrimaryKey, PKStrategy, pk_field
 
+
 class User(AuditedDomainModel):
     pk: Annotated[int, PrimaryKey(PKStrategy.INT_AUTO)] = pk_field()
     name: Annotated[str, FieldHint(max_length=100)]
@@ -201,10 +202,12 @@ Inherit from one of the soft-delete bases to get a `deleted_at: datetime | None`
 ```python
 from varco_core import SoftDeleteDomainModel, SoftDeleteAuditedDomainModel
 
+
 # Simple — pk + deleted_at
 class ArchivedPost(SoftDeleteDomainModel):
     pk: Annotated[int, PrimaryKey(PKStrategy.INT_AUTO)] = pk_field()
     title: str
+
 
 # Audited — pk + created_at + updated_at + deleted_at
 class Post(SoftDeleteAuditedDomainModel):
@@ -218,6 +221,7 @@ Or mix in `SoftDeleteMixin` yourself onto any existing hierarchy:
 ```python
 from varco_core import SoftDeleteMixin, VersionedDomainModel
 
+
 class Document(SoftDeleteMixin, VersionedDomainModel):
     pk: Annotated[int, PrimaryKey(PKStrategy.INT_AUTO)] = pk_field()
     content: str
@@ -230,6 +234,7 @@ The `SoftDeleteService` mixin (see [below](#softdeleteservice)) automatically ex
 ```python
 from varco_core import TenantDomainModel, TenantAuditedDomainModel
 
+
 class Post(TenantAuditedDomainModel):
     pk: Annotated[int, PrimaryKey(PKStrategy.INT_AUTO)] = pk_field()
     tenant_id: Annotated[str, FieldHint(index=True, nullable=False)]
@@ -240,6 +245,7 @@ Or add `TenantMixin` to any base:
 
 ```python
 from varco_core import TenantMixin, SoftDeleteAuditedDomainModel
+
 
 class Post(TenantMixin, SoftDeleteAuditedDomainModel):
     pk: Annotated[int, PrimaryKey(PKStrategy.INT_AUTO)] = pk_field()
@@ -252,10 +258,11 @@ class Post(TenantMixin, SoftDeleteAuditedDomainModel):
 ```python
 from varco_core import DomainMigrator
 
+
 class UserMigrator(DomainMigrator):
     steps = [
-        lambda data: {**data, "active": True},                       # v0 → v1
-        lambda data: {**data, "email": data["email"].lower()},       # v1 → v2
+        lambda data: {**data, "active": True},  # v0 → v1
+        lambda data: {**data, "email": data["email"].lower()},  # v1 → v2
     ]
 ```
 
@@ -265,8 +272,13 @@ class UserMigrator(DomainMigrator):
 
 ```python
 from varco_core.meta import (
-    FieldHint, PrimaryKey, PKStrategy, ForeignKey,
-    UniqueConstraint, CheckConstraint, pk_field,
+    FieldHint,
+    PrimaryKey,
+    PKStrategy,
+    ForeignKey,
+    UniqueConstraint,
+    CheckConstraint,
+    pk_field,
 )
 ```
 
@@ -295,6 +307,7 @@ class Post(AuditedDomainModel):
 ```python
 from varco_core.meta import UniqueConstraint, CheckConstraint
 
+
 class Subscription(AuditedDomainModel):
     __constraints__ = [
         UniqueConstraint("user_id", "plan_id", name="uq_user_plan"),
@@ -319,13 +332,13 @@ from varco_core import AsyncRepository, AsyncUnitOfWork
 
 ```python
 # All methods are async
-await repo.find_by_id(pk)            # D | None
-await repo.find_all()                # list[D]
-await repo.save(entity)              # D  (INSERT or UPDATE)
+await repo.find_by_id(pk)  # D | None
+await repo.find_all()  # list[D]
+await repo.save(entity)  # D  (INSERT or UPDATE)
 await repo.delete(entity)
-await repo.find_by_query(params)     # list[D]
-await repo.count(params)             # int
-await repo.exists(pk)                # bool  — lightweight, no ORM hydration
+await repo.find_by_query(params)  # list[D]
+await repo.count(params)  # int
+await repo.exists(pk)  # bool  — lightweight, no ORM hydration
 async for entity in repo.stream_by_query(params):  # AsyncIterator[D]
     process(entity)
 ```
@@ -334,6 +347,7 @@ async for entity in repo.stream_by_query(params):  # AsyncIterator[D]
 
 ```python
 from varco_core import AsyncRepository
+
 
 class UserRepository(AsyncRepository[User, int]):
     async def find_active(self) -> list[User]:
@@ -377,10 +391,12 @@ class UserCreate(CreateDTO):
     name: str
     email: str
 
+
 class UserRead(ReadDTO):
     name: str
     email: str
     active: bool
+
 
 class UserUpdate(UpdateDTO):
     name: str | None = None
@@ -393,9 +409,10 @@ class UserUpdate(UpdateDTO):
 class TagUpdate(UpdateDTO):
     tags: list[str] | None = None
 
+
 patch = TagUpdate(tags=["python"], op=UpdateOperation.EXTEND)  # append
-patch = TagUpdate(tags=["old"],    op=UpdateOperation.REMOVE)  # remove
-patch = TagUpdate(tags=["new"],    op=UpdateOperation.REPLACE) # overwrite (default)
+patch = TagUpdate(tags=["old"], op=UpdateOperation.REMOVE)  # remove
+patch = TagUpdate(tags=["new"], op=UpdateOperation.REPLACE)  # overwrite (default)
 ```
 
 ---
@@ -408,8 +425,8 @@ patch = TagUpdate(tags=["new"],    op=UpdateOperation.REPLACE) # overwrite (defa
 from varco_core.assembler import AbstractDTOAssembler
 from dataclasses import replace
 
-class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
 
+class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     def to_domain(self, dto: CreatePostDTO) -> Post:
         return Post(title=dto.title, body=dto.body)
 
@@ -426,17 +443,19 @@ class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, Updat
         return replace(
             entity,
             title=dto.title if dto.title is not None else entity.title,
-            body=dto.body   if dto.body  is not None else entity.body,
+            body=dto.body if dto.body is not None else entity.body,
         )
 ```
 
 The shorthand `Assembler` alias saves typing in service `__init__` signatures:
 
 ```python
-from varco_core import Assembler   # TypeAlias for AbstractDTOAssembler
+from varco_core import Assembler  # TypeAlias for AbstractDTOAssembler
 
-def __init__(self, assembler: Inject[Assembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]]):
-    ...
+
+def __init__(
+    self, assembler: Inject[Assembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]]
+): ...
 ```
 
 ---
@@ -468,19 +487,19 @@ from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AbstractAuthorizer
 from providify import Inject, Singleton
 
+
 @Singleton
-class PostService(
-    TenantAwareService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class PostService(TenantAwareService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     def __init__(
         self,
         uow_provider: Inject[IUoWProvider],
-        authorizer:   Inject[AbstractAuthorizer],
-        assembler:    Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
+        authorizer: Inject[AbstractAuthorizer],
+        assembler: Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
     ) -> None:
         super().__init__(uow_provider=uow_provider, authorizer=authorizer, assembler=assembler)
 
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
 ```
 
 What the hooks inject:
@@ -494,8 +513,10 @@ By default the field name is `"tenant_id"`. Override `_tenant_field` to use a di
 
 ```python
 class PostService(TenantAwareService[Post, ...]):
-    _tenant_field = "org_id"   # uses Post.org_id instead of Post.tenant_id
-    def _get_repo(self, uow): return uow.posts
+    _tenant_field = "org_id"  # uses Post.org_id instead of Post.tenant_id
+
+    def _get_repo(self, uow):
+        return uow.posts
 ```
 
 ### SoftDeleteService
@@ -505,12 +526,12 @@ Replaces physical deletion with a `deleted_at` timestamp and excludes soft-delet
 ```python
 from varco_core import SoftDeleteService
 
+
 @Singleton
-class PostService(
-    SoftDeleteService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class PostService(SoftDeleteService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     def __init__(self, uow_provider, authorizer, assembler): ...
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
 ```
 
 Extra methods beyond the standard CRUD:
@@ -541,7 +562,8 @@ class PostService(
     AsyncService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO],
 ):
     def __init__(self, uow_provider, authorizer, assembler): ...
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
 ```
 
 MRO: `PostService → TenantAwareService → SoftDeleteService → AsyncService`
@@ -619,6 +641,7 @@ Use `ServiceProtocol` to type-hint HTTP handlers or adapters without coupling to
 ```python
 from varco_core import ServiceProtocol
 
+
 async def list_handler(
     service: ServiceProtocol[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO],
     params: QueryParams,
@@ -645,21 +668,24 @@ async def list_handler(
 ```python
 from providify import Singleton, DIContainer
 
+
 @Singleton
-class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
-    ...
+class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]): ...
+
 
 @Singleton
 class PostService(AsyncService[Post, int, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     def __init__(
         self,
         uow_provider: Inject[IUoWProvider],
-        authorizer:   Inject[AbstractAuthorizer],
-        assembler:    Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
+        authorizer: Inject[AbstractAuthorizer],
+        assembler: Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
     ) -> None:
         super().__init__(uow_provider=uow_provider, authorizer=authorizer, assembler=assembler)
 
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
+
 
 container = DIContainer()
 container.register(PostAssembler)
@@ -678,10 +704,10 @@ container.register(PostService)
 from varco_core.auth import Action
 
 Action.CREATE  # "create"
-Action.READ    # "read"
+Action.READ  # "read"
 Action.UPDATE  # "update"
 Action.DELETE  # "delete"
-Action.LIST    # "list"
+Action.LIST  # "list"
 
 Action.READ == "read"  # True
 ```
@@ -691,9 +717,9 @@ Action.READ == "read"  # True
 ```python
 from varco_core.auth import ResourceGrant, Action
 
-ResourceGrant("posts",        frozenset({Action.LIST, Action.CREATE, Action.READ}))
+ResourceGrant("posts", frozenset({Action.LIST, Action.CREATE, Action.READ}))
 ResourceGrant("posts:abc123", frozenset({Action.UPDATE, Action.DELETE}))
-ResourceGrant("*",            frozenset(Action))   # wildcard — admin
+ResourceGrant("*", frozenset(Action))  # wildcard — admin
 ```
 
 ### AuthContext
@@ -705,25 +731,25 @@ ctx = AuthContext(
     user_id="usr_123",
     roles=frozenset({"editor"}),
     grants=(
-        ResourceGrant("posts",        frozenset({Action.LIST, Action.READ})),
+        ResourceGrant("posts", frozenset({Action.LIST, Action.READ})),
         ResourceGrant("posts:abc123", frozenset({Action.UPDATE, Action.DELETE})),
     ),
-    metadata={"tenant_id": "acme"},   # arbitrary bag — used by TenantAwareService
+    metadata={"tenant_id": "acme"},  # arbitrary bag — used by TenantAwareService
 )
 
-ctx.is_anonymous()                    # False
-ctx.has_role("editor")                # True
-ctx.can(Action.READ,   "posts")       # True  — type-level grant
-ctx.can(Action.UPDATE, "posts")       # False — no type-level UPDATE
-ctx.can(Action.UPDATE, "posts:abc123") # True  — instance-level grant
+ctx.is_anonymous()  # False
+ctx.has_role("editor")  # True
+ctx.can(Action.READ, "posts")  # True  — type-level grant
+ctx.can(Action.UPDATE, "posts")  # False — no type-level UPDATE
+ctx.can(Action.UPDATE, "posts:abc123")  # True  — instance-level grant
 ```
 
 Anonymous (unauthenticated) caller:
 
 ```python
-ctx = AuthContext()           # user_id=None, no grants
-ctx.is_anonymous()            # True
-ctx.can(Action.READ, "posts") # False
+ctx = AuthContext()  # user_id=None, no grants
+ctx.is_anonymous()  # True
+ctx.can(Action.READ, "posts")  # False
 ```
 
 ### AbstractAuthorizer
@@ -731,6 +757,7 @@ ctx.can(Action.READ, "posts") # False
 ```python
 from varco_core.auth import AbstractAuthorizer, Action, AuthContext, Resource
 from varco_core.exception.service import ServiceAuthorizationError
+
 
 class AppAuthorizer(AbstractAuthorizer):
     async def authorize(self, ctx: AuthContext, action: Action, resource: Resource) -> None:
@@ -758,6 +785,7 @@ Checks `ctx.can(action, resource_key)`. The resource key is derived as `"posts"`
 ```python
 from varco_core import GrantBasedAuthorizer
 
+
 @Singleton
 class AppAuthorizer(GrantBasedAuthorizer):
     def _resource_key(self, entity_type, entity=None) -> str:
@@ -774,9 +802,10 @@ Grants collection ops (LIST, CREATE) to everyone; instance ops (GET, UPDATE, DEL
 ```python
 from varco_core import OwnershipAuthorizer
 
+
 @Singleton
 class AppAuthorizer(OwnershipAuthorizer):
-    _owner_field = "author_id"   # default is "owner_id"
+    _owner_field = "author_id"  # default is "owner_id"
 
     # Override to customise collection-level behaviour (default: allow all)
     async def _check_collection(self, ctx, action, resource):
@@ -792,10 +821,11 @@ Grants actions based on `ctx.roles` and a static permission table:
 from varco_core import RoleBasedAuthorizer
 from varco_core.auth import Action
 
+
 @Singleton
 class AppAuthorizer(RoleBasedAuthorizer):
     role_permissions = {
-        "admin":  frozenset(Action),                                      # all actions
+        "admin": frozenset(Action),  # all actions
         "editor": frozenset({Action.READ, Action.LIST, Action.UPDATE}),
         "viewer": frozenset({Action.READ, Action.LIST}),
     }
@@ -812,8 +842,9 @@ from varco_core.base_authorizer import BaseAuthorizer
 container.scan("varco_core.base_authorizer")
 
 # Production guard
-assert not isinstance(container.get(AbstractAuthorizer), BaseAuthorizer), \
+assert not isinstance(container.get(AbstractAuthorizer), BaseAuthorizer), (
     "No real authorizer registered — refusing to start"
+)
 ```
 
 ---
@@ -825,8 +856,8 @@ assert not isinstance(container.get(AbstractAuthorizer), BaseAuthorizer), \
 ```python
 from varco_core import FastrestErrorCodes, ErrorCode
 
-FastrestErrorCodes.NOT_FOUND.code           # "FASTREST_001"
-FastrestErrorCodes.NOT_FOUND.http_status    # 404
+FastrestErrorCodes.NOT_FOUND.code  # "FASTREST_001"
+FastrestErrorCodes.NOT_FOUND.http_status  # 404
 FastrestErrorCodes.NOT_FOUND.default_message  # "The requested resource was not found."
 
 list(FastrestErrorCodes)  # all built-in codes — iterable because it's an Enum
@@ -849,6 +880,7 @@ from varco_core.exception.service import ServiceException
 from varco_core.exception.http import error_message_for
 
 app = FastAPI()
+
 
 @app.exception_handler(ServiceException)
 async def service_error_handler(request: Request, exc: ServiceException):
@@ -884,7 +916,9 @@ Register app-specific codes at startup. They take precedence over built-in codes
 from varco_core import ErrorCode, register_error_code
 from varco_core.exception.service import ServiceException
 
+
 class QuotaExceededError(ServiceException): ...
+
 
 register_error_code(
     QuotaExceededError,
@@ -929,15 +963,16 @@ Attach a correlation ID to every log record in the current async task:
 
 ```python
 from varco_core import (
-    generate_correlation_id,   # → str (UUID4)
-    current_correlation_id,    # → str | None
-    correlation_context,       # async context manager
-    CorrelationIdFilter,       # logging.Filter
+    generate_correlation_id,  # → str (UUID4)
+    current_correlation_id,  # → str | None
+    correlation_context,  # async context manager
+    CorrelationIdFilter,  # logging.Filter
 )
 import logging
 
 # Wire the filter once at startup — stamps record.correlation_id on every log line
 logging.getLogger().addFilter(CorrelationIdFilter())
+
 
 # In the HTTP middleware — activate a fresh ID per request
 @app.middleware("http")
@@ -948,8 +983,9 @@ async def correlation_middleware(request: Request, call_next):
     response.headers["X-Correlation-ID"] = cid
     return response
 
+
 # Anywhere in the service layer
-cid = current_correlation_id()   # "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+cid = current_correlation_id()  # "f47ac10b-58cc-4372-a567-0e02b2c3d479"
 ```
 
 The correlation ID is stored in a `ContextVar` — each asyncio task gets its own isolated copy. Tasks spawned inside `correlation_context()` inherit the ID automatically.
@@ -964,10 +1000,13 @@ The correlation ID is stored in a `ContextVar` — each asyncio task gets its ow
 from varco_core import TenantUoWProvider, tenant_context, current_tenant
 from varco_sa import SQLAlchemyRepositoryProvider
 
-provider = TenantUoWProvider({
-    "acme":   SQLAlchemyRepositoryProvider(engine_acme, sessions_acme),
-    "globex": SQLAlchemyRepositoryProvider(engine_globex, sessions_globex),
-})
+provider = TenantUoWProvider(
+    {
+        "acme": SQLAlchemyRepositoryProvider(engine_acme, sessions_acme),
+        "globex": SQLAlchemyRepositoryProvider(engine_globex, sessions_globex),
+    }
+)
+
 
 # In the HTTP adapter — activate the tenant once per request
 @app.middleware("http")
@@ -986,9 +1025,9 @@ provider.register("new_tenant", new_provider)
 ```
 
 ```python
-provider.has_tenant("acme")         # True
-provider.registered_tenants()       # ["acme", "globex"]
-current_tenant()                    # "acme" (inside a tenant_context block)
+provider.has_tenant("acme")  # True
+provider.registered_tenants()  # ["acme", "globex"]
+current_tenant()  # "acme" (inside a tenant_context block)
 ```
 
 `TenantUoWProvider` (above) is the static, hand-registered form. For a
@@ -1004,7 +1043,7 @@ Every default there is byte-identical to the `TenantUoWProvider` shape above
 ```python
 from varco_core.tenancy import TenancySettings, TenantIsolation
 
-settings = TenancySettings(isolation=TenantIsolation.SCHEMA)   # opt-in
+settings = TenancySettings(isolation=TenantIsolation.SCHEMA)  # opt-in
 ```
 
 **Worked example — turn on schema-per-tenant isolation and onboard a tenant:**
@@ -1028,7 +1067,7 @@ provisioner = SASchemaProvisioner(engine=engine)
 control_service = TenantControlService(
     catalog=SATenantCatalog(session=admin_session),
     provisioner=provisioner,
-    producer=producer,   # AbstractEventProducer — emits TenantCatalogChanged
+    producer=producer,  # AbstractEventProducer — emits TenantCatalogChanged
 )
 
 # 4. Onboard — idempotent; a second call on an already-active tenant is a no-op
@@ -1050,11 +1089,14 @@ default) `__table__.schema` stays `None`, byte-identical to today.
 ```python
 from varco_fastapi.tenancy.mount import mount_tenant_admin
 
-app = create_varco_app(container, routers=[...])       # tenant traffic — no admin privilege
-mount_tenant_admin(                                     # ← privileged surface, opt-in
-    app, control_service,
-    acknowledge_bundled_admin=True,   # required; ValueError without it
-    server_auth=auth, admin_role="tenant-admin", prefix="/tenancy",
+app = create_varco_app(container, routers=[...])  # tenant traffic — no admin privilege
+mount_tenant_admin(  # ← privileged surface, opt-in
+    app,
+    control_service,
+    acknowledge_bundled_admin=True,  # required; ValueError without it
+    server_auth=auth,
+    admin_role="tenant-admin",
+    prefix="/tenancy",
 )
 ```
 
@@ -1073,19 +1115,13 @@ from varco_core import QueryBuilder, QueryParams, SortField, SortOrder
 params = QueryParams(node=QueryBuilder().eq("active", True).build(), limit=10)
 
 # Compound filter
-node = (
-    QueryBuilder()
-    .eq("active", True)
-    .gte("age", 18)
-    .like("name", "Alice%")
-    .build()
-)
+node = QueryBuilder().eq("active", True).gte("age", 18).like("name", "Alice%").build()
 
 # OR / NOT / IN / NULL
 adult_or_admin = QueryBuilder().gte("age", 18).or_(QueryBuilder().eq("role", "admin")).build()
-not_banned     = QueryBuilder().eq("banned", True).not_().build()
-status_filter  = QueryBuilder().in_("status", ["active", "trial"]).build()
-unverified     = QueryBuilder().is_null("verified_at").build()
+not_banned = QueryBuilder().eq("banned", True).not_().build()
+status_filter = QueryBuilder().in_("status", ["active", "trial"]).build()
+unverified = QueryBuilder().is_null("verified_at").build()
 ```
 
 | Method | SQL equivalent |
@@ -1111,7 +1147,7 @@ params = QueryParams(
         SortField("title", SortOrder.ASC),
     ],
     limit=20,
-    offset=40,   # page 3 of 20
+    offset=40,  # page 3 of 20
 )
 ```
 
@@ -1123,7 +1159,7 @@ from varco_core.query import QueryParams
 
 params = QueryParams(
     filters=request.query_params.getlist("filter"),  # ["age__gte=18", "status__eq=active"]
-    sort=request.query_params.getlist("sort"),       # ["+created_at"]
+    sort=request.query_params.getlist("sort"),  # ["+created_at"]
     limit=int(request.query_params.get("limit", 50)),
     offset=int(request.query_params.get("offset", 0)),
 )
@@ -1159,15 +1195,21 @@ Grammar supports: `=`, `!=`, `>`, `<`, `>=`, `<=`, `LIKE`, `IN`, `IS NULL`, `IS 
 
 ```python
 from varco_core.query.visitor.type_coercion import (
-    coerce_int, coerce_float, coerce_boolean, coerce_datetime, coerce_list,
-    TypeCoercionRegistry, ASTTypeCoercion, register_default_coercer,
+    coerce_int,
+    coerce_float,
+    coerce_boolean,
+    coerce_datetime,
+    coerce_list,
+    TypeCoercionRegistry,
+    ASTTypeCoercion,
+    register_default_coercer,
 )
 
-coerce_int("42")                        # 42
-coerce_boolean("yes")                   # True
-coerce_datetime("2024-01-15T10:30:00Z") # datetime(...)
-coerce_list('["a","b"]')                # ['a', 'b']
-coerce_list('a,b,c')                    # ['a', 'b', 'c']
+coerce_int("42")  # 42
+coerce_boolean("yes")  # True
+coerce_datetime("2024-01-15T10:30:00Z")  # datetime(...)
+coerce_list('["a","b"]')  # ['a', 'b']
+coerce_list("a,b,c")  # ['a', 'b', 'c']
 
 registry = TypeCoercionRegistry()
 registry.register("age", int, coerce_int)
@@ -1210,8 +1252,9 @@ across deployments (otherwise the class name is used):
 ```python
 from varco_core.event import Event
 
+
 class OrderPlacedEvent(Event):
-    __event_type__ = "order.placed"   # stable cross-process identifier
+    __event_type__ = "order.placed"  # stable cross-process identifier
     order_id: str
     total: float
 ```
@@ -1287,6 +1330,7 @@ care about events and don't want to configure a real bus:
 
 ```python
 from varco_core.event import NoopEventBus
+
 bus = NoopEventBus()
 ```
 
@@ -1334,6 +1378,7 @@ and call `register_to(bus)` to subscribe:
 ```python
 from varco_core.event import EventConsumer, listen
 
+
 class NotificationConsumer(EventConsumer):
     @listen(OrderPlacedEvent, channel="orders")
     async def on_order_placed(self, event: OrderPlacedEvent) -> None:
@@ -1342,6 +1387,7 @@ class NotificationConsumer(EventConsumer):
     @listen(OrderPlacedEvent, filter=lambda e: e.total > 1000, channel="orders")
     async def on_large_order(self, event: OrderPlacedEvent) -> None:
         await self._alert_team(event)
+
 
 consumer = NotificationConsumer()
 consumer.register_to(bus)
@@ -1371,6 +1417,7 @@ class OrderShippedEvent(DomainEvent):
     order_id: UUID
     shipped_at: datetime
 
+
 # 2. Emit from service (via producer, not bus directly)
 class OrderService(AsyncService[Order, UUID, ...]):
     async def ship_order(self, order_id: UUID) -> None:
@@ -1378,10 +1425,13 @@ class OrderService(AsyncService[Order, UUID, ...]):
             order = await repo.get(order_id)
             order.status = "shipped"
             await repo.save(order)
-            await self._producer.produce(OrderShippedEvent(
-                order_id=order_id,
-                shipped_at=datetime.now(UTC),
-            ))
+            await self._producer.produce(
+                OrderShippedEvent(
+                    order_id=order_id,
+                    shipped_at=datetime.now(UTC),
+                )
+            )
+
 
 # 3. Handle in a consumer (EventConsumer subclass)
 class NotificationConsumer(EventConsumer):
@@ -1397,9 +1447,10 @@ class NotificationConsumer(EventConsumer):
     async def on_order_shipped(self, event: OrderShippedEvent) -> None:
         await self._mailer.send(f"Order {event.order_id} shipped!")
 
+
 # 4. Wire in DI
 container = DIContainer()
-container.scan("varco_kafka", recursive=True)   # discovers the Kafka bus @Singletons
+container.scan("varco_kafka", recursive=True)  # discovers the Kafka bus @Singletons
 container.install(NotificationConsumerModule)
 ```
 
@@ -1423,8 +1474,9 @@ Higher `priority` values run first.  Equal priorities run in subscription
 order (FIFO):
 
 ```python
-bus.subscribe(OrderPlacedEvent, handler_a, priority=10)   # runs first
-bus.subscribe(OrderPlacedEvent, handler_b, priority=0)    # runs second
+bus.subscribe(OrderPlacedEvent, handler_a, priority=10)  # runs first
+bus.subscribe(OrderPlacedEvent, handler_b, priority=0)  # runs second
+
 
 # Same with @listen
 @listen(OrderPlacedEvent, priority=10)
@@ -1450,7 +1502,7 @@ async def high_priority_handler(self, event): ...
 # BACKGROUND — caller can optionally await the returned task
 task = await bus.publish(event, channel="orders")
 if task:
-    await task   # optional: wait for all handlers to finish
+    await task  # optional: wait for all handlers to finish
 ```
 
 ---
@@ -1462,11 +1514,13 @@ ASGI-style middleware wraps the full dispatch pipeline:
 ```python
 from varco_core.event import EventMiddleware
 
+
 class LoggingMiddleware(EventMiddleware):
     async def __call__(self, event, channel, next):
         logger.info("→ %s on %s", type(event).__name__, channel)
         await next(event, channel)
         logger.info("✓ %s dispatched", type(event).__name__)
+
 
 bus = InMemoryEventBus(middleware=[LoggingMiddleware()])
 ```
@@ -1536,7 +1590,7 @@ from varco_core.event import BusEventProducer, EventConsumer, listen
 config = KafkaConfig(
     bootstrap_servers="localhost:9092",
     group_id="my-service",
-    topic_prefix="prod.",          # optional — "prod.orders", "prod.payments"
+    topic_prefix="prod.",  # optional — "prod.orders", "prod.payments"
     auto_offset_reset="latest",
 )
 
@@ -1548,8 +1602,7 @@ async with KafkaEventBus(config) as bus:
     # Consumer
     class OrderConsumer(EventConsumer):
         @listen(OrderPlacedEvent, channel="orders")
-        async def on_placed(self, event: OrderPlacedEvent) -> None:
-            ...
+        async def on_placed(self, event: OrderPlacedEvent) -> None: ...
 
     OrderConsumer().register_to(bus)
 ```
@@ -1575,7 +1628,7 @@ from varco_core.event import BusEventProducer, EventConsumer, listen
 
 config = RedisConfig(
     url="redis://localhost:6379/0",
-    channel_prefix="prod:",         # optional — "prod:orders", "prod:payments"
+    channel_prefix="prod:",  # optional — "prod:orders", "prod:payments"
 )
 
 async with RedisEventBus(config) as bus:
@@ -1586,8 +1639,7 @@ async with RedisEventBus(config) as bus:
     # Consumer
     class OrderConsumer(EventConsumer):
         @listen(OrderPlacedEvent, channel="orders")
-        async def on_placed(self, event: OrderPlacedEvent) -> None:
-            ...
+        async def on_placed(self, event: OrderPlacedEvent) -> None: ...
 
     OrderConsumer().register_to(bus)
 ```
@@ -1632,6 +1684,7 @@ entry = OutboxEntry.from_event(OrderPlacedEvent(order_id="1"), channel="orders")
 ```python
 from varco_core.service.outbox import OutboxRepository
 
+
 class SAOutboxRepository(OutboxRepository):
     async def save(self, entry: OutboxEntry) -> None: ...
     async def get_pending(self, limit: int = 100) -> list[OutboxEntry]: ...
@@ -1648,7 +1701,7 @@ from varco_core.service.outbox import OutboxRelay
 relay = OutboxRelay(
     outbox_repo=sa_outbox_repo,
     bus=event_bus,
-    poll_interval=5.0,   # seconds between polls
+    poll_interval=5.0,  # seconds between polls
 )
 
 # Start the background loop (typically in the app lifespan)
@@ -1678,18 +1731,23 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 from varco_sa import SAConfig, SAFastrestApp
 
-class Base(DeclarativeBase): pass
+
+class Base(DeclarativeBase):
+    pass
+
 
 engine = create_async_engine("postgresql+asyncpg://user:pass@localhost/mydb")
 
-app = SAFastrestApp(SAConfig(
-    engine=engine,
-    base=Base,
-    entity_classes=(User, Post, Subscription),
-))
+app = SAFastrestApp(
+    SAConfig(
+        engine=engine,
+        base=Base,
+        entity_classes=(User, Post, Subscription),
+    )
+)
 
-await app.create_all()                     # CREATE TABLE IF NOT EXISTS ...
-uow_provider = app.uow_provider            # inject this into services
+await app.create_all()  # CREATE TABLE IF NOT EXISTS ...
+uow_provider = app.uow_provider  # inject this into services
 ```
 
 Manual setup (if you need more control):
@@ -1744,7 +1802,7 @@ report = await guard.check()
 
 if report.has_drift:
     for drift in report.drifts:
-        print(drift)   # "Column 'users.phone' missing from database"
+        print(drift)  # "Column 'users.phone' missing from database"
 ```
 
 ### Repository interface (SQLAlchemy)
@@ -1845,14 +1903,16 @@ from varco_beanie import BeanieConfig, BeanieFastrestApp
 
 client = AsyncIOMotorClient("mongodb://localhost:27017")
 
-app = BeanieFastrestApp(BeanieConfig(
-    motor_client=client,
-    db_name="mydb",
-    entity_classes=(User, Post),
-))
+app = BeanieFastrestApp(
+    BeanieConfig(
+        motor_client=client,
+        db_name="mydb",
+        entity_classes=(User, Post),
+    )
+)
 
-await app.init()                    # calls beanie.init_beanie() internally
-uow_provider = app.uow_provider     # inject into services
+await app.init()  # calls beanie.init_beanie() internally
+uow_provider = app.uow_provider  # inject into services
 ```
 
 Manual setup:
@@ -1866,11 +1926,13 @@ await provider.init()
 
 async with provider.make_uow() as uow:
     user = await uow.users.save(User(name="Bob", email="bob@example.com"))
-    recent = await uow.posts.find_by_query(QueryParams(
-        node=QueryBuilder().eq("published", True).build(),
-        sort=[SortField("created_at", SortOrder.DESC)],
-        limit=10,
-    ))
+    recent = await uow.posts.find_by_query(
+        QueryParams(
+            node=QueryBuilder().eq("published", True).build(),
+            sort=[SortField("created_at", SortOrder.DESC)],
+            limit=10,
+        )
+    )
 ```
 
 ### Repository interface (Beanie)
@@ -1894,9 +1956,11 @@ from providify import DIContainer, Provider
 
 container = DIContainer()
 
+
 @Provider(singleton=True)
 def settings() -> BeanieSettings:
     return BeanieSettings(motor_client=client, db_name="mydb", entity_classes=(User, Post))
+
 
 container.provide(settings)
 container.install(BeanieModule)
@@ -1991,16 +2055,19 @@ def test_something(di_container):
     di_container.scan("varco_core", recursive=True)
     ...
 
+
 async def test_something_async(di_acontainer):
     # di_acontainer: the async counterpart — usable directly under
     # asyncio_mode = "auto"; container.ashutdown() is awaited at teardown
     ...
+
 
 def test_with_override(di_container, di_overrides):
     # di_overrides: a ContainerOverrides bound to di_container — any
     # override made through it is undone automatically at teardown
     di_overrides.instance(SomeInterface, a_test_double)
     ...
+
 
 def test_with_global(di_container, di_global):
     # di_global: makes DIContainer.current() return di_container for the
@@ -2041,7 +2108,7 @@ from varco_core.cache import InMemoryCache, TTLStrategy
 
 async with InMemoryCache(strategy=TTLStrategy(300)) as cache:
     await cache.set("user:42", {"name": "Alice"})
-    user = await cache.get("user:42")   # None after 300 s
+    user = await cache.get("user:42")  # None after 300 s
     await cache.delete("user:42")
     await cache.clear()
 ```
@@ -2050,6 +2117,7 @@ async with InMemoryCache(strategy=TTLStrategy(300)) as cache:
 
 ```python
 from varco_core.cache import NoOpCache
+
 cache = NoOpCache()
 ```
 
@@ -2079,11 +2147,11 @@ for the full design.
 
 ```python
 from varco_core.cache import (
-    TTLStrategy,          # time-based expiry
-    ExplicitStrategy,     # manual invalidation via cache.delete()
-    TaggedStrategy,       # bulk invalidation by tag
+    TTLStrategy,  # time-based expiry
+    ExplicitStrategy,  # manual invalidation via cache.delete()
+    TaggedStrategy,  # bulk invalidation by tag
     EventDrivenStrategy,  # bus-event-triggered invalidation
-    CompositeStrategy,    # logical OR of multiple strategies
+    CompositeStrategy,  # logical OR of multiple strategies
 )
 ```
 
@@ -2134,16 +2202,18 @@ Add transparent look-aside caching to any `AsyncService` subclass:
 ```python
 from varco_core.cache import CacheServiceMixin
 
+
 @Singleton
 class PostService(
-    CacheServiceMixin,   # ← LEFT side so caching wraps all CRUD
+    CacheServiceMixin,  # ← LEFT side so caching wraps all CRUD
     AsyncService[Post, UUID, PostCreate, PostRead, PostUpdate],
 ):
-    _cache_backend = Inject[CacheBackend]   # injected from DI
+    _cache_backend = Inject[CacheBackend]  # injected from DI
     _cache_namespace = "posts"
     _cache_ttl = 300
 
-    def _get_repo(self, uow): return uow.posts
+    def _get_repo(self, uow):
+        return uow.posts
 ```
 
 `get()` results are cached automatically; `update()` and `delete()` evict the entry.
@@ -2154,30 +2224,36 @@ class PostService(
 # 1. Choose invalidation strategy
 from varco_core.cache import TTLStrategy, TaggedStrategy, CompositeStrategy
 
+
 # 2. Mix in CacheServiceMixin (order matters in MRO!)
 class UserService(
-    CacheServiceMixin,          # ← LEFT side (runs first)
+    CacheServiceMixin,  # ← LEFT side (runs first)
     TenantAwareService,
     AsyncService[User, UUID, UserCreateDTO, UserReadDTO, UserUpdateDTO],
 ):
     _cache_config = CacheConfig(
         backend=RedisCache(...),
-        invalidation_strategy=CompositeStrategy([
-            TTLStrategy(ttl_seconds=300),
-            TaggedStrategy(),
-        ]),
+        invalidation_strategy=CompositeStrategy(
+            [
+                TTLStrategy(ttl_seconds=300),
+                TaggedStrategy(),
+            ]
+        ),
     )
 
     def _get_repo(self, uow: AsyncUnitOfWork) -> AsyncRepository[User, UUID]:
         return uow.get_repository(User)
 
+
 # 3. Use @cached on methods (works with any async callable)
 from varco_core.cache import cached
+
 
 @cached(key_fn=lambda self, user_id: f"user:{user_id}")
 async def get_user_profile(self, user_id: UUID) -> UserProfile:
     # This is cached; invalidation strategy handles eviction
     return await self.read(user_id)
+
 
 # 4. Invalidate explicitly when needed
 @listen(UserUpdatedEvent, channel="users")
@@ -2199,6 +2275,7 @@ from varco_core.cache import cached, InMemoryCache, TTLStrategy
 
 cache = InMemoryCache(strategy=TTLStrategy(300))
 
+
 @cached(cache=cache, key_fn=lambda self, user_id: f"profile:{user_id}", ttl=60)
 async def get_user_profile(self, user_id: UUID) -> UserProfile:
     return await self._repo.find_by_id(user_id)
@@ -2209,6 +2286,7 @@ stampede protection — N concurrent misses on the same key collapse into one re
 
 ```python
 from varco_core.cache import CachePolicy, cached
+
 
 @cached(cache, policy=CachePolicy(ttl=300.0), singleflight=True, namespace="users")
 async def get_user(user_id: int) -> dict:
@@ -2227,13 +2305,13 @@ cached_svc = CachedService(
     cache,
     namespace="posts",
     default_ttl=300,
-    bus=event_bus,                   # publish cross-process invalidation events
+    bus=event_bus,  # publish cross-process invalidation events
     bus_channel="posts.invalidations",
 )
 
-post = await cached_svc.get(post_id)      # cache miss → fetched, stored
-posts = await cached_svc.list()           # cached list
-await cached_svc.update(post_id, dto)     # evicts + publishes invalidation event
+post = await cached_svc.get(post_id)  # cache miss → fetched, stored
+posts = await cached_svc.list()  # cached list
+await cached_svc.update(post_id, dto)  # evicts + publishes invalidation event
 ```
 
 ---
@@ -2249,13 +2327,16 @@ Retries a failing function with exponential back-off and optional jitter:
 ```python
 from varco_core.resilience import retry, RetryPolicy, RetryExhaustedError
 
-@retry(RetryPolicy(
-    max_attempts=3,
-    base_delay=0.5,
-    max_delay=10.0,
-    jitter=True,
-    retryable=(httpx.HTTPError, TimeoutError),
-))
+
+@retry(
+    RetryPolicy(
+        max_attempts=3,
+        base_delay=0.5,
+        max_delay=10.0,
+        jitter=True,
+        retryable=(httpx.HTTPError, TimeoutError),
+    )
+)
 async def call_api() -> Response: ...
 ```
 
@@ -2274,16 +2355,21 @@ Prevents cascading failures by stopping calls to a broken dependency:
 ```python
 from varco_core.resilience import CircuitBreaker, CircuitBreakerConfig, circuit_breaker
 
+
 # Decorator form — one breaker per decorated function
-@circuit_breaker(CircuitBreakerConfig(
-    failure_threshold=5,
-    recovery_timeout=60.0,
-    success_threshold=2,
-))
+@circuit_breaker(
+    CircuitBreakerConfig(
+        failure_threshold=5,
+        recovery_timeout=60.0,
+        success_threshold=2,
+    )
+)
 async def call_payment_api() -> None: ...
+
 
 # Shared instance form — one breaker protecting multiple functions
 _breaker = CircuitBreaker(CircuitBreakerConfig(failure_threshold=5))
+
 
 async def charge(amount: float) -> None:
     await _breaker.protect(call_payment_api)(amount)
@@ -2300,8 +2386,10 @@ Cancels an async call if it exceeds a time limit (async-only):
 ```python
 from varco_core.resilience import timeout, CallTimeoutError
 
-@timeout(10.0)   # seconds
+
+@timeout(10.0)  # seconds
 async def fetch_data() -> bytes: ...
+
 
 try:
     data = await fetch_data()
@@ -2320,6 +2408,7 @@ from varco_core.resilience import rate_limit, InMemoryRateLimiter, RateLimitConf
 # Shared limiter — one per external service
 _limiter = InMemoryRateLimiter(RateLimitConfig(rate=100, period=1.0))
 
+
 @rate_limit(limiter=_limiter)
 async def send_notification(user_id: str) -> None: ...
 ```
@@ -2336,8 +2425,10 @@ from varco_core.resilience import Bulkhead, BulkheadConfig, bulkhead, BulkheadFu
 # Shared bulkhead — one per external dependency
 _db_bh = Bulkhead(BulkheadConfig(max_concurrent=10, max_wait=0.5))
 
+
 @_db_bh.protect
 async def heavy_db_query() -> list[Row]: ...
+
 
 # Or as a decorator with a new shared instance:
 @bulkhead(BulkheadConfig(max_concurrent=5))
@@ -2353,7 +2444,8 @@ Issues a speculative duplicate call after a delay to cut tail latency (async-onl
 ```python
 from varco_core.resilience import hedge, HedgeConfig
 
-@hedge(HedgeConfig(delay=0.1))   # fire second attempt after 100 ms
+
+@hedge(HedgeConfig(delay=0.1))  # fire second attempt after 100 ms
 async def read_product(product_id: int) -> Product: ...
 ```
 
@@ -2366,6 +2458,7 @@ Decorators compose bottom-to-top (innermost executes first):
 ```python
 from varco_core.resilience import timeout, retry, circuit_breaker, RetryPolicy, CircuitBreakerConfig
 
+
 # Execution order: circuit_breaker → retry loop → timeout → actual call
 @timeout(10.0)
 @retry(RetryPolicy(max_attempts=3, base_delay=0.5))
@@ -2377,14 +2470,22 @@ async def call_external_api(payload: dict) -> Response: ...
 
 ```python
 from varco_core.resilience import (
-    retry, timeout, circuit_breaker, rate_limit, bulkhead,
-    RetryPolicy, CircuitBreakerConfig, RateLimitConfig,
-    BulkheadConfig, InMemoryRateLimiter,
+    retry,
+    timeout,
+    circuit_breaker,
+    rate_limit,
+    bulkhead,
+    RetryPolicy,
+    CircuitBreakerConfig,
+    RateLimitConfig,
+    BulkheadConfig,
+    InMemoryRateLimiter,
 )
 
 # Shared instances — one per external dependency (NOT per-call)
 _payment_limiter = InMemoryRateLimiter(RateLimitConfig(rate=100, period=1.0))
 _payment_bulkhead = Bulkhead(BulkheadConfig(max_concurrent=10, max_wait=0.5))
+
 
 class PaymentService:
     def __init__(self, http_client: httpx.AsyncClient):
@@ -2405,6 +2506,7 @@ class PaymentService:
         if response.status_code >= 500:
             raise ExternalServiceError("Payment API down")
         return TransactionId(response.json()["id"])
+
 
 # Decorator order matters (bottom-to-top execution):
 # 1. circuit_breaker checks state
@@ -2435,7 +2537,7 @@ authority = JwtAuthority.from_pem(
     pem_bytes,
     kid="svc:auth-v1",
     issuer="my-service",
-    algorithm="RS256",   # RS256, ES256, or HS256
+    algorithm="RS256",  # RS256, ES256, or HS256
 )
 
 # Build and sign a token
@@ -2487,11 +2589,17 @@ payload = await registry.verify(raw_token_string)
 # raises IssuerNotFoundError or AuthorityError on failure
 
 # From explicit config
-config = AuthorizationConfig(issuers=[
-    IssuerConfig(issuer="my-svc",    source="pem_file", path="/etc/keys/svc.pub"),
-    IssuerConfig(issuer="google",    source="oidc",     discovery_url="https://accounts.google.com"),
-    IssuerConfig(issuer="corporate", source="jwks_url", jwks_url="https://auth.corp.internal/.well-known/jwks.json"),
-])
+config = AuthorizationConfig(
+    issuers=[
+        IssuerConfig(issuer="my-svc", source="pem_file", path="/etc/keys/svc.pub"),
+        IssuerConfig(issuer="google", source="oidc", discovery_url="https://accounts.google.com"),
+        IssuerConfig(
+            issuer="corporate",
+            source="jwks_url",
+            jwks_url="https://auth.corp.internal/.well-known/jwks.json",
+        ),
+    ]
+)
 registry = config.to_registry()
 await registry.load_all()
 ```
@@ -2560,9 +2668,9 @@ export VARCO_JWT_TRANSFORM_TOKEN_TYPE_FIELD="token_use"
 ```python
 from varco_core.jwt import JwtParser
 
-token = JwtParser.parse(raw_token, secret)   # unchanged call site
-token.auth_ctx.roles                         # populated from the foreign claim
-token.extra_claims["realm_access"]            # original claim still visible (non-destructive)
+token = JwtParser.parse(raw_token, secret)  # unchanged call site
+token.auth_ctx.roles  # populated from the foreign claim
+token.extra_claims["realm_access"]  # original claim still visible (non-destructive)
 ```
 
 For per-issuer overrides (mixed fleets, gateway forwarding tokens from several IdPs), a code
@@ -2585,6 +2693,7 @@ from varco_fastapi.router.presets import GenericRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.auth import JwtBearerAuth
 from varco_fastapi.auth.guard import require_token_profile
+
 
 class MeshRouter(GenericRouter):
     _prefix = "/mesh"
@@ -2668,6 +2777,7 @@ async with httpx.AsyncClient(**conn.to_httpx_kwargs()) as client:
 
 # With Basic auth
 from varco_core.connection import BasicAuthConfig
+
 conn = HttpConnectionSettings(
     base_url="https://api.example.com",
     auth=BasicAuthConfig(username="svc-user", password="secret"),
@@ -2675,6 +2785,7 @@ conn = HttpConnectionSettings(
 
 # With TLS
 from varco_core.connection import SSLConfig
+
 conn = HttpConnectionSettings.with_ssl(
     SSLConfig(ca_cert=Path("/etc/ssl/ca.pem")),
     base_url="https://secure-api.example.com",
@@ -2710,9 +2821,15 @@ conn = HttpConnectionSettings.from_env(prefix="NOTIF_API_")
 ```python
 from varco_fastapi.router.crud import VarcoCRUDRouter
 from varco_fastapi.router.mixins import (
-    CreateMixin, ReadMixin, UpdateMixin, PatchMixin, DeleteMixin, ListMixin,
+    CreateMixin,
+    ReadMixin,
+    UpdateMixin,
+    PatchMixin,
+    DeleteMixin,
+    ListMixin,
 )
 from providify import Singleton
+
 
 @Singleton
 class OrderRouter(
@@ -2726,7 +2843,8 @@ class OrderRouter(
 ):
     _prefix = "/orders"
     _tags = ["orders"]
-    _version = "v1"           # adds /v1/orders prefix
+    _version = "v1"  # adds /v1/orders prefix
+
 
 router = OrderRouter().build_router()
 app.include_router(router)
@@ -2736,6 +2854,7 @@ app.include_router(router)
 
 ```python
 from varco_fastapi.router.endpoint import route
+
 
 @Singleton
 class OrderRouter(ReadMixin, ListMixin, VarcoCRUDRouter[...]):
@@ -2758,8 +2877,10 @@ zero per-subclass boilerplate (no cast, no hand-rolled `@property` override):
 from varco_fastapi.router.presets import CRUDRouter
 from varco_fastapi.router.endpoint import route
 
+
 class OrderService(AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate]):
     async def cancel_order(self, order_id: UUID) -> None: ...
+
 
 class OrderRouter(CRUDRouter[Order, UUID, OrderCreate, OrderRead, OrderUpdate, OrderService]):
     _prefix = "/orders"
@@ -2805,7 +2926,7 @@ class OrderRouter(CreateMixin, ReadMixin, ListMixin, VarcoCRUDRouter[...]):
     _create_summary = "Place a new order"
     _create_status_code = 201
     _list_max_limit = 200
-    _create_async_capable = True    # allow ?with_async=true
+    _create_async_capable = True  # allow ?with_async=true
 ```
 
 ### Service-free routers — `GenericRouter`
@@ -2821,9 +2942,10 @@ from varco_fastapi.router.endpoint import route
 from varco_fastapi.auth import JwtBearerAuth
 from varco_fastapi.auth.guard import require_scopes, require_roles
 
+
 class ReportRouter(GenericRouter):
     _prefix = "/reports"
-    _auth = JwtBearerAuth(...)               # authentication stays in middleware
+    _auth = JwtBearerAuth(...)  # authentication stays in middleware
 
     @route("GET", "/summary", requires=require_scopes("reports:read"))
     async def get_summary(self, ctx: AuthContext) -> dict:
@@ -2832,6 +2954,7 @@ class ReportRouter(GenericRouter):
     @route("DELETE", "/cache", requires=require_roles("admin"))
     async def purge_cache(self, ctx: AuthContext) -> None:
         invalidate_cache()
+
 
 # Wire exactly like a normal router
 app = create_varco_app(routers=[ReportRouter])
@@ -2860,17 +2983,19 @@ await registry.load_all()
 
 auth = JwtBearerAuth(registry)
 
+
 # Apply to the whole router
 @Singleton
 class OrderRouter(CreateMixin, VarcoCRUDRouter[...]):
     _prefix = "/orders"
-    _auth = auth   # ClassVar — all routes use this auth strategy
+    _auth = auth  # ClassVar — all routes use this auth strategy
 ```
 
 Or inject via DI (installed automatically by `VarcoFastAPIModule`):
 
 ```python
 from varco_fastapi.di import VarcoFastAPIModule
+
 container.install(VarcoFastAPIModule)
 # AbstractServerAuth → JwtBearerAuth registered automatically
 ```
@@ -2883,9 +3008,9 @@ container.install(VarcoFastAPIModule)
 from varco_fastapi.context import get_request_context
 
 ctx = get_request_context()
-auth = ctx.auth           # AuthContext (user_id, roles, grants)
-jwt  = ctx.jwt            # raw JWT payload dict
-request = ctx.request     # FastAPI Request object
+auth = ctx.auth  # AuthContext (user_id, roles, grants)
+jwt = ctx.jwt  # raw JWT payload dict
+request = ctx.request  # FastAPI Request object
 ```
 
 ### Middleware stack
@@ -2937,9 +3062,9 @@ One-liner setup for each backend (also registered by `container.install(VarcoFas
 
 ```python
 from varco_fastapi.app import (
-    sa_bootstrap,       # SQLAlchemy repo provider + UoW
-    redis_bootstrap,    # Redis event bus
-    ws_bootstrap,       # WebSocket + SSE adapters
+    sa_bootstrap,  # SQLAlchemy repo provider + UoW
+    redis_bootstrap,  # Redis event bus
+    ws_bootstrap,  # WebSocket + SSE adapters
     fastapi_bootstrap,  # FastAPI defaults (auth, CORS, job runner, producer)
     redis_async_bootstrap,  # Redis cache (async — call inside lifespan)
 )
@@ -2947,7 +3072,7 @@ from varco_fastapi.lifespan import VarcoLifespan
 
 container = DIContainer()
 sa_bootstrap(container)
-redis_bootstrap(container, streams=True)    # use Redis Streams (at-least-once)
+redis_bootstrap(container, streams=True)  # use Redis Streams (at-least-once)
 ws_bootstrap(container)
 fastapi_bootstrap(container, setup_producer=True)
 
@@ -2963,6 +3088,7 @@ routes to introspect:
 ```python
 from varco_fastapi.router.a2a.source import SkillDefinition, AgentMetadata
 from varco_fastapi.router.skill import SkillAdapter
+
 
 class ReportSkillSource:
     def skills(self) -> list[SkillDefinition]:
@@ -2985,14 +3111,15 @@ class ReportSkillSource:
         # e.g. record which end user / agent / platform requested the report.
         return {"report_url": await build_report(payload, requested_by=ctx)}
 
+
 adapter = SkillAdapter(
-    None,                       # router_cls omitted
+    None,  # router_cls omitted
     source=ReportSkillSource(),
     agent_name="ReportAgent",
     agent_description="Generates PDF reports",
-    client=None,                # not needed — invoke() does its own work
+    client=None,  # not needed — invoke() does its own work
 )
-adapter.mount(app)              # same v1.0.0 + legacy A2A surface as a router-backed adapter
+adapter.mount(app)  # same v1.0.0 + legacy A2A surface as a router-backed adapter
 ```
 
 `adapter.router_class` is `None` for a non-router source — that is the documented contract,
@@ -3006,7 +3133,7 @@ class to subclass, no manual httpx wiring, returns a ready-to-call instance:
 
 ```python
 from varco_fastapi.client import client_for
-from orders_service.routers import OrderRouter   # importable peer router
+from orders_service.routers import OrderRouter  # importable peer router
 
 client = client_for(OrderRouter, "https://orders.internal")
 order = await client.read(order_id)
@@ -3024,6 +3151,7 @@ varco gen-client -c order.contract.json -o order_client.py --class-name OrderCli
 
 ```python
 from varco_fastapi.contract.runtime import contract_client
+
 client = contract_client("order.contract.json", "https://orders.internal")
 ```
 
@@ -3066,14 +3194,18 @@ assuming the two paths behave identically for a given router.
 ```python
 from varco_core.observability import span, SpanConfig
 
-@span                        # auto-named from function name
+
+@span  # auto-named from function name
 async def process_order(order_id: UUID) -> None: ...
+
 
 @span(SpanConfig(name="orders.process", attributes={"service": "orders"}))
 async def process_order(order_id: UUID) -> None: ...
 
+
 # Context manager form
 from varco_core.observability import create_span
+
 
 async def process_order(order_id: UUID) -> None:
     async with create_span("orders.validate") as s:
@@ -3086,8 +3218,10 @@ async def process_order(order_id: UUID) -> None:
 ```python
 from varco_core.observability import counter, histogram, CounterConfig, HistogramConfig
 
+
 @counter(CounterConfig(name="orders.created", description="Total orders created"))
 async def create_order(dto: OrderCreate) -> Order: ...
+
 
 @histogram(HistogramConfig(name="orders.processing_ms", unit="ms"))
 async def process_order(order_id: UUID) -> None: ...
@@ -3112,12 +3246,14 @@ Auto-spans every CRUD method on an `AsyncService` with zero boilerplate:
 ```python
 from varco_core.observability import TracingServiceMixin
 
+
 @Singleton
 class OrderService(
-    TracingServiceMixin,     # wraps get/list/create/update/delete in OTel spans
+    TracingServiceMixin,  # wraps get/list/create/update/delete in OTel spans
     AsyncService[Order, UUID, OrderCreate, OrderRead, OrderUpdate],
 ):
-    def _get_repo(self, uow): return uow.orders
+    def _get_repo(self, uow):
+        return uow.orders
 ```
 
 ### OtelConfig and DI wiring
@@ -3140,7 +3276,7 @@ def otel_config() -> OtelConfig:
 
 
 container = DIContainer()
-container.provide(otel_config)      # ⚠️ before install() — equal-priority
+container.provide(otel_config)  # ⚠️ before install() — equal-priority
 container.install(OtelConfiguration)  #    bindings resolve first-registered
 
 tracer_provider = container.get(TracerProvider)
@@ -3156,8 +3292,10 @@ as `param.<name>` span attributes by default — redacted (name-based, e.g.
 ```python
 from varco_core.observability import span
 
+
 @span
 async def place_order(order_id: UUID, password: str = "") -> Order: ...
+
 
 # span attributes: param.order_id="<uuid>", param.password="[REDACTED]"
 ```
@@ -3167,10 +3305,12 @@ Per-decorator or process-wide kill switches:
 ```python
 from varco_core.observability import set_capture_enabled, SpanConfig, span
 
-@span(SpanConfig(capture_params=False))     # off for this function only
+
+@span(SpanConfig(capture_params=False))  # off for this function only
 async def charge_card(card_token: str) -> None: ...
 
-set_capture_enabled(False)                  # off process-wide (or VARCO_OTEL_CAPTURE_PARAMS=false)
+
+set_capture_enabled(False)  # off process-wide (or VARCO_OTEL_CAPTURE_PARAMS=false)
 ```
 
 `TracingServiceMixin`/`TracingRepositoryMixin` spans do **not** auto-capture
@@ -3192,7 +3332,7 @@ set_global_attributes(**{"deployment.colour": "blue"})
 register_global_attribute_provider(
     lambda: {"k8s.pod.name": os.environ.get("POD_NAME", "unknown")},
     name="pod-identity",
-    cache_ttl=None,   # evaluate once — never poll/do I/O in a provider
+    cache_ttl=None,  # evaluate once — never poll/do I/O in a provider
 )
 ```
 
@@ -3237,16 +3377,18 @@ from varco_core.profiling import profile, profiled, ProfileConfig, set_profiling
 # 1. Enable globally (or VARCO_PROFILING_ENABLED=true in env)
 set_profiling_enabled(True)
 
+
 # 2a. Decorator form — wraps every call
 @profile(ProfileConfig(top_n=10))
 async def slow_query() -> list[Row]:
     return await db.execute("SELECT ...")
 
+
 # 2b. Context manager form — gives access to the report object
 async with profiled("batch_export") as session:
     rows = await db.fetch_all()
     await write_csv(rows)
-print(session.report.format())   # human-readable table to stderr/logs
+print(session.report.format())  # human-readable table to stderr/logs
 
 # 3. FastAPI: enable via env var or create_varco_app flag
 #    VARCO_PROFILER_ENABLED=true VARCO_PROFILER_ATTACH_HEADERS=true
@@ -3259,10 +3401,13 @@ app = create_varco_app(container, enable_profiling=True)
 ```python
 from varco_core.profiling import CpuProfilerBackend, CpuProfileResult, register_cpu_backend
 
+
 class PyinstrumentBackend:
     name = "pyinstrument"
+
     def start(self) -> None: ...
     def collect(self, top_n: int, sort_by: str) -> CpuProfileResult: ...
+
 
 register_cpu_backend("pyinstrument", PyinstrumentBackend)
 cfg = ProfileConfig(cpu_backend="pyinstrument")
@@ -3271,10 +3416,13 @@ cfg = ProfileConfig(cpu_backend="pyinstrument")
 ```python
 from varco_core.profiling import MemoryProfilerBackend, MemoryProfileResult, register_memory_backend
 
+
 class MemrayBackend:
     name = "memray"
+
     def start(self) -> None: ...
     def collect(self, top_n: int) -> MemoryProfileResult: ...
+
 
 register_memory_backend("memray", MemrayBackend)
 cfg = ProfileConfig(memory_backend="memray")
@@ -3334,11 +3482,15 @@ subscribes and persists each event as an `AuditEntry` via an injected `AuditRepo
 
 ```python
 class OrderService(
-    AuditLogMixin,                                              # ← left of AsyncService
+    AuditLogMixin,  # ← left of AsyncService
     AsyncService[Order, UUID, CreateOrderDTO, OrderReadDTO, UpdateOrderDTO],
 ):
-    def _get_repo(self, uow): return uow.orders
-    def _get_audit_actor(self, ctx): return ctx.sub            # override — base returns None
+    def _get_repo(self, uow):
+        return uow.orders
+
+    def _get_audit_actor(self, ctx):
+        return ctx.sub  # override — base returns None
+
 
 # Wire the consumer from @PostConstruct, same rule as any other EventConsumer
 class AuditWiring:
@@ -3390,13 +3542,15 @@ environment, middleware, and `/docs` — they are mounted as ASGI sub-apps under
 ```python
 from varco_fastapi import create_composite_app, ServiceMount
 
-from orders_service.app import app as orders_app      # its own create_varco_app()
-from billing_service.app import app as billing_app     # its own container + DB + env
+from orders_service.app import app as orders_app  # its own create_varco_app()
+from billing_service.app import app as billing_app  # its own container + DB + env
 
-composite = create_composite_app([
-    ServiceMount("/orders", orders_app),
-    ServiceMount("/billing", billing_app),
-])
+composite = create_composite_app(
+    [
+        ServiceMount("/orders", orders_app),
+        ServiceMount("/billing", billing_app),
+    ]
+)
 # uvicorn composite:composite
 ```
 
@@ -3482,6 +3636,7 @@ from varco_core.health import HealthCheck, HealthResult, HealthStatus, Composite
 ```python
 from varco_core.health import HealthCheck, HealthResult, HealthStatus
 
+
 class RedisHealthCheck(HealthCheck):
     name = "redis"
 
@@ -3506,11 +3661,13 @@ Runs all probes concurrently and reduces to the worst-case status:
 ```python
 from varco_core.health import CompositeHealthCheck
 
-composite = CompositeHealthCheck([
-    redis_health,
-    postgres_health,
-    kafka_health,
-])
+composite = CompositeHealthCheck(
+    [
+        redis_health,
+        postgres_health,
+        kafka_health,
+    ]
+)
 
 result = await composite.check()
 # result.status → HealthStatus.UNHEALTHY if any probe is unhealthy

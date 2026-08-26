@@ -129,8 +129,7 @@ async def test_outbox_survives_broker_outage_no_loss_no_premature_delete(
 
     n = 5
     entries = [
-        OutboxEntry.from_event(ChaosOrderEvent(order_id=str(i)), channel=channel)
-        for i in range(n)
+        OutboxEntry.from_event(ChaosOrderEvent(order_id=str(i)), channel=channel) for i in range(n)
     ]
     for entry in entries:
         await repo.save(entry)
@@ -185,9 +184,9 @@ async def test_outbox_survives_broker_outage_no_loss_no_premature_delete(
         ) and asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.3)
 
-        assert sorted(received) == [
-            str(i) for i in range(n)
-        ], f"expected every entry delivered exactly once, got {received}"
+        assert sorted(received) == [str(i) for i in range(n)], (
+            f"expected every entry delivered exactly once, got {received}"
+        )
         assert await repo.get_pending(limit=100) == []
     finally:
         await relay.stop()
@@ -221,8 +220,7 @@ async def test_poison_entry_routes_to_dlq_and_unblocks_stream(
     await repo.save(poison)
 
     good_entries = [
-        OutboxEntry.from_event(ChaosOrderEvent(order_id=str(i)), channel=channel)
-        for i in range(3)
+        OutboxEntry.from_event(ChaosOrderEvent(order_id=str(i)), channel=channel) for i in range(3)
     ]
     for entry in good_entries:
         await repo.save(entry)
@@ -230,9 +228,7 @@ async def test_poison_entry_routes_to_dlq_and_unblocks_stream(
     dlq = SADeadLetterQueue(outbox_engine)
     await dlq.ensure_table()
 
-    bus = RedisEventBus(
-        RedisEventBusSettings(url=f"redis://{host}:{port}/0"), middleware=[]
-    )
+    bus = RedisEventBus(RedisEventBusSettings(url=f"redis://{host}:{port}/0"), middleware=[])
     await bus.start()
 
     received: list[str] = []
@@ -255,9 +251,7 @@ async def test_poison_entry_routes_to_dlq_and_unblocks_stream(
 
     try:
         deadline = asyncio.get_event_loop().time() + 15.0
-        while (
-            len(received) < len(good_entries)
-        ) and asyncio.get_event_loop().time() < deadline:
+        while (len(received) < len(good_entries)) and asyncio.get_event_loop().time() < deadline:
             await asyncio.sleep(0.2)
 
         # Every good entry drained despite the poison entry queued ahead of
@@ -270,9 +264,7 @@ async def test_poison_entry_routes_to_dlq_and_unblocks_stream(
 
         # ...and landed in the DLQ.
         dlq_entries = await dlq.pop_batch(limit=10)
-        assert any(
-            isinstance(e, DeadLetterEntry) and e.channel == channel for e in dlq_entries
-        )
+        assert any(isinstance(e, DeadLetterEntry) and e.channel == channel for e in dlq_entries)
     finally:
         await relay.stop()
         await bus.stop()

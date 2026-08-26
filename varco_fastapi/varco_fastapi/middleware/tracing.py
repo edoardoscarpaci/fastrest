@@ -97,13 +97,9 @@ class TracingMiddleware(BaseHTTPMiddleware):
         # Check OTel availability once at init — avoids per-request ImportError cost
         self._otel_enabled = enable_otel and _otel_available()
         if enable_otel and not self._otel_enabled:
-            _logger.debug(
-                "TracingMiddleware: opentelemetry SDK not installed — OTel disabled."
-            )
+            _logger.debug("TracingMiddleware: opentelemetry SDK not installed — OTel disabled.")
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
         Handle the request, optionally wrapping it in an OTel span.
 

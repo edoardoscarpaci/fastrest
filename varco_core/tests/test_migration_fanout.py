@@ -31,10 +31,7 @@ def _make_catalog(tenant_ids):
     from varco_core.tenancy.settings import TenantStatus
 
     return StaticTenantCatalog(
-        [
-            TenantDescriptor(tenant_id=tid, status=TenantStatus.ACTIVE)
-            for tid in tenant_ids
-        ]
+        [TenantDescriptor(tenant_id=tid, status=TenantStatus.ACTIVE) for tid in tenant_ids]
     )
 
 
@@ -99,9 +96,7 @@ async def test_fanout_on_failure_stop_names_applied_failed_not_attempted() -> No
     catalog = _make_catalog(["a", "b-fails", "c"])
 
     def factory(descriptor):
-        return _FakeMigrator(
-            descriptor.tenant_id, fail=(descriptor.tenant_id == "b-fails")
-        )
+        return _FakeMigrator(descriptor.tenant_id, fail=(descriptor.tenant_id == "b-fails"))
 
     migrator = TenantFanoutMigrator(
         catalog=catalog,

@@ -164,9 +164,7 @@ class TenantReadinessCoordinator(EventConsumer):
         effective_retry_policy = (
             self._default_retry_policy if retry_policy is _UNSET else retry_policy
         )
-        return super().register_to(
-            bus, retry_policy=effective_retry_policy, dlq=effective_dlq
-        )
+        return super().register_to(bus, retry_policy=effective_retry_policy, dlq=effective_dlq)
 
     @listen(TenantNodeReady, channel=CHANNEL_TENANCY)
     async def on_node_ready(self, event: Event) -> None:
@@ -222,9 +220,7 @@ class TenantReadinessCoordinator(EventConsumer):
     def _ensure_timeout_task(self, tenant_id: str) -> None:
         if self._timeout_s is None or tenant_id in self._timeout_tasks:
             return
-        self._timeout_tasks[tenant_id] = asyncio.create_task(
-            self._watch_timeout(tenant_id)
-        )
+        self._timeout_tasks[tenant_id] = asyncio.create_task(self._watch_timeout(tenant_id))
 
     def _cancel_timeout(self, tenant_id: str) -> None:
         task = self._timeout_tasks.pop(tenant_id, None)

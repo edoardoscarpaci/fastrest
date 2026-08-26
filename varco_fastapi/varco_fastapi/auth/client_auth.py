@@ -195,10 +195,7 @@ class JwtClientAuth(AbstractClientAuth):
         async with self._lock:
             # Double-check under the lock — another coroutine may have refreshed
             now = time.time()
-            if (
-                self._cached_token
-                and (self._cached_expiry - now) > self._refresh_buffer
-            ):
+            if self._cached_token and (self._cached_expiry - now) > self._refresh_buffer:
                 return {"Authorization": f"Bearer {self._cached_token}"}
 
             # Sign a fresh token

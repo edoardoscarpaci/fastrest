@@ -144,9 +144,7 @@ class JsonRpcDispatcher:
         #      synchronous dispatch surface; use the legacy job_runner-backed
         #      /tasks/send path when crash recovery matters.
         self._tasks: dict[str, dict[str, Any]] = {}
-        self._methods: dict[
-            str, Callable[[dict[str, Any], AuthContext | None], Awaitable[Any]]
-        ] = {
+        self._methods: dict[str, Callable[[dict[str, Any], AuthContext | None], Awaitable[Any]]] = {
             "message/send": self._message_send,
             "message/stream": self._message_send,  # no push transport — single-shot
             "tasks/get": self._tasks_get,
@@ -185,9 +183,7 @@ class JsonRpcDispatcher:
             or body.get("jsonrpc") != "2.0"
             or not isinstance(body.get("method"), str)
         ):
-            return _error_envelope(
-                id_, _INVALID_REQUEST, "Invalid JSON-RPC 2.0 request"
-            )
+            return _error_envelope(id_, _INVALID_REQUEST, "Invalid JSON-RPC 2.0 request")
 
         method = body["method"]
         params = body.get("params") or {}
@@ -203,9 +199,7 @@ class JsonRpcDispatcher:
         except _JsonRpcError as exc:
             return _error_envelope(id_, exc.code, exc.message)
         except Exception as exc:  # noqa: BLE001
-            _logger.warning(
-                "A2A JSON-RPC method %s failed: %s", method, exc, exc_info=True
-            )
+            _logger.warning("A2A JSON-RPC method %s failed: %s", method, exc, exc_info=True)
             return _error_envelope(id_, _INTERNAL_ERROR, str(exc))
 
         return _result_envelope(id_, result)
@@ -235,9 +229,7 @@ class JsonRpcDispatcher:
         self._tasks[task_id] = task
         return task
 
-    async def _tasks_get(
-        self, params: dict[str, Any], ctx: AuthContext | None
-    ) -> dict[str, Any]:
+    async def _tasks_get(self, params: dict[str, Any], ctx: AuthContext | None) -> dict[str, Any]:
         task_id = params.get("task_id")
         if not task_id or not isinstance(task_id, str):
             raise _BadParamsError("params.task_id (str) is required")
@@ -246,9 +238,7 @@ class JsonRpcDispatcher:
             raise _JsonRpcError(_TASK_NOT_FOUND, f"Unknown task '{task_id}'")
         return task
 
-    async def _tasks_list(
-        self, params: dict[str, Any], ctx: AuthContext | None
-    ) -> dict[str, Any]:
+    async def _tasks_list(self, params: dict[str, Any], ctx: AuthContext | None) -> dict[str, Any]:
         return {"tasks": list(self._tasks.values())}
 
     async def _tasks_cancel(

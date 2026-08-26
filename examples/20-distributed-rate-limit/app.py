@@ -81,12 +81,8 @@ def create_app(
 
         app = create_app("redis://localhost:6379/0", rate=10)
     """
-    _redis_limiter = redis_limiter or build_redis_limiter(
-        redis_url, rate=rate, period=period
-    )
-    _in_mem_limiter = in_mem_limiter or build_in_memory_limiter(
-        rate=rate, period=period
-    )
+    _redis_limiter = redis_limiter or build_redis_limiter(redis_url, rate=rate, period=period)
+    _in_mem_limiter = in_mem_limiter or build_in_memory_limiter(rate=rate, period=period)
     # Only manage lifecycle when we built the limiter ourselves.
     _manage_redis = redis_limiter is None
 

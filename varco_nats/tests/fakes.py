@@ -261,18 +261,14 @@ class FakeJetStream:
         self.push_subs: dict[str, tuple[FakePushSubscription, Any]] = {}
         self.account_info_ok = True
 
-    async def stream_info(
-        self, name: str, subjects_filter: str | None = None
-    ) -> FakeStreamInfo:
+    async def stream_info(self, name: str, subjects_filter: str | None = None) -> FakeStreamInfo:
         if name not in self.streams:
             raise NotFoundError
         stream = self.streams[name]
         # Build per-subject counts (state.subjects) for the requested filter.
         subjects: dict[str, int] = {}
         for stored in stream.messages:
-            if subjects_filter is None or subject_matches(
-                subjects_filter, stored.subject
-            ):
+            if subjects_filter is None or subject_matches(subjects_filter, stored.subject):
                 subjects[stored.subject] = subjects.get(stored.subject, 0) + 1
         return FakeStreamInfo(
             config=_FakeStreamConfig(list(stream.subjects)),
@@ -307,9 +303,7 @@ class FakeJetStream:
             ]
         return True
 
-    async def publish(
-        self, subject: str, payload: bytes, headers: dict | None = None
-    ) -> Any:
+    async def publish(self, subject: str, payload: bytes, headers: dict | None = None) -> Any:
         self.published.append((subject, payload, headers))
         # Store into every stream whose configured subjects cover this subject.
         for stream in self.streams.values():

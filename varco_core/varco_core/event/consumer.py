@@ -589,9 +589,7 @@ def _make_retry_wrapper(
                 if attempt < max_attempts:
                     # Compute back-off delay.  When policy is None (dlq-only
                     # mode with max_attempts=1) this branch is never reached.
-                    delay = (
-                        policy.compute_delay(attempt - 1) if policy is not None else 0.0
-                    )
+                    delay = policy.compute_delay(attempt - 1) if policy is not None else 0.0
                     _logger.warning(
                         "Handler %r failed (attempt %d/%d) on channel %r "
                         "— event_type=%r, error=%s: %s — retrying in %.2f s",
@@ -611,8 +609,7 @@ def _make_retry_wrapper(
         assert first_failed_at is not None
 
         _logger.error(
-            "Handler %r exhausted %d attempt(s) on channel %r — "
-            "event_type=%r, last_error=%s: %s",
+            "Handler %r exhausted %d attempt(s) on channel %r — event_type=%r, last_error=%s: %s",
             handler_name,
             max_attempts,
             channel,
@@ -652,9 +649,7 @@ def _make_retry_wrapper(
             )
         else:
             # No DLQ — re-raise so the bus's ErrorPolicy can handle it.
-            raise RetryExhaustedError(
-                handler_name, max_attempts, last_exc
-            ) from last_exc
+            raise RetryExhaustedError(handler_name, max_attempts, last_exc) from last_exc
 
     return wrapper
 
@@ -870,9 +865,7 @@ class EventConsumer:
                 #      no-op unless set_default_reliability_preset() was
                 #      called; resolved HERE, at register_to() time, so a
                 #      preset set after class definition still applies).
-                entry_declared = (
-                    entry.retry_policy is not _UNSET or entry.dlq is not _UNSET
-                )
+                entry_declared = entry.retry_policy is not _UNSET or entry.dlq is not _UNSET
                 if entry_declared:
                     effective_retry_policy = (
                         None if entry.retry_policy is _UNSET else entry.retry_policy
@@ -932,12 +925,10 @@ class EventConsumer:
                 if entry.inbox is not None:
                     from varco_core.service.inbox import _make_inbox_wrapper
 
-                    actual_handler: Callable[[Event], Awaitable[None] | None] = (
-                        _make_inbox_wrapper(  # type: ignore[assignment]
-                            inner_handler,
-                            entry.inbox,
-                            resolved_channel,
-                        )
+                    actual_handler: Callable[[Event], Awaitable[None] | None] = _make_inbox_wrapper(  # type: ignore[assignment]
+                        inner_handler,
+                        entry.inbox,
+                        resolved_channel,
                     )
                 else:
                     actual_handler = inner_handler

@@ -25,9 +25,7 @@ def test_tenant_aware_service_on_global_entity_raises() -> None:
         pass
 
     with pytest.raises(TenantIsolationError) as exc:
-        validate_service_scope(
-            BadService, entity_cls=GlobalEntity, tenant_scope=TenantScope.GLOBAL
-        )
+        validate_service_scope(BadService, entity_cls=GlobalEntity, tenant_scope=TenantScope.GLOBAL)
 
     message = str(exc.value)
     assert "BadService" in message

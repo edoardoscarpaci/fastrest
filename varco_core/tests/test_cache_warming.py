@@ -210,9 +210,7 @@ async def test_composite_warmer_runs_in_order() -> None:
         async def warm(self, cache: object) -> None:
             order.append(self._n)
 
-    composite = CompositeWarmer(
-        SequencedWarmer(1), SequencedWarmer(2), SequencedWarmer(3)
-    )
+    composite = CompositeWarmer(SequencedWarmer(1), SequencedWarmer(2), SequencedWarmer(3))
     cache = StubCache()
     await composite.warm(cache)
 

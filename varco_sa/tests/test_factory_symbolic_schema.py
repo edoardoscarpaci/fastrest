@@ -29,9 +29,7 @@ def test_under_shared_generated_table_schema_is_none(
     base: type[DeclarativeBase],
 ) -> None:
     parsed = MetaReader.read(_TenantEntity)
-    orm_cls, _mapper = SAModelFactory(base).build(
-        _TenantEntity, parsed, isolation="shared"
-    )
+    orm_cls, _mapper = SAModelFactory(base).build(_TenantEntity, parsed, isolation="shared")
 
     assert orm_cls.__table__.schema is None
 
@@ -40,9 +38,7 @@ def test_under_schema_isolation_tenant_model_carries_symbolic_token(
     base: type[DeclarativeBase],
 ) -> None:
     parsed = MetaReader.read(_TenantEntity)
-    orm_cls, _mapper = SAModelFactory(base).build(
-        _TenantEntity, parsed, isolation="schema"
-    )
+    orm_cls, _mapper = SAModelFactory(base).build(_TenantEntity, parsed, isolation="schema")
 
     assert orm_cls.__table__.schema == "tenant"
 
@@ -51,8 +47,6 @@ def test_under_schema_isolation_global_model_has_no_symbolic_token(
     base: type[DeclarativeBase],
 ) -> None:
     parsed = MetaReader.read(_GlobalEntity)
-    orm_cls, _mapper = SAModelFactory(base).build(
-        _GlobalEntity, parsed, isolation="schema"
-    )
+    orm_cls, _mapper = SAModelFactory(base).build(_GlobalEntity, parsed, isolation="schema")
 
     assert orm_cls.__table__.schema is None

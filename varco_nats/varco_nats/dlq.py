@@ -389,8 +389,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
                 entry = self._deserialize_entry(msg.data)
             except Exception as exc:  # noqa: BLE001
                 _logger.warning(
-                    "NatsDLQ.pop_batch: failed to deserialize a DLQ message: "
-                    "%s — terminating it.",
+                    "NatsDLQ.pop_batch: failed to deserialize a DLQ message: %s — terminating it.",
                     exc,
                     exc_info=True,
                 )
@@ -536,12 +535,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
                 mechanism (RD-4) — JetStream streams are not randomly
                 deletable.
         """
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "

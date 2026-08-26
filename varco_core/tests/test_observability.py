@@ -115,9 +115,7 @@ def metric_reader():
 
     # Patch in opentelemetry.metrics._internal — that is where get_meter is
     # defined and where it resolves get_meter_provider() at call time.
-    with mock.patch(
-        "opentelemetry.metrics._internal.get_meter_provider", return_value=provider
-    ):
+    with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
         yield reader  # noqa: PT022
 
     # Clear after: next test starts with a clean instrument cache.
@@ -196,9 +194,7 @@ class TestSpanConfig:
 
 
 class TestSpanAsync:
-    async def test_creates_span_with_qualname(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_creates_span_with_qualname(self, span_exporter: InMemorySpanExporter) -> None:
         @span
         async def my_function() -> str:
             return "ok"
@@ -211,9 +207,7 @@ class TestSpanAsync:
         # Bare @span — span name is the function's __qualname__
         assert "my_function" in spans[0].name
 
-    async def test_configured_span_name(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_configured_span_name(self, span_exporter: InMemorySpanExporter) -> None:
         @span(SpanConfig(name="custom.name"))
         async def my_fn() -> None:
             pass
@@ -223,9 +217,7 @@ class TestSpanAsync:
         spans = span_exporter.get_finished_spans()
         assert spans[0].name == "custom.name"
 
-    async def test_static_attributes_set(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_static_attributes_set(self, span_exporter: InMemorySpanExporter) -> None:
         @span(SpanConfig(attributes={"db": "postgresql", "env": "test"}))
         async def my_fn() -> None:
             pass
@@ -252,9 +244,7 @@ class TestSpanAsync:
         events = spans[0].events
         assert any("exception" in e.name for e in events)
 
-    async def test_does_not_swallow_exception(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_does_not_swallow_exception(self, span_exporter: InMemorySpanExporter) -> None:
         @span
         async def failing_fn() -> None:
             raise RuntimeError("must propagate")
@@ -369,9 +359,7 @@ class TestHistogramConfig:
 
 
 class TestCounter:
-    async def test_increments_on_success_async(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    async def test_increments_on_success_async(self, metric_reader: InMemoryMetricReader) -> None:
         cfg = CounterConfig(name="test.counter.async")
 
         @counter(cfg)
@@ -389,9 +377,7 @@ class TestCounter:
         # Two successful calls → sum = 2
         assert counter_metric.data.data_points[0].value == 2
 
-    def test_increments_on_success_sync(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_increments_on_success_sync(self, metric_reader: InMemoryMetricReader) -> None:
         cfg = CounterConfig(name="test.counter.sync")
 
         @counter(cfg)
@@ -424,9 +410,7 @@ class TestCounter:
         # so an exception-only test never creates the instrument at all).
         assert data is None or not data.resource_metrics
 
-    async def test_does_not_swallow_exception(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    async def test_does_not_swallow_exception(self, metric_reader: InMemoryMetricReader) -> None:
         @counter(CounterConfig(name="test.counter.exc"))
         async def failing() -> None:
             raise RuntimeError("must propagate")
@@ -439,9 +423,7 @@ class TestCounter:
 
 
 class TestHistogram:
-    async def test_records_duration_on_success(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    async def test_records_duration_on_success(self, metric_reader: InMemoryMetricReader) -> None:
         cfg = HistogramConfig(name="test.histogram.ok")
 
         @histogram(cfg)
@@ -458,9 +440,7 @@ class TestHistogram:
         # Duration must be non-negative
         assert hist.data.data_points[0].sum >= 0.0
 
-    async def test_records_duration_on_exception(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    async def test_records_duration_on_exception(self, metric_reader: InMemoryMetricReader) -> None:
         cfg = HistogramConfig(name="test.histogram.exc")
 
         @histogram(cfg)
@@ -524,9 +504,7 @@ class TestTracingServiceMixin:
 
         await svc._run_in_span(operation, _noop)
 
-    async def test_create_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_create_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         svc = self._make_service()
         await self._run(svc, "create")
 
@@ -541,18 +519,14 @@ class TestTracingServiceMixin:
         spans = span_exporter.get_finished_spans()
         assert any("read" in s.name for s in spans)
 
-    async def test_update_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_update_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         svc = self._make_service()
         await self._run(svc, "update")
 
         spans = span_exporter.get_finished_spans()
         assert any("update" in s.name for s in spans)
 
-    async def test_delete_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_delete_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         svc = self._make_service()
         await self._run(svc, "delete")
 
@@ -566,9 +540,7 @@ class TestTracingServiceMixin:
         spans = span_exporter.get_finished_spans()
         assert any("list" in s.name for s in spans)
 
-    async def test_custom_tracing_config(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_custom_tracing_config(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.service.base import AsyncService
 
         class _Custom(TracingServiceMixin, AsyncService):  # type: ignore[type-arg]
@@ -658,9 +630,7 @@ class TestTracingRepositoryMixin:
 
     # ── Span name tests ───────────────────────────────────────────────────────
 
-    async def test_find_by_id_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_find_by_id_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "find_by_id")
         spans = span_exporter.get_finished_spans()
@@ -673,49 +643,37 @@ class TestTracingRepositoryMixin:
         spans = span_exporter.get_finished_spans()
         assert any("save" in s.name for s in spans)
 
-    async def test_delete_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_delete_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "delete")
         spans = span_exporter.get_finished_spans()
         assert any("delete" in s.name for s in spans)
 
-    async def test_find_by_query_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_find_by_query_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "find_by_query")
         spans = span_exporter.get_finished_spans()
         assert any("find_by_query" in s.name for s in spans)
 
-    async def test_count_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_count_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "count")
         spans = span_exporter.get_finished_spans()
         assert any("count" in s.name for s in spans)
 
-    async def test_exists_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_exists_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "exists")
         spans = span_exporter.get_finished_spans()
         assert any("exists" in s.name for s in spans)
 
-    async def test_save_many_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_save_many_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "save_many")
         spans = span_exporter.get_finished_spans()
         assert any("save_many" in s.name for s in spans)
 
-    async def test_delete_many_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_delete_many_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "delete_many")
         spans = span_exporter.get_finished_spans()
@@ -731,9 +689,7 @@ class TestTracingRepositoryMixin:
 
     # ── Span name includes class name ─────────────────────────────────────────
 
-    async def test_span_name_includes_class_name(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_span_name_includes_class_name(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
         await self._run(repo, "save")
         spans = span_exporter.get_finished_spans()
@@ -742,9 +698,7 @@ class TestTracingRepositoryMixin:
 
     # ── Exception recording ───────────────────────────────────────────────────
 
-    async def test_exception_recorded_on_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_exception_recorded_on_span(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
 
         async def _raise(*a: Any, **kw: Any) -> None:
@@ -757,9 +711,7 @@ class TestTracingRepositoryMixin:
         assert len(spans) == 1
         assert spans[0].status.status_code == StatusCode.ERROR
 
-    async def test_exception_re_raised(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_exception_re_raised(self, span_exporter: InMemorySpanExporter) -> None:
         repo = self._make_repo()
 
         async def _raise(*a: Any, **kw: Any) -> None:
@@ -811,9 +763,7 @@ class TestTracingRepositoryMixin:
                 yield
 
         class _NoRecord(TracingRepositoryMixin, _StubBackend):  # type: ignore[type-arg]
-            _tracing_config = SpanConfig(
-                record_exception=False, set_status_on_error=False
-            )
+            _tracing_config = SpanConfig(record_exception=False, set_status_on_error=False)
 
         repo = _NoRecord()
 
@@ -849,9 +799,7 @@ class TestTracingRepositoryMixin:
 
     # ── stream_by_query ───────────────────────────────────────────────────────
 
-    async def test_stream_by_query_creates_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_stream_by_query_creates_span(self, span_exporter: InMemorySpanExporter) -> None:
         """stream_by_query span is created and closed after full iteration."""
         repo = self._make_repo()
 
@@ -918,9 +866,7 @@ class TestTracingRepositoryMixin:
 
     # ── Static attributes ─────────────────────────────────────────────────────
 
-    async def test_static_attributes_set_on_span(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_static_attributes_set_on_span(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.repository import AsyncRepository
 
         class _StubBackend(AsyncRepository):  # type: ignore[type-arg]
@@ -1053,9 +999,7 @@ class TestCreateSpan:
         assert len(spans) == 1
         assert spans[0].name == "my.block"
 
-    def test_yields_span_for_dynamic_attributes(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    def test_yields_span_for_dynamic_attributes(self, span_exporter: InMemorySpanExporter) -> None:
         with create_span("my.block") as s:
             s.set_attribute("entity.id", "order-42")
 
@@ -1077,9 +1021,7 @@ class TestCreateSpan:
         spans = span_exporter.get_finished_spans()
         assert spans[0].status.status_code == StatusCode.ERROR
 
-    def test_does_not_swallow_exception(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    def test_does_not_swallow_exception(self, span_exporter: InMemorySpanExporter) -> None:
         with pytest.raises(RuntimeError):
             with create_span("my.block"):
                 raise RuntimeError("must propagate")
@@ -1097,9 +1039,7 @@ class TestCreateSpan:
         spans = span_exporter.get_finished_spans()
         assert spans[0].attributes.get("correlation_id") == "ctx-123"
 
-    def test_nested_creates_parent_child(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    def test_nested_creates_parent_child(self, span_exporter: InMemorySpanExporter) -> None:
         with create_span("outer"):
             with create_span("inner"):
                 pass
@@ -1118,9 +1058,7 @@ class TestCreateSpan:
 
 
 class TestCreateMetricHelpers:
-    def test_create_counter_returns_instrument(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_create_counter_returns_instrument(self, metric_reader: InMemoryMetricReader) -> None:
         c = create_counter("helpers.counter", description="test counter")
         c.add(5)
 
@@ -1129,9 +1067,7 @@ class TestCreateMetricHelpers:
         metric = next(m for m in metrics if m.name == "helpers.counter")
         assert metric.data.data_points[0].value == 5
 
-    def test_create_histogram_returns_instrument(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_create_histogram_returns_instrument(self, metric_reader: InMemoryMetricReader) -> None:
         h = create_histogram("helpers.histogram", description="test histogram")
         h.record(0.123)
 
@@ -1140,9 +1076,7 @@ class TestCreateMetricHelpers:
         hist = next(m for m in metrics if m.name == "helpers.histogram")
         assert hist.data.data_points[0].count == 1
 
-    def test_same_name_returns_cached_instrument(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_same_name_returns_cached_instrument(self, metric_reader: InMemoryMetricReader) -> None:
         # Two calls with the same name → same object (cached).
         c1 = create_counter("cache.test.counter")
         c2 = create_counter("cache.test.counter")
@@ -1184,9 +1118,7 @@ class TestMetric:
         point = next(m for m in metrics if m.name == "test.counter")
         assert point.data.data_points[0].value == 3
 
-    def test_counter_add_default_amount(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_counter_add_default_amount(self, metric_reader: InMemoryMetricReader) -> None:
         """add() with no argument defaults to incrementing by 1."""
         m = Metric("test.counter.default", kind="counter")
         m.add()  # default amount = 1
@@ -1196,9 +1128,7 @@ class TestMetric:
         point = next(m for m in metrics if m.name == "test.counter.default")
         assert point.data.data_points[0].value == 1
 
-    def test_updown_counter_add_and_sub(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_updown_counter_add_and_sub(self, metric_reader: InMemoryMetricReader) -> None:
         """sub() decrements an updown_counter — net result is the sum."""
         m = Metric("test.updown", kind="updown_counter")
         m.add(5)
@@ -1223,9 +1153,7 @@ class TestMetric:
         point = next(met for met in metrics if met.name == "test.sub.default")
         assert point.data.data_points[0].value == 9
 
-    def test_histogram_record_captures_value(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_histogram_record_captures_value(self, metric_reader: InMemoryMetricReader) -> None:
         """record() on a histogram kind records the observation."""
         m = Metric("test.histogram", kind="histogram", unit="s")
         m.record(0.75)
@@ -1238,9 +1166,7 @@ class TestMetric:
         assert dp.count == 1
         assert dp.sum == pytest.approx(0.75)
 
-    def test_add_on_histogram_routes_to_record(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_add_on_histogram_routes_to_record(self, metric_reader: InMemoryMetricReader) -> None:
         """add() on histogram kind internally calls .record() — same result."""
         m = Metric("test.histogram.add", kind="histogram", unit="1")
         m.add(42)
@@ -1250,9 +1176,7 @@ class TestMetric:
         point = next(met for met in metrics if met.name == "test.histogram.add")
         assert point.data.data_points[0].sum == 42
 
-    def test_kwargs_forwarded_as_attributes(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_kwargs_forwarded_as_attributes(self, metric_reader: InMemoryMetricReader) -> None:
         """Keyword arguments to add() become OTel attribute dimensions."""
         m = Metric("test.attrs", kind="counter")
         m.add(1, model="gpt-4o", tenant="acme")
@@ -1288,9 +1212,7 @@ class TestMetric:
         assert "counter" in r
         assert "my-svc" in r
 
-    def test_invalid_kind_raises_value_error(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_invalid_kind_raises_value_error(self, metric_reader: InMemoryMetricReader) -> None:
         """An unsupported kind string raises ValueError on first use."""
         m = Metric("bad.kind", kind="gauge")  # type: ignore[arg-type]
         with pytest.raises(ValueError, match="not supported"):
@@ -1308,9 +1230,7 @@ class TestRegisterGauge:
     SDK when ``metric_reader.get_metrics_data()`` is called.
     """
 
-    def test_callback_invoked_on_collection(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_callback_invoked_on_collection(self, metric_reader: InMemoryMetricReader) -> None:
         """The callback's return value appears as the gauge observation."""
         register_gauge(
             "test.gauge",
@@ -1339,9 +1259,7 @@ class TestRegisterGauge:
         point = next(m for m in metrics if m.name == "test.gauge.attrs")
         assert point.data.data_points[0].attributes.get("pod") == "worker-1"
 
-    def test_callback_can_return_dynamic_value(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_callback_can_return_dynamic_value(self, metric_reader: InMemoryMetricReader) -> None:
         """Callback is re-evaluated on each collection — returns current value."""
         counter_box = [0]
 
@@ -1426,9 +1344,7 @@ class TestSpanParamCapture:
         spans = span_exporter.get_finished_spans()
         assert not any(k.startswith("param.") for k in spans[0].attributes)
 
-    async def test_password_kwarg_is_redacted(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_password_kwarg_is_redacted(self, span_exporter: InMemorySpanExporter) -> None:
         @span
         async def login(username, password):
             pass
@@ -1637,9 +1553,7 @@ class TestGlobalAttributesOnMetrics:
         point = next(m for m in metrics if m.name == "test.ga.histogram")
         assert point.data.data_points[0].attributes.get("pod") == "p1"
 
-    def test_metric_add_gets_global_attribute(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_metric_add_gets_global_attribute(self, metric_reader: InMemoryMetricReader) -> None:
         from varco_core.observability.attributes import set_global_attributes
 
         set_global_attributes(pod="p1")
@@ -1652,9 +1566,7 @@ class TestGlobalAttributesOnMetrics:
         point = next(mm for mm in metrics if mm.name == "test.ga.metric.counter")
         assert point.data.data_points[0].attributes.get("pod") == "p1"
 
-    def test_metric_sub_gets_global_attribute(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_metric_sub_gets_global_attribute(self, metric_reader: InMemoryMetricReader) -> None:
         from varco_core.observability.attributes import set_global_attributes
 
         set_global_attributes(pod="p1")
@@ -1667,9 +1579,7 @@ class TestGlobalAttributesOnMetrics:
         point = next(mm for mm in metrics if mm.name == "test.ga.metric.updown")
         assert point.data.data_points[0].attributes.get("pod") == "p1"
 
-    def test_metric_record_gets_global_attribute(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_metric_record_gets_global_attribute(self, metric_reader: InMemoryMetricReader) -> None:
         from varco_core.observability.attributes import set_global_attributes
 
         set_global_attributes(pod="p1")
@@ -1696,9 +1606,7 @@ class TestGlobalAttributesOnMetrics:
         point = next(m for m in metrics if m.name == "test.ga.gauge")
         assert point.data.data_points[0].attributes.get("pod") == "p1"
 
-    def test_caller_attribute_wins_on_conflict(
-        self, metric_reader: InMemoryMetricReader
-    ) -> None:
+    def test_caller_attribute_wins_on_conflict(self, metric_reader: InMemoryMetricReader) -> None:
         from varco_core.observability.attributes import set_global_attributes
 
         set_global_attributes(tenant="global-tenant")
@@ -1748,9 +1656,7 @@ class TestGlobalAttributesOnMetrics:
         # Each distinct attribute set is its own data point, and the SDK keeps them in
         # insertion order — so the pre-registration measurement is always data_points[0].
         # The contract under test is that the LATER measurement picked the attribute up.
-        assert any(
-            dp.attributes.get("pod") == "late-pod" for dp in point.data.data_points
-        )
+        assert any(dp.attributes.get("pod") == "late-pod" for dp in point.data.data_points)
 
 
 # ── Plan 004 (Phase 5) — config, DI, import-surface ──────────────────────────
@@ -1866,9 +1772,7 @@ class TestTracingEventMiddleware:
     publishing events, then inspecting the recorded spans.
     """
 
-    async def test_span_created_on_dispatch(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_span_created_on_dispatch(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware
@@ -1883,9 +1787,7 @@ class TestTracingEventMiddleware:
         spans = span_exporter.get_finished_spans()
         assert len(spans) == 1
 
-    async def test_span_name_is_event_type_name(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_span_name_is_event_type_name(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware
@@ -1900,9 +1802,7 @@ class TestTracingEventMiddleware:
         spans = span_exporter.get_finished_spans()
         assert spans[0].name == "event.MySpecialEvent"
 
-    async def test_channel_attribute_set(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_channel_attribute_set(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware
@@ -1917,9 +1817,7 @@ class TestTracingEventMiddleware:
         spans = span_exporter.get_finished_spans()
         assert spans[0].attributes.get("messaging.channel") == "orders"
 
-    async def test_event_type_attribute_set(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_event_type_attribute_set(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware
@@ -1948,9 +1846,7 @@ class TestTracingEventMiddleware:
             __event_type__ = "test.pong"
 
         # CorrelationMiddleware sets the ContextVar before TracingEventMiddleware reads it
-        bus = InMemoryEventBus(
-            middleware=[CorrelationMiddleware(), TracingEventMiddleware()]
-        )
+        bus = InMemoryEventBus(middleware=[CorrelationMiddleware(), TracingEventMiddleware()])
         bus.subscribe(PongEvent, lambda e: None)
         await bus.publish(PongEvent())
 
@@ -1993,9 +1889,7 @@ class TestTracingEventMiddleware:
         async def bad_handler(event: Event) -> None:
             raise RuntimeError("boom")
 
-        bus = InMemoryEventBus(
-            middleware=[TracingEventMiddleware(record_exception=True)]
-        )
+        bus = InMemoryEventBus(middleware=[TracingEventMiddleware(record_exception=True)])
         bus.subscribe(FailEvent, bad_handler)
 
         with pytest.raises(RuntimeError):
@@ -2024,9 +1918,7 @@ class TestTracingEventMiddleware:
         with pytest.raises(ValueError, match="detonated"):
             await bus.publish(BombEvent())
 
-    async def test_error_status_set_on_failure(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_error_status_set_on_failure(self, span_exporter: InMemorySpanExporter) -> None:
         from opentelemetry.trace import StatusCode as OTelStatusCode
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
@@ -2038,9 +1930,7 @@ class TestTracingEventMiddleware:
         async def bad(e: Event) -> None:
             raise RuntimeError("bad")
 
-        bus = InMemoryEventBus(
-            middleware=[TracingEventMiddleware(set_status_on_error=True)]
-        )
+        bus = InMemoryEventBus(middleware=[TracingEventMiddleware(set_status_on_error=True)])
         bus.subscribe(ErrorEvent, bad)
 
         with pytest.raises(RuntimeError):
@@ -2049,9 +1939,7 @@ class TestTracingEventMiddleware:
         spans = span_exporter.get_finished_spans()
         assert spans[0].status.status_code == OTelStatusCode.ERROR
 
-    async def test_no_error_status_when_disabled(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_no_error_status_when_disabled(self, span_exporter: InMemorySpanExporter) -> None:
         from opentelemetry.trace import StatusCode as OTelStatusCode
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
@@ -2064,11 +1952,7 @@ class TestTracingEventMiddleware:
             raise RuntimeError("silent")
 
         bus = InMemoryEventBus(
-            middleware=[
-                TracingEventMiddleware(
-                    set_status_on_error=False, record_exception=False
-                )
-            ]
+            middleware=[TracingEventMiddleware(set_status_on_error=False, record_exception=False)]
         )
         bus.subscribe(SilentError, bad)
 
@@ -2078,9 +1962,7 @@ class TestTracingEventMiddleware:
         spans = span_exporter.get_finished_spans()
         assert spans[0].status.status_code != OTelStatusCode.ERROR
 
-    async def test_static_attributes_applied(
-        self, span_exporter: InMemorySpanExporter
-    ) -> None:
+    async def test_static_attributes_applied(self, span_exporter: InMemorySpanExporter) -> None:
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware
@@ -2089,9 +1971,7 @@ class TestTracingEventMiddleware:
             __event_type__ = "test.attr"
 
         bus = InMemoryEventBus(
-            middleware=[
-                TracingEventMiddleware(attributes={"messaging.system": "internal"})
-            ]
+            middleware=[TracingEventMiddleware(attributes={"messaging.system": "internal"})]
         )
         bus.subscribe(AttrEvent, lambda e: None)
         await bus.publish(AttrEvent())

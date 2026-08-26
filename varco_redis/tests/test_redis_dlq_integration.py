@@ -147,9 +147,7 @@ class TestRedisDLQIntegration:
 
 
 class TestRedisDLQRetentionSweepIntegration:
-    async def test_chunked_delete_where_sweep_drains_matching_entries(
-        self, dlq
-    ) -> None:
+    async def test_chunked_delete_where_sweep_drains_matching_entries(self, dlq) -> None:
         """Loop delete_where(..., limit=chunk) until 0 -- the chunked-sweep
         recipe from technical_docs/features/job-scheduling-and-leases.md's
         retention pitfall."""

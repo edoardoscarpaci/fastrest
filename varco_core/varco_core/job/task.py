@@ -406,11 +406,7 @@ class VarcoTask:
             self._serializer.deserialize(
                 value=val,
                 # Map positional index to parameter name, then to type hint
-                type_hint=(
-                    self._type_hints.get(param_names[i])
-                    if i < len(param_names)
-                    else None
-                ),
+                type_hint=(self._type_hints.get(param_names[i]) if i < len(param_names) else None),
             )
             for i, val in enumerate(payload.args)
         ]

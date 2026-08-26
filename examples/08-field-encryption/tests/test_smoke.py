@@ -125,9 +125,7 @@ class TestCreateAndRead:
 
         # Fetch by ID
         resp = await app_client.get(f"/v1/patients/{pk}")
-        assert (
-            resp.status_code == 200
-        ), f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         data = resp.json()
 
         # The ORM mapper decrypts ssn and notes transparently on SELECT —
@@ -185,8 +183,7 @@ class TestDbStoresCiphertext:
         # raw_ssn is bytes (Fernet token) — it will never equal the plaintext string
         plaintext_as_bytes = b"999-88-7777"
         assert raw_ssn != plaintext_as_bytes, (
-            "SSN was stored in plaintext — encryption did NOT apply. "
-            f"Raw DB value: {raw_ssn!r}"
+            f"SSN was stored in plaintext — encryption did NOT apply. Raw DB value: {raw_ssn!r}"
         )
         # Also verify that the raw value is non-trivially long (Fernet overhead)
         assert len(raw_ssn) > 20, f"Raw SSN is suspiciously short: {raw_ssn!r}"
@@ -223,9 +220,7 @@ class TestUpdateEncryptedField:
                 "notes": "Updated notes",
             },
         )
-        assert (
-            resp.status_code == 200
-        ), f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
 
         # GET and verify the plaintext reflects the update
         resp = await app_client.get(f"/v1/patients/{pk}")
@@ -263,18 +258,12 @@ class TestListWithDecryptedFields:
 
         # GET all patients — CRUDRouter may return a paged envelope or a plain list
         resp = await app_client.get("/v1/patients")
-        assert (
-            resp.status_code == 200
-        ), f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         body = resp.json()
-        all_patients = (
-            body["results"] if isinstance(body, dict) and "results" in body else body
-        )
+        all_patients = body["results"] if isinstance(body, dict) and "results" in body else body
 
         # Find this test's patients in the response list
-        this_test_patients = [
-            p for p in all_patients if p.get("name", "").startswith(tag)
-        ]
+        this_test_patients = [p for p in all_patients if p.get("name", "").startswith(tag)]
         assert len(this_test_patients) >= 2, (
             f"Expected at least 2 patients with name prefix {tag!r}, "
             f"found {len(this_test_patients)}: {this_test_patients}"
@@ -284,12 +273,12 @@ class TestListWithDecryptedFields:
         returned_ssns = {p["ssn"] for p in this_test_patients}
 
         # Both SSNs should be returned as plaintext — mapper decrypts on SELECT
-        assert (
-            "001-00-0001" in returned_ssns
-        ), f"SSN '001-00-0001' not found in list response. Returned: {returned_ssns}"
-        assert (
-            "002-00-0002" in returned_ssns
-        ), f"SSN '002-00-0002' not found in list response. Returned: {returned_ssns}"
+        assert "001-00-0001" in returned_ssns, (
+            f"SSN '001-00-0001' not found in list response. Returned: {returned_ssns}"
+        )
+        assert "002-00-0002" in returned_ssns, (
+            f"SSN '002-00-0002' not found in list response. Returned: {returned_ssns}"
+        )
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -303,8 +292,6 @@ class TestHealthCheck:
     async def test_health_returns_ok(self, app_client) -> None:
         """Health probe must return 200 with ``{"status": "ok"}``."""
         resp = await app_client.get("/health")
-        assert (
-            resp.status_code == 200
-        ), f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         body = resp.json()
         assert body == {"status": "ok"}, f"Unexpected health body: {body}"

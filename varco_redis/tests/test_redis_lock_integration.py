@@ -101,9 +101,7 @@ class TestRedisLockIntegration:
 
             # Real lock must still be held.
             contender = await lock.try_acquire("integration:token_guard", ttl=10)
-            assert (
-                contender is None
-            ), "Lock should still be held after wrong-token release"
+            assert contender is None, "Lock should still be held after wrong-token release"
         finally:
             await real_handle.release()
 
@@ -160,7 +158,7 @@ class TestRedisLockIntegration:
 
         # Now a new caller must be able to acquire without release.
         new_handle = await lock.try_acquire("integration:ttl_expiry", ttl=10)
-        assert (
-            new_handle is not None
-        ), "Lock should be acquirable after TTL expiry — Redis key should have been deleted"
+        assert new_handle is not None, (
+            "Lock should be acquirable after TTL expiry — Redis key should have been deleted"
+        )
         await new_handle.release()

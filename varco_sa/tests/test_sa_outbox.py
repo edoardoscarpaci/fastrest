@@ -127,9 +127,7 @@ class TestSAOutboxRepositorySave:
         assert len(pending) == 1
         assert pending[0].entry_id == entry.entry_id
 
-    async def test_save_does_not_auto_commit(
-        self, session: AsyncSession, engine
-    ) -> None:
+    async def test_save_does_not_auto_commit(self, session: AsyncSession, engine) -> None:
         """save() must not commit — the UoW controls the transaction boundary."""
         repo = SAOutboxRepository(session)
         entry = _make_entry()
@@ -150,9 +148,7 @@ class TestSAOutboxRepositorySave:
 
 
 class TestSAOutboxRepositoryGetPending:
-    async def test_get_pending_returns_oldest_first(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_get_pending_returns_oldest_first(self, session: AsyncSession) -> None:
         """get_pending() must return entries ordered by created_at ASC (oldest first)."""
         import asyncio
 
@@ -184,9 +180,7 @@ class TestSAOutboxRepositoryGetPending:
         pending = await repo.get_pending()
         assert pending == []
 
-    async def test_get_pending_returns_outbox_entry_objects(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_get_pending_returns_outbox_entry_objects(self, session: AsyncSession) -> None:
         repo = SAOutboxRepository(session)
         entry = _make_entry()
         await repo.save(entry)
@@ -294,9 +288,7 @@ class TestSARelayOutboxRepositoryDelete:
             pending = await other_repo.get_pending()
         assert len(pending) == 0
 
-    async def test_delete_nonexistent_is_noop(
-        self, relay_factory: async_sessionmaker
-    ) -> None:
+    async def test_delete_nonexistent_is_noop(self, relay_factory: async_sessionmaker) -> None:
         from uuid import uuid4
 
         repo = SARelayOutboxRepository(relay_factory)
@@ -347,9 +339,7 @@ class TestSARelayOutboxRepositoryCountPending:
 
         assert await repo.count_pending() == 2
 
-    async def test_count_pending_zero_when_empty(
-        self, relay_factory: async_sessionmaker
-    ) -> None:
+    async def test_count_pending_zero_when_empty(self, relay_factory: async_sessionmaker) -> None:
         repo = SARelayOutboxRepository(relay_factory)
         assert await repo.count_pending() == 0
 

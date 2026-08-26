@@ -99,9 +99,7 @@ class TestPush:
             await dlq.push(_make_entry())
             assert await dlq.count() == 1
 
-    async def test_push_never_raises_on_publish_failure(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_push_never_raises_on_publish_failure(self, fake_nc: FakeNatsClient) -> None:
         async with _started_dlq(fake_nc) as dlq:
             # Simulate a broker error mid-publish — push() must swallow it.
             async def _boom(*_: object, **__: object) -> None:
@@ -115,22 +113,16 @@ class TestPush:
 
 
 class TestPopBatchAndAck:
-    async def test_pop_batch_empty_returns_empty_list(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_pop_batch_empty_returns_empty_list(self, fake_nc: FakeNatsClient) -> None:
         async with _started_dlq(fake_nc) as dlq:
             assert await dlq.pop_batch(limit=5) == []
 
-    async def test_pop_batch_invalid_limit_raises(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_pop_batch_invalid_limit_raises(self, fake_nc: FakeNatsClient) -> None:
         async with _started_dlq(fake_nc) as dlq:
             with pytest.raises(ValueError, match="limit"):
                 await dlq.pop_batch(limit=0)
 
-    async def test_pop_batch_returns_pushed_entry(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_pop_batch_returns_pushed_entry(self, fake_nc: FakeNatsClient) -> None:
         async with _started_dlq(fake_nc) as dlq:
             await dlq.push(_make_entry(handler_name="on_order", order_id="42"))
             entries = await dlq.pop_batch(limit=10)
@@ -139,9 +131,7 @@ class TestPopBatchAndAck:
             assert isinstance(entries[0].event, OrderPlacedEvent)
             assert entries[0].event.order_id == "42"
 
-    async def test_pop_batch_does_not_remove_until_acked(
-        self, fake_nc: FakeNatsClient
-    ) -> None:
+    async def test_pop_batch_does_not_remove_until_acked(self, fake_nc: FakeNatsClient) -> None:
         async with _started_dlq(fake_nc) as dlq:
             await dlq.push(_make_entry())
             await dlq.pop_batch(limit=10)

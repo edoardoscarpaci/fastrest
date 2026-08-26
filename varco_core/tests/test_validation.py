@@ -184,9 +184,7 @@ class TestCompositeValidator:
         class QuantityValidator:
             def validate(self, value: Order) -> ValidationResult:
                 if value.quantity <= 0:
-                    return ValidationResult.error(
-                        "quantity must be positive", field="quantity"
-                    )
+                    return ValidationResult.error("quantity must be positive", field="quantity")
                 return ValidationResult.ok()
 
         return QuantityValidator()
@@ -195,9 +193,7 @@ class TestCompositeValidator:
         class TotalValidator:
             def validate(self, value: Order) -> ValidationResult:
                 if value.total < 0:
-                    return ValidationResult.error(
-                        "total must be non-negative", field="total"
-                    )
+                    return ValidationResult.error("total must be non-negative", field="total")
                 return ValidationResult.ok()
 
         return TotalValidator()
@@ -209,25 +205,19 @@ class TestCompositeValidator:
         assert result.is_valid is True
 
     def test_all_validators_pass_returns_ok(self) -> None:
-        composite = CompositeValidator(
-            self._quantity_validator(), self._total_validator()
-        )
+        composite = CompositeValidator(self._quantity_validator(), self._total_validator())
         result = composite.validate(Order(quantity=1, total=10.0))
         assert result.is_valid is True
 
     def test_one_validator_fails_returns_errors(self) -> None:
-        composite = CompositeValidator(
-            self._quantity_validator(), self._total_validator()
-        )
+        composite = CompositeValidator(self._quantity_validator(), self._total_validator())
         result = composite.validate(Order(quantity=-1, total=10.0))
         assert result.is_valid is False
         assert any("quantity" in e.message for e in result.errors)
 
     def test_all_validators_run_collect_all_errors(self) -> None:
         """All validators run — fail-fast is NOT the behaviour here."""
-        composite = CompositeValidator(
-            self._quantity_validator(), self._total_validator()
-        )
+        composite = CompositeValidator(self._quantity_validator(), self._total_validator())
         # Both qty and total are invalid
         result = composite.validate(Order(quantity=-1, total=-5.0))
         assert len(result.errors) == 2

@@ -61,15 +61,11 @@ logger = logging.getLogger(__name__)
 # Set by JobRunner before executing each job coroutine.
 # Holds a callable (progress, message) → None that job code can call
 # to report progress without importing the runner.
-_current_job_id_var: ContextVar[UUID | None] = ContextVar(
-    "varco_current_job_id", default=None
-)
+_current_job_id_var: ContextVar[UUID | None] = ContextVar("varco_current_job_id", default=None)
 
 # Holds the event bus emit function so job_progress() can publish without
 # directly holding a reference to the runner.
-_progress_emit_var: ContextVar[Any | None] = ContextVar(
-    "varco_progress_emit", default=None
-)
+_progress_emit_var: ContextVar[Any | None] = ContextVar("varco_progress_emit", default=None)
 
 
 def job_progress(progress: float, message: str | None = None) -> None:
@@ -182,9 +178,7 @@ class JobRunner(AbstractJobRunner):
         # Starts as the unresolved DI proxy; `start()` upgrades it in place to
         # the resolved `AbstractEventBus` once resolvable (see below) — the
         # attribute type covers both states across the instance's lifetime.
-        self._event_bus: Instance[AbstractEventBus] | AbstractEventBus | None = (
-            event_bus
-        )
+        self._event_bus: Instance[AbstractEventBus] | AbstractEventBus | None = event_bus
         self._max_concurrent = max_concurrent
         self._callback_retry_policy = callback_retry_policy
         self._enable_otel = enable_otel and self._check_otel()
@@ -202,11 +196,7 @@ class JobRunner(AbstractJobRunner):
         self._started = False
 
     def __repr__(self) -> str:
-        return (
-            f"JobRunner("
-            f"in_flight={len(self._tasks)}, "
-            f"max_concurrent={self._max_concurrent!r})"
-        )
+        return f"JobRunner(in_flight={len(self._tasks)}, max_concurrent={self._max_concurrent!r})"
 
     @staticmethod
     def _check_otel() -> bool:
@@ -274,9 +264,7 @@ class JobRunner(AbstractJobRunner):
             return
 
         in_flight = list(self._tasks.values())
-        logger.info(
-            "JobRunner stopping — cancelling %d in-flight tasks", len(in_flight)
-        )
+        logger.info("JobRunner stopping — cancelling %d in-flight tasks", len(in_flight))
 
         for task in in_flight:
             task.cancel()
@@ -647,9 +635,7 @@ class JobRunner(AbstractJobRunner):
             import json
 
             try:
-                result_bytes = (
-                    json.dumps(result).encode() if result is not None else None
-                )
+                result_bytes = json.dumps(result).encode() if result is not None else None
             except (TypeError, ValueError):
                 result_bytes = str(result).encode()
 
@@ -675,9 +661,7 @@ class JobRunner(AbstractJobRunner):
             await self._handle_job_failure(job, exc, span)
             logger.exception("JobRunner: recovered job %s failed", job.job_id)
 
-    async def _handle_job_failure(
-        self, job: Job, exc: BaseException, span: Any
-    ) -> None:
+    async def _handle_job_failure(self, job: Job, exc: BaseException, span: Any) -> None:
         """
         Terminalize (or retry-schedule) a job whose coroutine raised.
 
@@ -814,9 +798,7 @@ class JobRunner(AbstractJobRunner):
             import json
 
             try:
-                result_bytes = (
-                    json.dumps(result).encode() if result is not None else None
-                )
+                result_bytes = json.dumps(result).encode() if result is not None else None
             except (TypeError, ValueError):
                 result_bytes = str(result).encode()
 
@@ -872,9 +854,7 @@ class JobRunner(AbstractJobRunner):
             # No running event loop — silently skip
             return
         loop.create_task(
-            self._publish_progress(
-                job_id, JobStatus.RUNNING, progress=progress, message=message
-            ),
+            self._publish_progress(job_id, JobStatus.RUNNING, progress=progress, message=message),
             name=f"progress-{job_id}",
         )
 

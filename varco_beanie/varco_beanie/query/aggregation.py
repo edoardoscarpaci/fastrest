@@ -196,10 +196,7 @@ class BeanieAggregationApplicator(QueryApplicator):
         """
         if not sort_fields:
             return list(query)
-        sort_doc = {
-            sf.field: _DESC if sf.order == SortOrder.DESC else _ASC
-            for sf in sort_fields
-        }
+        sort_doc = {sf.field: _DESC if sf.order == SortOrder.DESC else _ASC for sf in sort_fields}
         return list(query) + [{"$sort": sort_doc}]
 
     def apply_pagination(  # type: ignore[override]
@@ -236,8 +233,7 @@ class BeanieAggregationApplicator(QueryApplicator):
 
     def __repr__(self) -> str:
         return (
-            f"BeanieAggregationApplicator("
-            f"allowed_fields={sorted(self.allowed_fields) or 'all'!r})"
+            f"BeanieAggregationApplicator(allowed_fields={sorted(self.allowed_fields) or 'all'!r})"
         )
 
 

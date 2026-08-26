@@ -23,9 +23,7 @@ if TYPE_CHECKING:
     from varco_fastapi.contract.model import ServiceContract
 
 
-def contract_client_class(
-    contract: ServiceContract, *, name: str | None = None
-) -> type:
+def contract_client_class(contract: ServiceContract, *, name: str | None = None) -> type:
     """
     Build (not memoized — call sites typically call this once per contract)
     an ``AsyncVarcoClient`` subclass whose methods are synthesized entirely

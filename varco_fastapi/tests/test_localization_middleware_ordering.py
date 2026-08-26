@@ -34,9 +34,7 @@ def make_app(*, i18n_enabled: bool) -> FastAPI:
     app.add_middleware(ErrorMiddleware)
     app.add_middleware(
         LocalizationMiddleware,
-        i18n_settings=I18nSettings(
-            enabled=i18n_enabled, supported_locales=("en", "fr")
-        ),
+        i18n_settings=I18nSettings(enabled=i18n_enabled, supported_locales=("en", "fr")),
     )
 
     @app.get("/boom")
@@ -94,6 +92,6 @@ async def test_middleware_after_tenant_resolution_sees_current_tenant() -> None:
     # current_tenant() is populated by the time Localization's tenant-default
     # precedence step runs. Flipped per this test's own escape hatch: "trust
     # CLAUDE.md's stated request order over this test and flip the comparison."
-    assert middleware_classes.index(
-        TenantResolutionMiddleware
-    ) < middleware_classes.index(LocalizationMiddleware)
+    assert middleware_classes.index(TenantResolutionMiddleware) < middleware_classes.index(
+        LocalizationMiddleware
+    )

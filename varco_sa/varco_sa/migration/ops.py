@@ -65,8 +65,7 @@ def rls_upgrade(
     """
     if _dialect_name(op) != "postgresql":
         logger.warning(
-            "rls_upgrade: dialect %r has no Row-Level Security — skipping "
-            "for table %r.",
+            "rls_upgrade: dialect %r has no Row-Level Security — skipping for table %r.",
             _dialect_name(op),
             table,
         )
@@ -102,8 +101,7 @@ def rls_downgrade(
     """
     if _dialect_name(op) != "postgresql":
         logger.warning(
-            "rls_downgrade: dialect %r has no Row-Level Security — skipping "
-            "for table %r.",
+            "rls_downgrade: dialect %r has no Row-Level Security — skipping for table %r.",
             _dialect_name(op),
             table,
         )

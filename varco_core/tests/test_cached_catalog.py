@@ -87,9 +87,7 @@ async def test_unknown_tenant_reads_through_and_is_rate_limited() -> None:
     from varco_core.tenancy.catalog import TenantNotFoundError
 
     store = _CountingCatalog({})
-    cached = CachedTenantCatalog(
-        store=store, catalog_ttl_s=60.0, negative_cache_window_s=60.0
-    )
+    cached = CachedTenantCatalog(store=store, catalog_ttl_s=60.0, negative_cache_window_s=60.0)
 
     with pytest.raises(TenantNotFoundError):
         await cached.get("ghost")

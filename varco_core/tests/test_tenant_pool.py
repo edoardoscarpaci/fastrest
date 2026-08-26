@@ -94,10 +94,7 @@ async def test_leased_entry_is_never_evicted_and_cap_breach_warns(
             await pool.ensure("b")  # would evict "a", but it's leased
 
         assert "resource-a" not in closed
-        assert any(
-            "WARNING" in r.levelname or r.levelno >= logging.WARNING
-            for r in caplog.records
-        )
+        assert any("WARNING" in r.levelname or r.levelno >= logging.WARNING for r in caplog.records)
 
 
 async def test_idle_ttl_sweep_closes_idle_entries() -> None:

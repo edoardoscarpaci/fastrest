@@ -229,11 +229,7 @@ class QueryCacheWarmer(CacheWarmer):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"QueryCacheWarmer("
-            f"query_fn={self._query_fn.__name__!r}, "
-            f"ttl={self._ttl})"
-        )
+        return f"QueryCacheWarmer(query_fn={self._query_fn.__name__!r}, ttl={self._ttl})"
 
 
 # ── SnapshotCacheWarmer ───────────────────────────────────────────────────────
@@ -311,11 +307,7 @@ class SnapshotCacheWarmer(CacheWarmer):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"SnapshotCacheWarmer("
-            f"snapshot_fn={self._snapshot_fn.__name__!r}, "
-            f"ttl={self._ttl})"
-        )
+        return f"SnapshotCacheWarmer(snapshot_fn={self._snapshot_fn.__name__!r}, ttl={self._ttl})"
 
 
 # ── CompositeWarmer ────────────────────────────────────────────────────────────

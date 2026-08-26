@@ -46,9 +46,7 @@ class _RecordingProvisioner:
     async def provision(self, tenant_id: str, **kwargs: object) -> None:
         self.provision_calls.append(tenant_id)
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         if not confirm_destroy:
             from varco_core.tenancy.provisioner import DestructiveOperationRefused
 
@@ -56,9 +54,7 @@ class _RecordingProvisioner:
         self.deprovision_calls.append(tenant_id)
 
 
-def _build(
-    role: str = "tenant-admin", *, expected_stores: frozenset[str] | None = None
-):
+def _build(role: str = "tenant-admin", *, expected_stores: frozenset[str] | None = None):
     """
     Wire a real catalog + real control service + the router under test.
 
@@ -93,9 +89,7 @@ def _build(
         )
 
     ctx = AuthContext(user_id="u1", roles=frozenset({role}))
-    router = build_tenant_router(
-        service, server_auth=_StubAuth(ctx), coordinator=coordinator
-    )
+    router = build_tenant_router(service, server_auth=_StubAuth(ctx), coordinator=coordinator)
     app = FastAPI()
     app.include_router(router)
     return app, service, catalog, provisioner
@@ -185,15 +179,11 @@ async def test_request_provision_has_no_local_effect_on_the_real_service() -> No
         raise AssertionError("request_provision() must not write the catalog")
 
 
-async def test_readiness_route_404s_for_a_tenant_the_real_coordinator_never_saw() -> (
-    None
-):
+async def test_readiness_route_404s_for_a_tenant_the_real_coordinator_never_saw() -> None:
     """The real ``TenantReadinessCoordinator.readiness()`` raises
     ``TenantNotFoundError`` for an unobserved tenant — the router's 404
     branch must be reachable with the real class, not only with a fake."""
-    app, _service, _catalog, _provisioner = _build(
-        expected_stores=frozenset({"orders", "billing"})
-    )
+    app, _service, _catalog, _provisioner = _build(expected_stores=frozenset({"orders", "billing"}))
     client = TestClient(app)
 
     response = client.get("/tenancy/tenants/never-seen/readiness")

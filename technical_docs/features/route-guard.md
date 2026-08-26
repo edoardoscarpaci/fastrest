@@ -30,12 +30,12 @@ exception handler maps to HTTP 403.
 ```python
 @dataclass(frozen=True)
 class RouteGuard:
-    scopes: tuple[str, ...]                                          # OAuth scopes
-    roles: tuple[str, ...]                                           # named roles
-    grant: tuple[Action, str] | None                                 # ctx.can(action, key)
-    require_all: bool = True                                         # AND vs OR for scopes/roles
-    allow_anonymous: bool = False                                    # bypass for public endpoints
-    token_profiles: tuple[str, ...] = ()                             # JWT token profile any-of match
+    scopes: tuple[str, ...]  # OAuth scopes
+    roles: tuple[str, ...]  # named roles
+    grant: tuple[Action, str] | None  # ctx.can(action, key)
+    require_all: bool = True  # AND vs OR for scopes/roles
+    allow_anonymous: bool = False  # bypass for public endpoints
+    token_profiles: tuple[str, ...] = ()  # JWT token profile any-of match
     predicate: Callable[[AuthContext], bool | Awaitable[bool]] | None  # custom callable
 ```
 
@@ -168,14 +168,14 @@ This function builds the FastAPI endpoint closure for every `@route` method.
 The guard is captured at build time (closure over `route.requires`):
 
 ```python
-guard = route.requires   # captured once at build_router() time
+guard = route.requires  # captured once at build_router() time
 
-if auth_dep is not None:        # _auth is set
+if auth_dep is not None:  # _auth is set
 
     async def custom_handler(request: Request, auth: AuthContext = auth_dep) -> Any:
         # ── Authorization ─────────────────────────────────────────────────────
         if guard is not None:
-            await guard.check(auth)     # <-- RouteGuard.check() called HERE
+            await guard.check(auth)  # <-- RouteGuard.check() called HERE
         # ── Proceed to handler ────────────────────────────────────────────────
         ...
         return await method_fn(router_instance, **call_kwargs)

@@ -70,9 +70,10 @@ a `zip()` over positional args plus a filtered pass over `kwargs` — no
 ```python
 from varco_core.observability import span, SpanConfig
 
+
 @span
-async def place_order(order_id: UUID, tenant_id: str, password: str = "") -> Order:
-    ...
+async def place_order(order_id: UUID, tenant_id: str, password: str = "") -> Order: ...
+
 
 # Trace attributes produced by a call place_order(oid, "acme", password="x"):
 #   param.order_id = "<uuid str>"
@@ -206,15 +207,15 @@ per-request UUID).
 
 ```python
 from varco_core.observability import (
-    set_global_attributes,               # merge static k/v into the registry
+    set_global_attributes,  # merge static k/v into the registry
     register_global_attribute_provider,  # add a callable provider
-    current_global_attributes,           # read the merged, cached snapshot
-    configure_global_attributes,         # apply_to_spans= / apply_to_metrics=
-    clear_global_attributes,             # test helper — full reset
-    GlobalAttributes,                    # the class, if you need a second registry
+    current_global_attributes,  # read the merged, cached snapshot
+    configure_global_attributes,  # apply_to_spans= / apply_to_metrics=
+    clear_global_attributes,  # test helper — full reset
+    GlobalAttributes,  # the class, if you need a second registry
 )
 
-set_global_attributes(**{"deployment.colour": "blue"})   # or set_global_attributes({"k": "v"})
+set_global_attributes(**{"deployment.colour": "blue"})  # or set_global_attributes({"k": "v"})
 ```
 
 `unregister_global_attribute_provider`, `apply_to_spans`, `apply_to_metrics`, and
@@ -232,6 +233,7 @@ from varco_core.observability.attributes import apply_to_spans, unregister_globa
 ```python
 def _pod_name() -> dict[str, str]:
     return {"k8s.pod.name": os.environ.get("POD_NAME", "unknown")}
+
 
 register_global_attribute_provider(_pod_name, name="pod-identity", cache_ttl=None)
 ```
@@ -379,6 +381,7 @@ import pytest
 from varco_core.observability.attributes import clear_global_attributes
 from varco_core.observability.params import reset_param_capture_state
 
+
 @pytest.fixture(autouse=True)
 def _reset_observability_state():
     yield
@@ -414,7 +417,7 @@ from varco_core.observability.reliability import (
 
 install_reliability_metrics(
     dlq=my_dlq,
-    dlq_name="orders-dlq",          # defaults to the DLQ's class name
+    dlq_name="orders-dlq",  # defaults to the DLQ's class name
     outbox_repo=my_outbox_repo,
     config=ReliabilityMetricsConfig(depth_by_channel=False),
 )

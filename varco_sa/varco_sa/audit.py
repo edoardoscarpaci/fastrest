@@ -254,9 +254,7 @@ class SAAuditRepository(AuditRepository):
         consumer.register_to(event_bus)
     """
 
-    def __init__(
-        self, session_factory: async_sessionmaker, *, hash_chain: bool = False
-    ) -> None:
+    def __init__(self, session_factory: async_sessionmaker, *, hash_chain: bool = False) -> None:
         """
         Args:
             session_factory: ``async_sessionmaker`` for creating ``AsyncSession``
@@ -426,32 +424,22 @@ class SAAuditRepository(AuditRepository):
             try:
                 stmt = stmt.with_for_update()
                 last_row = (await session.execute(stmt)).scalars().first()
-            except (
-                Exception
-            ):  # noqa: BLE001 — dialect-fallback guard, not error handling
+            except Exception:  # noqa: BLE001 — dialect-fallback guard, not error handling
                 # with_for_update() is a no-op/unsupported on some
                 # dialects (e.g. SQLite) — fall back to a plain read;
                 # the asyncio.Lock above is the real guard there. Any
                 # dialect-specific exception type is acceptable to catch
                 # broadly here since the fallback path is always correct.
                 await session.rollback()
-                plain_stmt = (
-                    select(AuditEntryModel)
-                    .order_by(AuditEntryModel.seq.desc())
-                    .limit(1)
-                )
+                plain_stmt = select(AuditEntryModel).order_by(AuditEntryModel.seq.desc()).limit(1)
                 last_row = (await session.execute(plain_stmt)).scalars().first()
 
             next_seq = (
-                (last_row.seq + 1)
-                if (last_row is not None and last_row.seq is not None)
-                else 1
+                (last_row.seq + 1) if (last_row is not None and last_row.seq is not None) else 1
             )
             prev_hash = last_row.entry_hash if last_row is not None else None
 
-            chained_entry = dataclasses.replace(
-                entry, seq=next_seq, prev_hash=prev_hash
-            )
+            chained_entry = dataclasses.replace(entry, seq=next_seq, prev_hash=prev_hash)
             computed_hash = chained_entry.entry_hash()
 
             session.add(

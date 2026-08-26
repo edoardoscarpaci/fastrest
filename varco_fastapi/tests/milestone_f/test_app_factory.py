@@ -100,9 +100,7 @@ def test_validate_false_skips_container_check():
     """``validate=False`` does not call ``validate_container_bindings``."""
     mock_container = MagicMock()
     # Container is present but does not have is_registered — would fail if validated
-    mock_container.is_registered = MagicMock(
-        side_effect=AttributeError("not available")
-    )
+    mock_container.is_registered = MagicMock(side_effect=AttributeError("not available"))
     mock_container.get = MagicMock(side_effect=LookupError("no binding"))
     mock_container.get_all = MagicMock(return_value=[])
     mock_container.scan = MagicMock()
@@ -145,9 +143,7 @@ def test_mcp_adapter_is_mounted_when_provided():
 def test_mcp_adapter_path_forwarded():
     """``mcp_path`` is forwarded to ``MCPAdapter.mount()``."""
     mock_adapter = MagicMock()
-    create_varco_app(
-        routers=[], mcp_adapter=mock_adapter, mcp_path="/ai/mcp", validate=False
-    )
+    create_varco_app(routers=[], mcp_adapter=mock_adapter, mcp_path="/ai/mcp", validate=False)
     mount_kwargs = mock_adapter.mount.call_args[1]
     assert mount_kwargs.get("path") == "/ai/mcp"
 
@@ -239,9 +235,7 @@ def test_extra_middleware_bare_class_form_accepted():
 def test_scan_routers_returns_empty_on_get_all_error():
     """``container.get_all()`` raising → returns empty list (no crash)."""
     mock_container = MagicMock()
-    mock_container.get_all = MagicMock(
-        side_effect=RuntimeError("no VarcoRouter binding")
-    )
+    mock_container.get_all = MagicMock(side_effect=RuntimeError("no VarcoRouter binding"))
     mock_container.scan = MagicMock()
 
     result = _scan_routers(mock_container)
@@ -314,9 +308,7 @@ def test_scan_routers_continues_on_scan_error():
     mock_container.scan = MagicMock(side_effect=_scan)
 
     # Should not raise — bad package is logged and skipped
-    result = _scan_routers(
-        mock_container, scan_packages=["bad.package", "good.package"]
-    )
+    result = _scan_routers(mock_container, scan_packages=["bad.package", "good.package"])
     assert call_count == 2  # both packages attempted
     assert result == [ItemRouter]  # good package's routers still found
 

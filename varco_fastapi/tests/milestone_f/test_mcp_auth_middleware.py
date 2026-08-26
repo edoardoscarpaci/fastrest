@@ -158,9 +158,7 @@ async def test_mcp_path_invalid_key_returns_401():
     auth = ApiKeyAuth(keys={"correct-key": AuthContext(user_id="agent")}, required=True)
     middleware = MCPAuthMiddleware(_ok_app, server_auth=auth, mount_path="/mcp")
 
-    status, body = await _call_middleware(
-        middleware, "/mcp", headers=[("X-API-Key", "wrong-key")]
-    )
+    status, body = await _call_middleware(middleware, "/mcp", headers=[("X-API-Key", "wrong-key")])
     assert status == 401
     assert "detail" in body
 
@@ -170,17 +168,13 @@ async def test_mcp_path_valid_key_passes_through():
     auth = ApiKeyAuth(keys={"valid-key": AuthContext(user_id="agent")}, required=True)
     middleware = MCPAuthMiddleware(_ok_app, server_auth=auth, mount_path="/mcp")
 
-    status, _ = await _call_middleware(
-        middleware, "/mcp", headers=[("X-API-Key", "valid-key")]
-    )
+    status, _ = await _call_middleware(middleware, "/mcp", headers=[("X-API-Key", "valid-key")])
     assert status == 200
 
 
 async def test_anonymous_auth_always_passes():
     """``AnonymousAuth`` never rejects — useful for dev/internal deployments."""
-    middleware = MCPAuthMiddleware(
-        _ok_app, server_auth=AnonymousAuth(), mount_path="/mcp"
-    )
+    middleware = MCPAuthMiddleware(_ok_app, server_auth=AnonymousAuth(), mount_path="/mcp")
     status, _ = await _call_middleware(middleware, "/mcp")
     assert status == 200
 

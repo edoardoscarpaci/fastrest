@@ -223,8 +223,7 @@ async def _wait_for_notifications(
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
     assert len(consumer.received) >= count, (
-        f"Expected at least {count} notification(s) after {timeout}s, "
-        f"got {len(consumer.received)}"
+        f"Expected at least {count} notification(s) after {timeout}s, got {len(consumer.received)}"
     )
 
 
@@ -278,9 +277,7 @@ class TestPublishAndReceive:
 
         assert len(consumer.received) >= 1
 
-    async def test_notification_body_matches_published_event(
-        self, client, consumer
-    ) -> None:
+    async def test_notification_body_matches_published_event(self, client, consumer) -> None:
         """
         The notification returned by ``GET /v1/notifications`` must reflect
         the exact ``order_id`` and ``amount`` from the published event.
@@ -330,9 +327,7 @@ class TestPublishAndReceive:
         for oid in order_ids:
             assert oid in received_ids
 
-    async def test_empty_notifications_on_fresh_consumer(
-        self, client, consumer
-    ) -> None:
+    async def test_empty_notifications_on_fresh_consumer(self, client, consumer) -> None:
         """
         ``GET /v1/notifications`` returns ``[]`` when no events have been received.
         """

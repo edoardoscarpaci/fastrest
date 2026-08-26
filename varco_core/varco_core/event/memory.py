@@ -167,9 +167,7 @@ class InMemoryEventBus(AbstractEventBus):
             self._middleware = middleware
         else:
             # Instance[EventMiddleware] from DI container
-            self._middleware = (
-                list(middleware.get_all()) if middleware.resolvable() else []
-            )
+            self._middleware = list(middleware.get_all()) if middleware.resolvable() else []
 
         # Strong references to pending background tasks — prevents GC from
         # collecting tasks before they complete.  Each task removes itself
@@ -181,9 +179,7 @@ class InMemoryEventBus(AbstractEventBus):
         # Typed as Coroutine (not just Awaitable) so asyncio.create_task()
         # accepts the result in BACKGROUND mode — create_task requires a
         # coroutine object, not a generic Awaitable.
-        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = (
-            self._build_chain()
-        )
+        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = self._build_chain()
 
     # ── Subscription management ────────────────────────────────────────────────
 
@@ -390,8 +386,7 @@ class InMemoryEventBus(AbstractEventBus):
                     errors.append(exc)
                 elif self._error_policy is ErrorPolicy.FIRE_FORGET:
                     _logger.warning(
-                        "Event handler %r raised and was ignored "
-                        "(FIRE_FORGET policy): %s",
+                        "Event handler %r raised and was ignored (FIRE_FORGET policy): %s",
                         entry.handler,
                         exc,
                         exc_info=True,

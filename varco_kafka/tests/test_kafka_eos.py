@@ -38,9 +38,7 @@ class PaymentEvent(Event):
 
 
 class FakeMessage:
-    def __init__(
-        self, topic: str, value: bytes, partition: int = 0, offset: int = 0
-    ) -> None:
+    def __init__(self, topic: str, value: bytes, partition: int = 0, offset: int = 0) -> None:
         self.topic = topic
         self.value = value
         self.partition = partition
@@ -109,9 +107,7 @@ class FakeConsumer:
         self._messages: list[FakeMessage] = []
         self.commits: int = 0
 
-    def queue(
-        self, topic: str, event: Event, partition: int = 0, offset: int = 0
-    ) -> None:
+    def queue(self, topic: str, event: Event, partition: int = 0, offset: int = 0) -> None:
         self._messages.append(
             FakeMessage(
                 topic=topic,
@@ -400,9 +396,7 @@ async def test_exactly_once_producer_has_transactional_id(
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaProducer", _make_producer)
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaConsumer", FakeConsumer)
 
-    bus = KafkaEventBus(
-        _settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1")
-    )
+    bus = KafkaEventBus(_settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1"))
     await bus.start()
 
     assert created[0].kwargs.get("transactional_id") == "svc-txn-1"
@@ -424,9 +418,7 @@ async def test_exactly_once_consumer_read_committed(
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaProducer", FakeProducer)
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaConsumer", _make_consumer)
 
-    bus = KafkaEventBus(
-        _settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1")
-    )
+    bus = KafkaEventBus(_settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1"))
     await bus.start()
 
     assert created[0].kwargs.get("isolation_level") == "read_committed"
@@ -442,9 +434,7 @@ async def test_exactly_once_publish_wraps_in_transaction(
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaProducer", lambda **kw: fake_producer)
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaConsumer", FakeConsumer)
 
-    bus = KafkaEventBus(
-        _settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1")
-    )
+    bus = KafkaEventBus(_settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1"))
     await bus.start()
     await bus.publish(PaymentEvent(amount=200.0), channel="payments")
 
@@ -473,9 +463,7 @@ async def test_exactly_once_consume_commits_offset_in_transaction(
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaProducer", lambda **kw: fake_producer)
     monkeypatch.setattr("varco_kafka.bus.AIOKafkaConsumer", lambda **kw: fake_consumer)
 
-    bus = KafkaEventBus(
-        _settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1")
-    )
+    bus = KafkaEventBus(_settings(KafkaDeliverySemantics.EXACTLY_ONCE, txn_id="svc-txn-1"))
     await bus.start()
     bus.subscribe(PaymentEvent, _handler, channel="payments")
 

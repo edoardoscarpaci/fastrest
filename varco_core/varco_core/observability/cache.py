@@ -95,9 +95,7 @@ class _PatchableMetric(Metric):
 
 # ── Module-level instruments (safe before MeterProvider setup) ─────────────
 
-_CACHE_HITS = _PatchableMetric(
-    "varco.cache.hits", kind="counter", description="Cache read hits"
-)
+_CACHE_HITS = _PatchableMetric("varco.cache.hits", kind="counter", description="Cache read hits")
 _CACHE_MISSES = _PatchableMetric(
     "varco.cache.misses", kind="counter", description="Cache read misses"
 )
@@ -231,9 +229,7 @@ def _layer_attr(layer: str) -> dict[str, str]:
     return {"layer": layer}
 
 
-def record_cache_hit(
-    *, cache: str = "", layer: str = "", kind: str = "positive"
-) -> None:
+def record_cache_hit(*, cache: str = "", layer: str = "", kind: str = "positive") -> None:
     """Record one cache hit. ``kind`` is ``"positive"``/``"negative"``/``"stale"``."""
     if not _enabled:
         return

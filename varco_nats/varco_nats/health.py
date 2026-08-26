@@ -156,9 +156,7 @@ class NatsHealthCheck(HealthCheck):
                     pass
 
     def __repr__(self) -> str:
-        return (
-            f"NatsHealthCheck(servers={self._servers_repr!r}, timeout={self._timeout})"
-        )
+        return f"NatsHealthCheck(servers={self._servers_repr!r}, timeout={self._timeout})"
 
 
 __all__ = ["NatsHealthCheck"]

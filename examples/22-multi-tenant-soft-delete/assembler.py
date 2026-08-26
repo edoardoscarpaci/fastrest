@@ -100,11 +100,7 @@ class NoteAssembler(AbstractDTOAssembler[Note, NoteCreate, NoteRead, NoteUpdate]
             created_at=entity.created_at,
             # Fall back so the field is never None in the DTO even on brand-new
             # entities where the repository hasn't refreshed updated_at yet.
-            updated_at=(
-                entity.updated_at
-                if entity.updated_at is not None
-                else entity.created_at
-            ),
+            updated_at=(entity.updated_at if entity.updated_at is not None else entity.created_at),
             deleted_at=entity.deleted_at,
         )
 

@@ -394,9 +394,4 @@ class JwtBuilder:
         return _jwt.encode(token.to_claims(), secret, algorithm=algorithm)
 
     def __repr__(self) -> str:
-        return (
-            f"JwtBuilder("
-            f"sub={self._sub!r}, "
-            f"iss={self._iss!r}, "
-            f"type={self._token_type!r})"
-        )
+        return f"JwtBuilder(sub={self._sub!r}, iss={self._iss!r}, type={self._token_type!r})"

@@ -42,9 +42,7 @@ async def test_list_tenants_filters_active_by_default_and_is_ordered(session) ->
     catalog = await _make_catalog(session)
     await catalog.add(TenantDescriptor(tenant_id="zeta", status=TenantStatus.ACTIVE))
     await catalog.add(TenantDescriptor(tenant_id="acme", status=TenantStatus.ACTIVE))
-    await catalog.add(
-        TenantDescriptor(tenant_id="pending-1", status=TenantStatus.PENDING)
-    )
+    await catalog.add(TenantDescriptor(tenant_id="pending-1", status=TenantStatus.PENDING))
 
     result = await catalog.list_tenants()
 

@@ -35,22 +35,27 @@ the common pairing with the rest of varco.
 from varco_ws import WebSocketEventBus
 from varco_core.event import Event
 
+
 class OrderPlacedEvent(Event):
     __event_type__ = "order.placed"
     order_id: str
 
+
 # bus is any AbstractEventBus (KafkaEventBus, RedisEventBus, InMemoryEventBus, ...)
 ws_bus = WebSocketEventBus(bus, event_type=OrderPlacedEvent, channel="orders")
 
+
 @app.on_event("startup")
 async def startup() -> None:
-    await ws_bus.start()          # subscribes to the underlying bus
+    await ws_bus.start()  # subscribes to the underlying bus
+
 
 @app.websocket("/ws/orders")
 async def orders_ws(websocket: WebSocket) -> None:
     await websocket.accept()
     async with ws_bus.connect(websocket):
         await asyncio.sleep(3600)  # keep the connection open until the client disconnects
+
 
 @app.on_event("shutdown")
 async def shutdown() -> None:
@@ -71,6 +76,7 @@ from varco_ws import SSEEventBus
 
 sse_bus = SSEEventBus(bus, event_type=OrderPlacedEvent, channel="orders")
 await sse_bus.start()
+
 
 @app.get("/events/orders")
 async def orders_sse(request: Request):
@@ -137,10 +143,10 @@ Both adapters must be explicitly started and stopped — they are **not**
 started automatically, even when DI-managed:
 
 ```python
-await ws_bus.start()   # subscribes to the underlying AbstractEventBus
-await ws_bus.stop()    # cancels the subscription and disconnects all clients
+await ws_bus.start()  # subscribes to the underlying AbstractEventBus
+await ws_bus.stop()  # cancels the subscription and disconnects all clients
 
-async with ws_bus:     # WebSocketEventBus also supports async context-manager use
+async with ws_bus:  # WebSocketEventBus also supports async context-manager use
     ...
 ```
 
@@ -157,11 +163,12 @@ be registered in the container before scanning `varco_ws`.
 from varco_redis.di import bootstrap as redis_bootstrap
 from varco_ws.di import bootstrap as ws_bootstrap
 
-redis_bootstrap()               # registers AbstractEventBus
-ws_bootstrap()                  # scans varco_ws, finds both adapters
+redis_bootstrap()  # registers AbstractEventBus
+ws_bootstrap()  # scans varco_ws, finds both adapters
 
 ws_bus = container.get(WebSocketEventBus)
 sse_bus = container.get(SSEEventBus)
+
 
 # Start/stop in the FastAPI lifespan handler — the container never calls
 # start()/stop() itself.
@@ -186,8 +193,8 @@ bootstrap(container)
 bind_websocket_adapter(container, event_type=OrderEvent, channel="orders")
 bind_sse_adapter(container, event_type=OrderEvent, channel="orders")
 
-orders_ws = container.get(WebSocketEventBus)    # per-channel singleton
-orders_sse = container.get(SSEEventBus)          # per-channel singleton
+orders_ws = container.get(WebSocketEventBus)  # per-channel singleton
+orders_sse = container.get(SSEEventBus)  # per-channel singleton
 ```
 
 ---

@@ -43,8 +43,7 @@ class OperationNotFound(QueryException):
         """
         self.op = op
         super().__init__(
-            f"Operation {op!r} not found. "
-            "Check the query grammar for supported operators."
+            f"Operation {op!r} not found. Check the query grammar for supported operators."
         )
 
 

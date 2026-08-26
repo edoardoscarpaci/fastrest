@@ -165,8 +165,7 @@ def enable_rls_ddl(
     #   ❌ An intentionally empty tenant id can no longer be matched — that
     #      is not a valid tenant identifier in any varco code path.
     tenant_filter = (
-        f"{tenant_column} = "
-        f"(SELECT NULLIF(current_setting('{setting}', true), '')::{cast_type})"
+        f"{tenant_column} = (SELECT NULLIF(current_setting('{setting}', true), '')::{cast_type})"
     )
     return [
         f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY",
@@ -175,11 +174,7 @@ def enable_rls_ddl(
         # loud one, which is exactly the fail-open failure mode U-5 warns
         # about at the application layer (TenantAwareService._scoped_params).
         f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY",
-        (
-            f"CREATE POLICY {name} ON {table} "
-            f"USING ({tenant_filter}) "
-            f"WITH CHECK ({tenant_filter})"
-        ),
+        (f"CREATE POLICY {name} ON {table} USING ({tenant_filter}) WITH CHECK ({tenant_filter})"),
     ]
 
 

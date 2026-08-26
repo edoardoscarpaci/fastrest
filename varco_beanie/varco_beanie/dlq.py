@@ -181,9 +181,7 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
                 tenant_id=entry.tenant_id,
             )
             await doc.insert()
-            _logger.debug(
-                "BeanieDeadLetterQueue.push: stored entry_id=%s", entry.entry_id
-            )
+            _logger.debug("BeanieDeadLetterQueue.push: stored entry_id=%s", entry.entry_id)
         except DuplicateKeyError:
             # Idempotent redelivery — same entry_id already stored. Success,
             # not an error (RD-2's "one definition per model name" cousin —
@@ -205,12 +203,7 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
         """Non-destructive read of the oldest ``limit`` entries."""
         if limit < 1:
             raise ValueError(f"pop_batch limit must be ≥ 1, got {limit}.")
-        docs = (
-            await DeadLetterDocument.find_all()
-            .sort("+first_failed_at")
-            .limit(limit)
-            .to_list()
-        )
+        docs = await DeadLetterDocument.find_all().sort("+first_failed_at").limit(limit).to_list()
         return [self._doc_to_entry(d) for d in docs]
 
     async def ack(self, entry_id: UUID) -> None:
@@ -272,12 +265,7 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
         limit: int | None = None,
     ) -> int:
         """Chunked-sweep-friendly bulk delete — one predicate is required."""
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(
                 "delete_where() requires at least one predicate "
                 "(older_than/source/channel/tenant_id) — refusing to delete "

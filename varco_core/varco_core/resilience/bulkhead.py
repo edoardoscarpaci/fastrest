@@ -131,20 +131,13 @@ class BulkheadConfig:
         """
         if self.max_concurrent < 1:
             raise ValueError(
-                f"BulkheadConfig.max_concurrent must be ≥ 1, "
-                f"got {self.max_concurrent}."
+                f"BulkheadConfig.max_concurrent must be ≥ 1, got {self.max_concurrent}."
             )
         if self.max_wait < 0:
-            raise ValueError(
-                f"BulkheadConfig.max_wait must be ≥ 0, " f"got {self.max_wait}."
-            )
+            raise ValueError(f"BulkheadConfig.max_wait must be ≥ 0, got {self.max_wait}.")
 
     def __repr__(self) -> str:
-        return (
-            f"BulkheadConfig("
-            f"max_concurrent={self.max_concurrent}, "
-            f"max_wait={self.max_wait})"
-        )
+        return f"BulkheadConfig(max_concurrent={self.max_concurrent}, max_wait={self.max_wait})"
 
 
 # ── BulkheadFullError ─────────────────────────────────────────────────────────
@@ -310,9 +303,7 @@ class Bulkhead:
             # This is a best-effort check; a tiny TOCTOU window exists but is
             # acceptable for fail-fast semantics.
             if semaphore.locked():
-                _logger.warning(
-                    "Bulkhead '%s' full (0 slots available, fail-fast).", self.name
-                )
+                _logger.warning("Bulkhead '%s' full (0 slots available, fail-fast).", self.name)
                 raise BulkheadFullError(
                     self.name,
                     self.config.max_concurrent,

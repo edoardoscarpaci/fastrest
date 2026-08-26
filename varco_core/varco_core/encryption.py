@@ -495,11 +495,7 @@ class MultiKeyEncryptorRegistry:
 
     def __repr__(self) -> str:
         kids = list(self._encryptors.keys())
-        return (
-            f"MultiKeyEncryptorRegistry("
-            f"primary={self._primary_kid!r}, "
-            f"registered={kids})"
-        )
+        return f"MultiKeyEncryptorRegistry(primary={self._primary_kid!r}, registered={kids})"
 
     def register(self, kid: str, encryptor: FieldEncryptor) -> None:
         """

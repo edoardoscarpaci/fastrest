@@ -109,12 +109,12 @@ def test_get_all_returns_ascending_priority_with_winner_last(
     all_instances = container.get_all(interface)
 
     assert len(all_instances) == 2
-    assert not is_app_instance(
-        all_instances[0]
-    ), "framework default (lowest priority) must sort first in get_all()"
-    assert is_app_instance(
-        all_instances[-1]
-    ), "app override (highest priority) must sort last in get_all()"
+    assert not is_app_instance(all_instances[0]), (
+        "framework default (lowest priority) must sort first in get_all()"
+    )
+    assert is_app_instance(all_instances[-1]), (
+        "app override (highest priority) must sort last in get_all()"
+    )
     assert container.get(interface) is all_instances[-1]
 
 

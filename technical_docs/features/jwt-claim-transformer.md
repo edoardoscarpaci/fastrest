@@ -66,6 +66,7 @@ from typing import Protocol, runtime_checkable
 from collections.abc import Mapping
 from typing import Any
 
+
 @runtime_checkable
 class ClaimTransformer(Protocol):
     def transform(self, claims: Mapping[str, Any]) -> Mapping[str, Any]: ...
@@ -89,6 +90,7 @@ class MyDirectoryTransformer:
         claims["roles"] = my_directory.roles_for(claims["sub"])
         return claims
 
+
 token = JwtParser.parse(raw, secret, transformer=MyDirectoryTransformer())
 ```
 
@@ -98,7 +100,11 @@ token = JwtParser.parse(raw, secret, transformer=MyDirectoryTransformer())
 
 ```python
 from varco_core.jwt.transform import (
-    CanonicalClaim, ClaimMapping, ClaimPath, ClaimRule, ValueShape,
+    CanonicalClaim,
+    ClaimMapping,
+    ClaimPath,
+    ClaimRule,
+    ValueShape,
 )
 
 mapping = ClaimMapping(
@@ -106,17 +112,17 @@ mapping = ClaimMapping(
         ClaimRule(
             target=CanonicalClaim.ROLES,
             sources=(ClaimPath.parse("realm_access.roles"), ClaimPath.parse("roles")),
-            strip_prefix="ROLE_",       # Keycloak/Spring convention
+            strip_prefix="ROLE_",  # Keycloak/Spring convention
         ),
         ClaimRule(
             target=CanonicalClaim.SCOPES,
             sources=(ClaimPath.parse("scope"),),
-            shape=ValueShape.SPACE,     # "read write" -> ["read", "write"]
+            shape=ValueShape.SPACE,  # "read write" -> ["read", "write"]
         ),
         ClaimRule(
             target=CanonicalClaim.TENANT_ID,
             sources=(ClaimPath.parse("org.id"),),
-            required=True,              # raises ClaimTransformError if missing
+            required=True,  # raises ClaimTransformError if missing
         ),
     ),
 )
@@ -289,8 +295,8 @@ when its in-memory keyset cache refreshes:
 
 ```python
 TrustedIssuerRegistry(
-    min_refresh_interval=10.0,   # VARCO_JWKS_MIN_REFRESH_SECONDS (default)
-    ttl_seconds=0.0,             # VARCO_JWKS_TTL_SECONDS (default — disabled)
+    min_refresh_interval=10.0,  # VARCO_JWKS_MIN_REFRESH_SECONDS (default)
+    ttl_seconds=0.0,  # VARCO_JWKS_TTL_SECONDS (default — disabled)
 )
 ```
 

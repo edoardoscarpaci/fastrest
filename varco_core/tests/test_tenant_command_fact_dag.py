@@ -24,9 +24,7 @@ class _CountingProvisioner:
     async def provision(self, tenant_id: str, **kwargs) -> None:
         pass
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         pass
 
 

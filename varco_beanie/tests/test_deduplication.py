@@ -73,9 +73,7 @@ class TestDeduplicationDocument:
                 # pymongo IndexModel stores options in document dict
                 hasattr(idx, "document")
                 and idx.document.get("unique", False)
-                and any(
-                    "event_id" in str(k) for k in idx.document.get("key", {}).keys()
-                )
+                and any("event_id" in str(k) for k in idx.document.get("key", {}).keys())
             )
             for idx in indexes
         )
@@ -86,9 +84,7 @@ class TestDeduplicationDocument:
         ttl_index = any(
             hasattr(idx, "document")
             and "expireAfterSeconds" in idx.document
-            and any(
-                "processed_at" in str(k) for k in idx.document.get("key", {}).keys()
-            )
+            and any("processed_at" in str(k) for k in idx.document.get("key", {}).keys())
             for idx in indexes
         )
         assert ttl_index, (
@@ -318,9 +314,7 @@ class TestBeanieDeduplicatorIntegration:
         await mongo_dedup.mark_seen(eid)  # second call — must not raise
         assert await mongo_dedup.is_duplicate(eid) is True
 
-    async def test_different_events_are_independent(
-        self, mongo_dedup: BeanieDeduplicator
-    ) -> None:
+    async def test_different_events_are_independent(self, mongo_dedup: BeanieDeduplicator) -> None:
         """Marking one event does not affect a different event_id."""
         eid1, eid2 = _eid(), _eid()
         await mongo_dedup.mark_seen(eid1)

@@ -137,9 +137,7 @@ class TenantResourcePool(Generic[T]):
             resource = await self._factory(tenant_id)
 
             async with self._get_pool_lock():
-                self._entries[tenant_id] = _Entry(
-                    resource=resource, last_used=time.monotonic()
-                )
+                self._entries[tenant_id] = _Entry(resource=resource, last_used=time.monotonic())
                 await self._evict_if_over_capacity(exclude=tenant_id)
 
             return resource
@@ -233,9 +231,7 @@ class TenantResourcePool(Generic[T]):
         try:
             await self._closer(resource)
         except Exception:  # noqa: BLE001 - "closer must never raise" contract
-            logger.exception(
-                "TenantResourcePool: closer raised while disposing a resource."
-            )
+            logger.exception("TenantResourcePool: closer raised while disposing a resource.")
 
     async def start_sweeper(self) -> None:
         """

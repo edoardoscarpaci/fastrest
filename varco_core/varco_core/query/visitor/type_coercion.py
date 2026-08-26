@@ -81,9 +81,7 @@ def coerce_boolean(value: Any) -> bool:
         raise CoercionError(f"Failed to coerce {value!r} to bool") from exc
 
 
-def coerce_datetime(
-    value: Any, *, policy: DatetimeCoercionPolicy | None = None
-) -> datetime:
+def coerce_datetime(value: Any, *, policy: DatetimeCoercionPolicy | None = None) -> datetime:
     """
     Coerce ``value`` to ``datetime`` — T3's declared timezone contract
     (Plan 011 D-10).
@@ -128,14 +126,10 @@ def coerce_datetime(
                 f"Failed to coerce {value!r} to datetime — expected ISO-8601 format"
             ) from exc
         return _apply_datetime_policy(parsed, policy)
-    raise CoercionError(
-        f"Cannot coerce {value!r} (type={type(value).__name__}) to datetime"
-    )
+    raise CoercionError(f"Cannot coerce {value!r} (type={type(value).__name__}) to datetime")
 
 
-def _apply_datetime_policy(
-    parsed: datetime, policy: DatetimeCoercionPolicy | None
-) -> datetime:
+def _apply_datetime_policy(parsed: datetime, policy: DatetimeCoercionPolicy | None) -> datetime:
     """Interpret a NAIVE ``parsed`` value under ``policy``. An already-aware
     ``parsed`` (explicit offset present) always wins — no policy applied."""
     if parsed.tzinfo is not None:
@@ -279,9 +273,7 @@ def coerce_list(value: Any) -> list[Any]:
     except Exception as exc:
         raise CoercionError(f"Failed to coerce {value!r} to list") from exc
 
-    raise CoercionError(
-        f"Cannot coerce {value!r} (type={type(value).__name__}) to list"
-    )
+    raise CoercionError(f"Cannot coerce {value!r} (type={type(value).__name__}) to list")
 
 
 # ── Convenience helpers ────────────────────────────────────────────────────────
@@ -435,7 +427,8 @@ class ASTTypeCoercion(BinaryWalkingVisitor):
 
         if node.op == Operation.IN or isinstance(node.value, list):
             coerced: Any = [
-                self._coerce_value(field_info, v) for v in node.value  # type: ignore[union-attr]
+                self._coerce_value(field_info, v)
+                for v in node.value  # type: ignore[union-attr]
             ]
         else:
             coerced = self._coerce_value(field_info, node.value)

@@ -15,14 +15,15 @@ was generalised **additively**:
 
 ```python
 class DeadLetterSource(StrEnum):
-    CONSUMER = "consumer"          # an EventConsumer handler exhausted retries (existing)
+    CONSUMER = "consumer"  # an EventConsumer handler exhausted retries (existing)
     OUTBOX_RELAY = "outbox_relay"  # OutboxRelay could not deserialize/publish an entry
-    JOB = "job"                    # a job exhausted max_attempts in JobRunner
+    JOB = "job"  # a job exhausted max_attempts in JobRunner
+
 
 # DeadLetterEntry gains, all defaulted:
 source: DeadLetterSource = DeadLetterSource.CONSUMER
-source_ref: str | None = None      # outbox entry_id / job_id, as str
-payload: bytes | None = None       # raw bytes when `event` could not be deserialized
+source_ref: str | None = None  # outbox entry_id / job_id, as str
+payload: bytes | None = None  # raw bytes when `event` could not be deserialized
 ```
 
 `event: DomainEvent` became `DomainEvent | None`. Every pre-Phase-3
@@ -130,7 +131,7 @@ from varco_sa.dlq import SADeadLetterQueue
 
 engine = create_async_engine("postgresql+asyncpg://...")
 dlq = SADeadLetterQueue(engine)
-await dlq.ensure_table()             # creates varco_dead_letters idempotently
+await dlq.ensure_table()  # creates varco_dead_letters idempotently
 
 relay = OutboxRelay(
     outbox=relay_repo,
@@ -183,7 +184,7 @@ support an operation that would either be destructive or impossible.
 from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 
 await init_beanie(database=db, document_models=[Order, DeadLetterDocument])
-dlq = BeanieDeadLetterQueue()   # ttl_seconds=None — no auto-expiry (RD-2)
+dlq = BeanieDeadLetterQueue()  # ttl_seconds=None — no auto-expiry (RD-2)
 ```
 
 Collection `varco_dead_letters` — matches `SADeadLetterQueue`'s table name
@@ -249,8 +250,8 @@ from varco_core.event.redrive import DlqRedriver
 
 redriver = DlqRedriver(dlq, bus, default_channel="orders")
 
-outcome = await redriver.redrive(entry_id)          # single entry
-report = await redriver.redrive_batch(limit=10)      # works on every backend, incl. Kafka/NATS
+outcome = await redriver.redrive(entry_id)  # single entry
+report = await redriver.redrive_batch(limit=10)  # works on every backend, incl. Kafka/NATS
 ```
 
 `DlqRedriver` is one of the **very few** classes permitted to hold an
@@ -282,7 +283,7 @@ inbox/dedup primitives handle it, same as everywhere else in this codebase.
 ### Stream-backed stores — single-entry redrive is unsupported (RD-4)
 
 ```python
-redriver.redrive(entry_id)   # Kafka/NATS DLQ → DeadLetterNotAddressable
+redriver.redrive(entry_id)  # Kafka/NATS DLQ → DeadLetterNotAddressable
 ```
 
 `DeadLetterNotAddressable` names the backend class and points at
@@ -373,8 +374,8 @@ constructor parameter a caller fills in by hand.
 async with tenant_context("acme"):
     ...  # a handler that dead-letters here produces an entry with tenant_id="acme"
 
-entries = await dlq.list_entries(tenant_id="acme")   # excludes entries with tenant_id=None
-entries = await dlq.list_entries()                   # no tenant filter — operator/global view
+entries = await dlq.list_entries(tenant_id="acme")  # excludes entries with tenant_id=None
+entries = await dlq.list_entries()  # no tenant filter — operator/global view
 ```
 
 ⚠️ **The `None`-tenant asymmetry is deliberate, not a bug**: an entry pushed
@@ -391,8 +392,10 @@ framework-level failure genuinely has no tenant.
 # inside a reviewed Alembic revision — nothing calls this automatically
 from varco_sa.rls_framework import framework_rls_upgrade, framework_rls_downgrade
 
+
 def upgrade() -> None:
-    framework_rls_upgrade(op)     # both framework tables by default
+    framework_rls_upgrade(op)  # both framework tables by default
+
 
 def downgrade() -> None:
     framework_rls_downgrade(op)
@@ -434,9 +437,11 @@ from varco_fastapi.admin.mount import mount_reliability_admin
 mount_reliability_admin(
     app,
     dlq=dlq,
-    redriver=redriver,             # omit to hide the redrive routes entirely
+    redriver=redriver,  # omit to hide the redrive routes entirely
     acknowledge_bundled_admin=True,  # required — ValueError without it (RD-9)
-    server_auth=auth, admin_role="reliability-admin", prefix="/reliability",
+    server_auth=auth,
+    admin_role="reliability-admin",
+    prefix="/reliability",
 )
 ```
 

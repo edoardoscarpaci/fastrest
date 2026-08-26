@@ -54,8 +54,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Resilience Payment Gateway",
         description=(
-            "Demonstrates varco resilience primitives: "
-            "timeout, retry, circuit breaker, hedge."
+            "Demonstrates varco resilience primitives: timeout, retry, circuit breaker, hedge."
         ),
         version="1.0.0",
     )

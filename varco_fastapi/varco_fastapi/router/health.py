@@ -103,7 +103,7 @@ class HealthRouter:
 
     def __repr__(self) -> str:
         checks_len = len(self._checks) if isinstance(self._checks, list) else 0
-        return f"HealthRouter(" f"checks={checks_len}, " f"prefix={self._prefix!r})"
+        return f"HealthRouter(checks={checks_len}, prefix={self._prefix!r})"
 
     async def _resolve_checks(self):
         if self._checks and isinstance(self._checks, InstanceProxy):

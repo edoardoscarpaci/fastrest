@@ -246,10 +246,7 @@ class BeanieModelFactory:
 
             annotations[dc_field.name] = ann_type
 
-            if (
-                dc_field.default is not dataclasses.MISSING
-                and dc_field.default is not None
-            ):
+            if dc_field.default is not dataclasses.MISSING and dc_field.default is not None:
                 field_defaults[dc_field.name] = PydanticField(default=dc_field.default)
 
         return annotations, field_defaults

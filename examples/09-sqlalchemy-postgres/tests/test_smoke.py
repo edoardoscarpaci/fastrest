@@ -157,9 +157,7 @@ async def test_update(app_client: httpx.AsyncClient) -> None:
     assert updated["author"] == "carol"
 
     # created_at must be write-once — assembler.apply_update() preserves it.
-    assert (
-        updated["created_at"] == original_created_at
-    ), "created_at must not change on PUT"
+    assert updated["created_at"] == original_created_at, "created_at must not change on PUT"
     # updated_at must be refreshed (may equal created_at for a fast test, but
     # it must be present and non-null).
     assert updated["updated_at"], "updated_at must be set after PUT"
@@ -235,20 +233,16 @@ async def test_filter_by_author(app_client: httpx.AsyncClient) -> None:
     await _create_post(app_client, title="C", author="other-author")
 
     # Filter — only the unique author's posts should appear.
-    filter_resp = await app_client.get(
-        "/v1/posts", params={"q": f'author = "{unique_author}"'}
-    )
+    filter_resp = await app_client.get("/v1/posts", params={"q": f'author = "{unique_author}"'})
     assert filter_resp.status_code == 200, filter_resp.text
     body = filter_resp.json()
     items = body["results"] if isinstance(body, dict) and "results" in body else body
 
     authors = [item["author"] for item in items]
-    assert all(
-        a == unique_author for a in authors
-    ), f"Filter returned posts from unexpected authors: {set(authors)}"
-    assert (
-        len(authors) >= 2
-    ), f"Expected at least 2 posts by '{unique_author}', got {len(authors)}"
+    assert all(a == unique_author for a in authors), (
+        f"Filter returned posts from unexpected authors: {set(authors)}"
+    )
+    assert len(authors) >= 2, f"Expected at least 2 posts by '{unique_author}', got {len(authors)}"
 
 
 # ── Unhappy-path tests ────────────────────────────────────────────────────────
@@ -264,9 +258,9 @@ async def test_get_unknown_returns_404(app_client: httpx.AsyncClient) -> None:
     """
     random_pk = str(uuid.uuid4())
     resp = await app_client.get(f"/v1/posts/{random_pk}")
-    assert (
-        resp.status_code == 404
-    ), f"Expected 404 for unknown pk={random_pk}, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 404, (
+        f"Expected 404 for unknown pk={random_pk}, got {resp.status_code}: {resp.text}"
+    )
 
 
 @pytest.mark.integration
@@ -280,6 +274,6 @@ async def test_invalid_payload_returns_422(app_client: httpx.AsyncClient) -> Non
     """
     # Completely empty payload — all required fields missing.
     resp = await app_client.post("/v1/posts", json={})
-    assert (
-        resp.status_code == 422
-    ), f"Expected 422 for empty payload, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 422, (
+        f"Expected 422 for empty payload, got {resp.status_code}: {resp.text}"
+    )

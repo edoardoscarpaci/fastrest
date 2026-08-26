@@ -56,9 +56,7 @@ class TestReadThroughByteIdenticalDefault:
         # the loader runs again on the second call.
         assert calls == 2
 
-    async def test_legacy_raw_value_already_in_store_is_served_as_hit(
-        self, cache
-    ) -> None:
+    async def test_legacy_raw_value_already_in_store_is_served_as_hit(self, cache) -> None:
         from varco_core.cache.policy import CachePolicy
         from varco_core.cache.readthrough import read_through
 
@@ -106,10 +104,7 @@ class TestReadThroughSingleflightIntegration:
 
         policy = CachePolicy(ttl=60.0, singleflight=True)
         results = await asyncio.gather(
-            *[
-                read_through(cache, "k", loader, policy, singleflight=sf)
-                for _ in range(20)
-            ]
+            *[read_through(cache, "k", loader, policy, singleflight=sf) for _ in range(20)]
         )
         assert calls == 1
         assert all(r == "v" for r in results)

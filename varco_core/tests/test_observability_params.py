@@ -201,9 +201,7 @@ class TestRedaction:
         # case-insensitive SUBSTRING match of the "authorization" pattern.
         ["password", "user_password", "X_Authorization", "api_key", "secret_token"],
     )
-    def test_redact_patterns_match_by_substring_case_insensitive(
-        self, name: str
-    ) -> None:
+    def test_redact_patterns_match_by_substring_case_insensitive(self, name: str) -> None:
         from varco_core.observability.params import build_capture_plan
 
         def fn(**kwargs):
@@ -489,9 +487,7 @@ class TestCaptureEnabledSwitch:
 
 
 class TestParamCaptureFromEnv:
-    def test_capture_params_false_disables(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_capture_params_false_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from varco_core.observability.params import param_capture_from_env
 
         monkeypatch.setenv("VARCO_OTEL_CAPTURE_PARAMS", "false")
@@ -516,9 +512,7 @@ class TestParamCaptureFromEnv:
             cfg = param_capture_from_env()
         assert cfg.enabled is True  # documented default
 
-    def test_capture_params_exclude_parsed_as_tuple(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_capture_params_exclude_parsed_as_tuple(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from varco_core.observability.params import param_capture_from_env
 
         monkeypatch.setenv("VARCO_OTEL_CAPTURE_PARAMS_EXCLUDE", "field_a,field_b")
@@ -526,9 +520,7 @@ class TestParamCaptureFromEnv:
         assert "field_a" in cfg.exclude
         assert "field_b" in cfg.exclude
 
-    def test_unset_env_vars_yield_process_defaults(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_unset_env_vars_yield_process_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from varco_core.observability.params import param_capture_from_env
 
         monkeypatch.delenv("VARCO_OTEL_CAPTURE_PARAMS", raising=False)

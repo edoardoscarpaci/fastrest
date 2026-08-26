@@ -43,9 +43,7 @@ class QueryApplicator(ABC):
                         and sort directives.  Empty set means no restriction.
     """
 
-    def __init__(
-        self, *args: Any, allowed_fields: set[str] | None = None, **kwargs: Any
-    ) -> None:
+    def __init__(self, *args: Any, allowed_fields: set[str] | None = None, **kwargs: Any) -> None:
         """
         Initialise the applicator.
 
@@ -58,9 +56,7 @@ class QueryApplicator(ABC):
         self.allowed_fields: set[str] = set(allowed_fields) if allowed_fields else set()
 
     @abstractmethod
-    def apply_query(
-        self, query: _T, node: TransformerNode, *args: Any, **kwargs: Any
-    ) -> _T:
+    def apply_query(self, query: _T, node: TransformerNode, *args: Any, **kwargs: Any) -> _T:
         """
         Apply an AST filter node to ``query`` and return the modified query.
 

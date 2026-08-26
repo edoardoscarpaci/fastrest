@@ -86,9 +86,7 @@ def test_gettext_catalog_loads_mo_file_in_start_and_renders(tmp_path) -> None:
     assert result == "Bonjour"
 
 
-async def test_gettext_catalog_missing_domain_is_skipped_with_warning(
-    tmp_path, caplog
-) -> None:
+async def test_gettext_catalog_missing_domain_is_skipped_with_warning(tmp_path, caplog) -> None:
     catalog = GettextMessageCatalog(str(tmp_path), domain="messages", locales=["xx"])
     await catalog.start()  # must not raise
     assert catalog.get_message("Hello", "xx") is None

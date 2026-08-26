@@ -46,9 +46,7 @@ class _RecordingLifecycle:
         fail_start: If ``True``, ``start()`` raises to exercise the fail-fast path.
     """
 
-    def __init__(
-        self, name: str, events: list[str], *, fail_start: bool = False
-    ) -> None:
+    def __init__(self, name: str, events: list[str], *, fail_start: bool = False) -> None:
         self._name = name
         self._events = events
         self._fail_start = fail_start
@@ -115,9 +113,7 @@ async def test_services_route_independently():
     """Each mounted service serves its own routes under its own prefix."""
     orders = _service_app("orders")
     billing = _service_app("billing")
-    app = create_composite_app(
-        [ServiceMount("/orders", orders), ServiceMount("/billing", billing)]
-    )
+    app = create_composite_app([ServiceMount("/orders", orders), ServiceMount("/billing", billing)])
 
     async with _composite_client(app) as client:
         r_orders = await client.get("/orders/ping")
@@ -131,9 +127,7 @@ async def test_each_service_keeps_its_own_docs_and_openapi():
     """Mounted sub-apps preserve their own /docs and /openapi.json."""
     orders = _service_app("orders")
     billing = _service_app("billing")
-    app = create_composite_app(
-        [ServiceMount("/orders", orders), ServiceMount("/billing", billing)]
-    )
+    app = create_composite_app([ServiceMount("/orders", orders), ServiceMount("/billing", billing)])
 
     async with _composite_client(app) as client:
         docs = await client.get("/orders/docs")
@@ -175,9 +169,7 @@ async def test_composite_lifespan_starts_and_stops_all_services_lifo():
     """
     events: list[str] = []
     orders_app = _service_app("orders", lifecycle=_RecordingLifecycle("orders", events))
-    billing_app = _service_app(
-        "billing", lifecycle=_RecordingLifecycle("billing", events)
-    )
+    billing_app = _service_app("billing", lifecycle=_RecordingLifecycle("billing", events))
 
     lifespan = CompositeLifespan(
         [ServiceMount("/orders", orders_app), ServiceMount("/billing", billing_app)]
@@ -206,13 +198,9 @@ async def test_startup_failure_aborts_and_tears_down_started_services():
     """
     events: list[str] = []
     good_app = _service_app("good", lifecycle=_RecordingLifecycle("good", events))
-    bad_app = _service_app(
-        "bad", lifecycle=_RecordingLifecycle("bad", events, fail_start=True)
-    )
+    bad_app = _service_app("bad", lifecycle=_RecordingLifecycle("bad", events, fail_start=True))
 
-    lifespan = CompositeLifespan(
-        [ServiceMount("/good", good_app), ServiceMount("/bad", bad_app)]
-    )
+    lifespan = CompositeLifespan([ServiceMount("/good", good_app), ServiceMount("/bad", bad_app)])
 
     with pytest.raises(RuntimeError, match="bad boom"):
         async with lifespan(FastAPI()):
@@ -236,9 +224,7 @@ async def test_aggregate_health_reports_per_service_and_503_on_unhealthy():
     async def _bad_health() -> dict[str, str]:
         return {"status": "unhealthy"}
 
-    app = create_composite_app(
-        [ServiceMount("/ok", healthy), ServiceMount("/bad", unhealthy)]
-    )
+    app = create_composite_app([ServiceMount("/ok", healthy), ServiceMount("/bad", unhealthy)])
 
     async with _composite_client(app) as client:
         resp = await client.get("/health")
@@ -385,9 +371,7 @@ def test_duplicate_prefix_raises():
 
 def test_prefix_colliding_with_health_path_raises():
     with pytest.raises(ValueError, match="collides with the composite health path"):
-        create_composite_app(
-            [ServiceMount("/health", _service_app("h"))], health_path="/health"
-        )
+        create_composite_app([ServiceMount("/health", _service_app("h"))], health_path="/health")
 
 
 # ── ServiceMount name derivation ──────────────────────────────────────────────

@@ -111,9 +111,7 @@ class BeanieTenantPool:
             client=effective_client,
         )
         self._resident.add(tenant_id)
-        return _PoolEntry(
-            tenant_id=tenant_id, binding=binding, owned_client=owned_client
-        )
+        return _PoolEntry(tenant_id=tenant_id, binding=binding, owned_client=owned_client)
 
     async def _close(self, entry: _PoolEntry) -> None:
         # Called on every eviction path — explicit evict(), automatic LRU

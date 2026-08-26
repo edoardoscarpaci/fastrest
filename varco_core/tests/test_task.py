@@ -40,9 +40,7 @@ class TestTaskPayload:
 
     def test_from_dict_round_trip(self):
         """to_dict() → from_dict() produces an equal payload."""
-        p = TaskPayload(
-            task_name="OrderRouter.create", args=["body"], kwargs={"auth": None}
-        )
+        p = TaskPayload(task_name="OrderRouter.create", args=["body"], kwargs={"auth": None})
         assert TaskPayload.from_dict(p.to_dict()) == p
 
     def test_from_dict_missing_args_defaults(self):

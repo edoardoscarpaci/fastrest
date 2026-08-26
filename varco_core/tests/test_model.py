@@ -357,9 +357,7 @@ def test_tenant_domain_model_tenant_id_accepts_constructor_value() -> None:
     assert entity.tenant_id == "acme"
 
 
-def test_tenant_domain_model_replace_stamps_tenant_without_touching_other_fields() -> (
-    None
-):
+def test_tenant_domain_model_replace_stamps_tenant_without_touching_other_fields() -> None:
     """
     dataclasses.replace(entity, tenant_id=tid) leaves all other fields intact.
     This is the exact mechanism TenantAwareService.create() uses after assembly.
@@ -443,9 +441,7 @@ def test_tenant_audited_domain_model_tenant_id_init_parameter() -> None:
     assert entity.tenant_id == "acme"
 
 
-def test_tenant_audited_domain_model_replace_stamps_tenant_and_preserves_init_fields() -> (
-    None
-):
+def test_tenant_audited_domain_model_replace_stamps_tenant_and_preserves_init_fields() -> None:
     """
     dataclasses.replace(entity, tenant_id=tid) sets tenant_id and copies all
     init=True fields from the original.  init=False fields (created_at,
@@ -522,9 +518,7 @@ def test_tenant_versioned_domain_model_tenant_id_init_parameter() -> None:
     assert entity.tenant_id == "acme"
 
 
-def test_tenant_versioned_domain_model_replace_stamps_tenant_and_resets_init_false_fields() -> (
-    None
-):
+def test_tenant_versioned_domain_model_replace_stamps_tenant_and_resets_init_false_fields() -> None:
     """
     dataclasses.replace(entity, tenant_id=tid) sets tenant_id and copies all
     init=True fields.  definition_version and row_version are init=False so

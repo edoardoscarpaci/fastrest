@@ -195,9 +195,7 @@ class SAConversationStore(AbstractConversationStore):
         row = _turn_to_row(task_id, turn)
         async with self._engine.begin() as conn:
             await conn.execute(_turns_table.insert().values(**row))
-        _logger.debug(
-            "SAConversationStore.append: task_id=%s role=%s", task_id, turn.role
-        )
+        _logger.debug("SAConversationStore.append: task_id=%s role=%s", task_id, turn.role)
 
     async def get(self, task_id: str) -> list[ConversationTurn]:
         """
@@ -248,9 +246,7 @@ class SAConversationStore(AbstractConversationStore):
         Async safety: ✅ Single DELETE in a ``begin()`` transaction.
         """
         async with self._engine.begin() as conn:
-            await conn.execute(
-                _turns_table.delete().where(_turns_table.c.task_id == task_id)
-            )
+            await conn.execute(_turns_table.delete().where(_turns_table.c.task_id == task_id))
         _logger.debug("SAConversationStore.delete: task_id=%s", task_id)
 
     async def turn_count(self, task_id: str) -> int:

@@ -289,12 +289,8 @@ class AuditedDomainModel(DomainModel):
     ``compare=False`` — equality is based on business fields only.
     """
 
-    created_at: datetime | None = field(
-        default=None, init=False, repr=True, compare=False
-    )
-    updated_at: datetime | None = field(
-        default=None, init=False, repr=True, compare=False
-    )
+    created_at: datetime | None = field(default=None, init=False, repr=True, compare=False)
+    updated_at: datetime | None = field(default=None, init=False, repr=True, compare=False)
 
 
 # ── Versioned base ─────────────────────────────────────────────────────────────
@@ -625,9 +621,7 @@ class SoftDeleteMixin:
     # ``init=True`` — required for dataclasses.replace() to set the field.
     # ``default=None`` — entity starts as active; SoftDeleteService.delete()
     # stamps the real timestamp.
-    deleted_at: datetime | None = field(
-        default=None, init=True, repr=True, compare=False
-    )
+    deleted_at: datetime | None = field(default=None, init=True, repr=True, compare=False)
 
 
 @dataclass(kw_only=True)

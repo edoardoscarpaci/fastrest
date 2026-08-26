@@ -82,9 +82,7 @@ class TestRetryPolicy:
 
     def test_compute_delay_capped_at_max_delay(self) -> None:
         # max_delay=3, so delay is capped before reaching 8.0
-        p = RetryPolicy(
-            base_delay=1.0, exponential_base=2.0, max_delay=3.0, jitter=False
-        )
+        p = RetryPolicy(base_delay=1.0, exponential_base=2.0, max_delay=3.0, jitter=False)
         assert p.compute_delay(3) == pytest.approx(3.0)
 
     def test_compute_delay_with_jitter_in_range(self) -> None:
@@ -459,9 +457,7 @@ class TestCircuitBreakerOpen:
                 await b.call_async(failing)
 
     async def test_open_rejects_calls_immediately(self) -> None:
-        b = CircuitBreaker(
-            CircuitBreakerConfig(failure_threshold=2, recovery_timeout=60.0)
-        )
+        b = CircuitBreaker(CircuitBreakerConfig(failure_threshold=2, recovery_timeout=60.0))
         await self._trip_breaker(b)
         assert b.state == CircuitState.OPEN
 
@@ -515,9 +511,7 @@ class TestCircuitBreakerHalfOpen:
 
     async def test_probe_success_closes_circuit(self) -> None:
         # recovery_timeout=0 means instant recovery
-        b = CircuitBreaker(
-            CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.0)
-        )
+        b = CircuitBreaker(CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.0))
         await self._trip_and_wait(b)
         assert b.state == CircuitState.OPEN
 
@@ -530,9 +524,7 @@ class TestCircuitBreakerHalfOpen:
         assert b.state == CircuitState.CLOSED
 
     async def test_probe_failure_reopens_circuit(self) -> None:
-        b = CircuitBreaker(
-            CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.0)
-        )
+        b = CircuitBreaker(CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.0))
         await self._trip_and_wait(b)
 
         async def bad_probe() -> None:
@@ -544,9 +536,7 @@ class TestCircuitBreakerHalfOpen:
         assert b.state == CircuitState.OPEN
 
     async def test_reset_returns_to_closed(self) -> None:
-        b = CircuitBreaker(
-            CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.0)
-        )
+        b = CircuitBreaker(CircuitBreakerConfig(failure_threshold=2, recovery_timeout=0.0))
         await self._trip_and_wait(b)
         b.reset()
         assert b.state == CircuitState.CLOSED

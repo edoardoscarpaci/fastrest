@@ -260,9 +260,7 @@ def sanitize_value(
     Thread safety:  ✅ Pure function, no shared state.
     """
     try:
-        return _sanitize_value_inner(
-            value, max_value_length, max_sequence_items, value_mode
-        )
+        return _sanitize_value_inner(value, max_value_length, max_sequence_items, value_mode)
     except Exception:
         return "<unrepresentable>"
 
@@ -319,9 +317,7 @@ def _is_eligible(name: str, config: ParamCaptureConfig) -> bool:
     return True
 
 
-def _render_captured(
-    collected: dict[str, Any], config: ParamCaptureConfig
-) -> dict[str, Any]:
+def _render_captured(collected: dict[str, Any], config: ParamCaptureConfig) -> dict[str, Any]:
     """
     Apply ``max_params`` truncation, redaction, and value sanitisation to an
     already-collected ``{raw_name: raw_value}`` dict, in declaration order.
@@ -499,9 +495,7 @@ _EMPTY_PLAN_SENTINEL = CapturePlan(
 )
 
 
-def build_capture_plan(
-    func: Callable[..., Any], config: ParamCaptureConfig
-) -> CapturePlan:
+def build_capture_plan(func: Callable[..., Any], config: ParamCaptureConfig) -> CapturePlan:
     """
     Build a ``CapturePlan`` for ``func`` from ``inspect.signature(func)``.
 

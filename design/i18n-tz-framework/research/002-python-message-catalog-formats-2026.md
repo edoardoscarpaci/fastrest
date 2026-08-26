@@ -288,12 +288,7 @@ The ABC should support **both patterns**:
 
 2. **Structured params path** — for formatters that need context:
    ```python
-   def format_message(
-       self, 
-       key: str, 
-       locale: str, 
-       params: dict[str, Any] | None = None
-   ) -> str:
+   def format_message(self, key: str, locale: str, params: dict[str, Any] | None = None) -> str:
        """Format a message with parameters (handles plurals, dates, etc.)."""
        return ...
    ```

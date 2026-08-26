@@ -141,9 +141,7 @@ class TestSAEncryptionKeyStoreSave:
         assert loaded.is_primary is False
 
     async def test_save_preserves_all_fields(self, store: SAEncryptionKeyStore) -> None:
-        entry = _make_entry(
-            kid="full", tenant_id="globex", is_primary=False, wrapped=True
-        )
+        entry = _make_entry(kid="full", tenant_id="globex", is_primary=False, wrapped=True)
         await store.save(entry)
         loaded = await store.load("full")
         assert loaded is not None
@@ -167,9 +165,7 @@ class TestSAEncryptionKeyStoreSave:
 
 
 class TestSAEncryptionKeyStoreLoad:
-    async def test_load_returns_none_when_missing(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_load_returns_none_when_missing(self, store: SAEncryptionKeyStore) -> None:
         assert await store.load("ghost") is None
 
     async def test_load_round_trip(self, store: SAEncryptionKeyStore) -> None:
@@ -180,9 +176,7 @@ class TestSAEncryptionKeyStoreLoad:
         assert loaded.kid == entry.kid
         assert loaded.key_material == entry.key_material
 
-    async def test_created_at_is_timezone_aware(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_created_at_is_timezone_aware(self, store: SAEncryptionKeyStore) -> None:
         entry = _make_entry(kid="tz1")
         await store.save(entry)
         loaded = await store.load("tz1")
@@ -196,9 +190,7 @@ class TestSAEncryptionKeyStoreLoad:
 
 
 class TestSAEncryptionKeyStoreLoadForTenant:
-    async def test_returns_only_matching_tenant(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_returns_only_matching_tenant(self, store: SAEncryptionKeyStore) -> None:
         await store.save(_make_entry(kid="a1", tenant_id="acme"))
         await store.save(_make_entry(kid="g1", tenant_id="globex"))
         result = await store.load_for_tenant("acme")
@@ -212,14 +204,10 @@ class TestSAEncryptionKeyStoreLoadForTenant:
         assert len(result) == 1
         assert result[0].tenant_id is None
 
-    async def test_returns_empty_list_for_unknown_tenant(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_returns_empty_list_for_unknown_tenant(self, store: SAEncryptionKeyStore) -> None:
         assert await store.load_for_tenant("nobody") == []
 
-    async def test_sorted_by_created_at_ascending(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_sorted_by_created_at_ascending(self, store: SAEncryptionKeyStore) -> None:
         newer = _make_entry(kid="newer", tenant_id="t", offset_seconds=10)
         older = _make_entry(kid="older", tenant_id="t", offset_seconds=0)
         # Insert out of order
@@ -228,9 +216,7 @@ class TestSAEncryptionKeyStoreLoadForTenant:
         result = await store.load_for_tenant("t")
         assert [e.kid for e in result] == ["older", "newer"]
 
-    async def test_multiple_entries_all_returned(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_multiple_entries_all_returned(self, store: SAEncryptionKeyStore) -> None:
         for i in range(3):
             await store.save(_make_entry(kid=f"k{i}", tenant_id="multi"))
         result = await store.load_for_tenant("multi")
@@ -276,9 +262,7 @@ class TestSAEncryptionKeyStoreDelete:
         """No-op — must not raise."""
         await store.delete("ghost")
 
-    async def test_delete_only_removes_target(
-        self, store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_delete_only_removes_target(self, store: SAEncryptionKeyStore) -> None:
         await store.save(_make_entry(kid="keep"))
         await store.save(_make_entry(kid="remove"))
         await store.delete("remove")
@@ -362,9 +346,7 @@ class TestSAEncryptionKeyStoreIntegration:
         assert loaded is not None
         assert loaded.is_primary is False
 
-    async def test_pg_created_at_timezone_aware(
-        self, pg_store: SAEncryptionKeyStore
-    ) -> None:
+    async def test_pg_created_at_timezone_aware(self, pg_store: SAEncryptionKeyStore) -> None:
         """PostgreSQL TIMESTAMPTZ preserves UTC timezone info."""
         entry = _make_entry(kid="pg-tz")
         await pg_store.save(entry)
@@ -421,9 +403,7 @@ class TestSAEncryptionKeyStoreScope:
         assert "acme" in scopes
         assert "beta" in scopes
 
-    async def test_destroy_scope_tombstones_entries_and_returns_kids(
-        self, store
-    ) -> None:
+    async def test_destroy_scope_tombstones_entries_and_returns_kids(self, store) -> None:
         await store.save(_make_entry(kid="k1", tenant_id="acme"))
         kids = await store.destroy_scope("acme")
         assert "k1" in kids
@@ -439,9 +419,7 @@ class TestSAEncryptionKeyStoreScope:
         second = await store.destroy_scope("acme")
         assert second == ()
 
-    async def test_pre_migration_row_with_null_scope_yields_tenant_id(
-        self, store, engine
-    ) -> None:
+    async def test_pre_migration_row_with_null_scope_yields_tenant_id(self, store, engine) -> None:
         # Simulate a row persisted before the migration: scope column NULL.
         # save() a normal entry, then null out the "scope" column directly.
         await store.save(_make_entry(kid="k1", tenant_id="acme"))
@@ -450,9 +428,7 @@ class TestSAEncryptionKeyStoreScope:
 
         async with engine.begin() as conn:
             await conn.execute(
-                sa.text(
-                    "UPDATE varco_encryption_keys SET scope = NULL WHERE kid = 'k1'"
-                )
+                sa.text("UPDATE varco_encryption_keys SET scope = NULL WHERE kid = 'k1'")
             )
 
         loaded = await store.load("k1")

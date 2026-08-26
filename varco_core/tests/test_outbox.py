@@ -226,9 +226,7 @@ class TestOutboxRelayOnce:
         repo = InMemoryOutboxRepository()
 
         class FailingBus(InMemoryEventBus):
-            async def publish(
-                self, event: Event, *, channel: str = CHANNEL_DEFAULT
-            ) -> None:
+            async def publish(self, event: Event, *, channel: str = CHANNEL_DEFAULT) -> None:
                 raise RuntimeError("broker down")
 
         relay = OutboxRelay(outbox=repo, bus=FailingBus(), poll_interval=0.01)
@@ -261,9 +259,7 @@ class TestOutboxRelayOnce:
     async def test_relay_once_processes_multiple_entries(self) -> None:
         repo, bus, relay = await self._setup()
         for _ in range(5):
-            await repo.save(
-                OutboxEntry.from_event(OrderPlacedEvent(), channel="orders")
-            )
+            await repo.save(OutboxEntry.from_event(OrderPlacedEvent(), channel="orders"))
 
         await relay._relay_once()
         assert len(repo._entries) == 0
@@ -408,9 +404,7 @@ class TestOutboxRelayWithRetryPolicy:
         assert len(repo._entries) == 0
         assert await dlq.count() == 1
 
-    async def test_repository_without_mark_failed_degrades_with_warning(
-        self, caplog
-    ) -> None:
+    async def test_repository_without_mark_failed_degrades_with_warning(self, caplog) -> None:
         # A plain repo (today's InMemoryOutboxRepository, no mark_failed override)
         # must fall back to unbounded-retry behaviour via the concrete ABC default.
         from varco_core.resilience import RetryPolicy
@@ -435,6 +429,5 @@ def dataclasses_replace_future_entry() -> OutboxEntry:
     entry = OutboxEntry.from_event(OrderPlacedEvent(), channel="orders")
     return _dc.replace(
         entry,
-        next_attempt_at=datetime.now(tz=UTC)
-        + __import__("datetime").timedelta(hours=1),
+        next_attempt_at=datetime.now(tz=UTC) + __import__("datetime").timedelta(hours=1),
     )

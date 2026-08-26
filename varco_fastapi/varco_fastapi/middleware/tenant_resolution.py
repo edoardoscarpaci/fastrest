@@ -56,9 +56,7 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
         self._pool = pool
         self._header = header
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         tenant_id = request.headers.get(self._header)
         if tenant_id is None:
             return await call_next(request)

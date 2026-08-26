@@ -157,10 +157,7 @@ class MemcachedHealthCheck(HealthCheck):
 
     def __repr__(self) -> str:
         return (
-            f"MemcachedHealthCheck("
-            f"host={self._host!r}, "
-            f"port={self._port}, "
-            f"timeout={self._timeout})"
+            f"MemcachedHealthCheck(host={self._host!r}, port={self._port}, timeout={self._timeout})"
         )
 
 

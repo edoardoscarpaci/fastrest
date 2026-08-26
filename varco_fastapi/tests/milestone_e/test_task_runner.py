@@ -69,9 +69,7 @@ class TestTryClaim:
         await store.save(job)
 
         # Fire 10 concurrent claims — only one should succeed
-        results = await asyncio.gather(
-            *[store.try_claim(job.job_id) for _ in range(10)]
-        )
+        results = await asyncio.gather(*[store.try_claim(job.job_id) for _ in range(10)])
         successes = [r for r in results if r is not None]
         assert len(successes) == 1
         assert successes[0].status == JobStatus.RUNNING
@@ -259,9 +257,7 @@ class TestRecover:
         # Job stays in RUNNING state (claimed but not executed)
         stored = await store.get(job.job_id)
         assert stored is not None
-        assert (
-            stored.status == JobStatus.RUNNING
-        )  # claimed via try_claim but not executed
+        assert stored.status == JobStatus.RUNNING  # claimed via try_claim but not executed
 
         await runner.stop()
 

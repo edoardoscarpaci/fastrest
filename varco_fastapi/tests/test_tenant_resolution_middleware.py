@@ -33,9 +33,7 @@ def _build_app(catalog, pool, tenant_header: str = "X-Tenant-Id"):
     from varco_fastapi.middleware.tenant_resolution import TenantResolutionMiddleware
 
     app = FastAPI()
-    app.add_middleware(
-        TenantResolutionMiddleware, catalog=catalog, pool=pool, header=tenant_header
-    )
+    app.add_middleware(TenantResolutionMiddleware, catalog=catalog, pool=pool, header=tenant_header)
 
     @app.get("/ping")
     async def ping():

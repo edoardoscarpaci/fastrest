@@ -488,9 +488,7 @@ class TypedJsonSerializer(Serializer[Any]):
 
         # type_hint wins over the embedded class — lets callers coerce/migrate
         # types without changing the serialized bytes.
-        cls: type = (
-            type_hint if type_hint is not None else self._import_class(qualified)
-        )
+        cls: type = type_hint if type_hint is not None else self._import_class(qualified)
 
         # Re-encode __data__ as bytes so JsonSerializer's TypeAdapter path
         # handles coercion (str → UUID, str → datetime, nested models, etc.).
@@ -556,9 +554,7 @@ class TypedJsonSerializer(Serializer[Any]):
 
         # Allowlist check — performed before any import to avoid side-effects.
         if self._allow_modules is not None:
-            permitted = any(
-                module_path.startswith(prefix) for prefix in self._allow_modules
-            )
+            permitted = any(module_path.startswith(prefix) for prefix in self._allow_modules)
             if not permitted:
                 raise ValueError(
                     f"Module {module_path!r} is not in the allow_modules allowlist "

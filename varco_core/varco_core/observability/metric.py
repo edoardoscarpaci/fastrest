@@ -359,12 +359,7 @@ class Metric:
         )
 
     def __repr__(self) -> str:
-        return (
-            f"Metric("
-            f"name={self._name!r}, "
-            f"kind={self._kind!r}, "
-            f"meter={self._meter_name!r})"
-        )
+        return f"Metric(name={self._name!r}, kind={self._kind!r}, meter={self._meter_name!r})"
 
 
 # ── register_gauge ─────────────────────────────────────────────────────────

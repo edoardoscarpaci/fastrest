@@ -206,9 +206,7 @@ class EncryptionKeyEntry:
             "is_primary": self.is_primary,
             "wrapped": self.wrapped,
             "scope": self.scope,
-            "destroyed_at": (
-                self.destroyed_at.isoformat() if self.destroyed_at else None
-            ),
+            "destroyed_at": (self.destroyed_at.isoformat() if self.destroyed_at else None),
         }
 
     @classmethod
@@ -236,9 +234,7 @@ class EncryptionKeyEntry:
                 created_at = datetime.fromisoformat(str(created_at_raw))
             except ValueError:
                 # Python <3.11 does not accept the "Z" suffix — replace it
-                created_at = datetime.fromisoformat(
-                    str(created_at_raw).replace("Z", "+00:00")
-                )
+                created_at = datetime.fromisoformat(str(created_at_raw).replace("Z", "+00:00"))
             # Ensure timezone-aware (assume UTC if naive)
             if created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=UTC)
@@ -469,9 +465,7 @@ class InMemoryEncryptionKeyStore:
 
     async def list_tenants(self) -> list[str]:
         """Return sorted list of distinct non-None tenant IDs."""
-        tenants = {
-            e.tenant_id for e in self._entries.values() if e.tenant_id is not None
-        }
+        tenants = {e.tenant_id for e in self._entries.values() if e.tenant_id is not None}
         return sorted(tenants)
 
     async def delete(self, kid: str) -> None:
@@ -494,9 +488,7 @@ class InMemoryEncryptionKeyStore:
         destroyed_kids: list[str] = []
         for kid, entry in list(self._entries.items()):
             if entry.scope == scope and not entry.is_destroyed:
-                self._entries[kid] = dataclasses.replace(
-                    entry, key_material="", destroyed_at=now
-                )
+                self._entries[kid] = dataclasses.replace(entry, key_material="", destroyed_at=now)
                 destroyed_kids.append(kid)
         return tuple(destroyed_kids)
 
@@ -618,9 +610,7 @@ class EncryptionKeyManager:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def get_or_create_encryptor(
-        self, tenant_id: str | None = None
-    ) -> FieldEncryptor:
+    async def get_or_create_encryptor(self, tenant_id: str | None = None) -> FieldEncryptor:
         """
         Return the active ``FieldEncryptor`` for ``tenant_id``, creating one
         if none exists.
@@ -839,9 +829,7 @@ class EncryptionKeyManager:
             enc, primary = self._generate(tenant_id=None, is_primary=True, scope=scope)
             await self._store.save(primary)
 
-        multi = MultiKeyEncryptorRegistry(
-            primary_kid=primary.kid, primary_encryptor=enc
-        )
+        multi = MultiKeyEncryptorRegistry(primary_kid=primary.kid, primary_encryptor=enc)
         self._scoped_multi[scope] = multi
 
         registry = ScopedEncryptorRegistry()
@@ -864,9 +852,7 @@ class EncryptionKeyManager:
                       ``build_scoped_registry()`` first.
         """
         entries = await self._load_for_scope(scope)
-        current_primary = next(
-            (e for e in entries if e.is_primary and not e.is_destroyed), None
-        )
+        current_primary = next((e for e in entries if e.is_primary and not e.is_destroyed), None)
         if current_primary is None:
             raise KeyError(
                 f"Cannot rotate key for scope {scope!r} — no primary key "
@@ -888,9 +874,7 @@ class EncryptionKeyManager:
 
         return new_enc
 
-    async def destroy_scope(
-        self, scope: str, *, actor: str | None = None
-    ) -> DestroyReceipt:
+    async def destroy_scope(self, scope: str, *, actor: str | None = None) -> DestroyReceipt:
         """
         Crypto-shred every key for ``scope`` — the store-level tombstone plus
         an audit-friendly receipt.
@@ -924,9 +908,7 @@ class EncryptionKeyManager:
         # not keep serving encrypt() calls with a shredded key.
         self._cache.pop(scope, None)
 
-        return DestroyReceipt(
-            scope=scope, kids=kids, destroyed_at=datetime.now(UTC), actor=actor
-        )
+        return DestroyReceipt(scope=scope, kids=kids, destroyed_at=datetime.now(UTC), actor=actor)
 
     # ── Capability shim (Step 14) ────────────────────────────────────────────
     # EncryptionKeyStore is a runtime_checkable Protocol; adding load_for_scope/
@@ -1028,9 +1010,7 @@ class EncryptionKeyManager:
 
         # Encode as base64url (no padding) for storage — works for both
         # raw bytes and ciphertext bytes
-        key_material = (
-            base64.urlsafe_b64encode(key_material_bytes).rstrip(b"=").decode("ascii")
-        )
+        key_material = base64.urlsafe_b64encode(key_material_bytes).rstrip(b"=").decode("ascii")
 
         entry = EncryptionKeyEntry(
             kid=str(uuid.uuid4()),

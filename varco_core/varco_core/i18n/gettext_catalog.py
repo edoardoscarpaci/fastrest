@@ -42,9 +42,7 @@ class GettextMessageCatalog(MessageCatalog):
             a missing locale.
     """
 
-    def __init__(
-        self, directory: str, *, domain: str = "messages", locales: Any = ()
-    ) -> None:
+    def __init__(self, directory: str, *, domain: str = "messages", locales: Any = ()) -> None:
         self._directory = directory
         self._domain = domain
         self._locales = tuple(locales)
@@ -64,8 +62,7 @@ class GettextMessageCatalog(MessageCatalog):
                 )
             except OSError:
                 logger.warning(
-                    "GettextMessageCatalog: no .mo file for domain=%r locale=%r "
-                    "under %r; skipping",
+                    "GettextMessageCatalog: no .mo file for domain=%r locale=%r under %r; skipping",
                     self._domain,
                     locale,
                     self._directory,

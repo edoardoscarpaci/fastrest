@@ -36,10 +36,7 @@ async def test_create_database_uses_autocommit_isolation_level() -> None:
 
     await provisioner._create_database(conn, "db_acme")  # type: ignore[attr-defined]
 
-    assert any(
-        call.get("isolation_level") == "AUTOCOMMIT"
-        for call in conn.execution_options_calls
-    )
+    assert any(call.get("isolation_level") == "AUTOCOMMIT" for call in conn.execution_options_calls)
 
 
 async def test_drop_database_refuses_without_confirm_destroy() -> None:

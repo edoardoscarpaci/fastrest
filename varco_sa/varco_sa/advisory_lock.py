@@ -355,9 +355,7 @@ class SAAdvisoryLock(AbstractDistributedLock):
                     token,
                 )
         except Exception as exc:
-            _logger.error(
-                "SAAdvisoryLock.release: error unlocking key=%r: %s", key, exc
-            )
+            _logger.error("SAAdvisoryLock.release: error unlocking key=%r: %s", key, exc)
         finally:
             try:
                 await conn.close()
@@ -633,9 +631,7 @@ class SAXactAdvisoryLock(AbstractDistributedLock):
             conn = await self._engine.connect()
             txn = await conn.begin()
             result = await conn.execute(
-                sa.text("SELECT pg_try_advisory_xact_lock(:key)").bindparams(
-                    key=key_int
-                )
+                sa.text("SELECT pg_try_advisory_xact_lock(:key)").bindparams(key=key_int)
             )
             acquired: bool = bool(result.scalar())
         except Exception as exc:
@@ -726,9 +722,7 @@ class SAXactAdvisoryLock(AbstractDistributedLock):
             except Exception:
                 pass
 
-        _logger.debug(
-            "SAXactAdvisoryLock.release: released key=%r (token=%s)", key, token
-        )
+        _logger.debug("SAXactAdvisoryLock.release: released key=%r (token=%s)", key, token)
         return True
 
     def __repr__(self) -> str:

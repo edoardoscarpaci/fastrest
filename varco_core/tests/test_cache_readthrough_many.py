@@ -34,18 +34,14 @@ async def test_loader_called_once_with_exactly_the_missing_keys() -> None:
         calls.append(list(missing_keys))
         return {k: f"loaded-{k}" for k in missing_keys}
 
-    result = await read_through_many(
-        cache, ["k1", "k2", "k3"], loader, CachePolicy(ttl=60.0)
-    )
+    result = await read_through_many(cache, ["k1", "k2", "k3"], loader, CachePolicy(ttl=60.0))
 
     assert calls == [["k2", "k3"]]
     assert result == {"k1": "cached-1", "k2": "loaded-k2", "k3": "loaded-k3"}
     await cache.stop()
 
 
-async def test_single_read_through_for_missing_key_joins_same_singleflight_slot() -> (
-    None
-):
+async def test_single_read_through_for_missing_key_joins_same_singleflight_slot() -> None:
     cache = InMemoryCache()
     await cache.start()
     sf = Singleflight()
@@ -89,9 +85,7 @@ async def test_loader_raising_fails_all_led_keys_and_clears_slots() -> None:
     # DEVIATION: singleflight=True added — see the note above.
     policy = CachePolicy(ttl=60.0, singleflight=True)
     with pytest.raises(RuntimeError, match="boom"):
-        await read_through_many(
-            cache, ["a", "b"], failing_loader, policy, singleflight=sf
-        )
+        await read_through_many(cache, ["a", "b"], failing_loader, policy, singleflight=sf)
 
     # Slots must be cleared — a subsequent call is a fresh attempt, not a
     # forever-broken future.

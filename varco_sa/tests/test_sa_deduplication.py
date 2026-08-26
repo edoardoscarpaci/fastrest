@@ -149,11 +149,7 @@ class TestSADeduplicatorUnit:
         # expires_at should be roughly now + 3600 seconds.
         expires_at = params["expires_at"]
         # Allow generous tolerance for test execution time.
-        assert (
-            before + timedelta(seconds=3599)
-            <= expires_at
-            <= after + timedelta(seconds=3601)
-        )
+        assert before + timedelta(seconds=3599) <= expires_at <= after + timedelta(seconds=3601)
 
     async def test_mark_seen_does_not_raise_on_db_error(self) -> None:
         """mark_seen swallows all DB errors — MUST NOT raise."""
@@ -282,9 +278,7 @@ class TestSADeduplicatorIntegration:
         """A never-seen event_id is not a duplicate."""
         assert await dedup.is_duplicate(_eid()) is False
 
-    async def test_mark_seen_then_is_duplicate_returns_true(
-        self, dedup: SADeduplicator
-    ) -> None:
+    async def test_mark_seen_then_is_duplicate_returns_true(self, dedup: SADeduplicator) -> None:
         """mark_seen followed by is_duplicate returns True."""
         eid = _eid()
         assert await dedup.is_duplicate(eid) is False

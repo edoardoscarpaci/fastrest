@@ -83,9 +83,7 @@ def db_url(postgres_container: PostgresContainer) -> str:
     """
     # testcontainers returns a psycopg2 URL; SA async requires asyncpg.
     raw = postgres_container.get_connection_url()
-    return raw.replace("psycopg2", "asyncpg").replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )
+    return raw.replace("psycopg2", "asyncpg").replace("postgresql://", "postgresql+asyncpg://")
 
 
 # ── FastAPI application ───────────────────────────────────────────────────────

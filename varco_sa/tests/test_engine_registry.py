@@ -13,9 +13,7 @@ import pytest
 def _make_registry(db_template="db_{tenant_id}"):
     from varco_sa.tenancy.engine_registry import SAEngineRegistry
 
-    return SAEngineRegistry(
-        db_template=db_template, base_dsn="postgresql+asyncpg://user:pw@host/"
-    )
+    return SAEngineRegistry(db_template=db_template, base_dsn="postgresql+asyncpg://user:pw@host/")
 
 
 async def test_dsn_built_from_template() -> None:

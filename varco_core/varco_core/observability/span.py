@@ -234,9 +234,7 @@ def span(  # type: ignore[misc]
         return _make_wrapper(func, SpanConfig())
 
     # Configured form: @span(SpanConfig(...)) — func IS the SpanConfig.
-    effective_config: SpanConfig = (
-        func if isinstance(func, SpanConfig) else SpanConfig()
-    )
+    effective_config: SpanConfig = func if isinstance(func, SpanConfig) else SpanConfig()
 
     def decorator(fn: _F) -> _F:
         return _make_wrapper(fn, effective_config)
@@ -339,17 +337,13 @@ def _make_wrapper(func: _F, cfg: SpanConfig) -> _F:
         plan = _plan_cell[0]
         if plan is None:
             effective_cfg = (
-                cfg.param_capture
-                if cfg.param_capture is not None
-                else param_capture_defaults()
+                cfg.param_capture if cfg.param_capture is not None else param_capture_defaults()
             )
             plan = build_capture_plan(func, effective_cfg)
             _plan_cell[0] = plan
         return plan
 
-    def _capture(
-        args: tuple[Any, ...], kwargs: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    def _capture(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any] | None:
         if not _resolve_capture_enabled(cfg):
             return None
         return _get_plan().extract(args, kwargs)

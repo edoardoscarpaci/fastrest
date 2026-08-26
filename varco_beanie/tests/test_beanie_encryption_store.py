@@ -167,9 +167,7 @@ class TestEncryptionKeyDocument:
 
 class TestDocToEntry:
     def test_round_trip(self) -> None:
-        entry = _make_entry(
-            kid="rt", tenant_id="globex", is_primary=False, wrapped=True
-        )
+        entry = _make_entry(kid="rt", tenant_id="globex", is_primary=False, wrapped=True)
         doc = _make_doc(entry)
         restored = _doc_to_entry(doc)
         assert restored.kid == entry.kid
@@ -280,9 +278,7 @@ class TestBeanieEncryptionKeyStoreUnit:
         mock_find = MagicMock()
         mock_find.sort.return_value = mock_sorted
 
-        with patch.object(
-            EncryptionKeyDocument, "find", return_value=mock_find
-        ) as mock_f:
+        with patch.object(EncryptionKeyDocument, "find", return_value=mock_find) as mock_f:
             await store.load_for_tenant(None)
         # find() called once with the None-tenant filter dict
         mock_f.assert_called_once_with({"tenant_id": None})
@@ -383,9 +379,7 @@ class TestBeanieEncryptionKeyStoreIntegration:
         result = await beanie_store.load("ghost-kid")
         assert result is None
 
-    async def test_save_upserts_existing(
-        self, beanie_store: BeanieEncryptionKeyStore
-    ) -> None:
+    async def test_save_upserts_existing(self, beanie_store: BeanieEncryptionKeyStore) -> None:
         import dataclasses
 
         entry = _make_entry(kid="int-u1", is_primary=True)
@@ -424,17 +418,13 @@ class TestBeanieEncryptionKeyStoreIntegration:
         assert "int-zebra" in tenants
         assert tenants == sorted(tenants)
 
-    async def test_delete_removes_entry(
-        self, beanie_store: BeanieEncryptionKeyStore
-    ) -> None:
+    async def test_delete_removes_entry(self, beanie_store: BeanieEncryptionKeyStore) -> None:
         entry = _make_entry(kid="int-del1")
         await beanie_store.save(entry)
         await beanie_store.delete("int-del1")
         assert await beanie_store.load("int-del1") is None
 
-    async def test_delete_noop_when_missing(
-        self, beanie_store: BeanieEncryptionKeyStore
-    ) -> None:
+    async def test_delete_noop_when_missing(self, beanie_store: BeanieEncryptionKeyStore) -> None:
         await beanie_store.delete("int-ghost")  # must not raise
 
     async def test_full_lifecycle(self, beanie_store: BeanieEncryptionKeyStore) -> None:
@@ -524,9 +514,7 @@ class TestBeanieEncryptionKeyStoreScopeIntegration:
         scopes = await beanie_store.list_scopes()
         assert "scope-beta" in scopes
 
-    async def test_destroy_scope_tombstones_and_is_idempotent(
-        self, beanie_store
-    ) -> None:
+    async def test_destroy_scope_tombstones_and_is_idempotent(self, beanie_store) -> None:
         await beanie_store.save(_make_entry(kid="scope-k3", tenant_id="scope-gamma"))
         kids = await beanie_store.destroy_scope("scope-gamma")
         assert "scope-k3" in kids
@@ -538,9 +526,7 @@ class TestBeanieEncryptionKeyStoreScopeIntegration:
         second = await beanie_store.destroy_scope("scope-gamma")
         assert second == ()
 
-    async def test_pre_migration_row_with_no_scope_yields_tenant_id(
-        self, beanie_store
-    ) -> None:
+    async def test_pre_migration_row_with_no_scope_yields_tenant_id(self, beanie_store) -> None:
         await beanie_store.save(_make_entry(kid="scope-k4", tenant_id="scope-delta"))
         # Directly null the scope field on the underlying document to
         # simulate a pre-migration row.  The document has no ``kid`` field —

@@ -119,9 +119,7 @@ def _bearer(token: str) -> dict[str, str]:
 class TestTokenIssuance:
     """POST /auth/token returns a signed JWT with the active kid."""
 
-    async def test_issue_token_returns_token_and_kid(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_issue_token_returns_token_and_kid(self, client: httpx.AsyncClient) -> None:
         """POST /auth/token → 200 with token and active_kid fields."""
         resp = await client.post("/auth/token", params={"subject": "user:alice"})
         assert resp.status_code == 200
@@ -138,9 +136,7 @@ class TestTokenIssuance:
         assert resp.status_code == 200
         assert "token" in resp.json()
 
-    async def test_issued_token_verifiable_by_registry(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_issued_token_verifiable_by_registry(self, client: httpx.AsyncClient) -> None:
         """Token from /auth/token must be verifiable by the registry."""
         resp = await client.post("/auth/token", params={"subject": "user:bob"})
         raw = resp.json()["token"]
@@ -164,25 +160,17 @@ class TestMeEndpoint:
         assert body["subject"] == "user:alice"
         assert body["kid"] == _KID_A
 
-    async def test_me_without_token_returns_401(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_me_without_token_returns_401(self, client: httpx.AsyncClient) -> None:
         """GET /me without a token → 401 (JwtBearerAuth required=True)."""
         resp = await client.get("/me")
         assert resp.status_code == 401
 
-    async def test_me_with_invalid_token_returns_401(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_me_with_invalid_token_returns_401(self, client: httpx.AsyncClient) -> None:
         """GET /me with a garbage token → 401."""
-        resp = await client.get(
-            "/me", headers={"Authorization": "Bearer not.a.real.token"}
-        )
+        resp = await client.get("/me", headers={"Authorization": "Bearer not.a.real.token"})
         assert resp.status_code == 401
 
-    async def test_me_with_wrong_bearer_format_returns_401(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_me_with_wrong_bearer_format_returns_401(self, client: httpx.AsyncClient) -> None:
         """GET /me with a malformed Authorization header → 401."""
         resp = await client.get("/me", headers={"Authorization": "Basic dXNlcjpwYXNz"})
         assert resp.status_code == 401
@@ -258,9 +246,7 @@ class TestKeyRotation:
         assert body["subject"] == "user:bob"
         assert body["kid"] == _KID_B
 
-    async def test_jwks_contains_both_keys_after_rotation(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_jwks_contains_both_keys_after_rotation(self, client: httpx.AsyncClient) -> None:
         """
         After rotation, /jwks must expose both key A and key B.
         """
@@ -274,9 +260,7 @@ class TestKeyRotation:
         assert _KID_A in kids
         assert _KID_B in kids
 
-    async def test_token_from_retired_key_rejected(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_token_from_retired_key_rejected(self, client: httpx.AsyncClient) -> None:
         """
         After retiring key A, tokens signed by A must be rejected with 401.
 
@@ -300,9 +284,7 @@ class TestKeyRotation:
         resp = await client.get("/me", headers=_bearer(token_a))
         assert resp.status_code == 401
 
-    async def test_token_from_b_verifiable_after_a_retired(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_token_from_b_verifiable_after_a_retired(self, client: httpx.AsyncClient) -> None:
         """
         Tokens signed by B are verifiable even after key A is retired.
         """
@@ -328,9 +310,7 @@ class TestKeyRotation:
         with pytest.raises(ValueError, match="Cannot retire the active kid"):
             multi_authority.retire(_KID_A)
 
-    async def test_active_kid_reported_by_token_endpoint(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_active_kid_reported_by_token_endpoint(self, client: httpx.AsyncClient) -> None:
         """
         POST /auth/token reflects the active kid before and after rotation.
         """

@@ -120,12 +120,8 @@ class PaymentGateway:
     # DESIGN: separate breakers per operation
     #   ✅ A slow balance endpoint doesn't trip the charge circuit.
     #   ❌ More state to manage; tests must reset both.
-    _charge_breaker: CircuitBreaker = CircuitBreaker(
-        _BREAKER_CONFIG, name="payment-charge"
-    )
-    _balance_breaker: CircuitBreaker = CircuitBreaker(
-        _BREAKER_CONFIG, name="payment-balance"
-    )
+    _charge_breaker: CircuitBreaker = CircuitBreaker(_BREAKER_CONFIG, name="payment-charge")
+    _balance_breaker: CircuitBreaker = CircuitBreaker(_BREAKER_CONFIG, name="payment-balance")
 
     def __init__(self, stub: FlakeyPaymentStub) -> None:
         """
@@ -208,9 +204,7 @@ class PaymentGateway:
         can use a class-level shared breaker without decorating at class-definition
         time (which would create a new breaker per class instantiation).
         """
-        return await self._charge_breaker.call_async(
-            self._stub.charge, amount, card_token
-        )
+        return await self._charge_breaker.call_async(self._stub.charge, amount, card_token)
 
     @timeout(0.5)
     @hedge(HedgeConfig(delay=0.05))
@@ -221,9 +215,7 @@ class PaymentGateway:
         Hedge fires a duplicate call after 50 ms if the first hasn't returned.
         Both copies go through the circuit breaker.
         """
-        return await self._balance_breaker.call_async(
-            self._stub.get_balance, account_id
-        )
+        return await self._balance_breaker.call_async(self._stub.get_balance, account_id)
 
     def __repr__(self) -> str:
         return (

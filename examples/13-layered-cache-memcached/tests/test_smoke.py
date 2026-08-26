@@ -117,9 +117,7 @@ async def app_client(memcached_host_port):
 
 
 async def _create(client: httpx.AsyncClient, pid: str, name: str, price: float) -> dict:
-    resp = await client.post(
-        "/v1/products", json={"id": pid, "name": name, "price": price}
-    )
+    resp = await client.post("/v1/products", json={"id": pid, "name": name, "price": price})
     assert resp.status_code == 201, f"Expected 201, got {resp.status_code}: {resp.text}"
     return resp.json()
 

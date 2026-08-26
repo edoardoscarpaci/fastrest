@@ -120,9 +120,7 @@ class CacheBackplane(abc.ABC):
         """
 
     @abc.abstractmethod
-    def subscribe(
-        self, handler: Callable[[InvalidationMessage], Awaitable[None]]
-    ) -> None:
+    def subscribe(self, handler: Callable[[InvalidationMessage], Awaitable[None]]) -> None:
         """
         Register the local receive handler.
 
@@ -217,9 +215,7 @@ class InMemoryBackplane(CacheBackplane):
         except Exception as exc:  # noqa: BLE001 - publish() must never raise
             _logger.debug("InMemoryBackplane: publish failed: %s", exc)
 
-    def subscribe(
-        self, handler: Callable[[InvalidationMessage], Awaitable[None]]
-    ) -> None:
+    def subscribe(self, handler: Callable[[InvalidationMessage], Awaitable[None]]) -> None:
         self._handlers.append(handler)
 
 

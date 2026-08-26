@@ -19,9 +19,7 @@ class _CountingProvisioner:
         if self._fail:
             raise RuntimeError("provision failed")
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         if not confirm_destroy:
             from varco_core.tenancy.provisioner import DestructiveOperationRefused
 

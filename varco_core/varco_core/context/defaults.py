@@ -77,6 +77,4 @@ class StaticTenantDefaults:
         self._mapping = dict(mapping)
 
     async def defaults_for(self, tenant_id: str) -> TenantLocalizationDefaults:
-        return self._mapping.get(
-            tenant_id, TenantLocalizationDefaults(locale=None, timezone=None)
-        )
+        return self._mapping.get(tenant_id, TenantLocalizationDefaults(locale=None, timezone=None))

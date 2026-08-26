@@ -130,9 +130,7 @@ class SADatabaseProvisioner(AbstractTenantProvisioner):
 
         await conn.execute(sa.text(f'CREATE DATABASE "{db_name}"'))
 
-    async def _drop_database(
-        self, conn: Any, db_name: str, *, force: bool = False
-    ) -> None:
+    async def _drop_database(self, conn: Any, db_name: str, *, force: bool = False) -> None:
         """``DROP DATABASE`` — always ``AUTOCOMMIT``, always ``IF EXISTS``."""
         import sqlalchemy as sa
 

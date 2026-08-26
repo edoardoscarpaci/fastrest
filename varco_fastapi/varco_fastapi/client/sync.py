@@ -148,9 +148,7 @@ class SyncVarcoClient:
             - Called outside context manager → creates a temporary httpx.Client.
         """
         if not self._async_client._base_url:
-            raise RuntimeError(
-                f"{type(self._async_client).__name__} has no base URL configured."
-            )
+            raise RuntimeError(f"{type(self._async_client).__name__} has no base URL configured.")
 
         # Substitute path params
         effective_path = path

@@ -65,19 +65,13 @@ class DeadLetterQueueConformance:
         await dlq.push(entry)
         await dlq.ack(entry.entry_id)
 
-    async def test_count_reflects_pushed_entries(
-        self, dlq: AbstractDeadLetterQueue
-    ) -> None:
+    async def test_count_reflects_pushed_entries(self, dlq: AbstractDeadLetterQueue) -> None:
         before = await dlq.count()
         await dlq.push(self._entry())
         after = await dlq.count()
-        assert (
-            after >= before
-        )  # a redelivered/duplicate broker read must never lose one
+        assert after >= before  # a redelivered/duplicate broker read must never lose one
 
-    async def test_random_access_flag_matches_reality(
-        self, dlq: AbstractDeadLetterQueue
-    ) -> None:
+    async def test_random_access_flag_matches_reality(self, dlq: AbstractDeadLetterQueue) -> None:
         entry = self._entry()
         await dlq.push(entry)
 
@@ -104,9 +98,7 @@ class DeadLetterQueueConformance:
         # Portable default: delete() == ack() unless overridden. Must not raise.
         await dlq.delete(entry.entry_id)
 
-    async def test_delete_where_no_predicate_raises(
-        self, dlq: AbstractDeadLetterQueue
-    ) -> None:
+    async def test_delete_where_no_predicate_raises(self, dlq: AbstractDeadLetterQueue) -> None:
         with pytest.raises(ValueError):
             await dlq.delete_where()
 

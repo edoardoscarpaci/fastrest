@@ -220,9 +220,7 @@ class CompositeLifespan:
                 try:
                     # Enter the sub-app's OWN lifespan (VarcoLifespan et al.).
                     # This is what actually starts its DB pool / bus / outbox.
-                    await stack.enter_async_context(
-                        sub_app.router.lifespan_context(sub_app)
-                    )
+                    await stack.enter_async_context(sub_app.router.lifespan_context(sub_app))
                     _logger.info(
                         "CompositeLifespan: started service %r at %s",
                         service.resolved_name(),
@@ -397,9 +395,7 @@ def build_service(
     """
     if env is None:
         # No overlay requested — build and wrap directly.
-        return ServiceMount(
-            prefix=prefix, app=factory(), name=name, health_path=health_path
-        )
+        return ServiceMount(prefix=prefix, app=factory(), name=name, health_path=health_path)
 
     # Snapshot only the keys we are about to touch so restore is exact — a key
     # that was previously unset must end up unset again, not "" .

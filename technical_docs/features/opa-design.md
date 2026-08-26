@@ -25,9 +25,9 @@ backend implements the same `PolicyEngine.enforce` and maps `EnforcementRequest`
 # EnforcementRequest(subject, object, action, subject_attrs, object_attrs, domain)
 input = {
     "subject": {"id": req.subject, **req.subject_attrs},
-    "object":  {"id": req.object,  **req.object_attrs},
-    "action":  req.action,
-    "domain":  req.domain,
+    "object": {"id": req.object, **req.object_attrs},
+    "action": req.action,
+    "domain": req.domain,
 }
 ```
 
@@ -52,9 +52,9 @@ needs. **No interface change required.**
 class OpaPolicyEngine(PolicyEngine):
     def __init__(self, settings: Inject[OpaSettings], client: httpx.AsyncClient): ...
 
-    @timeout(2.0)                                   # fail fast — OPA is on the hot path
-    @retry(RetryPolicy(max_attempts=2))             # idempotent decision query
-    @circuit_breaker(CircuitBreakerConfig(...))     # shared breaker per OPA endpoint
+    @timeout(2.0)  # fail fast — OPA is on the hot path
+    @retry(RetryPolicy(max_attempts=2))  # idempotent decision query
+    @circuit_breaker(CircuitBreakerConfig(...))  # shared breaker per OPA endpoint
     async def enforce(self, request: EnforcementRequest) -> bool:
         resp = await self._client.post(
             f"{self._settings.base_url}/v1/data/{self._settings.package}/allow",

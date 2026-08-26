@@ -253,9 +253,7 @@ class JsonWebKey:
         # key_ops is a JSON array — must be tuple for frozen dataclass hashability.
         # All other fields map 1:1 by name; absent fields default to None naturally.
         raw_key_ops = raw.get("key_ops")
-        key_ops: tuple[str, ...] | None = (
-            tuple(raw_key_ops) if raw_key_ops is not None else None
-        )
+        key_ops: tuple[str, ...] | None = tuple(raw_key_ops) if raw_key_ops is not None else None
 
         return cls(
             kty=raw["kty"],  # required — raises KeyError when missing
@@ -576,8 +574,4 @@ class JsonWebKeySet:
         return JsonWebKeySet(keys=public_keys)
 
     def __repr__(self) -> str:
-        return (
-            f"JsonWebKeySet("
-            f"count={len(self.keys)}, "
-            f"kids={[k.kid for k in self.keys]!r})"
-        )
+        return f"JsonWebKeySet(count={len(self.keys)}, kids={[k.kid for k in self.keys]!r})"

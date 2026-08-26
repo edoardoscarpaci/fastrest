@@ -128,6 +128,4 @@ class ProfileConfig:
         if self.top_n < 1:
             raise ValueError(f"top_n must be >= 1, got {self.top_n}")
         if self.sort_by not in ("cumulative", "tottime"):
-            raise ValueError(
-                f"sort_by must be 'cumulative' or 'tottime', got '{self.sort_by}'"
-            )
+            raise ValueError(f"sort_by must be 'cumulative' or 'tottime', got '{self.sort_by}'")

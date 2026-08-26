@@ -81,9 +81,7 @@ class TestWorkingContract:
         app = FastAPI()
 
         with caplog.at_level("WARNING"):
-            mount_reliability_admin(
-                app, dlq=dlq, acknowledge_bundled_admin=True, server_auth=None
-            )
+            mount_reliability_admin(app, dlq=dlq, acknowledge_bundled_admin=True, server_auth=None)
 
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]
         assert len(warnings) == 1
@@ -94,9 +92,7 @@ class TestWorkingContract:
 
 
 class TestDoubleMountGuard:
-    def test_double_mount_same_prefix_raises(
-        self, dlq: InMemoryDeadLetterQueue
-    ) -> None:
+    def test_double_mount_same_prefix_raises(self, dlq: InMemoryDeadLetterQueue) -> None:
         """
         Plan 014 step 9, inverted by step 16.
 
@@ -113,9 +109,7 @@ class TestDoubleMountGuard:
         with pytest.raises(ValueError, match="already"):
             mount_reliability_admin(app, dlq=dlq, acknowledge_bundled_admin=True)
 
-    def test_double_mount_different_prefix_raises(
-        self, dlq: InMemoryDeadLetterQueue
-    ) -> None:
+    def test_double_mount_different_prefix_raises(self, dlq: InMemoryDeadLetterQueue) -> None:
         """
         Plan 014 step 10, inverted by step 16.
 

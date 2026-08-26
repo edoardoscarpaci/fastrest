@@ -156,8 +156,7 @@ class InMemoryProductRepository(AsyncRepository[Product, UUID]):
         """
         if entity.pk is None:
             raise ValueError(
-                "Cannot delete an unpersisted Product — pk is None. "
-                "Call save() before delete()."
+                "Cannot delete an unpersisted Product — pk is None. Call save() before delete()."
             )
         pk = UUID(entity.pk) if isinstance(entity.pk, str) else entity.pk
         self._store.pop(pk, None)

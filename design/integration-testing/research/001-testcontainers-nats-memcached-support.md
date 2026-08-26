@@ -81,6 +81,7 @@ Should you need to support pre-4.3.0 (NATS) or pre-4.4.1 (Memcached) or prefer h
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
+
 class NatsContainer(DockerContainer):
     def __init__(self, image: str = "nats:latest", **kwargs):
         super().__init__(image, **kwargs)
@@ -100,6 +101,7 @@ class NatsContainer(DockerContainer):
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
+
 class MemcachedContainer(DockerContainer):
     def __init__(self, image: str = "memcached:1", **kwargs):
         super().__init__(image, **kwargs)
@@ -107,6 +109,7 @@ class MemcachedContainer(DockerContainer):
         self.with_exposed_ports(self.port_to_expose)
         # Memcached has no debug log message; use wait_for_port instead
         from testcontainers.core.container import DEFAULT_TIMEOUT
+
         self.wait_strategy = wait_for_logs(self, "", timeout=120)  # fallback
 
     def get_host_and_port(self) -> tuple:

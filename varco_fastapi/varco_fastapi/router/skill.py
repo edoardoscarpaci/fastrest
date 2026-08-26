@@ -452,18 +452,14 @@ class SkillAdapter:
             if self._conversation_store is not None:
                 try:
                     serialised = (
-                        result.model_dump(mode="json")
-                        if hasattr(result, "model_dump")
-                        else result
+                        result.model_dump(mode="json") if hasattr(result, "model_dump") else result
                     )
                 except Exception:  # noqa: BLE001
                     serialised = str(result)
                 await self._record_turn(task_id, "agent", serialised)
             return _completed_response(task_id, result)
         except Exception as exc:  # noqa: BLE001
-            _logger.warning(
-                "SkillAdapter task %s failed: %s", task_id, exc, exc_info=True
-            )
+            _logger.warning("SkillAdapter task %s failed: %s", task_id, exc, exc_info=True)
             return _failed_response(task_id, str(exc))
 
     async def _handle_task_async(
@@ -729,8 +725,7 @@ class SkillAdapter:
 
         if not legacy_paths:
             _logger.info(
-                "SkillAdapter: mounted %d skills — v1.0.0 surface at %s / %s "
-                "(legacy_paths=False)",
+                "SkillAdapter: mounted %d skills — v1.0.0 surface at %s / %s (legacy_paths=False)",
                 len(self._skills),
                 agent_card_v1_path,
                 jsonrpc_path,
@@ -873,17 +868,14 @@ class SkillAdapter:
             )
 
         _logger.info(
-            "SkillAdapter: mounted %d skills — legacy Agent Card at %s, "
-            "tasks at %s/send",
+            "SkillAdapter: mounted %d skills — legacy Agent Card at %s, tasks at %s/send",
             len(self._skills),
             agent_card_path,
             tasks_prefix,
         )
 
     def __repr__(self) -> str:
-        router_repr = (
-            self._router_cls.__name__ if self._router_cls is not None else None
-        )
+        router_repr = self._router_cls.__name__ if self._router_cls is not None else None
         return (
             f"SkillAdapter("
             f"router={router_repr!r}, "
@@ -912,9 +904,7 @@ def _completed_response(task_id: str, data: Any) -> dict[str, Any]:
     # Pydantic models need serialisation; plain dicts pass through
     serialised: Any
     try:
-        serialised = (
-            data.model_dump(mode="json") if hasattr(data, "model_dump") else data
-        )
+        serialised = data.model_dump(mode="json") if hasattr(data, "model_dump") else data
     except Exception:  # noqa: BLE001
         serialised = str(data)
 
@@ -1160,9 +1150,7 @@ def bind_skill_adapter(
             conversation_store=conv_store,
         )
 
-    container.provide(
-        Provider(singleton=True)(_skill_adapter_factory), returns=SkillAdapter
-    )
+    container.provide(Provider(singleton=True)(_skill_adapter_factory), returns=SkillAdapter)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

@@ -212,9 +212,7 @@ class TestJsonRpcDispatch:
         adapter.mount(app, base_url="https://example.com")
 
         client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post(
-            "/a2a", json=_jsonrpc_request("message/send", {"not_a_skill_field": 1})
-        )
+        resp = client.post("/a2a", json=_jsonrpc_request("message/send", {"not_a_skill_field": 1}))
         assert resp.status_code == 200
         body = resp.json()
         assert "error" in body

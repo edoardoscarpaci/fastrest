@@ -88,9 +88,7 @@ def db_url(postgres_container) -> str:
     """
     url = postgres_container.get_connection_url()
     # Replace the sync psycopg2 driver with asyncpg for the async adapter.
-    return url.replace("psycopg2", "asyncpg").replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )
+    return url.replace("psycopg2", "asyncpg").replace("postgresql://", "postgresql+asyncpg://")
 
 
 # ── Casbin engine fixture ─────────────────────────────────────────────────────

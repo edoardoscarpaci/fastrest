@@ -16,13 +16,13 @@ class ReportRouter(GenericRouter):
     @route("POST", "/{report_id}/summary", requires=require_scopes("reports:read"))
     async def summary(
         self,
-        report_id: int,                       # typed path param → coerced to int
-        ctx: AuthContext,                     # injected from _auth
+        report_id: int,  # typed path param → coerced to int
+        ctx: AuthContext,  # injected from _auth
         window: int = Query(30, ge=1, le=365),  # validated query param (422 on bad input)
-        filters: FilterBody = Body(...),      # Pydantic request body
-        repo: Repo = Depends(get_repo),       # arbitrary FastAPI dependency
-        request: Request = None,              # raw request if wanted
-    ) -> SummaryResponse:                     # return annotation → OpenAPI response model
+        filters: FilterBody = Body(...),  # Pydantic request body
+        repo: Repo = Depends(get_repo),  # arbitrary FastAPI dependency
+        request: Request = None,  # raw request if wanted
+    ) -> SummaryResponse:  # return annotation → OpenAPI response model
         ...
 ```
 
@@ -66,9 +66,9 @@ Builds a `_CustomHandlerSig` (frozen dataclass):
 ```python
 @dataclass(frozen=True)
 class _CustomHandlerSig:
-    signature: inspect.Signature   # the FastAPI-visible signature
-    auth_kwarg: str | None         # kwarg key carrying the AuthContext
-    request_kwarg: str | None      # kwarg key carrying the Request (offload flag)
+    signature: inspect.Signature  # the FastAPI-visible signature
+    auth_kwarg: str | None  # kwarg key carrying the AuthContext
+    request_kwarg: str | None  # kwarg key carrying the Request (offload flag)
     hidden_kwargs: frozenset[str]  # keys stripped before the user's method is called
 ```
 

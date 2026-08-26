@@ -179,9 +179,7 @@ class TestAuthenticatedMe:
         body = resp.json()
         assert body["subject"] == "user:alice"
 
-    async def test_me_roles_and_scopes_reflected(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_me_roles_and_scopes_reflected(self, client: httpx.AsyncClient) -> None:
         """GET /v1/me → roles and scopes from the JWT are returned in the body."""
         token = _user_token(
             "user:bob",
@@ -204,9 +202,7 @@ class TestAuthenticatedMe:
 
     async def test_me_invalid_token_denied(self, client: httpx.AsyncClient) -> None:
         """GET /v1/me with a garbage token → 401 from JwtBearerAuth."""
-        resp = await client.get(
-            "/v1/me", headers={"Authorization": "Bearer not-a-real-token"}
-        )
+        resp = await client.get("/v1/me", headers={"Authorization": "Bearer not-a-real-token"})
         assert resp.status_code == 401
 
 
@@ -227,9 +223,7 @@ class TestScopeGuard:
         assert "total_requests" in body
         assert "error_rate_pct" in body
 
-    async def test_reports_without_scope_denied(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_reports_without_scope_denied(self, client: httpx.AsyncClient) -> None:
         """GET /v1/reports/summary with a JWT but no ``reports:read`` scope → 403."""
         token = _user_token(scopes=frozenset({"posts:read"}))
         resp = await client.get("/v1/reports/summary", headers=_bearer(token))
@@ -261,9 +255,7 @@ class TestRoleGuard:
         resp = await client.post("/v1/admin/flush-cache", headers=_bearer(token))
         assert resp.status_code == 204
 
-    async def test_flush_cache_without_role_denied(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_flush_cache_without_role_denied(self, client: httpx.AsyncClient) -> None:
         """POST /v1/admin/flush-cache with a JWT but no ``admin`` role → 403."""
         token = _user_token(roles=frozenset({"editor"}))
         resp = await client.post("/v1/admin/flush-cache", headers=_bearer(token))
@@ -274,9 +266,7 @@ class TestRoleGuard:
         resp = await client.post("/v1/admin/flush-cache")
         assert resp.status_code in (401, 403)
 
-    async def test_flush_cache_scope_not_role_denied(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_flush_cache_scope_not_role_denied(self, client: httpx.AsyncClient) -> None:
         """POST /v1/admin/flush-cache with a scope (not a role) → 403."""
         token = _user_token(scopes=frozenset({"admin:all"}))
         resp = await client.post("/v1/admin/flush-cache", headers=_bearer(token))
@@ -291,9 +281,7 @@ class TestPredicateGuard:
     Tests for ``GET /v1/internal/status`` — requires subject starting with ``"svc:"``.
     """
 
-    async def test_internal_status_service_account(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_internal_status_service_account(self, client: httpx.AsyncClient) -> None:
         """GET /v1/internal/status with ``svc:`` subject → 200."""
         token = _svc_token("my-service")
         resp = await client.get("/v1/internal/status", headers=_bearer(token))
@@ -302,24 +290,18 @@ class TestPredicateGuard:
         assert body["ok"] is True
         assert body["caller"].startswith("svc:")
 
-    async def test_internal_status_user_account_denied(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_internal_status_user_account_denied(self, client: httpx.AsyncClient) -> None:
         """GET /v1/internal/status with a ``user:`` subject → 403."""
         token = _user_token("user:alice")
         resp = await client.get("/v1/internal/status", headers=_bearer(token))
         assert resp.status_code == 403
 
-    async def test_internal_status_no_token_denied(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_internal_status_no_token_denied(self, client: httpx.AsyncClient) -> None:
         """GET /v1/internal/status without a token → 401 or 403."""
         resp = await client.get("/v1/internal/status")
         assert resp.status_code in (401, 403)
 
-    async def test_internal_status_wrong_prefix_denied(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_internal_status_wrong_prefix_denied(self, client: httpx.AsyncClient) -> None:
         """GET /v1/internal/status with ``service:x`` (no svc: prefix) → 403."""
         token = _user_token("service:my-service")
         resp = await client.get("/v1/internal/status", headers=_bearer(token))

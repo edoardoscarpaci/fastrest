@@ -175,9 +175,7 @@ async def test_two_engines_share_database_writer_reader(casbin_db_url: str) -> N
         db_url=casbin_db_url,
     )
 
-    async with CasbinPolicyEngine(settings) as writer, CasbinPolicyEngine(
-        settings
-    ) as reader:
+    async with CasbinPolicyEngine(settings) as writer, CasbinPolicyEngine(settings) as reader:
         assert await reader.enforce(ER("dave", "posts", "read")) is False
 
         await writer.add_policy("public", "posts", "read")

@@ -169,7 +169,7 @@ def build_router() -> APIRouter:
             return JSONResponse(
                 status_code=400,
                 content={
-                    "error": (f"Unknown mode {raw_mode!r}. " f"Valid modes: {valid}"),
+                    "error": (f"Unknown mode {raw_mode!r}. Valid modes: {valid}"),
                 },
             )
 

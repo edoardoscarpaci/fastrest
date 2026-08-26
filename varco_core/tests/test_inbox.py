@@ -357,9 +357,7 @@ async def test_inbox_poller_relay_once_publish_failure_leaves_unprocessed() -> N
     await repo.save(entry)
 
     # Patch bus.publish to raise — simulates broker outage.
-    with patch.object(
-        bus, "publish", new=AsyncMock(side_effect=RuntimeError("broker down"))
-    ):
+    with patch.object(bus, "publish", new=AsyncMock(side_effect=RuntimeError("broker down"))):
         await poller._relay_once()
 
     # Entry must remain unprocessed.

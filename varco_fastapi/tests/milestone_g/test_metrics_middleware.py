@@ -154,9 +154,7 @@ async def test_records_request_duration(metric_reader):
     after one request, with correct method, route, and status_code attributes.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/test")
     assert resp.status_code == 200
 
@@ -182,9 +180,7 @@ async def test_route_template_not_raw_url(metric_reader):
     would create a separate time-series in the TSDB.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/orders/123")
         await client.get("/orders/456")
 
@@ -192,9 +188,9 @@ async def test_route_template_not_raw_url(metric_reader):
     # Both requests should collapse into ONE histogram bucket (same route template)
     assert len(points) == 1, "Both /orders/* requests must share the same route label"
     attrs = dict(points[0].attributes)
-    assert (
-        attrs["http.route"] == "/orders/{order_id}"
-    ), "Route must be the template, not the concrete URL"
+    assert attrs["http.route"] == "/orders/{order_id}", (
+        "Route must be the template, not the concrete URL"
+    )
     assert attrs["http.route"] != "/orders/123"
     assert attrs["http.route"] != "/orders/456"
     # count=2 because both requests hit the same route template
@@ -209,9 +205,7 @@ async def test_unknown_route_for_404(metric_reader):
     from path-scanning bots that probe thousands of distinct URLs.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/does/not/exist")
 
     assert resp.status_code == 404
@@ -226,9 +220,7 @@ async def test_active_requests_decremented_after_request(metric_reader):
     request completes — the +1 before the call is balanced by the -1 in finally.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/test")
 
     points = _get_data_points(metric_reader, "http.server.active_requests")
@@ -254,9 +246,7 @@ async def test_skips_metrics_path(metric_reader):
     async def mock_metrics():
         return PlainTextResponse("# empty")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/metrics")
 
     points = _get_data_points(metric_reader, "http.server.request.duration")
@@ -278,9 +268,7 @@ async def test_skips_health_path(metric_reader):
     async def mock_health():
         return JSONResponse({"status": "ok"})
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/health")
 
     points = _get_data_points(metric_reader, "http.server.request.duration")
@@ -299,9 +287,7 @@ async def test_custom_skip_paths(metric_reader):
     async def custom():
         return PlainTextResponse("skipped")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # /custom-skip is in skip_paths — should not be instrumented
         await client.get("/custom-skip")
         # /test is NOT in skip_paths — should be instrumented
@@ -320,9 +306,7 @@ async def test_records_body_size_when_content_length(metric_reader):
     """
     app = _make_app()
     body = b'{"name": "widget"}'
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.post(
             "/items",
             content=body,
@@ -341,15 +325,11 @@ async def test_no_body_size_without_content_length(metric_reader):
     is absent — common for GET requests with no body.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/test")
 
     points = _get_data_points(metric_reader, "http.server.request.body.size")
-    assert (
-        len(points) == 0
-    ), "Body size must not be recorded when Content-Length is absent"
+    assert len(points) == 0, "Body size must not be recorded when Content-Length is absent"
 
 
 async def test_5xx_recorded_with_correct_status_code(metric_reader):
@@ -378,9 +358,7 @@ async def test_5xx_recorded_with_correct_status_code(metric_reader):
         # without re-raising at the ASGI level.
         raise HTTPException(status_code=500, detail="intentional server error")
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/boom")
 
     # FastAPI returns 500 for unhandled exceptions
@@ -401,9 +379,7 @@ async def test_multiple_routes_separate_histogram_buckets(metric_reader):
     each with distinct ``http.route`` attributes.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/test")
         await client.get("/orders/999")
 
@@ -420,9 +396,7 @@ async def test_different_status_codes_separate_buckets(metric_reader):
     data points, enabling per-status-code rate queries.
     """
     app = _make_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.get("/test")  # 200
         await client.get("/missing")  # 404 (no such route)
 

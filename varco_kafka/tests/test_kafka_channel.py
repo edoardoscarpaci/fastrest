@@ -167,9 +167,7 @@ class TestKafkaChannelManagerLifecycle:
             await m.stop()
             assert m._admin is None
 
-    async def test_stop_before_start_is_noop(
-        self, settings: KafkaChannelManagerSettings
-    ) -> None:
+    async def test_stop_before_start_is_noop(self, settings: KafkaChannelManagerSettings) -> None:
         m = KafkaChannelManager(settings)
         await m.stop()  # must not raise
 

@@ -388,9 +388,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
         if _tr_proxy is not None:
             if hasattr(_tr_proxy, "is_resolvable") and _tr_proxy.is_resolvable():
                 registry = _tr_proxy.get()
-            elif not hasattr(_tr_proxy, "is_resolvable") and isinstance(
-                _tr_proxy, _TaskRegistry
-            ):
+            elif not hasattr(_tr_proxy, "is_resolvable") and isinstance(_tr_proxy, _TaskRegistry):
                 # Directly assigned TaskRegistry (test setup) — use as-is
                 registry = _tr_proxy
 
@@ -483,9 +481,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
                 return await _service_ref.create(body)  # type: ignore[union-attr]
 
         registry.register(
-            VarcoTask(
-                name=f"{cls_name}.create", fn=_task_create, serializer=_serializer
-            )
+            VarcoTask(name=f"{cls_name}.create", fn=_task_create, serializer=_serializer)
         )
 
         # ── read task ─────────────────────────────────────────────────────────
@@ -501,14 +497,10 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
                     return await _service_ref.read(pk, ctx)  # type: ignore[union-attr]
             return await _service_ref.read(pk)  # type: ignore[union-attr]
 
-        registry.register(
-            VarcoTask(name=f"{cls_name}.read", fn=_task_read, serializer=_serializer)
-        )
+        registry.register(VarcoTask(name=f"{cls_name}.read", fn=_task_read, serializer=_serializer))
 
         # ── update task ───────────────────────────────────────────────────────
-        async def _task_update(
-            pk_str: str, body_dict: dict, auth_snapshot: dict | None
-        ) -> Any:
+        async def _task_update(pk_str: str, body_dict: dict, auth_snapshot: dict | None) -> Any:
             from varco_core.job.base import auth_context_from_snapshot
 
             from varco_fastapi.context import auth_context as _auth_ctx
@@ -523,15 +515,11 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             return await _service_ref.update(pk, body)  # type: ignore[union-attr]
 
         registry.register(
-            VarcoTask(
-                name=f"{cls_name}.update", fn=_task_update, serializer=_serializer
-            )
+            VarcoTask(name=f"{cls_name}.update", fn=_task_update, serializer=_serializer)
         )
 
         # ── patch task ────────────────────────────────────────────────────────
-        async def _task_patch(
-            pk_str: str, body_dict: dict, auth_snapshot: dict | None
-        ) -> Any:
+        async def _task_patch(pk_str: str, body_dict: dict, auth_snapshot: dict | None) -> Any:
             from varco_core.job.base import auth_context_from_snapshot
 
             from varco_fastapi.context import auth_context as _auth_ctx
@@ -564,9 +552,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
                 await _service_ref.delete(pk)  # type: ignore[union-attr]
 
         registry.register(
-            VarcoTask(
-                name=f"{cls_name}.delete", fn=_task_delete, serializer=_serializer
-            )
+            VarcoTask(name=f"{cls_name}.delete", fn=_task_delete, serializer=_serializer)
         )
 
         # ── list task — not recoverable via named task (query is complex) ─────

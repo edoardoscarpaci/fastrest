@@ -95,9 +95,7 @@ def test_aggregation_expression_hashable() -> None:
 def test_aggregation_query_basic_construction() -> None:
     """AggregationQuery can be constructed with minimal arguments."""
     q = AggregationQuery(
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
     )
     assert q.group_by == ()
     assert q.having is None
@@ -116,18 +114,14 @@ def test_aggregation_query_unsafe_group_by_field_raises() -> None:
     with pytest.raises(ValueError, match="unsafe characters"):
         AggregationQuery(
             group_by=("bad field",),
-            aggregations=(
-                AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-            ),
+            aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
         )
 
 
 def test_aggregation_query_is_frozen() -> None:
     """AggregationQuery is immutable."""
     q = AggregationQuery(
-        aggregations=(
-            AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),
-        ),
+        aggregations=(AggregationExpression(AggregationFunc.COUNT, field=None, alias="cnt"),),
     )
     with pytest.raises(Exception):
         q.limit = 10  # type: ignore[misc]

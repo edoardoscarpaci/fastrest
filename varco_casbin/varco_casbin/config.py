@@ -167,9 +167,7 @@ class CasbinSettings(VarcoSettings):
                 f"VARCO_CASBIN_MODEL_PATH / model_text for a custom model."
             )
         # importlib.resources keeps this working from a zipped wheel too.
-        preset = resources.files("varco_casbin.models").joinpath(
-            f"{self.model_preset}.conf"
-        )
+        preset = resources.files("varco_casbin.models").joinpath(f"{self.model_preset}.conf")
         return preset.read_text(encoding="utf-8")
 
 

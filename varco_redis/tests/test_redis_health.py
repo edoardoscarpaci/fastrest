@@ -166,9 +166,7 @@ async def test_aclose_called_on_error() -> None:
 
 
 def test_repr_contains_url() -> None:
-    check = RedisHealthCheck(
-        RedisEventBusSettings(url="redis://myhost:6379/1"), timeout=3.0
-    )
+    check = RedisHealthCheck(RedisEventBusSettings(url="redis://myhost:6379/1"), timeout=3.0)
     text = repr(check)
     assert "myhost" in text
     assert "3.0" in text

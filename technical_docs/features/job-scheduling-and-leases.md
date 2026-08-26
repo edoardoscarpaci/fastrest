@@ -56,10 +56,10 @@ from varco_core.event.dlq import AbstractDeadLetterQueue
 runner = JobRunner(
     store=store,
     retry_policy=RetryPolicy(max_attempts=5, base_delay=2.0),
-    dlq=my_dlq,   # optional — see decision table below
+    dlq=my_dlq,  # optional — see decision table below
 )
 
-job = Job(max_attempts=5)   # must opt in per-job too — 1 means terminal-on-first-failure
+job = Job(max_attempts=5)  # must opt in per-job too — 1 means terminal-on-first-failure
 ```
 
 On a job coroutine failure, `JobRunner._handle_job_failure()`:
@@ -119,7 +119,7 @@ because it masks a lease that is about to (or already did) expire.
 ### `JobPoller(lease_aware=True)` — the default that changes behaviour
 
 ```python
-poller = JobPoller(store=store, lease_aware=True)   # default
+poller = JobPoller(store=store, lease_aware=True)  # default
 ```
 
 When the store supports leases, each poll tick runs **both** death signals,
@@ -163,7 +163,8 @@ class SyncTask(VarcoTask):
         await do_the_sync_work()
         # Re-enqueue myself for the next run instead of a cron entry.
         await runner.enqueue_task(
-            self, interval_seconds=interval_seconds,
+            self,
+            interval_seconds=interval_seconds,
             run_at=None,  # or thread run_at through if you added it to enqueue_task
         )
 ```
@@ -181,7 +182,9 @@ table.
 deleted = 1
 while deleted:
     deleted = await store.delete_where(
-        status=JobStatus.COMPLETED, completed_before=cutoff, limit=1000,
+        status=JobStatus.COMPLETED,
+        completed_before=cutoff,
+        limit=1000,
     )
 ```
 
@@ -228,7 +231,7 @@ defaulting `True`:
 ```python
 class OrderRouter(CRUDRouter[...]):
     _prefix = "/orders"
-    _store_raw_token = False   # opt out for every async-offloaded route on this router
+    _store_raw_token = False  # opt out for every async-offloaded route on this router
 ```
 
 ## Zoned schedules (Plan 011 / T2)

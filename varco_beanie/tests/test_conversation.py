@@ -630,9 +630,7 @@ async def test_integration_content_dict_round_trips(
     """dict content (A2A message format) must survive a MongoDB round-trip."""
     store = conversation_store_integration
     task_id = f"task-dict-{uuid.uuid4().hex[:8]}"
-    content = {
-        "parts": [{"text": "Hello!"}, {"image_url": "http://example.com/img.png"}]
-    }
+    content = {"parts": [{"text": "Hello!"}, {"image_url": "http://example.com/img.png"}]}
 
     turn = ConversationTurn(role="user", content=content)
     await store.append(task_id, turn)

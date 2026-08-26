@@ -61,9 +61,7 @@ def registry_from_sa_model(
             coercer = None
 
         coercer = (
-            coercer
-            or field_coercions.get(field_name)
-            or default_field_coercions.get(python_type)
+            coercer or field_coercions.get(field_name) or default_field_coercions.get(python_type)
         )
         if coercer is not None:
             registry.register_field(field_name, python_type, coercer)

@@ -398,9 +398,7 @@ class DefaultTaskSerializer(TaskSerializer):
             elem_args = typing.get_args(type_hint)
             # For list[T], elem_args = (T,); for tuple[T, ...] elem_args = (T, Ellipsis)
             # Use first arg as element type, ignoring Ellipsis sentinel
-            elem_type = (
-                elem_args[0] if elem_args and elem_args[0] is not Ellipsis else None
-            )
+            elem_type = elem_args[0] if elem_args and elem_args[0] is not Ellipsis else None
             if isinstance(value, list):
                 deserialized = [self.deserialize(item, elem_type) for item in value]
                 # Restore to tuple when annotated as such

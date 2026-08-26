@@ -48,9 +48,7 @@ async def test_two_tenant_databases_full_read_isolation_and_drop_removes_one(
         # MongoDB creates databases lazily — write one document per tenant so
         # both databases physically exist and the drop is observable.
         await client["db_acme"]["orders"].insert_one({"_id": "a1", "tenant": "acme"})
-        await client["db_globex"]["orders"].insert_one(
-            {"_id": "g1", "tenant": "globex"}
-        )
+        await client["db_globex"]["orders"].insert_one({"_id": "g1", "tenant": "globex"})
 
         names = await client.list_database_names()
         assert "db_acme" in names

@@ -20,13 +20,9 @@ class InMemoryAuditRepository(AuditRepository):
     async def save(self, entry: AuditEntry) -> None:
         self.entries.append(entry)
 
-    async def list_for_entity(
-        self, entity_type, entity_id, *, limit=100, tenant_id=None
-    ):
+    async def list_for_entity(self, entity_type, entity_id, *, limit=100, tenant_id=None):
         return [
-            e
-            for e in self.entries
-            if e.entity_type == entity_type and e.entity_id == entity_id
+            e for e in self.entries if e.entity_type == entity_type and e.entity_id == entity_id
         ][:limit]
 
     async def list(self, **filters):
@@ -107,7 +103,5 @@ class TestAuditRouterAllowDelete:
         app.include_router(router)
         client = TestClient(app)
 
-        resp = client.request(
-            "DELETE", "/audit/entries", params={"entity_type": "Order"}
-        )
+        resp = client.request("DELETE", "/audit/entries", params={"entity_type": "Order"})
         assert resp.status_code != 404

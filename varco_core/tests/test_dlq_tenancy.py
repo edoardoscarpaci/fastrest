@@ -119,16 +119,9 @@ class _TenantFilterableDLQ(InMemoryDeadLetterQueue):
     async def delete_where(  # type: ignore[override]
         self, *, older_than=None, source=None, channel=None, tenant_id=None, limit=None
     ) -> int:
-        if (
-            older_than is None
-            and source is None
-            and channel is None
-            and tenant_id is None
-        ):
+        if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError("delete_where() requires at least one predicate.")
-        matching = [
-            e for e in self._entries if tenant_id is None or e.tenant_id == tenant_id
-        ]
+        matching = [e for e in self._entries if tenant_id is None or e.tenant_id == tenant_id]
         if limit is not None:
             matching = matching[:limit]
         for e in matching:

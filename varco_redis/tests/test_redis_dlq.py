@@ -125,9 +125,7 @@ class FakeRedis:
         members = self._zset.get(key, {})
         # Sort by score ascending (FIFO order), then slice by rank.
         sorted_members = sorted(members.items(), key=lambda x: x[1])
-        sliced = (
-            sorted_members[start : stop + 1] if stop >= 0 else sorted_members[start:]
-        )
+        sliced = sorted_members[start : stop + 1] if stop >= 0 else sorted_members[start:]
         return [m.encode("utf-8") for m, _ in sliced]
 
     async def zcard(self, key: str) -> int:
@@ -220,9 +218,7 @@ class TestRedisDLQLifecycle:
             assert dlq._redis is first_client
             await dlq.disconnect()
 
-    async def test_disconnect_before_connect_is_noop(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_disconnect_before_connect_is_noop(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         await dlq.disconnect()  # must not raise
 
@@ -253,9 +249,7 @@ class TestRedisDLQLifecycle:
 
 
 class TestRedisDLQPush:
-    async def test_push_stores_in_hash(
-        self, dlq: RedisDLQ, fake_redis: FakeRedis
-    ) -> None:
+    async def test_push_stores_in_hash(self, dlq: RedisDLQ, fake_redis: FakeRedis) -> None:
         entry = _make_entry()
         await dlq.push(entry)
 
@@ -263,9 +257,7 @@ class TestRedisDLQPush:
         hash_store = fake_redis._hash.get(dlq._entries_key, {})
         assert str(entry.entry_id) in hash_store
 
-    async def test_push_stores_in_sorted_set(
-        self, dlq: RedisDLQ, fake_redis: FakeRedis
-    ) -> None:
+    async def test_push_stores_in_sorted_set(self, dlq: RedisDLQ, fake_redis: FakeRedis) -> None:
         entry = _make_entry()
         await dlq.push(entry)
 
@@ -284,16 +276,12 @@ class TestRedisDLQPush:
             entry = _make_entry()
             await dlq.push(entry)  # must NOT raise
 
-    async def test_push_before_connect_is_noop(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_push_before_connect_is_noop(self, settings: RedisEventBusSettings) -> None:
         # push() before connect() logs a warning and returns silently.
         dlq = RedisDLQ(settings)
         await dlq.push(_make_entry())  # must not raise
 
-    async def test_push_score_is_timestamp(
-        self, dlq: RedisDLQ, fake_redis: FakeRedis
-    ) -> None:
+    async def test_push_score_is_timestamp(self, dlq: RedisDLQ, fake_redis: FakeRedis) -> None:
         entry = _make_entry()
         await dlq.push(entry)
 
@@ -311,9 +299,7 @@ class TestRedisDLQPopBatch:
         with pytest.raises(ValueError, match="limit"):
             await dlq.pop_batch(limit=0)
 
-    async def test_pop_batch_before_connect_raises(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_pop_batch_before_connect_raises(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         with pytest.raises(RuntimeError, match="connect"):
             await dlq.pop_batch()
@@ -332,9 +318,7 @@ class TestRedisDLQPopBatch:
         assert len(result) == 1
         assert result[0].handler_name == "OrderConsumer.on_order"
 
-    async def test_pop_batch_respects_limit(
-        self, dlq: RedisDLQ, fake_redis: FakeRedis
-    ) -> None:
+    async def test_pop_batch_respects_limit(self, dlq: RedisDLQ, fake_redis: FakeRedis) -> None:
         for i in range(5):
             await dlq.push(_make_entry(f"H.h{i}"))
 
@@ -361,9 +345,7 @@ class TestRedisDLQPopBatch:
 
         assert isinstance(result[0].event, SampleEvent)
 
-    async def test_pop_batch_fifo_order(
-        self, dlq: RedisDLQ, fake_redis: FakeRedis
-    ) -> None:
+    async def test_pop_batch_fifo_order(self, dlq: RedisDLQ, fake_redis: FakeRedis) -> None:
         # Entries with earlier last_failed_at should come first.
         for i in range(3):
             await dlq.push(_make_entry(f"H.h{i}"))
@@ -392,15 +374,11 @@ class TestRedisDLQAck:
         # Acking an unknown entry_id must not raise — idempotent.
         await dlq.ack(uuid.uuid4())  # must not raise
 
-    async def test_ack_before_connect_is_noop(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_ack_before_connect_is_noop(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         await dlq.ack(uuid.uuid4())  # must not raise (logs warning)
 
-    async def test_ack_reduces_count(
-        self, dlq: RedisDLQ, fake_redis: FakeRedis
-    ) -> None:
+    async def test_ack_reduces_count(self, dlq: RedisDLQ, fake_redis: FakeRedis) -> None:
         entry = _make_entry()
         await dlq.push(entry)
         assert await dlq.count() == 1
@@ -412,9 +390,7 @@ class TestRedisDLQAck:
 
 
 class TestRedisDLQCount:
-    async def test_count_before_connect_raises(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_count_before_connect_raises(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         with pytest.raises(RuntimeError, match="connect"):
             await dlq.count()
@@ -438,9 +414,7 @@ class TestRedisDLQCount:
 
 
 class TestRedisDLQSerialization:
-    def test_serialize_deserialize_roundtrip(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    def test_serialize_deserialize_roundtrip(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         entry = _make_entry("MyConsumer.handler")
         payload = dlq._serialize_entry(entry)
@@ -457,9 +431,7 @@ class TestRedisDLQSerialization:
         assert recovered.attempts == entry.attempts
         assert isinstance(recovered.event, SampleEvent)
 
-    def test_serialize_contains_event_type(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    def test_serialize_contains_event_type(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         entry = _make_entry()
         payload = dlq._serialize_entry(entry)
@@ -467,9 +439,7 @@ class TestRedisDLQSerialization:
         # The event_payload field embeds the event's __event_type__
         assert "test.sample.redis_dlq" in data["event_payload"]
 
-    def test_serialize_datetimes_are_iso_strings(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    def test_serialize_datetimes_are_iso_strings(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         entry = _make_entry()
         payload = dlq._serialize_entry(entry)
@@ -483,9 +453,7 @@ class TestRedisDLQSerialization:
 
 
 class TestRedisDLQConfiguration:
-    async def test_provides_abstract_dead_letter_queue(
-        self, fake_redis: FakeRedis
-    ) -> None:
+    async def test_provides_abstract_dead_letter_queue(self, fake_redis: FakeRedis) -> None:
         from providify import DIContainer
         from varco_core.event.dlq import AbstractDeadLetterQueue
 
@@ -507,9 +475,7 @@ class TestRedisDLQConfiguration:
 
 
 class TestRedisDLQRandomAccessCapabilityFlag:
-    def test_supports_random_access_is_true(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    def test_supports_random_access_is_true(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisDLQ(settings)
         assert dlq.supports_random_access is True
 
@@ -542,15 +508,11 @@ class TestRedisDLQListEntries:
 
 
 class TestRedisDLQDeleteWhere:
-    async def test_delete_where_no_predicate_raises_value_error(
-        self, dlq: RedisDLQ
-    ) -> None:
+    async def test_delete_where_no_predicate_raises_value_error(self, dlq: RedisDLQ) -> None:
         with pytest.raises(ValueError):
             await dlq.delete_where()
 
-    async def test_delete_where_older_than_deletes_matching(
-        self, dlq: RedisDLQ
-    ) -> None:
+    async def test_delete_where_older_than_deletes_matching(self, dlq: RedisDLQ) -> None:
         await dlq.push(_make_entry())
         deleted = await dlq.delete_where(older_than=datetime.now())
         assert deleted >= 0

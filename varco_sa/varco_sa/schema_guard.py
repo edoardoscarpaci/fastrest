@@ -266,16 +266,12 @@ class SchemaGuard:
             drift = await guard.report(engine)
             logger.info("Schema check: %s", drift.format())
         """
-        metadata = (
-            self._metadata
-        )  # local alias — avoids repeated attr lookup in run_sync
+        metadata = self._metadata  # local alias — avoids repeated attr lookup in run_sync
 
         async with engine.connect() as conn:
             # Batch the entire diff into one run_sync call — see class docstring
             # for why this is better than one call per table.
-            missing_tables, missing_cols, extra_cols = await conn.run_sync(
-                _diff_metadata, metadata
-            )
+            missing_tables, missing_cols, extra_cols = await conn.run_sync(_diff_metadata, metadata)
 
         return SchemaDriftReport(
             missing_tables=missing_tables,

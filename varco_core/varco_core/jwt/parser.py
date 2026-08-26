@@ -255,9 +255,7 @@ class JwtParser:
               i.e. BEFORE transformation — foreign claim names stay visible).
         """
         tf: ClaimTransformer = (
-            transformer
-            if transformer is not None
-            else resolve_claim_transformer(raw.get("iss"))
+            transformer if transformer is not None else resolve_claim_transformer(raw.get("iss"))
         )
         # Non-destructive: IDENTITY returns `raw` itself (no copy — the
         # zero-config hot path); MappingClaimTransformer returns a new dict

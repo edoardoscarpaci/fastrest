@@ -50,9 +50,7 @@ async def test_migrations_run_before_first_request_is_served() -> None:
     assert events == ["migrate", "first-request-served"]
 
 
-async def test_failing_migrator_with_on_failure_fail_aborts_startup_no_request_served() -> (
-    None
-):
+async def test_failing_migrator_with_on_failure_fail_aborts_startup_no_request_served() -> None:
     from varco_core.migration.base import Revision
     from varco_core.migration.inmemory import InMemoryMigrator
     from varco_core.migration.settings import MigrationSettings
@@ -76,9 +74,7 @@ async def test_failing_migrator_with_on_failure_fail_aborts_startup_no_request_s
 
 
 async def test_migrations_none_leaves_lifespan_components_byte_identical() -> None:
-    app_without_migrations_param = create_varco_app(
-        None, routers=[_PingRouter], validate=False
-    )
+    app_without_migrations_param = create_varco_app(None, routers=[_PingRouter], validate=False)
     app_with_explicit_none = create_varco_app(
         None, routers=[_PingRouter], migrations=None, validate=False
     )

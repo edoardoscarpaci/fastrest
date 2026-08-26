@@ -148,9 +148,7 @@ def build_router(store: ProductStore, cache_layer: ProductCacheLayer) -> APIRout
             name=body.name if body.name is not None else existing.name,
             price=body.price if body.price is not None else existing.price,
             description=(
-                body.description
-                if body.description is not None
-                else existing.description
+                body.description if body.description is not None else existing.description
             ),
         )
         await store.save(updated)

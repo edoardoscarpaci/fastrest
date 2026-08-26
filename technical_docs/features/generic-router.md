@@ -38,8 +38,9 @@ not a protocol — it is a Python name alias.  `GenericRouter is VarcoRouter` is
 The alias exists for **discoverability and intent signalling** only:
 
 ```python
-class ReportRouter(GenericRouter):   # intent: service-free server
+class ReportRouter(GenericRouter):  # intent: service-free server
     ...
+
 
 class OrderRouter(CRUDRouter[Order, UUID, C, R, U]):  # intent: CRUD-backed
     ...
@@ -70,7 +71,7 @@ def _resolve_type_args(router_cls: type) -> tuple[type, ...] | None:
         resolved = tuple(a for a in args if not isinstance(a, TypeVar))
         if len(resolved) == len(args):
             return args
-    return None          # <── returns None when no args are bound
+    return None  # <── returns None when no args are bound
 ```
 
 When `class ReportRouter(GenericRouter): ...` is defined, `__orig_bases__` is
@@ -79,7 +80,7 @@ When `class ReportRouter(GenericRouter): ...` is defined, `__orig_bases__` is
 ### In `build_router()` (`base.py:530`)
 
 ```python
-type_args = _resolve_type_args(router_cls)   # None for GenericRouter subclasses
+type_args = _resolve_type_args(router_cls)  # None for GenericRouter subclasses
 ...
 routes = introspect_routes(router_cls, type_args=type_args)
 ```
@@ -148,8 +149,8 @@ ReportRouter().build_router()
 
 ```python
 def _mount_router(app, router_cls, container):
-    api_router = router_cls().build_router()   # instantiate + build
-    app.include_router(api_router)             # prefix already embedded
+    api_router = router_cls().build_router()  # instantiate + build
+    app.include_router(api_router)  # prefix already embedded
 ```
 
 `build_router()` already sets `prefix="/reports"` on the `APIRouter`, so
@@ -194,9 +195,9 @@ The skip is implemented by `_is_service_backed()`:
 def _is_service_backed(router_cls: type) -> bool:
     for cls in router_cls.__mro__:
         if getattr(cls, "_CRUD_ACTION", None) is not None:
-            return True          # has a CRUD mixin
+            return True  # has a CRUD mixin
     if getattr(router_cls, "_service", None) is not None:
-        return True              # has explicit _service ClassVar
+        return True  # has explicit _service ClassVar
     return False
 ```
 
@@ -234,7 +235,7 @@ Authentication works identically to CRUD routers:
 
 ```python
 class ReportRouter(GenericRouter):
-    _auth = JwtBearerAuth(...)   # or ApiKeyAuth, AnonymousAuth, CompositeServerAuth
+    _auth = JwtBearerAuth(...)  # or ApiKeyAuth, AnonymousAuth, CompositeServerAuth
 ```
 
 `_auth` is a `ClassVar[AbstractServerAuth | None]` on `VarcoRouter`.  In
@@ -285,7 +286,7 @@ This is the bridge pattern: keep the HTTP layer unchanged, swap the service impl
 
 ```python
 # base.py:_effective_prefix() and build_router()
-prefix = self._effective_prefix()   # _prefix + optional _version prefix
+prefix = self._effective_prefix()  # _prefix + optional _version prefix
 api_router = APIRouter(prefix=prefix, tags=tags)
 ```
 

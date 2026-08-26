@@ -61,9 +61,7 @@ class _ClaimPredicateStore(AbstractJobStore):
         return claimed
 
 
-async def test_claim_predicate_identical_for_zoned_and_unzoned_job_not_yet_due() -> (
-    None
-):
+async def test_claim_predicate_identical_for_zoned_and_unzoned_job_not_yet_due() -> None:
     store = _ClaimPredicateStore()
     future = datetime.now(UTC) + timedelta(hours=1)
 

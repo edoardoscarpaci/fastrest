@@ -154,9 +154,7 @@ class NatsChannelManagerSettings(VarcoSettings):
 
     def channel_from_subject(self, subject: str) -> str:
         """Recover the logical channel name from a full subject (inverse of subject_name)."""
-        return subject.removeprefix(f"{self.subject_prefix}.").removeprefix(
-            self.channel_prefix
-        )
+        return subject.removeprefix(f"{self.subject_prefix}.").removeprefix(self.channel_prefix)
 
 
 @Provider(singleton=True, priority=-sys.maxsize)
@@ -255,8 +253,7 @@ class NatsStreamManager(ChannelManager):
         """
         if self._nc is not None:
             raise RuntimeError(
-                "NatsStreamManager.start() called on an already-started manager. "
-                "Call stop() first."
+                "NatsStreamManager.start() called on an already-started manager. Call stop() first."
             )
         self._nc = await connect(
             servers=self._settings.to_servers_list(),
@@ -335,8 +332,7 @@ class NatsStreamManager(ChannelManager):
             duplicate_window=self._settings.duplicate_window_seconds,
         )
         _logger.info(
-            "Created JetStream stream %r (subjects=[%s], replicas=%d) "
-            "while declaring channel %r",
+            "Created JetStream stream %r (subjects=[%s], replicas=%d) while declaring channel %r",
             stream,
             self._settings.wildcard_subject(),
             cfg.replication_factor,

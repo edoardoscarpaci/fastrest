@@ -62,9 +62,7 @@ def memcached_settings(
 
 @pytest.mark.integration
 class TestMemcachedCacheIntegration:
-    async def test_set_and_get_roundtrip(
-        self, memcached_settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_set_and_get_roundtrip(self, memcached_settings: MemcachedCacheSettings) -> None:
         """Values written to Memcached are returned intact on get."""
         async with MemcachedCache(memcached_settings) as cache:
             await cache.set("hello", {"world": 42})
@@ -79,9 +77,7 @@ class TestMemcachedCacheIntegration:
             result = await cache.get("absolutely-not-set")
         assert result is None
 
-    async def test_set_with_ttl_expires(
-        self, memcached_settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_set_with_ttl_expires(self, memcached_settings: MemcachedCacheSettings) -> None:
         """An entry with ttl=1 is gone after 2 seconds."""
         async with MemcachedCache(memcached_settings) as cache:
             await cache.set("ttl-key", "soon-gone", ttl=1)
@@ -92,9 +88,7 @@ class TestMemcachedCacheIntegration:
             result = await cache.get("ttl-key")
         assert result is None
 
-    async def test_delete_removes_entry(
-        self, memcached_settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_delete_removes_entry(self, memcached_settings: MemcachedCacheSettings) -> None:
         """delete() makes a previously-set key return None."""
         async with MemcachedCache(memcached_settings) as cache:
             await cache.set("to-delete", "value")
@@ -109,9 +103,7 @@ class TestMemcachedCacheIntegration:
         async with MemcachedCache(memcached_settings) as cache:
             await cache.delete("nonexistent-key")
 
-    async def test_exists_true(
-        self, memcached_settings: MemcachedCacheSettings
-    ) -> None:
+    async def test_exists_true(self, memcached_settings: MemcachedCacheSettings) -> None:
         """exists() returns True for a key that is present."""
         async with MemcachedCache(memcached_settings) as cache:
             await cache.set("exists-key", "yes")

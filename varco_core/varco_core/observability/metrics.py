@@ -281,9 +281,7 @@ def histogram(cfg: HistogramConfig) -> Callable[[_F], _F]:
                     # finally runs on both success and exception — we always
                     # want to record the latency regardless of outcome.
                     elapsed = time.perf_counter() - start
-                    _get_histogram(cfg).record(
-                        elapsed, attributes=cfg.attributes or None
-                    )
+                    _get_histogram(cfg).record(elapsed, attributes=cfg.attributes or None)
 
             return async_wrapper  # type: ignore[return-value]
 

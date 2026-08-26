@@ -154,14 +154,10 @@ async def _read_through(
                 return None
             # Negative entry expired — fall through to a real recompute.
         else:
-            hard_expired = (
-                env.hard_expires_at is not None and now >= env.hard_expires_at
-            )
+            hard_expired = env.hard_expires_at is not None and now >= env.hard_expires_at
             if not hard_expired:
                 value = coerce(env.value, type_hint)
-                soft_expired = (
-                    env.soft_expires_at is not None and now >= env.soft_expires_at
-                )
+                soft_expired = env.soft_expires_at is not None and now >= env.soft_expires_at
                 if soft_expired:
                     return await _serve_stale_and_refresh(
                         cache, key, loader, policy, singleflight, value
@@ -251,9 +247,7 @@ async def _compute(
         raise
 
 
-async def _load_and_store(
-    cache: AsyncCache, key: str, loader: Loader, policy: CachePolicy
-) -> Any:
+async def _load_and_store(cache: AsyncCache, key: str, loader: Loader, policy: CachePolicy) -> Any:
     """Call ``loader()`` and persist the result per ``policy``, then return it."""
     result = await loader()
     await _store(cache, key, result, policy)
@@ -407,23 +401,17 @@ async def read_through_many(
                     continue
                 # expired negative entry — fall through to recompute below.
             else:
-                hard_expired = (
-                    env.hard_expires_at is not None and now >= env.hard_expires_at
-                )
+                hard_expired = env.hard_expires_at is not None and now >= env.hard_expires_at
                 if not hard_expired:
                     value = coerce(env.value, type_hint)
-                    soft_expired = (
-                        env.soft_expires_at is not None and now >= env.soft_expires_at
-                    )
+                    soft_expired = env.soft_expires_at is not None and now >= env.soft_expires_at
                     if soft_expired:
                         record_cache_hit(cache=policy.name, kind="stale")
                         record_cache_stale_served(cache=policy.name, reason="soft_ttl")
                         if singleflight is not None:
 
                             async def _refresh(k: str = k) -> Any:
-                                return await _load_one_and_store(
-                                    cache, k, loader, policy
-                                )
+                                return await _load_one_and_store(cache, k, loader, policy)
 
                             singleflight.spawn_refresh(k, _refresh)
                         result[k] = value
@@ -504,9 +492,7 @@ async def _load_one_and_store(
     return value
 
 
-async def _store_many(
-    cache: AsyncCache, items: dict[str, Any], policy: CachePolicy
-) -> None:
+async def _store_many(cache: AsyncCache, items: dict[str, Any], policy: CachePolicy) -> None:
     """Write every ``(key, value)`` pair per ``policy`` — uses ``set_many``
     when available, else a loop over ``_store`` (per-key ``set``)."""
     from varco_core.cache.base import BulkCache

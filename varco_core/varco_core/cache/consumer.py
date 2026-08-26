@@ -221,11 +221,7 @@ class CacheInvalidationConsumer(EventConsumer):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"CacheInvalidationConsumer("
-            f"channel={self._channel!r}, "
-            f"strategy={self._strategy!r})"
-        )
+        return f"CacheInvalidationConsumer(channel={self._channel!r}, strategy={self._strategy!r})"
 
 
 __all__ = ["CacheInvalidationConsumer"]

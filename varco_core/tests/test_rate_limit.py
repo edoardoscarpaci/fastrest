@@ -142,9 +142,7 @@ class TestInMemoryRateLimiterSlidingWindow:
 
         # t=1.001: the first call at t=0 is now outside the window (period=1.0).
         # The slot it occupied is free; new call should be allowed.
-        with patch(
-            "varco_core.resilience.rate_limit.time.monotonic", return_value=1.001
-        ):
+        with patch("varco_core.resilience.rate_limit.time.monotonic", return_value=1.001):
             assert await limiter.acquire("k") is True
 
     async def test_call_at_window_boundary_allowed(self) -> None:
@@ -170,9 +168,7 @@ class TestInMemoryRateLimiterSlidingWindow:
         limiter2 = InMemoryRateLimiter(cfg)
         with patch("varco_core.resilience.rate_limit.time.monotonic", return_value=0.0):
             await limiter2.acquire("k")
-        with patch(
-            "varco_core.resilience.rate_limit.time.monotonic", return_value=0.999
-        ):
+        with patch("varco_core.resilience.rate_limit.time.monotonic", return_value=0.999):
             assert await limiter2.acquire("k") is False
 
 

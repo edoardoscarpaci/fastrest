@@ -188,9 +188,7 @@ class AsyncModeParams:
 
 
 async def _async_mode_params(
-    with_async: bool = Query(
-        False, alias="with_async", description="Offload to background job"
-    ),
+    with_async: bool = Query(False, alias="with_async", description="Offload to background job"),
     callback_url: str | None = Query(
         None, alias="callback_url", description="Callback URL on job completion"
     ),
@@ -294,9 +292,7 @@ class HttpQueryParams:
         sort = _parse_sort_string(self.sort) if self.sort is not None else []
 
         # Clamp limit to prevent accidentally fetching millions of rows
-        effective_limit = min(
-            self.limit if self.limit is not None else default_limit, max_limit
-        )
+        effective_limit = min(self.limit if self.limit is not None else default_limit, max_limit)
 
         return QueryParams(
             node=node,
@@ -565,11 +561,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
     _store_raw_token: ClassVar[bool] = True
 
     def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}("
-            f"prefix={self._effective_prefix()!r}, "
-            f"tags={self._tags!r})"
-        )
+        return f"{type(self).__name__}(prefix={self._effective_prefix()!r}, tags={self._tags!r})"
 
     def __init__(
         self,
@@ -747,9 +739,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
         # A custom route can actually offload only when async_capable AND a job
         # runner is wired — async_capable=True is the @route default, so it alone
         # doesn't mean the route ever returns a JobAcceptedResponse.
-        can_offload = (
-            route.async_capable and getattr(self, "_job_runner", None) is not None
-        )
+        can_offload = route.async_capable and getattr(self, "_job_runner", None) is not None
 
         route_kwargs: dict[str, Any] = {}
         if route.is_crud:
@@ -848,9 +838,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
         method_name = route.name
         method_fn = getattr(type(self), method_name, None)
         if method_fn is None:
-            logger.warning(
-                "VarcoRouter: no method %r found for route %r", method_name, route.path
-            )
+            logger.warning("VarcoRouter: no method %r found for route %r", method_name, route.path)
             return _make_noop_handler(route)
 
         return _make_custom_handler(
@@ -935,9 +923,7 @@ def _make_create_handler(
             async_params: AsyncModeParams = async_dep,
         ) -> Any:
             if async_params.with_async and job_runner is not None:
-                return await _submit_job(
-                    router, job_runner, auth, service.create, body, auth
-                )
+                return await _submit_job(router, job_runner, auth, service.create, body, auth)
             return await service.create(body, auth)
 
     else:
@@ -1014,9 +1000,7 @@ def _make_update_handler(
 
     if auth_dep is not None:
 
-        async def update_handler(
-            id: Any, body: Any, auth: AuthContext = auth_dep
-        ) -> Any:
+        async def update_handler(id: Any, body: Any, auth: AuthContext = auth_dep) -> Any:
             return await service.update(id, body, auth)
 
     else:
@@ -1056,9 +1040,7 @@ def _make_patch_handler(
 
     if auth_dep is not None:
 
-        async def patch_handler(
-            id: Any, body: Any, auth: AuthContext = auth_dep
-        ) -> Any:
+        async def patch_handler(id: Any, body: Any, auth: AuthContext = auth_dep) -> Any:
             return await service.patch(id, body, auth)
 
     else:
@@ -1165,9 +1147,7 @@ def _make_list_handler(
                 except AttributeError:
                     # Service may not implement count() — degrade gracefully
                     pass
-            page = _paged_response(
-                items, params=params, total_count=total, raw_query=http_params.q
-            )
+            page = _paged_response(items, params=params, total_count=total, raw_query=http_params.q)
             add_pagination_headers(response, page, request)
             return page
 
@@ -1190,9 +1170,7 @@ def _make_list_handler(
                     total = await service.count(params)
                 except AttributeError:
                     pass
-            page = _paged_response(
-                items, params=params, total_count=total, raw_query=http_params.q
-            )
+            page = _paged_response(items, params=params, total_count=total, raw_query=http_params.q)
             add_pagination_headers(response, page, request)
             return page
 
@@ -1353,9 +1331,7 @@ def _synthesize_custom_signature(
         # keeping the historical ctx/auth/context injection contract.
         if name in _AUTH_PARAM_NAMES and auth_kwarg is None:
             if auth_dep is not None:
-                auth_kwarg = (
-                    name  # flows through to the user's method under its own name
-                )
+                auth_kwarg = name  # flows through to the user's method under its own name
                 params.append(
                     P(
                         name,
@@ -1375,9 +1351,7 @@ def _synthesize_custom_signature(
         # so FastAPI resolves them natively.  All KEYWORD_ONLY — sidesteps the
         # "non-default before default" ordering rule and lets us call purely by kwargs.
         default = p.default if p.default is not P.empty else P.empty
-        params.append(
-            P(name, kind=P.KEYWORD_ONLY, default=default, annotation=annotation)
-        )
+        params.append(P(name, kind=P.KEYWORD_ONLY, default=default, annotation=annotation))
 
     # Router has _auth but the handler didn't declare ctx/auth/context — still resolve
     # the AuthContext (hidden) for the RouteGuard and the offload snapshot.

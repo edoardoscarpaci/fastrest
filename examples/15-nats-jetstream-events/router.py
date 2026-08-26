@@ -141,8 +141,7 @@ def build_router(
               as duplicate entries (de-duplication is out of scope).
         """
         return [
-            NotificationItem(order_id=ev.order_id, amount=ev.amount)
-            for ev in consumer.received
+            NotificationItem(order_id=ev.order_id, amount=ev.amount) for ev in consumer.received
         ]
 
     @router.get("/health")

@@ -301,9 +301,7 @@ class TestRedisStreamDLQLifecycle:
         await dlq.disconnect()
         assert dlq._redis is None
 
-    async def test_disconnect_before_connect_is_noop(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_disconnect_before_connect_is_noop(self, settings: RedisEventBusSettings) -> None:
         """disconnect() before connect() must not raise."""
         dlq = RedisStreamDLQ(settings)
         # Should not raise
@@ -369,9 +367,7 @@ class TestRedisStreamDLQPush:
         await dlq.push(_make_entry("H.c"))
         assert len(fake_redis._streams.get(dlq._stream_key, [])) == 3
 
-    async def test_push_never_raises_on_redis_error(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_push_never_raises_on_redis_error(self, settings: RedisEventBusSettings) -> None:
         """push() swallows all exceptions — even Redis errors."""
         broken_redis = MagicMock()
         broken_redis.xadd = AsyncMock(side_effect=OSError("connection reset"))
@@ -397,9 +393,7 @@ class TestRedisStreamDLQPush:
             # Must not raise
             await dlq.push(_make_entry())
 
-    async def test_push_drops_when_not_connected(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_push_drops_when_not_connected(self, settings: RedisEventBusSettings) -> None:
         """push() before connect() logs a warning and drops the entry silently."""
         dlq = RedisStreamDLQ(settings)
         # Must not raise even though _redis is None
@@ -487,9 +481,7 @@ class TestRedisStreamDLQPopBatch:
         with pytest.raises(RuntimeError, match="connect()"):
             await dlq.pop_batch(limit=1)
 
-    async def test_pop_batch_returns_empty_on_empty_stream(
-        self, dlq: RedisStreamDLQ
-    ) -> None:
+    async def test_pop_batch_returns_empty_on_empty_stream(self, dlq: RedisStreamDLQ) -> None:
         """pop_batch() returns empty list when no messages are available."""
         results = await dlq.pop_batch(limit=10)
         assert results == []
@@ -590,9 +582,7 @@ class TestRedisStreamDLQAck:
         assert len(fake_redis.xack_calls) == 0
         assert len(fake_redis.xdel_calls) == 0
 
-    async def test_ack_when_not_connected_is_noop(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_ack_when_not_connected_is_noop(self, settings: RedisEventBusSettings) -> None:
         """ack() before connect() logs a warning and does not raise."""
         dlq = RedisStreamDLQ(settings)
         # Must not raise.
@@ -603,9 +593,7 @@ class TestRedisStreamDLQAck:
 
 
 class TestRedisStreamDLQCount:
-    async def test_count_returns_zero_on_empty_stream(
-        self, dlq: RedisStreamDLQ
-    ) -> None:
+    async def test_count_returns_zero_on_empty_stream(self, dlq: RedisStreamDLQ) -> None:
         assert await dlq.count() == 0
 
     async def test_count_returns_correct_count_after_push(
@@ -626,9 +614,7 @@ class TestRedisStreamDLQCount:
             await dlq.ack(entry.entry_id)
         assert await dlq.count() == 0
 
-    async def test_count_raises_when_not_connected(
-        self, settings: RedisEventBusSettings
-    ) -> None:
+    async def test_count_raises_when_not_connected(self, settings: RedisEventBusSettings) -> None:
         dlq = RedisStreamDLQ(settings)
         with pytest.raises(RuntimeError, match="connect()"):
             await dlq.count()
@@ -657,13 +643,9 @@ class TestRedisStreamDLQSerialization:
 
         # Datetime fields — compare to second precision to avoid float drift.
         assert (
-            restored.first_failed_at.isoformat()[:19]
-            == original.first_failed_at.isoformat()[:19]
+            restored.first_failed_at.isoformat()[:19] == original.first_failed_at.isoformat()[:19]
         )
-        assert (
-            restored.last_failed_at.isoformat()[:19]
-            == original.last_failed_at.isoformat()[:19]
-        )
+        assert restored.last_failed_at.isoformat()[:19] == original.last_failed_at.isoformat()[:19]
 
     async def test_roundtrip_preserves_nested_event(
         self, dlq: RedisStreamDLQ, fake_redis: FakeRedis
@@ -782,9 +764,7 @@ class TestRedisStreamDLQIntegration:
         final_results = await real_dlq.pop_batch(limit=10)
         assert final_results == []
 
-    async def test_push_never_raises_on_real_redis(
-        self, real_dlq: RedisStreamDLQ
-    ) -> None:
+    async def test_push_never_raises_on_real_redis(self, real_dlq: RedisStreamDLQ) -> None:
         """push() against a real Redis instance must not raise."""
         entry = _make_entry()
         # Must not raise.

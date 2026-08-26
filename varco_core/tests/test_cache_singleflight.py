@@ -48,9 +48,7 @@ class TestSingleflightCoalescing:
             await asyncio.sleep(0.02)
             return "b-val"
 
-        (val_a, _), (val_b, _) = await asyncio.gather(
-            sf.do("a", loader_a), sf.do("b", loader_b)
-        )
+        (val_a, _), (val_b, _) = await asyncio.gather(sf.do("a", loader_a), sf.do("b", loader_b))
 
         assert calls == {"a": 1, "b": 1}
         assert val_a == "a-val"

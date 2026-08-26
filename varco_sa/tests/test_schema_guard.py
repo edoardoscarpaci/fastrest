@@ -151,9 +151,7 @@ async def test_check_raises_when_column_is_missing():
     # Create the table without the 'price' column to simulate a stale migration
     async with engine.begin() as conn:
         await conn.execute(
-            text(
-                "CREATE TABLE widgets_guard (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"
-            )
+            text("CREATE TABLE widgets_guard (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
         )
 
     guard = SchemaGuard(base)
@@ -174,9 +172,7 @@ async def test_report_missing_column_listed():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     async with engine.begin() as conn:
         await conn.execute(
-            text(
-                "CREATE TABLE widgets_guard (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"
-            )
+            text("CREATE TABLE widgets_guard (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
         )
 
     guard = SchemaGuard(base)

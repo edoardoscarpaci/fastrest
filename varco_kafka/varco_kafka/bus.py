@@ -168,9 +168,7 @@ class KafkaEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[
-            Serializer[Event] | None, InjectMeta(optional=True)
-        ] = None,
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -191,9 +189,7 @@ class KafkaEventBus(AbstractEventBus):
         elif isinstance(middleware, list):
             self._middleware = middleware
         else:
-            self._middleware = (
-                list(middleware.get_all()) if middleware.resolvable() else []
-            )
+            self._middleware = list(middleware.get_all()) if middleware.resolvable() else []
 
         # Use the provided serializer or fall back to JSON.
         # Stored as an instance so it is pluggable and stateful serializers
@@ -217,9 +213,7 @@ class KafkaEventBus(AbstractEventBus):
         self._started = False
 
         # Pre-build middleware chain — same approach as InMemoryEventBus.
-        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = (
-            self._build_chain()
-        )
+        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = self._build_chain()
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -469,9 +463,7 @@ class KafkaEventBus(AbstractEventBus):
                 # If the consumer is already running, update its subscription.
                 if self._consumer is not None:
                     self._consumer.subscribe(list(self._subscribed_topics))
-                    _logger.debug(
-                        "Consumer re-subscribed to topics: %s", self._subscribed_topics
-                    )
+                    _logger.debug("Consumer re-subscribed to topics: %s", self._subscribed_topics)
 
         return Subscription(entry)
 
@@ -600,8 +592,7 @@ class KafkaEventBus(AbstractEventBus):
                     errors.append(exc)
                 elif self._error_policy is ErrorPolicy.FIRE_FORGET:
                     _logger.warning(
-                        "Kafka event handler %r raised and was ignored "
-                        "(FIRE_FORGET): %s",
+                        "Kafka event handler %r raised and was ignored (FIRE_FORGET): %s",
                         entry.handler,
                         exc,
                         exc_info=True,

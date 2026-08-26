@@ -172,9 +172,7 @@ class OutboxEntryModel(_OutboxBase):
     # entry on the very next tick", exactly today's behaviour.
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    next_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 # Expose the metadata so users can wire it into Alembic target_metadata.
@@ -354,7 +352,8 @@ class SAOutboxRepository(OutboxRepository):
         stmt = (
             select(OutboxEntryModel)
             # Oldest first — FIFO delivery order within a channel.
-            .order_by(OutboxEntryModel.created_at.asc()).limit(limit)
+            .order_by(OutboxEntryModel.created_at.asc())
+            .limit(limit)
         )
         result = await self._session.execute(stmt)
         rows = result.scalars().all()
@@ -418,9 +417,7 @@ class SAOutboxRepository(OutboxRepository):
         stmt = (
             sa_update(OutboxEntryModel)
             .where(OutboxEntryModel.entry_id == entry_id)
-            .values(
-                attempts=attempts, next_attempt_at=next_attempt_at, last_error=error
-            )
+            .values(attempts=attempts, next_attempt_at=next_attempt_at, last_error=error)
         )
         await self._session.execute(stmt)
         _logger.debug(
@@ -609,11 +606,7 @@ class SARelayOutboxRepository(OutboxRepository):
         # Use autocommit=False (default) — SELECT requires no explicit commit.
         # Session is closed on context-manager exit.
         async with self._session_factory() as session:
-            stmt = (
-                select(OutboxEntryModel)
-                .order_by(OutboxEntryModel.created_at.asc())
-                .limit(limit)
-            )
+            stmt = select(OutboxEntryModel).order_by(OutboxEntryModel.created_at.asc()).limit(limit)
             result = await session.execute(stmt)
             rows = result.scalars().all()
             entries = [_model_to_entry(row) for row in rows]
@@ -648,9 +641,7 @@ class SARelayOutboxRepository(OutboxRepository):
         Async safety: ✅ Each call creates, commits, and closes its own session.
         """
         async with self._session_factory() as session:
-            stmt = sa_delete(OutboxEntryModel).where(
-                OutboxEntryModel.entry_id == entry_id
-            )
+            stmt = sa_delete(OutboxEntryModel).where(OutboxEntryModel.entry_id == entry_id)
             await session.execute(stmt)
             # Commit here — relay has no session context to commit later.
             await session.commit()
@@ -688,9 +679,7 @@ class SARelayOutboxRepository(OutboxRepository):
             stmt = (
                 sa_update(OutboxEntryModel)
                 .where(OutboxEntryModel.entry_id == entry_id)
-                .values(
-                    attempts=attempts, next_attempt_at=next_attempt_at, last_error=error
-                )
+                .values(attempts=attempts, next_attempt_at=next_attempt_at, last_error=error)
             )
             await session.execute(stmt)
             await session.commit()
@@ -754,9 +743,7 @@ class SARelayOutboxRepository(OutboxRepository):
         Async safety: ✅ Own session, closed after the query.
         """
         async with self._session_factory() as session:
-            result = await session.execute(
-                select(func.count()).select_from(OutboxEntryModel)
-            )
+            result = await session.execute(select(func.count()).select_from(OutboxEntryModel))
             return int(result.scalar_one())
 
     async def oldest_pending_at(self) -> datetime | None:
@@ -767,9 +754,7 @@ class SARelayOutboxRepository(OutboxRepository):
         Async safety: ✅ Own session, closed after the query.
         """
         async with self._session_factory() as session:
-            result = await session.execute(
-                select(func.min(OutboxEntryModel.created_at))
-            )
+            result = await session.execute(select(func.min(OutboxEntryModel.created_at)))
             value = result.scalar_one_or_none()
             if value is not None and value.tzinfo is None:
                 value = value.replace(tzinfo=UTC)

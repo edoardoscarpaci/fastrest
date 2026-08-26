@@ -127,9 +127,7 @@ def mint_token(subject: str, *, expires_in: timedelta = _TOKEN_LIFETIME) -> str:
           tokens carry the new kid.  Tokens with the old kid remain verifiable
           until ``retire()`` is called for that kid.
     """
-    builder = (
-        multi_authority.token().subject(subject).issued_now().expires_in(expires_in)
-    )
+    builder = multi_authority.token().subject(subject).issued_now().expires_in(expires_in)
     return multi_authority.sign(builder)
 
 

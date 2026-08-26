@@ -79,14 +79,9 @@ class TestNatsChannelManagerSettingsDI:
         container = DIContainer()
         container.scan("varco_nats", recursive=True)
 
-        implementations = {
-            getattr(b, "implementation", None) for b in container._bindings
-        }
+        implementations = {getattr(b, "implementation", None) for b in container._bindings}
         assert NatsStreamManager in implementations
-        assert any(
-            b.interface in (ChannelManager, NatsStreamManager)
-            for b in container._bindings
-        )
+        assert any(b.interface in (ChannelManager, NatsStreamManager) for b in container._bindings)
 
 
 class TestNatsContainerValidates:
@@ -130,9 +125,7 @@ class TestNatsEventBusSettingsCharacterization:
         container = DIContainer()
         container.scan("varco_nats", recursive=True)
 
-        assert container.get(NatsEventBusSettings) is container.get(
-            NatsEventBusSettings
-        )
+        assert container.get(NatsEventBusSettings) is container.get(NatsEventBusSettings)
 
     async def test_characterization_event_bus_resolves_with_injected_settings(
         self, monkeypatch: pytest.MonkeyPatch

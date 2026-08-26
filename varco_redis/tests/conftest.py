@@ -45,9 +45,7 @@ def redis_url(request: pytest.FixtureRequest) -> str:
 
     override = os.environ.get("VARCO_TEST_REDIS_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("redis", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("redis", override))
         yield override
         return
 

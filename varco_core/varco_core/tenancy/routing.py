@@ -39,9 +39,7 @@ class TenantRoutingRejected(Exception):
     """Raised by ``route_request`` when a non-``active`` tenant is targeted."""
 
     def __init__(self, tenant_id: str, http_status: int, reason: str) -> None:
-        super().__init__(
-            f"Tenant {tenant_id!r} routing rejected ({http_status}): {reason}"
-        )
+        super().__init__(f"Tenant {tenant_id!r} routing rejected ({http_status}): {reason}")
         self.tenant_id = tenant_id
         self.http_status = http_status
         self.reason = reason
@@ -81,9 +79,7 @@ def routing_decision_for_status(status: str) -> RoutingDecision:
     return RoutingDecision(http_status=code, reason=reason, routable=False)
 
 
-async def route_request(
-    *, catalog: AbstractTenantCatalog, pool: Any, tenant_id: str
-) -> Any:
+async def route_request(*, catalog: AbstractTenantCatalog, pool: Any, tenant_id: str) -> Any:
     """
     Resolve a tenant's pool-backed resource for an incoming request.
 
@@ -98,9 +94,7 @@ async def route_request(
         descriptor: TenantDescriptor = await catalog.get(tenant_id)
     except TenantNotFoundError:
         decision = routing_decision_for_status(TenantStatus.DELETED.value)
-        raise TenantRoutingRejected(
-            tenant_id, decision.http_status, "unknown tenant"
-        ) from None
+        raise TenantRoutingRejected(tenant_id, decision.http_status, "unknown tenant") from None
 
     decision = routing_decision_for_status(descriptor.status.value)
     if not decision.routable:

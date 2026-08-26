@@ -31,9 +31,7 @@ async def _publish(base_url: str, payload: str) -> None:
         resp.raise_for_status()
 
 
-async def _wait_for_connected_count(
-    base_url: str, expected: int, timeout: float = 5.0
-) -> None:
+async def _wait_for_connected_count(base_url: str, expected: int, timeout: float = 5.0) -> None:
     async with httpx.AsyncClient(base_url=base_url, timeout=10.0) as client:
         deadline = asyncio.get_event_loop().time() + timeout
         while True:
@@ -42,8 +40,7 @@ async def _wait_for_connected_count(
                 return
             if asyncio.get_event_loop().time() > deadline:
                 raise AssertionError(
-                    f"connected-count never reached {expected}, "
-                    f"last seen {resp.json()['count']}"
+                    f"connected-count never reached {expected}, last seen {resp.json()['count']}"
                 )
             await asyncio.sleep(0.05)
 

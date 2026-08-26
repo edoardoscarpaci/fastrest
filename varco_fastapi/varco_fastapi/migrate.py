@@ -82,8 +82,7 @@ class MigrationLifecycle:
                     await self._run_one(migrator)
         except TimeoutError as exc:
             message = (
-                f"Migration timed out after {self._settings.timeout}s "
-                f"(VARCO_MIGRATE_TIMEOUT)."
+                f"Migration timed out after {self._settings.timeout}s (VARCO_MIGRATE_TIMEOUT)."
             )
             if self._settings.on_failure == "warn":
                 logger.error(message)
@@ -104,9 +103,7 @@ class MigrationLifecycle:
             return
 
         # mode == "upgrade"
-        report = await migrator.upgrade(
-            self._settings.target, dry_run=self._settings.dry_run
-        )
+        report = await migrator.upgrade(self._settings.target, dry_run=self._settings.dry_run)
 
         if report.skipped_locked:
             replanned = await migrator.plan()
@@ -116,9 +113,7 @@ class MigrationLifecycle:
                     "is now current — proceeding."
                 )
                 return
-            raise MigrationLockTimeout(
-                self._settings.lock_key, self._settings.lock_timeout
-            )
+            raise MigrationLockTimeout(self._settings.lock_key, self._settings.lock_timeout)
 
         if report.applied:
             applied_ids = ", ".join(rev.id for rev in report.applied)

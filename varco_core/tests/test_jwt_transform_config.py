@@ -63,17 +63,13 @@ class TestGlobalRolesField:
 
 class TestFallbackChainAndMerge:
     def test_comma_chain_first_non_empty_wins(self, monkeypatch):
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM_ROLES_FIELD", "sofy-roles,realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM_ROLES_FIELD", "sofy-roles,realm_access.roles")
         signed = _sign(realm_access={"roles": ["viewer"]})
         token = JwtParser.parse(signed, _SECRET)
         assert token.auth_ctx.roles == frozenset({"viewer"})
 
     def test_merge_sources_true_unions_chain(self, monkeypatch):
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM_ROLES_FIELD", "sofy-roles,realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM_ROLES_FIELD", "sofy-roles,realm_access.roles")
         monkeypatch.setenv("VARCO_JWT_TRANSFORM_MERGE_SOURCES", "true")
         signed = _sign(**{"sofy-roles": ["editor"]}, realm_access={"roles": ["viewer"]})
         token = JwtParser.parse(signed, _SECRET)
@@ -153,18 +149,14 @@ class TestSeparatorAndStrict:
 class TestPerIssuerMapping:
     def test_per_issuer_mapping_applies_only_to_matching_iss(self, monkeypatch):
         monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ISS", "kc-issuer")
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles")
         signed = _sign(iss="kc-issuer", realm_access={"roles": ["kc-role"]})
         token = JwtParser.parse(signed, _SECRET)
         assert token.auth_ctx.roles == frozenset({"kc-role"})
 
     def test_other_issuer_gets_global_mapping(self, monkeypatch):
         monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ISS", "kc-issuer")
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles")
         monkeypatch.setenv("VARCO_JWT_TRANSFORM_ROLES_FIELD", "roles")
         signed = _sign(iss="some-other-issuer", roles=["global-role"])
         token = JwtParser.parse(signed, _SECRET)
@@ -173,9 +165,7 @@ class TestPerIssuerMapping:
     def test_per_issuer_inherits_unspecified_global_fields(self, monkeypatch):
         # Label declares only ROLES_FIELD; global SCOPES_FIELD/STRICT still apply.
         monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ISS", "kc-issuer")
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles")
         monkeypatch.setenv("VARCO_JWT_TRANSFORM_SCOPES_FIELD", "scope")
         signed = _sign(
             iss="kc-issuer",
@@ -190,26 +180,20 @@ class TestPerIssuerMapping:
         # No __ISS on the transform label — falls back to
         # FASTREST_AUTHORIZATION__KEYCLOAK__ISS.
         monkeypatch.setenv("FASTREST_AUTHORIZATION__KEYCLOAK__ISS", "kc-fallback-iss")
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles")
         signed = _sign(iss="kc-fallback-iss", realm_access={"roles": ["kc-role"]})
         token = JwtParser.parse(signed, _SECRET)
         assert token.auth_ctx.roles == frozenset({"kc-role"})
 
     def test_iss_fallback_to_normalised_label_when_neither_set(self, monkeypatch):
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles")
         signed = _sign(iss="keycloak", realm_access={"roles": ["kc-role"]})
         token = JwtParser.parse(signed, _SECRET)
         assert token.auth_ctx.roles == frozenset({"kc-role"})
 
     def test_unmapped_issuer_falls_back_to_identity_no_error(self, monkeypatch):
         monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ISS", "kc-issuer")
-        monkeypatch.setenv(
-            "VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles"
-        )
+        monkeypatch.setenv("VARCO_JWT_TRANSFORM__KEYCLOAK__ROLES_FIELD", "realm_access.roles")
         signed = _sign(iss="unrelated-issuer", roles=["editor"])
         token = JwtParser.parse(signed, _SECRET)
         # Canonical "roles" claim parses normally via IDENTITY.

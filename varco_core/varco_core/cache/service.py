@@ -236,17 +236,13 @@ class CachedService:
         """
         if not kwargs:
             return f"{self._namespace}:list:{self._LIST_ALL_KEY}"
-        sorted_kwargs = json.dumps(
-            dict(sorted(kwargs.items())), sort_keys=True, default=str
-        )
+        sorted_kwargs = json.dumps(dict(sorted(kwargs.items())), sort_keys=True, default=str)
         h = hashlib.md5(sorted_kwargs.encode(), usedforsecurity=False).hexdigest()[:12]
         return f"{self._namespace}:list:{h}"
 
     # ── Read-through helpers ───────────────────────────────────────────────────
 
-    async def _get_or_set(
-        self, key: str, call: Any, *, type_hint: type | None = None
-    ) -> Any:
+    async def _get_or_set(self, key: str, call: Any, *, type_hint: type | None = None) -> Any:
         """
         Cache look-aside: return cached value, or call ``call`` and cache it.
 
@@ -270,14 +266,10 @@ class CachedService:
             cached = await self._cache.get(key, type_hint=type_hint)
 
         if cached is not None:
-            _logger.debug(
-                "CachedService[%s]: cache hit for key %r.", self._namespace, key
-            )
+            _logger.debug("CachedService[%s]: cache hit for key %r.", self._namespace, key)
             return cached
 
-        _logger.debug(
-            "CachedService[%s]: cache miss for key %r, fetching.", self._namespace, key
-        )
+        _logger.debug("CachedService[%s]: cache miss for key %r, fetching.", self._namespace, key)
         value = await call()
         if value is not None:
             await self._cache.set(key, value, ttl=self._default_ttl)
@@ -394,9 +386,7 @@ class CachedService:
         if entity_id is not None:
             invalidated_keys = [self._exists_key(entity_id), self._list_key()]
             await self._publish_invalidation(invalidated_keys, operation="create")
-        _logger.debug(
-            "CachedService[%s]: post-create invalidation complete.", self._namespace
-        )
+        _logger.debug("CachedService[%s]: post-create invalidation complete.", self._namespace)
         return result
 
     async def update(self, entity_id: Any, data: Any, **kwargs: Any) -> Any:
@@ -474,9 +464,7 @@ class CachedService:
         # are cleared even if the explicit strategy isn't consulted yet.
         await self._cache.delete(list_key)
 
-    async def _publish_invalidation(
-        self, keys: builtins.list[str], *, operation: str
-    ) -> None:
+    async def _publish_invalidation(self, keys: builtins.list[str], *, operation: str) -> None:
         """
         Publish a ``CacheInvalidated`` event via the injected producer.
 

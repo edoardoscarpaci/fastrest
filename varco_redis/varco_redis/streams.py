@@ -203,9 +203,7 @@ class RedisStreamEventBus(AbstractEventBus):
         dlq: AbstractDeadLetterQueue | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[
-            JsonEventSerializer | None, InjectMeta(optional=True)
-        ] = None,
+        serializer: Annotated[JsonEventSerializer | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -244,9 +242,7 @@ class RedisStreamEventBus(AbstractEventBus):
         elif isinstance(middleware, list):
             self._middleware = middleware
         else:
-            self._middleware = (
-                list(middleware.get_all()) if middleware.resolvable() else []
-            )
+            self._middleware = list(middleware.get_all()) if middleware.resolvable() else []
         self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
 
         self._subscriptions: list[_SubscriptionEntry] = []
@@ -270,9 +266,7 @@ class RedisStreamEventBus(AbstractEventBus):
         # UTC timestamp of the first dispatch failure per msg_id.
         self._first_failure_times: dict[bytes, datetime] = {}
 
-        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = (
-            self._build_chain()
-        )
+        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = self._build_chain()
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -389,9 +383,7 @@ class RedisStreamEventBus(AbstractEventBus):
 
         # XADD with auto-ID (*) and a single "payload" field.
         await self._redis.xadd(stream_key, {_PAYLOAD_FIELD: value})
-        _logger.debug(
-            "Published %s to Redis stream %s", type(event).__name__, stream_key
-        )
+        _logger.debug("Published %s to Redis stream %s", type(event).__name__, stream_key)
         return None
 
     def subscribe(
@@ -643,9 +635,7 @@ class RedisStreamEventBus(AbstractEventBus):
             # Task cancelled — do NOT acknowledge; message stays in PEL.
             raise
         except Exception as exc:  # noqa: BLE001
-            await self._handle_dispatch_failure(
-                stream_key, msg_id, event, logical_channel, exc
-            )
+            await self._handle_dispatch_failure(stream_key, msg_id, event, logical_channel, exc)
             return
 
         # All handlers ran without error — acknowledge the message.
@@ -844,8 +834,7 @@ class RedisStreamEventBus(AbstractEventBus):
                     errors.append(exc)
                 elif self._error_policy is ErrorPolicy.FIRE_FORGET:
                     _logger.warning(
-                        "Streams event handler %r raised and was ignored "
-                        "(FIRE_FORGET): %s",
+                        "Streams event handler %r raised and was ignored (FIRE_FORGET): %s",
                         entry.handler,
                         exc,
                         exc_info=True,
@@ -895,8 +884,7 @@ class RedisStreamEventBus(AbstractEventBus):
     def __repr__(self) -> str:
         active = sum(1 for s in self._subscriptions if not s.cancelled)
         dlq_info = (
-            f"dlq={type(self._dlq).__name__!r}, "
-            f"max_delivery={self._max_delivery_count}"
+            f"dlq={type(self._dlq).__name__!r}, max_delivery={self._max_delivery_count}"
             if self._dlq is not None or self._max_delivery_count > 0
             else "dlq=None"
         )

@@ -176,9 +176,7 @@ class TestRedisCacheTTL:
             await cache.delete("persistent")  # cleanup
 
     async def test_default_ttl_from_settings(self, redis_url: str) -> None:
-        settings = RedisCacheSettings(
-            url=redis_url, key_prefix="test:dttl:", default_ttl=1.0
-        )
+        settings = RedisCacheSettings(url=redis_url, key_prefix="test:dttl:", default_ttl=1.0)
         async with RedisCache(settings) as cache:
             await cache.set("k", "v")
             assert await cache.get("k") == "v"
@@ -192,9 +190,7 @@ class TestRedisCacheTTL:
 class TestLayeredCacheIntegration:
     async def test_write_through_populates_both_layers(self, redis_url: str) -> None:
         l1 = InMemoryCache()
-        l2 = RedisCache(
-            RedisCacheSettings(url=redis_url, key_prefix="test:layered:wt:")
-        )
+        l2 = RedisCache(RedisCacheSettings(url=redis_url, key_prefix="test:layered:wt:"))
         async with LayeredCache(l1, l2) as cache:
             await cache.set("k", "v")
             assert await l1.get("k") == "v"
@@ -203,9 +199,7 @@ class TestLayeredCacheIntegration:
 
     async def test_l2_hit_promotes_to_l1(self, redis_url: str) -> None:
         l1 = InMemoryCache()
-        l2 = RedisCache(
-            RedisCacheSettings(url=redis_url, key_prefix="test:layered:promo:")
-        )
+        l2 = RedisCache(RedisCacheSettings(url=redis_url, key_prefix="test:layered:promo:"))
         async with LayeredCache(l1, l2) as cache:
             # Write only to L2
             await l2.set("k", "from-redis")
@@ -219,9 +213,7 @@ class TestLayeredCacheIntegration:
     async def test_l1_hit_does_not_go_to_l2(self, redis_url: str) -> None:
         """L2 value differs — layered cache must return L1 value."""
         l1 = InMemoryCache()
-        l2 = RedisCache(
-            RedisCacheSettings(url=redis_url, key_prefix="test:layered:l1hit:")
-        )
+        l2 = RedisCache(RedisCacheSettings(url=redis_url, key_prefix="test:layered:l1hit:"))
         async with LayeredCache(l1, l2) as cache:
             await cache.set("k", "shared")
             # Modify L2 directly — simulates stale L2
@@ -232,9 +224,7 @@ class TestLayeredCacheIntegration:
 
     async def test_delete_propagates_to_both_layers(self, redis_url: str) -> None:
         l1 = InMemoryCache()
-        l2 = RedisCache(
-            RedisCacheSettings(url=redis_url, key_prefix="test:layered:del:")
-        )
+        l2 = RedisCache(RedisCacheSettings(url=redis_url, key_prefix="test:layered:del:"))
         async with LayeredCache(l1, l2) as cache:
             await cache.set("k", "v")
             await cache.delete("k")
@@ -244,9 +234,7 @@ class TestLayeredCacheIntegration:
     async def test_l1_ttl_stale_window(self, redis_url: str) -> None:
         """L1 expires (stale window), L2 still has authoritative value."""
         l1 = InMemoryCache(strategy=TTLStrategy(default_ttl=0.3))  # 300ms stale window
-        l2 = RedisCache(
-            RedisCacheSettings(url=redis_url, key_prefix="test:layered:stale:")
-        )
+        l2 = RedisCache(RedisCacheSettings(url=redis_url, key_prefix="test:layered:stale:"))
         async with LayeredCache(l1, l2, promote_ttl=0.3) as cache:
             await cache.set("k", "v")
             # Immediately available
@@ -416,9 +404,7 @@ class TestCachedServiceEventDriven:
         # ExplicitStrategy is shared — consumer writes to it, cache reads from it
         event_strategy = ExplicitStrategy()
 
-        consumer = CacheInvalidationConsumer(
-            event_strategy, channel="varco.cache.invalidations"
-        )
+        consumer = CacheInvalidationConsumer(event_strategy, channel="varco.cache.invalidations")
         consumer.register_to(bus)
 
         async with RedisCache(settings, strategy=event_strategy) as cache:
@@ -456,9 +442,7 @@ class TestCachedServiceEventDriven:
 
             await cache.clear()
 
-    async def test_layered_cache_with_event_driven_invalidation(
-        self, redis_url: str
-    ) -> None:
+    async def test_layered_cache_with_event_driven_invalidation(self, redis_url: str) -> None:
         """
         Full stack: InMemoryEventBus + L1(InMemory, ExplicitStrategy) + L2(Redis).
         CacheInvalidationConsumer on L1 reacts to bus events via ExplicitStrategy
@@ -494,9 +478,7 @@ class TestCachedServiceEventDriven:
             # External update + bus event
             svc._store[10] = _User(id=10, name="Caroline")
             await bus.publish(
-                CacheInvalidationEvent(
-                    keys=["u:get:10"], namespace="u", operation="update"
-                ),
+                CacheInvalidationEvent(keys=["u:get:10"], namespace="u", operation="update"),
                 channel="cache.inv",
             )
             await asyncio.sleep(0.05)

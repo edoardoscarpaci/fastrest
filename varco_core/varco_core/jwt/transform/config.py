@@ -183,18 +183,14 @@ class JwtTransformSettings(VarcoSettings):
             strict=self.strict,
         )
 
-    def _build_sources(
-        self, target: CanonicalClaim, field_value: str
-    ) -> tuple[ClaimPath, ...]:
+    def _build_sources(self, target: CanonicalClaim, field_value: str) -> tuple[ClaimPath, ...]:
         """Parse a comma-separated fallback chain, appending the canonical
         fallback path last (D-7) unless it is already present."""
         specs = [chunk.strip() for chunk in field_value.split(",") if chunk.strip()]
         canonical_spec = _DEFAULT_CANONICAL_SOURCE[target]
         if canonical_spec not in specs:
             specs.append(canonical_spec)
-        return tuple(
-            ClaimPath.parse(spec, separator=self.path_separator) for spec in specs
-        )
+        return tuple(ClaimPath.parse(spec, separator=self.path_separator) for spec in specs)
 
     def _parse_metadata_fields(self) -> tuple[tuple[str, ClaimPath], ...]:
         """Parse ``key=path,key2=path2`` into ``(key, ClaimPath)`` pairs."""

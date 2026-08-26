@@ -27,9 +27,7 @@ from varco_core.query.visitor.ast_visitor import ASTVisitor
 class _RecordingVisitor(ASTVisitor):
     """Visitor that records which handler was called and returns the node type."""
 
-    def _visit_comparison(
-        self, node: ComparisonNode, args: Any = None, **kwargs: Any
-    ) -> str:
+    def _visit_comparison(self, node: ComparisonNode, args: Any = None, **kwargs: Any) -> str:
         return "comparison"
 
     def _visit_and(self, node: AndNode, args: Any = None, **kwargs: Any) -> str:

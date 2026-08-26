@@ -244,9 +244,7 @@ def bind_websocket_adapter(
     _channel = channel
     _max_queue_size = max_queue_size
     _backpressure_policy = (
-        backpressure_policy
-        if backpressure_policy is not None
-        else BackpressurePolicy.DROP_OLDEST
+        backpressure_policy if backpressure_policy is not None else BackpressurePolicy.DROP_OLDEST
     )
 
     def _ws_factory() -> WebSocketEventBus:
@@ -349,8 +347,7 @@ def bind_sse_adapter(
         import logging  # noqa: PLC0415
 
         logging.getLogger(__name__).warning(
-            "bind_sse_adapter: providify not installed — "
-            "SSEEventBus not registered in DI."
+            "bind_sse_adapter: providify not installed — SSEEventBus not registered in DI."
         )
         return
 

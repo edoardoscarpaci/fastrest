@@ -133,9 +133,7 @@ class TestSAInboxRepositorySave:
         assert len(unprocessed) == 1
         assert unprocessed[0].entry_id == entry.entry_id
 
-    async def test_save_does_not_auto_commit(
-        self, session: AsyncSession, engine
-    ) -> None:
+    async def test_save_does_not_auto_commit(self, session: AsyncSession, engine) -> None:
         """save() must not commit — the UoW controls the transaction boundary."""
         repo = SAInboxRepository(session)
         entry = _make_entry()
@@ -156,9 +154,7 @@ class TestSAInboxRepositorySave:
 
 
 class TestSAInboxRepositoryMarkProcessed:
-    async def test_mark_processed_removes_from_unprocessed(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_mark_processed_removes_from_unprocessed(self, session: AsyncSession) -> None:
         """After mark_processed(), get_unprocessed() must return an empty list."""
         repo = SAInboxRepository(session)
         entry = _make_entry()
@@ -190,9 +186,7 @@ class TestSAInboxRepositoryMarkProcessed:
         unprocessed = await repo.get_unprocessed()
         assert len(unprocessed) == 0
 
-    async def test_mark_processed_unknown_id_is_noop(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_mark_processed_unknown_id_is_noop(self, session: AsyncSession) -> None:
         """mark_processed() with an unknown UUID must be a silent no-op."""
         repo = SAInboxRepository(session)
         await repo.mark_processed(uuid4())  # must not raise
@@ -230,9 +224,7 @@ class TestSAInboxRepositoryGetUnprocessed:
         repo = SAInboxRepository(session)
         assert await repo.get_unprocessed() == []
 
-    async def test_get_unprocessed_returns_inbox_entry_objects(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_get_unprocessed_returns_inbox_entry_objects(self, session: AsyncSession) -> None:
         """get_unprocessed() must return InboxEntry value objects with correct fields."""
         repo = SAInboxRepository(session)
         entry = _make_entry()
@@ -251,9 +243,7 @@ class TestSAInboxRepositoryGetUnprocessed:
 
 
 class TestSAPollerInboxRepositorySave:
-    async def test_poller_repo_save_and_get(
-        self, poller_factory: async_sessionmaker
-    ) -> None:
+    async def test_poller_repo_save_and_get(self, poller_factory: async_sessionmaker) -> None:
         """SAPollerInboxRepository.save() must commit so the entry is visible."""
         repo = SAPollerInboxRepository(poller_factory)
         entry = _make_entry()
@@ -285,9 +275,7 @@ class TestSAPollerInboxRepositorySave:
 
 
 class TestSAPollerInboxRepositoryMarkProcessed:
-    async def test_poller_repo_mark_processed(
-        self, poller_factory: async_sessionmaker
-    ) -> None:
+    async def test_poller_repo_mark_processed(self, poller_factory: async_sessionmaker) -> None:
         """SAPollerInboxRepository.mark_processed() must commit correctly."""
         repo = SAPollerInboxRepository(poller_factory)
         entry = _make_entry()

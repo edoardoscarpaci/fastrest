@@ -188,10 +188,10 @@ curl -N http://localhost:8000/events/posts
 
 ```python
 class Post(DomainModel):
-    pk:         UUID   # auto-assigned by SQLAlchemy
-    title:      str
-    body:       str
-    author_id:  UUID | None
+    pk: UUID  # auto-assigned by SQLAlchemy
+    title: str
+    body: str
+    author_id: UUID | None
     created_at: datetime
     updated_at: datetime
 ```
@@ -307,23 +307,37 @@ class Comment(DomainModel):
     body: str
     author_id: UUID | None
 
+
 # 2. DTOs (dtos.py)
-class CommentCreate(CreateDTO): body: str
-class CommentRead(ReadDTO):     pk: UUID; body: str; author_id: UUID | None
-class CommentUpdate(UpdateDTO): body: str | None = None
+class CommentCreate(CreateDTO):
+    body: str
+
+
+class CommentRead(ReadDTO):
+    pk: UUID
+    body: str
+    author_id: UUID | None
+
+
+class CommentUpdate(UpdateDTO):
+    body: str | None = None
+
 
 # 3. Service (service.py)
 @Singleton
 class CommentService(AsyncService[Comment, UUID, CommentCreate, CommentRead, CommentUpdate]):
-    def _get_repo(self, uow): return uow.get_repository(Comment)
+    def _get_repo(self, uow):
+        return uow.get_repository(Comment)
+
 
 # 4. Router (router.py)
 @Singleton
 class CommentRouter(CreateMixin, ReadMixin, ListMixin, VarcoCRUDRouter[...]):
     _prefix = "/comments"
 
+
 # 5. Wire in app.py
-container.provide(make_sa_provider(Base, Post, Comment))   # add Comment
+container.provide(make_sa_provider(Base, Post, Comment))  # add Comment
 bind_repositories(container, Post, Comment)
 ```
 

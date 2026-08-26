@@ -81,9 +81,7 @@ async def test_beanie_doc_registry_still_returns_base_class() -> None:
 
     BeanieDocRegistry._registry[_TenantDoc] = _TenantDoc  # type: ignore[attr-defined]
 
-    await build_tenant_binding(
-        "acme", database_name="db_acme", document_models=[_TenantDoc]
-    )
+    await build_tenant_binding("acme", database_name="db_acme", document_models=[_TenantDoc])
 
     assert BeanieDocRegistry.get(_TenantDoc) is _TenantDoc
 

@@ -60,9 +60,7 @@ def make_patient_router(container) -> type[CRUDRouter]:
 
     svc = container.get(PatientService)
 
-    class PatientRouter(
-        CRUDRouter[Patient, UUID, PatientCreate, PatientRead, PatientUpdate]
-    ):
+    class PatientRouter(CRUDRouter[Patient, UUID, PatientCreate, PatientRead, PatientUpdate]):
         """
         REST router for patient records.
 

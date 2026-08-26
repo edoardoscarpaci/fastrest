@@ -171,9 +171,7 @@ R = TypeVar("R", bound=ReadDTO)
 U = TypeVar("U", bound=UpdateDTO)
 
 
-class CacheServiceMixin(
-    ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]
-):
+class CacheServiceMixin(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]):
     """
     ``AsyncService`` mixin that adds transparent look-aside caching.
 
@@ -367,9 +365,7 @@ class CacheServiceMixin(
             )
             return hit
 
-        _logger.debug(
-            "CacheServiceMixin[%s]: cache miss for key %r.", self._cache_namespace, key
-        )
+        _logger.debug("CacheServiceMixin[%s]: cache miss for key %r.", self._cache_namespace, key)
         result = await super().get(pk, ctx)
         await self._cache.set(key, result, ttl=self._cache_ttl)
         return result
@@ -562,9 +558,7 @@ class CacheServiceMixin(
     # named `list()` elsewhere in the MRO chain, which shadows the builtin
     # `list` name for mypy's static analysis — same footgun class as the
     # `object`-shadowing fix in varco_casbin/router.py.
-    async def _publish_invalidated(
-        self, keys: builtins.list[str], *, operation: str
-    ) -> None:
+    async def _publish_invalidated(self, keys: builtins.list[str], *, operation: str) -> None:
         """
         Publish a ``CacheInvalidated`` event via the injected producer (if any).
 

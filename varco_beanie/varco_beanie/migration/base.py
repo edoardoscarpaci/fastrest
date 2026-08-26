@@ -128,9 +128,7 @@ class MigrationRegistry:
         if pkg_path is None:
             return
 
-        for _finder, name, _is_pkg in pkgutil.walk_packages(
-            pkg_path, prefix=f"{package}."
-        ):
+        for _finder, name, _is_pkg in pkgutil.walk_packages(pkg_path, prefix=f"{package}."):
             module = importlib.import_module(name)
             for attr in vars(module).values():
                 if (

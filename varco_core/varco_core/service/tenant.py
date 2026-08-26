@@ -352,9 +352,7 @@ class TenantUoWProvider(IUoWProvider):
 # ── TenantAwareService ────────────────────────────────────────────────────────
 
 
-class TenantAwareService(
-    ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]
-):
+class TenantAwareService(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]):
     """
     Abstract ``AsyncService`` mixin that enforces row-level tenant isolation.
 
@@ -444,10 +442,7 @@ class TenantAwareService(
         # AND the tenant filter onto the caller's filter — QueryBuilder.and_()
         # handles the ``params.node is None`` case without an explicit branch.
         scoped_node = (
-            QueryBuilder()
-            .eq(self._tenant_field, tid)
-            .and_(QueryBuilder(params.node))
-            .build()
+            QueryBuilder().eq(self._tenant_field, tid).and_(QueryBuilder(params.node)).build()
         )
         scoped = dataclasses.replace(params, node=scoped_node)
         # Chain to super so additional mixins can also inject filters.

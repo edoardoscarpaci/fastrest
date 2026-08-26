@@ -29,15 +29,11 @@ class TestHttpConnectionSettings:
         assert conn.auth is None
 
     def test_effective_base_url_from_base_url_field(self) -> None:
-        conn = HttpConnectionSettings.model_validate(
-            {"base_url": "https://api.example.com/v1"}
-        )
+        conn = HttpConnectionSettings.model_validate({"base_url": "https://api.example.com/v1"})
         assert conn._effective_base_url() == "https://api.example.com/v1"
 
     def test_effective_base_url_from_host_port_no_ssl(self) -> None:
-        conn = HttpConnectionSettings.model_validate(
-            {"host": "api.example.com", "port": 8080}
-        )
+        conn = HttpConnectionSettings.model_validate({"host": "api.example.com", "port": 8080})
         assert conn._effective_base_url() == "http://api.example.com:8080"
 
     def test_effective_base_url_from_host_port_with_ssl(self) -> None:
@@ -51,9 +47,7 @@ class TestHttpConnectionSettings:
         assert conn._effective_base_url() == "https://api.example.com:443"
 
     def test_to_httpx_kwargs_no_auth_no_ssl(self) -> None:
-        conn = HttpConnectionSettings.model_validate(
-            {"base_url": "https://api.example.com"}
-        )
+        conn = HttpConnectionSettings.model_validate({"base_url": "https://api.example.com"})
         kwargs = conn.to_httpx_kwargs()
         assert kwargs["base_url"] == "https://api.example.com"
         assert kwargs["timeout"] == 30.0
@@ -118,9 +112,7 @@ class TestHttpConnectionSettings:
 
     def test_with_ssl_factory(self) -> None:
         ssl_cfg = SSLConfig(verify=False, check_hostname=False)
-        conn = HttpConnectionSettings.with_ssl(
-            ssl_cfg, base_url="https://api.example.com"
-        )
+        conn = HttpConnectionSettings.with_ssl(ssl_cfg, base_url="https://api.example.com")
         assert conn.ssl is not None
         assert conn.ssl.verify is False
 
@@ -138,9 +130,7 @@ class TestHttpConnectionSettings:
         with pytest.raises(ValueError, match="requires a non-empty prefix"):
             HttpConnectionSettings.from_env(prefix="")
 
-    def test_from_env_multiple_clients_independent(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_from_env_multiple_clients_independent(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # Two HTTP clients with different prefixes must not bleed into each other —
         # the key feature that motivates removing the fixed HTTP_ prefix.
         monkeypatch.setenv("SVC_A_BASE_URL", "https://a.example.com")

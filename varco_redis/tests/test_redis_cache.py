@@ -128,9 +128,7 @@ class TestRedisCacheSettings:
         assert s.redis_key("user:1") == "myapp:user:1"
 
     def test_from_dict(self) -> None:
-        s = RedisCacheSettings.from_dict(
-            {"url": "redis://other:6379/1", "key_prefix": "prod:"}
-        )
+        s = RedisCacheSettings.from_dict({"url": "redis://other:6379/1", "key_prefix": "prod:"})
         assert s.url == "redis://other:6379/1"
         assert s.key_prefix == "prod:"
 
@@ -139,16 +137,12 @@ class TestRedisCacheSettings:
 
 
 class TestRedisCacheLifecycle:
-    async def test_not_started_raises_on_get(
-        self, settings: RedisCacheSettings
-    ) -> None:
+    async def test_not_started_raises_on_get(self, settings: RedisCacheSettings) -> None:
         c = RedisCache(settings)
         with pytest.raises(RuntimeError, match="not started"):
             await c.get("k")
 
-    async def test_not_started_raises_on_set(
-        self, settings: RedisCacheSettings
-    ) -> None:
+    async def test_not_started_raises_on_set(self, settings: RedisCacheSettings) -> None:
         c = RedisCache(settings)
         with pytest.raises(RuntimeError, match="not started"):
             await c.set("k", "v")
@@ -186,9 +180,7 @@ class TestRedisCacheLifecycle:
 
 
 class TestRedisCacheSetGet:
-    async def test_set_and_get_roundtrip(
-        self, cache: RedisCache, fake_redis: FakeRedis
-    ) -> None:
+    async def test_set_and_get_roundtrip(self, cache: RedisCache, fake_redis: FakeRedis) -> None:
         await cache.set("user:1", {"name": "Alice", "age": 30})
         result = await cache.get("user:1")
         assert result == {"name": "Alice", "age": 30}
@@ -196,9 +188,7 @@ class TestRedisCacheSetGet:
     async def test_get_missing_returns_none(self, cache: RedisCache) -> None:
         assert await cache.get("missing") is None
 
-    async def test_set_with_ttl_uses_psetex(
-        self, cache: RedisCache, fake_redis: FakeRedis
-    ) -> None:
+    async def test_set_with_ttl_uses_psetex(self, cache: RedisCache, fake_redis: FakeRedis) -> None:
         await cache.set("k", "v", ttl=120)
         assert "k" in fake_redis._ttls_ms
         assert fake_redis._ttls_ms["k"] == 120_000
@@ -238,9 +228,7 @@ class TestRedisCacheSetGet:
 
 
 class TestRedisCacheDelete:
-    async def test_delete_removes_key(
-        self, cache: RedisCache, fake_redis: FakeRedis
-    ) -> None:
+    async def test_delete_removes_key(self, cache: RedisCache, fake_redis: FakeRedis) -> None:
         await cache.set("k", "v")
         await cache.delete("k")
         assert await cache.get("k") is None
@@ -287,9 +275,7 @@ class TestRedisCacheClear:
                 assert await cache.get("a") is None
                 assert await cache.get("b") is None
 
-    async def test_clear_does_not_remove_unrelated_keys(
-        self, fake_redis: FakeRedis
-    ) -> None:
+    async def test_clear_does_not_remove_unrelated_keys(self, fake_redis: FakeRedis) -> None:
         settings = RedisCacheSettings(url="redis://fake:6379/0", key_prefix="ns:")
         # Manually put an unrelated key directly in the fake store
         fake_redis._store["other:key"] = b'"unrelated"'

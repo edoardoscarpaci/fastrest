@@ -82,9 +82,7 @@ def _make_registry(*migration_classes: type) -> Any:
     return registry
 
 
-def _migration_cls(
-    version: str, name: str, applied: list[str], *, raises: bool = False
-):
+def _migration_cls(version: str, name: str, applied: list[str], *, raises: bool = False):
     from varco_beanie.migration.base import Migration
 
     class _M(Migration):
@@ -209,8 +207,6 @@ async def test_checksum_mismatch_raises_unless_verify_checksums_false(
     with pytest.raises(Exception):  # noqa: B017 — exact type is migrator-defined
         await migrator2.plan()
 
-    migrator3 = BeanieMigrator(
-        fake_db, registry, index_mode="off", verify_checksums=False
-    )
+    migrator3 = BeanieMigrator(fake_db, registry, index_mode="off", verify_checksums=False)
     # Must not raise when verification is disabled.
     await migrator3.plan()

@@ -119,9 +119,7 @@ class RedisBackplaneSettings(BaseSettings):
                        after construction by this module).
     """
 
-    model_config = SettingsConfigDict(
-        env_prefix="VARCO_REDIS_CACHE_BACKPLANE_", frozen=True
-    )
+    model_config = SettingsConfigDict(env_prefix="VARCO_REDIS_CACHE_BACKPLANE_", frozen=True)
 
     url: str = "redis://localhost:6379/0"
     channel: str = "varco.cache.invalidate"
@@ -187,9 +185,7 @@ class RedisPubSubBackplane(CacheBackplane):
         self._settings = settings or RedisBackplaneSettings()
         self._external_client = client
         self._channel = channel if channel is not None else self._settings.channel
-        self._hash_keys = (
-            hash_keys if hash_keys is not None else self._settings.hash_keys
-        )
+        self._hash_keys = hash_keys if hash_keys is not None else self._settings.hash_keys
         self._channel_for = channel_for
 
         self._origin = uuid.uuid4().hex
@@ -254,9 +250,7 @@ class RedisPubSubBackplane(CacheBackplane):
         """
         try:
             if self._redis is None:
-                raise RuntimeError(
-                    "RedisPubSubBackplane.publish() called before start()."
-                )
+                raise RuntimeError("RedisPubSubBackplane.publish() called before start().")
             kind: InvalidationKind = message.kind
             payload = message.payload
             if self._hash_keys and kind != "clear":
@@ -272,20 +266,14 @@ class RedisPubSubBackplane(CacheBackplane):
                     "ts": message.ts,
                 }
             ).encode()
-            channel = (
-                self._channel_for(message.payload)
-                if self._channel_for
-                else self._channel
-            )
+            channel = self._channel_for(message.payload) if self._channel_for else self._channel
             await self._redis.publish(channel, data)
             record_backplane_published(kind=kind)
         except Exception as exc:  # noqa: BLE001 - publish() must never raise
             record_backplane_dropped(reason="publish_failed")
             _logger.debug("RedisPubSubBackplane: publish failed: %s", exc)
 
-    def subscribe(
-        self, handler: Callable[[InvalidationMessage], Awaitable[None]]
-    ) -> None:
+    def subscribe(self, handler: Callable[[InvalidationMessage], Awaitable[None]]) -> None:
         """Register the local receive handler — exactly one per instance."""
         self._handler = handler
 
@@ -316,9 +304,7 @@ class RedisPubSubBackplane(CacheBackplane):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 - connection hiccup, not fatal
-                _logger.debug(
-                    "RedisPubSubBackplane: get_message() failed, reconnecting: %s", exc
-                )
+                _logger.debug("RedisPubSubBackplane: get_message() failed, reconnecting: %s", exc)
                 await asyncio.sleep(_POLL_INTERVAL)
                 try:
                     await self._resubscribe()
@@ -365,9 +351,7 @@ class RedisPubSubBackplane(CacheBackplane):
         """Emit a synthetic local ``clear`` after a reconnect (brief 002 §2)."""
         if self._handler is None:
             return
-        synthetic = InvalidationMessage(
-            kind="clear", payload="", origin="__reconnect__", ts=0.0
-        )
+        synthetic = InvalidationMessage(kind="clear", payload="", origin="__reconnect__", ts=0.0)
         await self._handler(synthetic)
 
     def __repr__(self) -> str:

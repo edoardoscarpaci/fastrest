@@ -293,9 +293,7 @@ class OutboxRepository(ABC):
         """
 
     @abstractmethod
-    async def get_pending(
-        self, *, limit: int = _DEFAULT_BATCH_SIZE
-    ) -> list[OutboxEntry]:
+    async def get_pending(self, *, limit: int = _DEFAULT_BATCH_SIZE) -> list[OutboxEntry]:
         """
         Return up to ``limit`` unsent outbox entries, ordered by ``created_at``.
 
@@ -735,9 +733,7 @@ class OutboxRelay:
         # works with every existing OutboxRepository implementation, at the
         # cost of still fetching (but not publishing) not-yet-due entries.
         now = datetime.now(UTC)
-        due_entries = [
-            e for e in entries if e.next_attempt_at is None or e.next_attempt_at <= now
-        ]
+        due_entries = [e for e in entries if e.next_attempt_at is None or e.next_attempt_at <= now]
 
         if not due_entries:
             return
@@ -904,9 +900,7 @@ class OutboxRelay:
                 exc_info=True,
             )
 
-    async def _push_to_dlq(
-        self, entry: OutboxEntry, exc: Exception, *, attempts: int
-    ) -> None:
+    async def _push_to_dlq(self, entry: OutboxEntry, exc: Exception, *, attempts: int) -> None:
         """Build and push a ``DeadLetterEntry`` for a poison/exhausted
         outbox entry. ``push()`` must never raise (ABC contract) — any
         failure here is the DLQ implementation's own responsibility to

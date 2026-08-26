@@ -72,9 +72,7 @@ R = TypeVar("R", bound=ReadDTO)
 U = TypeVar("U", bound=UpdateDTO)
 
 
-class SoftDeleteService(
-    ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]
-):
+class SoftDeleteService(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, PK, C, R, U]):
     """
     Abstract ``AsyncService`` mixin that replaces physical deletion with
     soft deletion.

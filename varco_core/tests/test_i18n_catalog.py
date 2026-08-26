@@ -55,9 +55,7 @@ def test_format_message_default_interpolates_params() -> None:
     assert rendered == "Hello Ada"
 
 
-def test_format_message_missing_placeholder_renders_literal_brace_never_raises() -> (
-    None
-):
+def test_format_message_missing_placeholder_renders_literal_brace_never_raises() -> None:
     # Edge cases table: "a missing interpolation param renders the literal
     # {name}; no KeyError inside an exception handler."
     catalog = DictMessageCatalog({"en": {"greeting": "Hello {name}"}})

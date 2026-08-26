@@ -143,9 +143,7 @@ class BeanieMigrator(AbstractMigrator):
         for collection, labels in drift.missing_indexes.items():
             for label in labels:
                 pending.append(
-                    Revision(
-                        id=f"index:{collection}:{label}", label=label, branch="index"
-                    )
+                    Revision(id=f"index:{collection}:{label}", label=label, branch="index")
                 )
         return pending
 
@@ -159,18 +157,14 @@ class BeanieMigrator(AbstractMigrator):
 
         return MigrationPlan(current=tuple(sorted(applied)), pending=tuple(pending))
 
-    async def upgrade(
-        self, target: str = "heads", *, dry_run: bool = False
-    ) -> MigrationReport:
+    async def upgrade(self, target: str = "heads", *, dry_run: bool = False) -> MigrationReport:
         start = time.monotonic()
         await self._verify_recorded_checksums()
 
         pending_migrations = await self._pending_migrations()
 
         if dry_run:
-            applied = tuple(
-                Revision(id=m.version, label=m.name) for m in pending_migrations
-            )
+            applied = tuple(Revision(id=m.version, label=m.name) for m in pending_migrations)
             return MigrationReport(applied=applied, duration_s=time.monotonic() - start)
 
         if not pending_migrations:
@@ -182,14 +176,10 @@ class BeanieMigrator(AbstractMigrator):
         # case (another instance is mid-migration) as an immediate failure
         # instead of waiting for it to finish.
         deadline = time.monotonic() + self._settings.lock_timeout
-        acquired = await self._store.acquire(
-            self._owner_id, self._settings.lock_timeout
-        )
+        acquired = await self._store.acquire(self._owner_id, self._settings.lock_timeout)
         while not acquired and time.monotonic() < deadline:
             await asyncio.sleep(min(0.5, max(deadline - time.monotonic(), 0)))
-            acquired = await self._store.acquire(
-                self._owner_id, self._settings.lock_timeout
-            )
+            acquired = await self._store.acquire(self._owner_id, self._settings.lock_timeout)
 
         if not acquired:
             replanned = await self.plan()
@@ -200,9 +190,7 @@ class BeanieMigrator(AbstractMigrator):
                 )
             from varco_core.migration.errors import MigrationLockTimeout
 
-            raise MigrationLockTimeout(
-                self._settings.lock_key, self._settings.lock_timeout
-            )
+            raise MigrationLockTimeout(self._settings.lock_key, self._settings.lock_timeout)
 
         # Re-check pending migrations now that the lock is actually held —
         # the list computed before acquiring may be stale if another

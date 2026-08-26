@@ -180,7 +180,10 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
     ) -> int:
         """Bulk UPDATE by query, wrapped in an OTel span."""
         return await self._run_in_span(
-            "update_many_by_query", super().update_many_by_query, params, update  # type: ignore[safe-super]
+            "update_many_by_query",
+            super().update_many_by_query,  # type: ignore[safe-super]
+            params,
+            update,
         )
 
     def stream_by_query(self, params: QueryParams) -> AsyncIterator[D]:

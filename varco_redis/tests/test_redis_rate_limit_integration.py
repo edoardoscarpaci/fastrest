@@ -132,9 +132,7 @@ async def test_window_expires_after_period(limiter) -> None:
     url = f"redis://{host}:{port}/0"
 
     cfg = RateLimitConfig(rate=2, period=0.3)
-    settings = RedisEventBusSettings(
-        url=url, channel_prefix=f"test:{uuid.uuid4().hex[:8]}:"
-    )
+    settings = RedisEventBusSettings(url=url, channel_prefix=f"test:{uuid.uuid4().hex[:8]}:")
     async with RedisRateLimiter(cfg, settings=settings) as short_limiter:
         # Fill the window.
         await short_limiter.acquire("k")

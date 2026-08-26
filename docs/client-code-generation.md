@@ -32,7 +32,7 @@ from order_client import OrderClient
 
 client = OrderClient("https://orders.internal")
 order = await client.read(order_id)
-await client.cancel(order_id, reason="oos")   # real, typed keyword arguments
+await client.cancel(order_id, reason="oos")  # real, typed keyword arguments
 ```
 
 Every method's signature — including custom `@route` endpoints — is built

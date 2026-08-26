@@ -155,9 +155,7 @@ def make_engine(*, echo: bool = False) -> AsyncEngine:
     conn = make_postgres_settings()
     # to_engine_kwargs() returns pool_size, max_overflow, pool_timeout, and
     # connect_args (which carries the ssl context when POSTGRES_SSL__* is set).
-    return create_async_engine(
-        conn.to_sqlalchemy_url(), echo=echo, **conn.to_engine_kwargs()
-    )
+    return create_async_engine(conn.to_sqlalchemy_url(), echo=echo, **conn.to_engine_kwargs())
 
 
 def make_di_sa_provider(

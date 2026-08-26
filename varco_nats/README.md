@@ -36,10 +36,11 @@ class OrderPlacedEvent(Event):
 
 config = NatsEventBusSettings(
     servers="nats://localhost:4222",
-    durable_name="order-service",   # the JetStream analogue of a Kafka group_id
+    durable_name="order-service",  # the JetStream analogue of a Kafka group_id
 )
 
 async with NatsEventBus(config) as bus:
+
     class OrderConsumer(EventConsumer):
         @listen(OrderPlacedEvent, channel="orders")
         async def on_placed(self, event: OrderPlacedEvent) -> None:
@@ -139,10 +140,10 @@ from varco_nats import NatsStreamManager, NatsChannelManagerSettings
 
 settings = NatsChannelManagerSettings(servers="nats://localhost:4222")
 async with NatsStreamManager(settings) as manager:
-    await manager.declare_channel("orders")    # ensures the backing stream
+    await manager.declare_channel("orders")  # ensures the backing stream
     exists = await manager.channel_exists("orders")  # has the subject any message?
-    channels = await manager.list_channels()   # channels carrying messages
-    await manager.delete_channel("orders")     # purge that channel's messages
+    channels = await manager.list_channels()  # channels carrying messages
+    await manager.delete_channel("orders")  # purge that channel's messages
 ```
 
 ---
@@ -181,10 +182,10 @@ async with NatsDLQ(settings=NatsEventBusSettings()) as dlq:
 from varco_nats.di import bootstrap
 from varco_core.event import AbstractEventBus
 
-container = bootstrap()                       # scans varco_nats
+container = bootstrap()  # scans varco_nats
 bus = await container.aget(AbstractEventBus)  # NatsEventBus singleton
 # ...
-await container.ashutdown()                   # stops the bus via @PreDestroy
+await container.ashutdown()  # stops the bus via @PreDestroy
 ```
 
 Install the DLQ explicitly when needed:
@@ -224,7 +225,8 @@ await container.ainstall(NatsEventBusConfiguration)
 
 # After (2.0)
 from varco_nats.di import bootstrap
-bootstrap(container)            # or: container.scan("varco_nats", recursive=True)
+
+bootstrap(container)  # or: container.scan("varco_nats", recursive=True)
 ```
 
 The opt-in `NatsDLQConfiguration` is unchanged — still `await container.ainstall(...)`.

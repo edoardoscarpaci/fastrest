@@ -51,6 +51,7 @@ base no-op hooks:
 from varco_core.service.audit import AuditLogMixin
 from varco_core.service.base import AsyncService
 
+
 class OrderService(
     AuditLogMixin,
     AsyncService[Order, UUID, CreateOrderDTO, OrderReadDTO, UpdateOrderDTO],
@@ -149,9 +150,12 @@ from varco_core.event.base import AbstractEventBus
 from varco_core.service.audit import AuditConsumer
 from varco_sa.audit import SAAuditRepository
 
+
 @Component
 class AuditWiring:
-    def __init__(self, bus: Inject[AbstractEventBus], audit_repo: Inject[SAAuditRepository]) -> None:
+    def __init__(
+        self, bus: Inject[AbstractEventBus], audit_repo: Inject[SAAuditRepository]
+    ) -> None:
         self._bus = bus
         self._consumer = AuditConsumer(audit_repo=audit_repo)
 
@@ -204,7 +208,7 @@ no-DLQ) behaviour by passing `retry_policy=None` to `register_to()`:
 
 ```python
 consumer = AuditConsumer(audit_repo=audit_repo)
-consumer.register_to(bus, retry_policy=None)   # restores pre-Phase-3 behaviour
+consumer.register_to(bus, retry_policy=None)  # restores pre-Phase-3 behaviour
 ```
 
 Or supply your own policy/DLQ instead of the `durable_delivery()` default:
@@ -330,8 +334,9 @@ from varco_fastapi.admin.mount import mount_reliability_admin
 mount_reliability_admin(
     app,
     audit_repo=audit_repo,
-    acknowledge_bundled_admin=True,   # required — ValueError without it (RD-9)
-    server_auth=auth, admin_role="reliability-admin",
+    acknowledge_bundled_admin=True,  # required — ValueError without it (RD-9)
+    server_auth=auth,
+    admin_role="reliability-admin",
 )
 ```
 
@@ -353,19 +358,19 @@ prev_hash`. The genesis entry hashes `prev_hash=None` as the JSON literal
 ```python
 from varco_sa.audit import SAAuditRepository
 
-audit_repo = SAAuditRepository(session_factory, hash_chain=True)   # opt-in, default False
+audit_repo = SAAuditRepository(session_factory, hash_chain=True)  # opt-in, default False
 ```
 
 ```python
 from varco_core.service.audit import AuditRepository
 
-result = AuditRepository.verify_chain(entries)   # portable @staticmethod, pure
+result = AuditRepository.verify_chain(entries)  # portable @staticmethod, pure
 if result is True:
     ...  # unbroken (or vacuously true for an empty list)
 else:
-    for finding in result:   # list[ChainGap | HashMismatch]
+    for finding in result:  # list[ChainGap | HashMismatch]
         ...  # ChainGap = a missing seq (e.g. a deleted row)
-             # HashMismatch = a prev_hash that doesn't match (e.g. an edited row)
+        # HashMismatch = a prev_hash that doesn't match (e.g. an edited row)
 ```
 
 **RD-8 — the chain is a repository concern, not a consumer concern, and is

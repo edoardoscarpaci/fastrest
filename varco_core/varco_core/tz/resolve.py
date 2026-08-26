@@ -58,9 +58,7 @@ async def resolve_timezone(
     def _valid(name: str | None, *, source: str) -> ZoneInfo | None:
         zone = validate_iana_zone(name)
         if name and zone is None:
-            logger.warning(
-                "invalid IANA zone %r from source=%s; falling through", name, source
-            )
+            logger.warning("invalid IANA zone %r from source=%s; falling through", name, source)
         return zone
 
     tenant_default: ZoneInfo | None = None

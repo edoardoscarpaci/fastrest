@@ -153,9 +153,7 @@ class KafkaHealthCheck(HealthCheck):
             if producer is not None:
                 try:
                     await producer.stop()
-                except (
-                    Exception
-                ):  # noqa: BLE001 — best-effort cleanup; ignore teardown errors
+                except Exception:  # noqa: BLE001 — best-effort cleanup; ignore teardown errors
                     pass
 
     def __repr__(self) -> str:

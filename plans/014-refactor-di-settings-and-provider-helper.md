@@ -158,17 +158,16 @@ becomes the permanent proof it still resolves.
 ```python
 # BEFORE — varco_redis/varco_redis/config.py:61-62
 @Singleton(priority=-sys.maxsize)
-class RedisEventBusSettings(EventBusSettings):
-    ...
+class RedisEventBusSettings(EventBusSettings): ...
+
 
 # AFTER
-class RedisEventBusSettings(EventBusSettings):
-    ...
+class RedisEventBusSettings(EventBusSettings): ...
 
 
 @Provider(singleton=True, priority=-sys.maxsize)
 def redis_event_bus_settings() -> RedisEventBusSettings:
-    """..."""   # docstring modelled on varco_kafka/channel.py:133-155
+    """..."""  # docstring modelled on varco_kafka/channel.py:133-155
     return RedisEventBusSettings()
 ```
 
@@ -190,9 +189,11 @@ Audit `audits/001-audit-di-wiring.md:91-98`. The duplicated shape is:
 
 ```python
 @Provider(singleton=True)
-def _factory() -> SomeType:      # ← string annotation under PEP 563
+def _factory() -> SomeType:  # ← string annotation under PEP 563
     ...
-_factory.__annotations__["return"] = SomeType   # ← the workaround
+
+
+_factory.__annotations__["return"] = SomeType  # ← the workaround
 container.provide(_factory)
 ```
 
@@ -285,8 +286,7 @@ try:
     import providify  # noqa: F401 — presence probe; provide_factory needs it
 except ImportError:
     logging.getLogger(__name__).warning(
-        "bind_websocket_adapter: providify not installed — "
-        "WebSocketEventBus not registered in DI."
+        "bind_websocket_adapter: providify not installed — WebSocketEventBus not registered in DI."
     )
     return
 

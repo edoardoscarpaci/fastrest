@@ -49,9 +49,7 @@ class TestBeanieDeadLetterQueueConformance(DeadLetterQueueConformance):
     async def dlq(self, mongo_url: str):
         client = AsyncIOMotorClient(mongo_url)
         db_name = f"conformance_{uuid4().hex[:8]}"
-        await init_beanie(
-            database=client[db_name], document_models=[DeadLetterDocument]
-        )
+        await init_beanie(database=client[db_name], document_models=[DeadLetterDocument])
         try:
             yield BeanieDeadLetterQueue()
         finally:

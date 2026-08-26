@@ -187,9 +187,7 @@ class TestSASagaRepositoryLoad:
 
 
 class TestSASagaRepositoryLifecycle:
-    async def test_pending_to_running_to_completed(
-        self, repo: SASagaRepository
-    ) -> None:
+    async def test_pending_to_running_to_completed(self, repo: SASagaRepository) -> None:
         """PENDING → RUNNING → COMPLETED lifecycle persists correctly."""
         saga_id = uuid4()
 
@@ -197,15 +195,11 @@ class TestSASagaRepositoryLifecycle:
         await repo.save(pending)
         assert (await repo.load(saga_id)).status == SagaStatus.PENDING  # type: ignore[union-attr]
 
-        running = SagaState(
-            saga_id=saga_id, status=SagaStatus.RUNNING, completed_steps=0
-        )
+        running = SagaState(saga_id=saga_id, status=SagaStatus.RUNNING, completed_steps=0)
         await repo.save(running)
         assert (await repo.load(saga_id)).status == SagaStatus.RUNNING  # type: ignore[union-attr]
 
-        completed = SagaState(
-            saga_id=saga_id, status=SagaStatus.COMPLETED, completed_steps=3
-        )
+        completed = SagaState(saga_id=saga_id, status=SagaStatus.COMPLETED, completed_steps=3)
         await repo.save(completed)
 
         loaded = await repo.load(saga_id)

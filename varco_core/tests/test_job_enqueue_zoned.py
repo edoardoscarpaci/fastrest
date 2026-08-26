@@ -105,9 +105,7 @@ class _MinimalRunner(AbstractJobRunner):
         return 0
 
 
-async def test_enqueue_with_tz_into_unaware_store_raises_value_error_naming_class() -> (
-    None
-):
+async def test_enqueue_with_tz_into_unaware_store_raises_value_error_naming_class() -> None:
     store = _UnzoneAwareStore()
     runner = _MinimalRunner(store)
     job = Job(job_id=uuid4())
@@ -120,9 +118,7 @@ async def test_enqueue_with_tz_into_unaware_store_raises_value_error_naming_clas
         )
 
 
-async def test_enqueue_with_tz_into_aware_store_succeeds_and_materializes_run_at() -> (
-    None
-):
+async def test_enqueue_with_tz_into_aware_store_succeeds_and_materializes_run_at() -> None:
     store = _ZonedAwareStore()
     runner = _MinimalRunner(store)
     job = Job(job_id=uuid4())

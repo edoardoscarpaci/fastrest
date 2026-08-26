@@ -67,17 +67,13 @@ class TestProfileReport:
             wall_time_ms=123.4,
             cpu_time_ms=100.0,
             top_functions=(
-                FunctionStat(
-                    function="foo:1(bar)", ncalls=10, tottime_ms=50.0, cumtime_ms=100.0
-                ),
+                FunctionStat(function="foo:1(bar)", ncalls=10, tottime_ms=50.0, cumtime_ms=100.0),
             ),
             mem_current_bytes=1024,
             mem_peak_bytes=2048,
             mem_delta_bytes=512,
             rss_delta_bytes=4096,
-            top_allocations=(
-                AllocationStat(location="file.py:42", size_bytes=512, count=2),
-            ),
+            top_allocations=(AllocationStat(location="file.py:42", size_bytes=512, count=2),),
             artifacts=(),
             cpu_backend="cprofile",
             memory_backend="tracemalloc",
@@ -306,9 +302,7 @@ class TestOtelBridge:
         mock_hist.record = MagicMock()
 
         # Patch at the source module since otel.py uses a lazy import
-        with patch(
-            "varco_core.observability.helpers.create_histogram", return_value=mock_hist
-        ):
+        with patch("varco_core.observability.helpers.create_histogram", return_value=mock_hist):
             with profiled("otel-op", config=ProfileConfig(otel=True)) as session:
                 _ = sum(range(1_000))
 
@@ -364,9 +358,7 @@ class TestEngineSafety:
 
         with profiled(
             "partial",
-            config=ProfileConfig(
-                cpu_backend=FailCpuBackend, memory_backend="tracemalloc"
-            ),
+            config=ProfileConfig(cpu_backend=FailCpuBackend, memory_backend="tracemalloc"),
         ) as session:
             _ = [0] * 100
 
@@ -482,9 +474,7 @@ class TestBackendRegistry:
 
         with profiled(
             "factory-callable",
-            config=ProfileConfig(
-                cpu_backend=DirectFactory, memory=False, track_rss=False
-            ),
+            config=ProfileConfig(cpu_backend=DirectFactory, memory=False, track_rss=False),
         ) as session:
             pass
 

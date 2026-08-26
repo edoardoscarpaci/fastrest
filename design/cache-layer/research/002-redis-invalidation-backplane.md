@@ -18,8 +18,10 @@ For varco's C1 item — a cross-node L1 invalidation backplane for a two-tier `L
 
 ```python
 from redis.cache import CacheConfig
+
 r = redis.Redis(
-    host='localhost', port=6379,
+    host="localhost",
+    port=6379,
     protocol=3,  # RESP3 required
     cache_config=CacheConfig(),  # uses invalidation table on server
 )

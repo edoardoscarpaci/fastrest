@@ -64,9 +64,7 @@ def _make_metrics_app(prefix: str = "/metrics") -> FastAPI:
 async def test_metrics_endpoint_returns_200():
     """``GET /metrics`` returns HTTP 200 when prometheus_client is installed."""
     app = _make_metrics_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics")
     assert resp.status_code == 200
 
@@ -78,9 +76,7 @@ async def test_metrics_content_type_is_prometheus_text():
     Prometheus text format (v0.0.4).
     """
     app = _make_metrics_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics")
     assert resp.status_code == 200
     assert "text/plain" in resp.headers["content-type"]
@@ -92,9 +88,7 @@ async def test_metrics_body_is_non_empty():
     exports default Python process metrics (GC stats, memory, etc.).
     """
     app = _make_metrics_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics")
     assert len(resp.content) > 0
 
@@ -106,9 +100,7 @@ async def test_openmetrics_format_via_accept_header():
     OpenMetrics content type (used by Prometheus ≥ 2.26 for exemplar support).
     """
     app = _make_metrics_app()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get(
             "/metrics",
             headers={"Accept": "application/openmetrics-text"},
@@ -136,9 +128,7 @@ async def test_returns_503_when_prometheus_client_missing():
     # Remove prometheus_client from sys.modules to force ImportError on import
     sys.modules["prometheus_client"] = None  # type: ignore[assignment]
     try:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get("/metrics")
         assert resp.status_code == 503
         assert "prometheus" in resp.text.lower()
@@ -165,16 +155,12 @@ async def test_custom_prefix():
     ``MetricsRouter(prefix="/observability/metrics")`` mounts at the custom path.
     """
     app = _make_metrics_app(prefix="/observability/metrics")
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/observability/metrics")
     assert resp.status_code == 200
 
     # Original /metrics must NOT exist
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics")
     assert resp.status_code == 404
 
@@ -191,15 +177,11 @@ async def test_create_varco_app_enable_metrics_mounts_endpoint():
     from varco_fastapi import create_varco_app
 
     app = create_varco_app(enable_metrics=True, validate=False)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics")
     # Route is mounted — 200 (prometheus installed) or 503 (not installed)
     # Either way it must NOT be 404.
-    assert (
-        resp.status_code != 404
-    ), "GET /metrics must be mounted when enable_metrics=True"
+    assert resp.status_code != 404, "GET /metrics must be mounted when enable_metrics=True"
 
 
 async def test_create_varco_app_enable_metrics_false_no_endpoint():
@@ -210,13 +192,9 @@ async def test_create_varco_app_enable_metrics_false_no_endpoint():
     from varco_fastapi import create_varco_app
 
     app = create_varco_app(enable_metrics=False, validate=False)
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/metrics")
-    assert (
-        resp.status_code == 404
-    ), "GET /metrics must not exist when enable_metrics=False"
+    assert resp.status_code == 404, "GET /metrics must not exist when enable_metrics=False"
 
 
 async def test_create_varco_app_metrics_middleware_added():
@@ -240,18 +218,14 @@ async def test_create_varco_app_metrics_middleware_added():
     # (its __globals__ points to _internal.__dict__), so patching the re-export
     # namespace (opentelemetry.metrics.get_meter_provider) has no effect on
     # the internal name resolution.
-    with mock.patch(
-        "opentelemetry.metrics._internal.get_meter_provider", return_value=provider
-    ):
+    with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
         app = create_varco_app(enable_metrics=True, validate=False)
 
         @app.get("/ping")
         async def ping():
             return {"pong": True}
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             await client.get("/ping")
 
     # If MetricsMiddleware was active, a duration data point should exist
@@ -264,8 +238,7 @@ async def test_create_varco_app_metrics_middleware_added():
                     instrument_names.append(m.name)
 
     assert "http.server.request.duration" in instrument_names, (
-        "MetricsMiddleware must record http.server.request.duration "
-        "when enable_metrics=True"
+        "MetricsMiddleware must record http.server.request.duration when enable_metrics=True"
     )
     _instruments.clear()
 

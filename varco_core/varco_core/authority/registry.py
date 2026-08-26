@@ -448,9 +448,7 @@ class TrustedIssuerRegistry:
                 return key
         return None
 
-    def _search_caches_with_entry(
-        self, kid: str
-    ) -> tuple[JsonWebKey, TrustedIssuerEntry] | None:
+    def _search_caches_with_entry(self, kid: str) -> tuple[JsonWebKey, TrustedIssuerEntry] | None:
         """Same as ``_search_caches`` but also returns the matched entry —
         used by ``_resolve_key`` to recover which issuer's ``iss`` claim to
         enforce (Plan 005, Phase 2)."""
@@ -460,9 +458,7 @@ class TrustedIssuerRegistry:
                 return key, entry
         return None
 
-    async def _resolve_key(
-        self, kid: str
-    ) -> tuple[JsonWebKey, TrustedIssuerEntry] | None:
+    async def _resolve_key(self, kid: str) -> tuple[JsonWebKey, TrustedIssuerEntry] | None:
         """
         Find a ``JsonWebKey`` **and** the ``TrustedIssuerEntry`` it resolved
         from — the entry carries the ``iss`` value ``verify()`` must enforce

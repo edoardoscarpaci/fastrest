@@ -266,15 +266,9 @@ def _generate_source(
     # ── Client class ─────────────────────────────────────────────────────────
     class_lines: list[str] = [f"class {class_name}(GenericClient):"]
     # Add a note about the base URL when available
-    _base = (
-        base_url or spec.get("servers", [{}])[0].get("url", "")
-        if spec.get("servers")
-        else ""
-    )
+    _base = base_url or spec.get("servers", [{}])[0].get("url", "") if spec.get("servers") else ""
     if _base:
-        class_lines.append(
-            f'    """Generated client for {spec_source}. Base URL: {_base}"""'
-        )
+        class_lines.append(f'    """Generated client for {spec_source}. Base URL: {_base}"""')
 
     method_names_seen: set[str] = set()
 
@@ -375,9 +369,7 @@ def _generate_source(
             ]
             class_lines.extend(body_parts)
 
-    if len(class_lines) == 1 or (
-        len(class_lines) == 2 and class_lines[1].startswith('    """')
-    ):
+    if len(class_lines) == 1 or (len(class_lines) == 2 and class_lines[1].startswith('    """')):
         # Empty class — no operations found
         class_lines.append("    pass")
 
@@ -461,9 +453,7 @@ def generate_client(
                 with open(spec_path) as fh:
                     spec_dict = json.load(fh)
     else:
-        raise TypeError(
-            f"spec must be a dict, str, or Path — got {type(spec).__name__!r}"
-        )
+        raise TypeError(f"spec must be a dict, str, or Path — got {type(spec).__name__!r}")
 
     # Derive class name from spec title when not provided
     if class_name is None:

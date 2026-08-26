@@ -162,9 +162,7 @@ def test_service_free_router_middleware_stack_runs(caplog: Any) -> None:
     # Request succeeded
     assert resp.status_code == 200
     # Access log line was emitted by RequestLoggingMiddleware
-    assert any(
-        "POST" in r.message and "/echo/process" in r.message for r in caplog.records
-    )
+    assert any("POST" in r.message and "/echo/process" in r.message for r in caplog.records)
 
 
 def test_service_free_router_with_anonymous_auth():

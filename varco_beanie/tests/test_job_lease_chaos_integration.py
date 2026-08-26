@@ -43,9 +43,7 @@ async def test_stalled_worker_fenced_after_reap_does_not_clobber_survivor(
 
         # Worker A claims the job with a short lease — simulating a worker
         # that will crash before renewing.
-        claimed_a = await store.try_claim(
-            job.job_id, owner_id="worker-a", lease_ttl=0.5
-        )
+        claimed_a = await store.try_claim(job.job_id, owner_id="worker-a", lease_ttl=0.5)
         assert claimed_a is not None
         assert claimed_a.lease_epoch > 0
 
@@ -56,9 +54,7 @@ async def test_stalled_worker_fenced_after_reap_does_not_clobber_survivor(
         assert any(j.job_id == job.job_id for j in reaped)
 
         # Worker B claims the now-reaped job and completes it.
-        claimed_b = await store.try_claim(
-            job.job_id, owner_id="worker-b", lease_ttl=30.0
-        )
+        claimed_b = await store.try_claim(job.job_id, owner_id="worker-b", lease_ttl=30.0)
         assert claimed_b is not None
         assert claimed_b.lease_epoch > claimed_a.lease_epoch
 

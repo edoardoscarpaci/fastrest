@@ -36,9 +36,7 @@ def metric_reader():
     reader = InMemoryMetricReader()
     provider = MeterProvider(metric_readers=[reader])
     _instrument_cache.clear()
-    with mock.patch(
-        "opentelemetry.metrics._internal.get_meter_provider", return_value=provider
-    ):
+    with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
         yield reader
     _instrument_cache.clear()
 
@@ -170,9 +168,7 @@ class TestLayeredCacheHitMissLayerAttribute:
         for p in hit_points + miss_points:
             assert "layer" not in p.attributes
 
-    async def test_metrics_pack_not_installed_records_nothing(
-        self, metric_reader
-    ) -> None:
+    async def test_metrics_pack_not_installed_records_nothing(self, metric_reader) -> None:
         # Pack never installed — _enabled defaults False (see the autouse
         # fixture above, which forces it back to False before this test).
         l1 = InMemoryCache()
@@ -190,9 +186,7 @@ class TestLayeredCacheHitMissLayerAttribute:
 
 
 class TestLayeredCacheBackplaneEvictionMetric:
-    async def test_backplane_receive_records_eviction_backplane_reason(
-        self, metric_reader
-    ) -> None:
+    async def test_backplane_receive_records_eviction_backplane_reason(self, metric_reader) -> None:
         from varco_core.cache.backplane import InMemoryBackplane
         from varco_core.cache.layered import LayeredCache
         from varco_core.observability.cache import install_cache_metrics
@@ -228,9 +222,7 @@ class TestLayeredCacheBackplaneEvictionMetric:
         await asyncio.sleep(0.02)
 
         points = _collect_points(metric_reader, "varco.cache.evictions")
-        backplane_points = [
-            p for p in points if p.attributes.get("reason") == "backplane"
-        ]
+        backplane_points = [p for p in points if p.attributes.get("reason") == "backplane"]
         assert len(backplane_points) >= 1
         for p in backplane_points:
             # never the last (authoritative) layer

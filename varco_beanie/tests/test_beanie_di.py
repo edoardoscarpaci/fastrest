@@ -215,15 +215,11 @@ def test_make_repo_provider_stamps_provider_metadata_returns() -> None:
     fn = _make_repo_provider(_User)
 
     meta = _get_provider_metadata(fn)
-    assert (
-        meta is not None
-    ), "_make_repo_provider() must return a @Provider-decorated callable"
+    assert meta is not None, "_make_repo_provider() must return a @Provider-decorated callable"
     assert meta.returns == AsyncRepository[_User]
 
 
-def test_make_repo_provider_different_entities_have_distinct_provider_metadata_returns() -> (
-    None
-):
+def test_make_repo_provider_different_entities_have_distinct_provider_metadata_returns() -> None:
     """
     Edge case (Plan 016 Step 16): two different entity classes must produce
     two distinct interfaces in the ``@Provider`` metadata, not just two

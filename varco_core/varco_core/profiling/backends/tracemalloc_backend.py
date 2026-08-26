@@ -71,9 +71,7 @@ class TracemallocMemoryBackend:
             tracemalloc.stop()
 
         # Diff the two snapshots at file:lineno granularity
-        top_allocations = self._diff_snapshots(
-            self._snapshot_before, snapshot_after, top_n
-        )
+        top_allocations = self._diff_snapshots(self._snapshot_before, snapshot_after, top_n)
 
         delta_bytes = sum(s.size_bytes for s in top_allocations)
 

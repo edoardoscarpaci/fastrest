@@ -41,22 +41,12 @@ PRODUCTS: tuple[Product, ...] = (
         category="electronics",
         in_stock=True,
     ),
-    Product(
-        id=3, name="USB-C Hub", price=34.99, category="electronics", in_stock=False
-    ),
-    Product(
-        id=4, name="4K Monitor", price=499.99, category="electronics", in_stock=True
-    ),
-    Product(
-        id=5, name="Webcam HD", price=89.99, category="electronics", in_stock=False
-    ),
-    Product(
-        id=6, name="Cotton T-Shirt", price=19.99, category="clothing", in_stock=True
-    ),
+    Product(id=3, name="USB-C Hub", price=34.99, category="electronics", in_stock=False),
+    Product(id=4, name="4K Monitor", price=499.99, category="electronics", in_stock=True),
+    Product(id=5, name="Webcam HD", price=89.99, category="electronics", in_stock=False),
+    Product(id=6, name="Cotton T-Shirt", price=19.99, category="clothing", in_stock=True),
     Product(id=7, name="Denim Jacket", price=89.99, category="clothing", in_stock=True),
-    Product(
-        id=8, name="Running Shoes", price=129.99, category="clothing", in_stock=False
-    ),
+    Product(id=8, name="Running Shoes", price=129.99, category="clothing", in_stock=False),
     Product(id=9, name="Wool Socks", price=9.99, category="clothing", in_stock=True),
     Product(
         id=10,
@@ -65,15 +55,9 @@ PRODUCTS: tuple[Product, ...] = (
         category="clothing",
         in_stock=False,
     ),
-    Product(
-        id=11, name="Python Cookbook", price=49.99, category="books", in_stock=True
-    ),
-    Product(
-        id=12, name="Design Patterns", price=44.99, category="books", in_stock=True
-    ),
-    Product(
-        id=13, name="Widget Engineering", price=59.99, category="books", in_stock=False
-    ),
+    Product(id=11, name="Python Cookbook", price=49.99, category="books", in_stock=True),
+    Product(id=12, name="Design Patterns", price=44.99, category="books", in_stock=True),
+    Product(id=13, name="Widget Engineering", price=59.99, category="books", in_stock=False),
     Product(id=14, name="Clean Code", price=39.99, category="books", in_stock=True),
     Product(
         id=15,
@@ -85,9 +69,7 @@ PRODUCTS: tuple[Product, ...] = (
     Product(id=16, name="Coffee Maker", price=79.99, category="home", in_stock=True),
     Product(id=17, name="Air Purifier", price=199.99, category="home", in_stock=True),
     Product(id=18, name="Smart LED Bulb", price=14.99, category="home", in_stock=True),
-    Product(
-        id=19, name="Widget Desk Lamp", price=34.99, category="home", in_stock=False
-    ),
+    Product(id=19, name="Widget Desk Lamp", price=34.99, category="home", in_stock=False),
     Product(id=20, name="Standing Desk", price=999.99, category="home", in_stock=True),
 )
 

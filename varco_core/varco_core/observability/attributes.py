@@ -197,9 +197,7 @@ class GlobalAttributes:
             - A provider returning a non-mapping → skipped, logged once.
         """
         with self._lock:
-            self._providers[name] = _ProviderEntry(
-                provider=provider, cache_ttl=cache_ttl
-            )
+            self._providers[name] = _ProviderEntry(provider=provider, cache_ttl=cache_ttl)
             self._generation += 1
 
     def unregister_provider(self, name: str) -> None:
@@ -256,9 +254,7 @@ class GlobalAttributes:
             return False
         return (now - entry.last_evaluated) >= entry.cache_ttl
 
-    def _evaluate_provider(
-        self, name: str, entry: _ProviderEntry
-    ) -> dict[str, AttributeValue]:
+    def _evaluate_provider(self, name: str, entry: _ProviderEntry) -> dict[str, AttributeValue]:
         try:
             result = entry.provider()
         except Exception:
@@ -491,9 +487,7 @@ def load_global_attributes_from_env(environ: Mapping[str, str] | None = None) ->
         else None
     )
     if apply_spans is not None or apply_metrics is not None:
-        configure_global_attributes(
-            apply_to_spans=apply_spans, apply_to_metrics=apply_metrics
-        )
+        configure_global_attributes(apply_to_spans=apply_spans, apply_to_metrics=apply_metrics)
 
 
 # ── Metric instrument proxy ──────────────────────────────────────────────────
@@ -599,9 +593,7 @@ def wrap_gauge_callback(callback: Callable[..., Any]) -> Callable[..., Any]:
         merged_observations = []
         for obs in observations:
             attrs = dict(obs.attributes or {})
-            merged_observations.append(
-                Observation(obs.value, attributes={**g, **attrs})
-            )
+            merged_observations.append(Observation(obs.value, attributes={**g, **attrs}))
         return merged_observations
 
     return wrapped

@@ -25,9 +25,7 @@ def metric_reader():
     reader = InMemoryMetricReader()
     provider = MeterProvider(metric_readers=[reader])
     _instrument_cache.clear()
-    with mock.patch(
-        "opentelemetry.metrics._internal.get_meter_provider", return_value=provider
-    ):
+    with mock.patch("opentelemetry.metrics._internal.get_meter_provider", return_value=provider):
         yield reader
     _instrument_cache.clear()
 
@@ -76,9 +74,7 @@ class TestInstallCacheMetrics:
         points = _collect_points(metric_reader, "varco.cache.misses")
         assert sum(p.value for p in points) == 1
 
-    async def test_attribute_keys_never_contain_forbidden_names(
-        self, metric_reader
-    ) -> None:
+    async def test_attribute_keys_never_contain_forbidden_names(self, metric_reader) -> None:
         from varco_core.observability.cache import (
             install_cache_metrics,
             record_cache_hit,
@@ -119,9 +115,7 @@ class TestInstallCacheMetrics:
         points = _collect_points(metric_reader, "varco.cache.hits")
         assert sum(p.value for p in points) == 1
 
-    async def test_raising_instrument_does_not_propagate_out_of_record(
-        self, metric_reader
-    ) -> None:
+    async def test_raising_instrument_does_not_propagate_out_of_record(self, metric_reader) -> None:
         from varco_core.observability.cache import (
             install_cache_metrics,
             record_cache_hit,
@@ -132,9 +126,7 @@ class TestInstallCacheMetrics:
             "varco_core.observability.cache._CACHE_HITS.add",
             side_effect=RuntimeError("boom"),
         ):
-            record_cache_hit(
-                cache="users", layer="l1", kind="positive"
-            )  # must not raise
+            record_cache_hit(cache="users", layer="l1", kind="positive")  # must not raise
 
     async def test_stampede_suppressed_and_stale_served_and_backplane_counters(
         self, metric_reader
@@ -156,43 +148,19 @@ class TestInstallCacheMetrics:
         record_backplane_dropped(reason="publish_failed")
 
         assert (
-            sum(
-                p.value
-                for p in _collect_points(
-                    metric_reader, "varco.cache.stampede_suppressed"
-                )
-            )
+            sum(p.value for p in _collect_points(metric_reader, "varco.cache.stampede_suppressed"))
+            == 1
+        )
+        assert sum(p.value for p in _collect_points(metric_reader, "varco.cache.stale_served")) == 1
+        assert (
+            sum(p.value for p in _collect_points(metric_reader, "varco.cache.backplane.published"))
             == 1
         )
         assert (
-            sum(
-                p.value
-                for p in _collect_points(metric_reader, "varco.cache.stale_served")
-            )
+            sum(p.value for p in _collect_points(metric_reader, "varco.cache.backplane.received"))
             == 1
         )
         assert (
-            sum(
-                p.value
-                for p in _collect_points(
-                    metric_reader, "varco.cache.backplane.published"
-                )
-            )
-            == 1
-        )
-        assert (
-            sum(
-                p.value
-                for p in _collect_points(
-                    metric_reader, "varco.cache.backplane.received"
-                )
-            )
-            == 1
-        )
-        assert (
-            sum(
-                p.value
-                for p in _collect_points(metric_reader, "varco.cache.backplane.dropped")
-            )
+            sum(p.value for p in _collect_points(metric_reader, "varco.cache.backplane.dropped"))
             == 1
         )

@@ -236,12 +236,7 @@ class JobDocument(Document):
         indexes: list = []
 
     def __repr__(self) -> str:
-        return (
-            f"JobDocument("
-            f"id={self.id}, "
-            f"status={self.status!r}, "
-            f"created_at={self.created_at!r})"
-        )
+        return f"JobDocument(id={self.id}, status={self.status!r}, created_at={self.created_at!r})"
 
 
 # ── Serialization helpers ─────────────────────────────────────────────────────
@@ -304,9 +299,7 @@ def _job_to_doc(job: Job) -> JobDocument:
         # Always a dict (empty dict for jobs with no metadata).
         job_metadata=job.metadata,
         # to_dict() converts TaskPayload to a plain dict for BSON storage.
-        task_payload=(
-            job.task_payload.to_dict() if job.task_payload is not None else None
-        ),
+        task_payload=(job.task_payload.to_dict() if job.task_payload is not None else None),
         run_at=job.run_at,
         attempt=job.attempt,
         max_attempts=job.max_attempts,
@@ -495,9 +488,7 @@ class BeanieJobStore(AbstractJobStore):
         # Insert the fresh state.
         await doc.insert()
 
-        _logger.debug(
-            "BeanieJobStore.save: job_id=%s status=%s", job.job_id, job.status
-        )
+        _logger.debug("BeanieJobStore.save: job_id=%s status=%s", job.job_id, job.status)
 
     async def get(self, job_id: UUID) -> Job | None:
         """
@@ -823,9 +814,7 @@ class BeanieJobStore(AbstractJobStore):
         for candidate in candidates:
             if candidate.run_at is not None and candidate.run_at > current:
                 continue
-            claimed = await self.try_claim(
-                candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl
-            )
+            claimed = await self.try_claim(candidate.job_id, owner_id=owner_id, lease_ttl=lease_ttl)
             if claimed is not None:
                 return claimed
         return None

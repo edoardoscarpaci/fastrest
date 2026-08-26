@@ -146,9 +146,9 @@ async def test_tenant_isolation_list(client) -> None:
 
     # Filter for Tenant A's note title in Tenant B's results — must be absent.
     titles = [n["title"] for n in notes]
-    assert (
-        "Tenant A Note" not in titles
-    ), f"Tenant B should not see Tenant A's notes, but found: {titles}"
+    assert "Tenant A Note" not in titles, (
+        f"Tenant B should not see Tenant A's notes, but found: {titles}"
+    )
 
 
 async def test_cross_tenant_access_blocked(client) -> None:
@@ -175,8 +175,7 @@ async def test_cross_tenant_access_blocked(client) -> None:
     # Tenant B attempts to read Tenant A's note — must get 404, not 403.
     get_resp = await client.get(f"/v1/notes/{note_id}", headers=_headers(tenant_b))
     assert get_resp.status_code == 404, (
-        f"Cross-tenant access should return 404, got {get_resp.status_code}: "
-        f"{get_resp.text}"
+        f"Cross-tenant access should return 404, got {get_resp.status_code}: {get_resp.text}"
     )
 
 
@@ -212,9 +211,9 @@ async def test_soft_delete_removes_from_list(client) -> None:
     list_after = await client.get("/v1/notes", headers=headers)
     assert list_after.status_code == 200, list_after.text
     ids_after = [n["pk"] for n in list_after.json()]
-    assert (
-        note_id not in ids_after
-    ), f"Soft-deleted note {note_id} must not appear in the active list"
+    assert note_id not in ids_after, (
+        f"Soft-deleted note {note_id} must not appear in the active list"
+    )
 
 
 async def test_soft_delete_blocks_get(client) -> None:
@@ -240,8 +239,7 @@ async def test_soft_delete_blocks_get(client) -> None:
     # Direct GET after soft-delete must return 404.
     get_resp = await client.get(f"/v1/notes/{note_id}", headers=headers)
     assert get_resp.status_code == 404, (
-        f"Soft-deleted note should return 404, got {get_resp.status_code}: "
-        f"{get_resp.text}"
+        f"Soft-deleted note should return 404, got {get_resp.status_code}: {get_resp.text}"
     )
 
 
@@ -261,6 +259,6 @@ async def test_blank_title_returns_422(client) -> None:
         json={"title": "   ", "content": "body"},
         headers=_headers(tenant),
     )
-    assert (
-        resp.status_code == 422
-    ), f"Blank title should return 422, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 422, (
+        f"Blank title should return 422, got {resp.status_code}: {resp.text}"
+    )

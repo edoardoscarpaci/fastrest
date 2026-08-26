@@ -30,15 +30,17 @@ You build each service exactly as today, then hand the finished `FastAPI` apps t
 `create_composite_app`:
 
 ```python
-from orders_service.app import app as orders_app      # its own create_varco_app()
-from billing_service.app import app as billing_app     # its own container + DB + env
+from orders_service.app import app as orders_app  # its own create_varco_app()
+from billing_service.app import app as billing_app  # its own container + DB + env
 
 from varco_fastapi import create_composite_app, ServiceMount
 
-composite = create_composite_app([
-    ServiceMount("/orders", orders_app),
-    ServiceMount("/billing", billing_app),
-])
+composite = create_composite_app(
+    [
+        ServiceMount("/orders", orders_app),
+        ServiceMount("/billing", billing_app),
+    ]
+)
 # uvicorn composite:composite
 ```
 
@@ -71,9 +73,7 @@ none of that startup ever runs — the app answers requests with dead connection
 ```python
 async with AsyncExitStack() as stack:
     for service in services:
-        await stack.enter_async_context(
-            service.app.router.lifespan_context(service.app)
-        )
+        await stack.enter_async_context(service.app.router.lifespan_context(service.app))
     yield
 # Stack exit stops every started service in LIFO order.
 ```
@@ -154,12 +154,12 @@ from varco_fastapi import build_service, create_composite_app
 
 orders = build_service(
     "/orders",
-    lambda: create_orders_app(),                       # reads DATABASE_URL
+    lambda: create_orders_app(),  # reads DATABASE_URL
     env={"DATABASE_URL": "postgresql+asyncpg://.../orders"},
 )
 billing = build_service(
     "/billing",
-    lambda: create_billing_app(),                      # also reads DATABASE_URL
+    lambda: create_billing_app(),  # also reads DATABASE_URL
     env={"DATABASE_URL": "postgresql+asyncpg://.../billing"},
 )
 
@@ -209,10 +209,11 @@ but there is still only one process-global registry underneath; opting out chang
 ```python
 @dataclass(frozen=True)
 class ServiceMount:
-    prefix: str                    # "/orders" — non-empty, starts with "/", unique
-    app: FastAPI                   # already built via create_varco_app()
-    name: str | None = None        # health-key name; defaults to prefix.strip("/")
-    health_path: str = "/health"   # sub-app path the aggregate probe calls
+    prefix: str  # "/orders" — non-empty, starts with "/", unique
+    app: FastAPI  # already built via create_varco_app()
+    name: str | None = None  # health-key name; defaults to prefix.strip("/")
+    health_path: str = "/health"  # sub-app path the aggregate probe calls
+
 
 def create_composite_app(
     services: list[ServiceMount],
@@ -224,6 +225,7 @@ def create_composite_app(
     health_path: str = "/health",
     landing_page: bool = True,
 ) -> FastAPI: ...
+
 
 def build_service(
     prefix: str,

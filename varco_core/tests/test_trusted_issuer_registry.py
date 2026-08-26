@@ -685,9 +685,7 @@ class _TestTrustedIssuerRegistryVerifyIssuerEnforcement:
         return JwtAuthority.from_pem(pem, kid=kid, issuer=issuer, algorithm="RS256")
 
 
-class TestVerifyEnforcesIssuerByDefault(
-    _TestTrustedIssuerRegistryVerifyIssuerEnforcement
-):
+class TestVerifyEnforcesIssuerByDefault(_TestTrustedIssuerRegistryVerifyIssuerEnforcement):
     async def test_token_with_mismatched_iss_is_rejected(self) -> None:
         from varco_core.authority.registry import TrustedIssuerRegistry
 
@@ -698,9 +696,7 @@ class TestVerifyEnforcesIssuerByDefault(
 
         # Sign a token whose kid resolves to issuer A's key, but whose `iss`
         # claim names issuer B — a forged/misrouted issuer claim.
-        forged = authority_a.sign(
-            authority_a.token().issuer("issuer-b").subject("user-1")
-        )
+        forged = authority_a.sign(authority_a.token().issuer("issuer-b").subject("user-1"))
 
         with pytest.raises(Exception):
             await registry.verify(forged)
@@ -725,9 +721,7 @@ class TestVerifyEnforcesIssuerByDefault(
         registry.register_authority(authority_a, label="A")
         await registry.load_all()
 
-        forged = authority_a.sign(
-            authority_a.token().issuer("issuer-b").subject("user-1")
-        )
+        forged = authority_a.sign(authority_a.token().issuer("issuer-b").subject("user-1"))
 
         # Explicit opt-out — must NOT raise on the iss mismatch.
         result = await registry.verify(forged, enforce_issuer=False)
@@ -745,9 +739,7 @@ class TestVerifyEnforcesIssuerByDefault(
         registry.register_authority(authority_a, label="A")
         await registry.load_all()
 
-        forged = authority_a.sign(
-            authority_a.token().issuer("issuer-b").subject("user-1")
-        )
+        forged = authority_a.sign(authority_a.token().issuer("issuer-b").subject("user-1"))
 
         # None (default) reads JwtVerificationSettings.from_env(), which must
         # now expose enforce_issuer.

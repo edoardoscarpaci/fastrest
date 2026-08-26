@@ -159,8 +159,7 @@ class RateLimitExceededError(Exception):
         self.key = key
         self.retry_after = max(0.0, retry_after)
         super().__init__(
-            f"Rate limit exceeded for key '{key}'. "
-            f"Retry after {self.retry_after:.3f} s."
+            f"Rate limit exceeded for key '{key}'. Retry after {self.retry_after:.3f} s."
         )
 
 

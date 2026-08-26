@@ -125,9 +125,7 @@ async def app_client(mongo_url):
 # ── Helper ─────────────────────────────────────────────────────────────────────
 
 
-async def _create_post(
-    client: httpx.AsyncClient, *, title: str, content: str, author: str
-) -> dict:
+async def _create_post(client: httpx.AsyncClient, *, title: str, content: str, author: str) -> dict:
     """
     POST /v1/posts and return the parsed JSON response body.
 
@@ -190,9 +188,7 @@ class TestCreateAndRead:
         pk = created["pk"]
 
         resp = await app_client.get(f"/v1/posts/{pk}")
-        assert (
-            resp.status_code == 200
-        ), f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         data = resp.json()
         assert data["title"] == "Readable Post"
         assert data["author"] == "bob"
@@ -220,9 +216,7 @@ class TestUpdate:
                 "author": "carol",
             },
         )
-        assert (
-            resp.status_code == 200
-        ), f"Expected 200, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
         data = resp.json()
         assert data["title"] == "Updated Title"
         assert data["content"] == "Updated content"
@@ -247,9 +241,7 @@ class TestDelete:
         pk = created["pk"]
 
         resp = await app_client.delete(f"/v1/posts/{pk}")
-        assert (
-            resp.status_code == 204
-        ), f"Expected 204, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 204, f"Expected 204, got {resp.status_code}: {resp.text}"
 
         resp2 = await app_client.get(f"/v1/posts/{pk}")
         assert resp2.status_code == 404
@@ -272,11 +264,7 @@ class TestList:
         resp = await app_client.get("/v1/posts")
         assert resp.status_code == 200
         body = resp.json()
-        all_posts = (
-            body["results"] if isinstance(body, dict) and "results" in body else body
-        )
+        all_posts = body["results"] if isinstance(body, dict) and "results" in body else body
 
         tagged = [p for p in all_posts if p.get("author") == tag]
-        assert (
-            len(tagged) >= 2
-        ), f"Expected at least 2 posts with author={tag!r}, got {len(tagged)}"
+        assert len(tagged) >= 2, f"Expected at least 2 posts with author={tag!r}, got {len(tagged)}"

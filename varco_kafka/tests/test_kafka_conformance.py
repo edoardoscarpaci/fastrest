@@ -65,9 +65,7 @@ class TestKafkaEventBusConformance(EventBusConformance):
 class TestKafkaDLQConformance(DeadLetterQueueConformance):
     @pytest.fixture
     async def dlq(self, kafka_bootstrap: str):
-        async with KafkaDLQ(
-            KafkaEventBusSettings(bootstrap_servers=kafka_bootstrap)
-        ) as dlq:
+        async with KafkaDLQ(KafkaEventBusSettings(bootstrap_servers=kafka_bootstrap)) as dlq:
             yield dlq
 
     # test_regression_kafka_dlq_delete_where_no_predicate: KafkaDLQ.delete_where()

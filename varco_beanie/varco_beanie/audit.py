@@ -451,9 +451,7 @@ class BeanieAuditRepository(AuditRepository):
 
         prev_hash: str | None = None
         if next_seq > 1:
-            last_doc = await AuditDocument.find(
-                AuditDocument.seq == next_seq - 1
-            ).first_or_none()
+            last_doc = await AuditDocument.find(AuditDocument.seq == next_seq - 1).first_or_none()
             prev_hash = last_doc.entry_hash if last_doc is not None else None
 
         # occurred_at must be truncated to BSON's millisecond resolution
@@ -582,9 +580,7 @@ class BeanieAuditRepository(AuditRepository):
         return entries
 
     def __repr__(self) -> str:
-        return (
-            f"BeanieAuditRepository(" f"session={'set' if self._session else 'None'})"
-        )
+        return f"BeanieAuditRepository(session={'set' if self._session else 'None'})"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

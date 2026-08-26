@@ -107,9 +107,7 @@ async def test_abstract_migrator_check_is_concrete_and_raises_when_pending() -> 
 
     class _StubMigrator(AbstractMigrator):
         async def plan(self) -> MigrationPlan:
-            return MigrationPlan(
-                current=(), pending=(Revision(id="0001", label="init"),)
-            )
+            return MigrationPlan(current=(), pending=(Revision(id="0001", label="init"),))
 
         async def upgrade(self, target: str = "heads", *, dry_run: bool = False):
             raise NotImplementedError

@@ -25,18 +25,14 @@ from varco_fastapi.context import (
 class TestRequestContext:
     def test_frozen_dataclass(self):
         """RequestContext is immutable."""
-        ctx = AuthContext(
-            user_id="u1", roles=frozenset(), scopes=frozenset(), grants=()
-        )
+        ctx = AuthContext(user_id="u1", roles=frozenset(), scopes=frozenset(), grants=())
         rc = RequestContext(auth=ctx, request_id="req_1", token="tok")
         with pytest.raises(Exception):
             rc.request_id = "other"  # type: ignore[misc]
 
     def test_fields_stored(self):
         """All fields are stored correctly."""
-        ctx = AuthContext(
-            user_id="u1", roles=frozenset(), scopes=frozenset(), grants=()
-        )
+        ctx = AuthContext(user_id="u1", roles=frozenset(), scopes=frozenset(), grants=())
         rc = RequestContext(auth=ctx, request_id="req_1", token=None)
         assert rc.auth is ctx
         assert rc.request_id == "req_1"
@@ -60,9 +56,7 @@ class TestJwtContext:
 class TestGetRequestContext:
     async def test_returns_request_context(self):
         """get_request_context() returns a RequestContext from ContextVars."""
-        auth = AuthContext(
-            user_id="u1", roles=frozenset(), scopes=frozenset(), grants=()
-        )
+        auth = AuthContext(user_id="u1", roles=frozenset(), scopes=frozenset(), grants=())
         async with request_scope(request_id="req-test") as rid:
             async with auth_context(auth, token="raw_tok"):
                 rc = get_request_context()
@@ -87,9 +81,7 @@ class TestGetJwtContext:
 
     async def test_returns_raw_token_when_set(self):
         """get_jwt_context() captures the raw token from the ContextVar."""
-        auth = AuthContext(
-            user_id="u1", roles=frozenset(), scopes=frozenset(), grants=()
-        )
+        auth = AuthContext(user_id="u1", roles=frozenset(), scopes=frozenset(), grants=())
         async with request_scope(request_id="req"):
             async with auth_context(auth, token="raw_bearer"):
                 jc = get_jwt_context()

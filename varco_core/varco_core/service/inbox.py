@@ -294,9 +294,7 @@ class InboxRepository(ABC):
         """
 
     @abstractmethod
-    async def get_unprocessed(
-        self, *, limit: int = _DEFAULT_BATCH_SIZE
-    ) -> list[InboxEntry]:
+    async def get_unprocessed(self, *, limit: int = _DEFAULT_BATCH_SIZE) -> list[InboxEntry]:
         """
         Return up to ``limit`` unprocessed inbox entries, ordered by ``received_at``.
 
@@ -424,9 +422,7 @@ class InboxPoller:
                 f"{type(self).__name__}.start() called twice without stop(). "
                 "Call stop() first to cancel the running task."
             )
-        self._task = asyncio.create_task(
-            self._relay_loop(), name=f"InboxPoller[{id(self)}]"
-        )
+        self._task = asyncio.create_task(self._relay_loop(), name=f"InboxPoller[{id(self)}]")
         _logger.info(
             "InboxPoller started (poll_interval=%.1f s, batch_size=%d)",
             self._poll_interval,

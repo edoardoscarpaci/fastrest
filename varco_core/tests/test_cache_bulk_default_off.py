@@ -27,9 +27,7 @@ async def test_layered_cache_set_many_with_no_backplane_publishes_nothing() -> N
     await cache.stop()
 
 
-async def test_layered_cache_set_many_with_backplane_publishes_exactly_n_key_messages() -> (
-    None
-):
+async def test_layered_cache_set_many_with_backplane_publishes_exactly_n_key_messages() -> None:
     l1 = InMemoryCache()
     l2 = InMemoryCache()
     backplane = InMemoryBackplane()
@@ -52,9 +50,7 @@ async def test_layered_cache_set_many_with_backplane_publishes_exactly_n_key_mes
     await cache.stop()
 
 
-async def test_batch_path_never_taken_without_explicit_opt_in_on_service_mixin() -> (
-    None
-):
+async def test_batch_path_never_taken_without_explicit_opt_in_on_service_mixin() -> None:
     # CacheServiceMixin.list() takes the batch path only when the cache
     # satisfies BulkCache AND the caller opted in — with no opt-in the
     # existing (loop) bodies run verbatim (step 68).

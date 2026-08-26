@@ -926,7 +926,8 @@ warning was not.
   def my_serializer() -> Serializer[Event]:
       return MyCompactSerializer()
 
-  container.provide(my_serializer)   # wins over JsonEventSerializer
+
+  container.provide(my_serializer)  # wins over JsonEventSerializer
   ```
 
   **Breaking:** the `EventSerializer` alias is removed. Replace

@@ -156,9 +156,7 @@ async def _create_document(
 class TestCreate:
     """POST /v1/documents — grant-based create authorization."""
 
-    async def test_create_with_write_grant_returns_201(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_create_with_write_grant_returns_201(self, client: httpx.AsyncClient) -> None:
         """A token with docs:write grant → 201 with document fields."""
         resp = await client.post(
             "/v1/documents",
@@ -174,9 +172,7 @@ class TestCreate:
         assert "pk" in body
         assert "created_at" in body
 
-    async def test_create_sets_owner_id_from_jwt(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_create_sets_owner_id_from_jwt(self, client: httpx.AsyncClient) -> None:
         """owner_id is always taken from ctx.user_id, never from the request body."""
         resp = await client.post(
             "/v1/documents",
@@ -188,9 +184,7 @@ class TestCreate:
         # owner_id must equal the JWT sub, regardless of any body field
         assert body["owner_id"] == "user:carol"
 
-    async def test_create_without_write_grant_returns_403(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_create_without_write_grant_returns_403(self, client: httpx.AsyncClient) -> None:
         """A token with only docs:read grant cannot create — 403."""
         resp = await client.post(
             "/v1/documents",
@@ -200,9 +194,7 @@ class TestCreate:
         # ServiceAuthorizationError → 403 via add_exception_handlers
         assert resp.status_code == 403, resp.text
 
-    async def test_create_with_admin_grant_returns_201(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_create_with_admin_grant_returns_201(self, client: httpx.AsyncClient) -> None:
         """Admin wildcard grant (``"*"``) satisfies any resource check → 201."""
         resp = await client.post(
             "/v1/documents",
@@ -259,9 +251,7 @@ class TestRead:
         )
         assert resp.status_code == 200, resp.text
 
-    async def test_read_missing_document_returns_404(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_read_missing_document_returns_404(self, client: httpx.AsyncClient) -> None:
         """GET on a non-existent pk → 404."""
         import uuid
 
@@ -279,9 +269,7 @@ class TestRead:
 class TestDelete:
     """DELETE /v1/documents/{id} — ownership + admin role bypass."""
 
-    async def test_owner_can_delete_own_document(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_owner_can_delete_own_document(self, client: httpx.AsyncClient) -> None:
         """Owner can delete their document → 204."""
         body = await _create_document(client, "user:alice")
         pk = body["pk"]
@@ -299,9 +287,7 @@ class TestDelete:
         )
         assert read_resp.status_code == 404, read_resp.text
 
-    async def test_admin_can_delete_any_document(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_admin_can_delete_any_document(self, client: httpx.AsyncClient) -> None:
         """Admin role bypasses ownership check → 204."""
         body = await _create_document(client, "user:alice")
         pk = body["pk"]
@@ -312,9 +298,7 @@ class TestDelete:
         )
         assert resp.status_code == 204, resp.text
 
-    async def test_non_owner_cannot_delete_returns_404(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_non_owner_cannot_delete_returns_404(self, client: httpx.AsyncClient) -> None:
         """Non-owner delete attempt → 404 (not 403 — existence oracle prevention)."""
         body = await _create_document(client, "user:alice")
         pk = body["pk"]
@@ -326,9 +310,7 @@ class TestDelete:
         )
         assert resp.status_code == 404, resp.text
 
-    async def test_delete_missing_document_returns_404(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_delete_missing_document_returns_404(self, client: httpx.AsyncClient) -> None:
         """DELETE on a non-existent pk → 404."""
         import uuid
 
@@ -346,9 +328,7 @@ class TestDelete:
 class TestNoToken:
     """All endpoints require authentication — missing token → 401 or 403."""
 
-    async def test_create_without_token_returns_401_or_403(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_create_without_token_returns_401_or_403(self, client: httpx.AsyncClient) -> None:
         """POST without Authorization header is denied."""
         resp = await client.post(
             "/v1/documents",
@@ -359,18 +339,14 @@ class TestNoToken:
         # credentials: 401 (Unauthorized) or 403 (Forbidden).
         assert resp.status_code in (401, 403), resp.text
 
-    async def test_read_without_token_returns_401_or_403(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_read_without_token_returns_401_or_403(self, client: httpx.AsyncClient) -> None:
         """GET without Authorization header is denied."""
         import uuid
 
         resp = await client.get(f"/v1/documents/{uuid.uuid4()}")
         assert resp.status_code in (401, 403), resp.text
 
-    async def test_delete_without_token_returns_401_or_403(
-        self, client: httpx.AsyncClient
-    ) -> None:
+    async def test_delete_without_token_returns_401_or_403(self, client: httpx.AsyncClient) -> None:
         """DELETE without Authorization header is denied."""
         import uuid
 

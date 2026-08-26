@@ -224,9 +224,7 @@ class SAEncryptionKeyStore:
         Async safety:   ✅ Awaits async DB operations.
         """
         async with self._engine.connect() as conn:
-            result = await conn.execute(
-                sa.select(_KEY_TABLE).where(_KEY_TABLE.c.kid == kid)
-            )
+            result = await conn.execute(sa.select(_KEY_TABLE).where(_KEY_TABLE.c.kid == kid))
             row = result.fetchone()
             if row is None:
                 return None
@@ -398,9 +396,7 @@ class SAEncryptionKeyStore:
         else:
             # Generic fallback: DELETE + INSERT in same transaction — two
             # round-trips but universally compatible (SQLite, MySQL, etc.)
-            await conn.execute(
-                sa.delete(_KEY_TABLE).where(_KEY_TABLE.c.kid == entry.kid)
-            )
+            await conn.execute(sa.delete(_KEY_TABLE).where(_KEY_TABLE.c.kid == entry.kid))
             await conn.execute(sa.insert(_KEY_TABLE).values(**values))
 
     @staticmethod

@@ -73,9 +73,7 @@ class TestSAAuditRepositoryList:
 
 
 class TestSAAuditRepositoryTenantFilter:
-    async def test_list_for_entity_tenant_id_filters(
-        self, repo: SAAuditRepository
-    ) -> None:
+    async def test_list_for_entity_tenant_id_filters(self, repo: SAAuditRepository) -> None:
         await repo.save(_entry(tenant_id="acme"))
         await repo.save(_entry(tenant_id="other"))
 

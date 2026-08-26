@@ -120,9 +120,7 @@ class ResolvedRoute:
     # generation (path/query/body/header). Populated only for custom @route
     # handlers (CRUD routes are typed via request_model/response_model
     # instead — their DTOs already carry this information).
-    param_specs: tuple[ParamSpec, ...] = field(
-        default_factory=tuple, compare=False, hash=False
-    )
+    param_specs: tuple[ParamSpec, ...] = field(default_factory=tuple, compare=False, hash=False)
 
 
 # ── ParamSpec ────────────────────────────────────────────────────────────────
@@ -158,14 +156,10 @@ class ParamSpec:
 
 # Parameters that never become part of a client's typed surface — framework
 # plumbing the handler may declare, all excluded from param_specs entirely.
-_EXCLUDED_PARAM_NAMES: Final[frozenset[str]] = frozenset(
-    {"self", "ctx", "auth", "context"}
-)
+_EXCLUDED_PARAM_NAMES: Final[frozenset[str]] = frozenset({"self", "ctx", "auth", "context"})
 
 
-def _extract_param_specs(
-    fn: Any, path_params: tuple[str, ...]
-) -> tuple[ParamSpec, ...]:
+def _extract_param_specs(fn: Any, path_params: tuple[str, ...]) -> tuple[ParamSpec, ...]:
     """
     Classify a custom ``@route`` handler's parameters into path/query/body.
 
@@ -423,9 +417,7 @@ def introspect_routes(
                 skill_enabled=getattr(router_cls, f"_{action}_skill", False),
                 skill_id=getattr(router_cls, f"_{action}_skill_id", None),
                 skill_name=getattr(router_cls, f"_{action}_skill_name", None),
-                skill_description=getattr(
-                    router_cls, f"_{action}_skill_description", None
-                ),
+                skill_description=getattr(router_cls, f"_{action}_skill_description", None),
                 skill_input_modes=tuple(
                     getattr(router_cls, f"_{action}_skill_input_modes", None) or ()
                 ),
@@ -489,9 +481,7 @@ def introspect_routes(
                 skill_input_modes=tuple(entry.skill_input_modes or ()),
                 skill_output_modes=tuple(entry.skill_output_modes or ()),
                 requires=entry.requires,
-                param_specs=_extract_param_specs(
-                    method_obj, _extract_path_params(entry.path)
-                ),
+                param_specs=_extract_param_specs(method_obj, _extract_path_params(entry.path)),
             )
             if enabled_routes is None or attr_name in enabled_routes:
                 routes.append(route)
@@ -522,9 +512,7 @@ def introspect_routes(
                 seen_names.add(attr_name)
 
         # @sse_route
-        sse_entry: _SSERouteEntry | None = getattr(
-            method_obj, "__sse_route_entry__", None
-        )
+        sse_entry: _SSERouteEntry | None = getattr(method_obj, "__sse_route_entry__", None)
         if sse_entry is not None and attr_name not in seen_names:
             tags = tuple(sse_entry.tags or getattr(router_cls, "_tags", []) or [])
             route = ResolvedRoute(

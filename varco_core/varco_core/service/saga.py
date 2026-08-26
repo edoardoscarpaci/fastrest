@@ -536,9 +536,7 @@ class SagaOrchestrator:
 
         if state.status == SagaStatus.COMPENSATING:
             # Resume compensation from the top — compensate all completed steps.
-            return await self._compensate(
-                state, error=state.error or "Resumed during compensation"
-            )
+            return await self._compensate(state, error=state.error or "Resumed during compensation")
 
         # PENDING or RUNNING — resume forward execution.
         return await self._execute_steps(state)
@@ -665,9 +663,7 @@ class SagaOrchestrator:
                 )
                 any_compensation_failed = True
 
-        final_status = (
-            SagaStatus.FAILED if any_compensation_failed else SagaStatus.COMPENSATED
-        )
+        final_status = SagaStatus.FAILED if any_compensation_failed else SagaStatus.COMPENSATED
         final_state = SagaState(
             saga_id=state.saga_id,
             status=final_status,

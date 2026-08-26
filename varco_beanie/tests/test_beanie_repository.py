@@ -359,9 +359,7 @@ async def test_find_by_query_with_pagination() -> None:
     mapper = _make_mapper()
     mapper._orm_cls.find.return_value = cursor
 
-    await AsyncBeanieRepository(mapper=mapper).find_by_query(
-        QueryParams(offset=10, limit=5)
-    )
+    await AsyncBeanieRepository(mapper=mapper).find_by_query(QueryParams(offset=10, limit=5))
 
     cursor.skip.assert_called_once_with(10)
     cursor.limit.assert_called_once_with(5)

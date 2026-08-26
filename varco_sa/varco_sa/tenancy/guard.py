@@ -39,11 +39,7 @@ def guard_fanout_configuration(
             configured — naming ``VARCO_TENANCY_FANOUT_FRAMEWORK_TABLES``
             as the flag that enables fan-out.
     """
-    if (
-        isolation == TenantIsolation.DATABASE
-        and not fanout_framework_tables
-        and relay_configured
-    ):
+    if isolation == TenantIsolation.DATABASE and not fanout_framework_tables and relay_configured:
         raise TenantIsolationError(
             "TenantIsolation.DATABASE is configured with an OutboxRelay/"
             "job poller/audit consumer wired, but "

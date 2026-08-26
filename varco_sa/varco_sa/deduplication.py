@@ -365,9 +365,7 @@ class SADeduplicator(AbstractDeduplicator):
                     # on conflict.  Caught below and swallowed per the never-raise contract.
                     from sqlalchemy import insert as _insert  # type: ignore[assignment]
 
-                stmt = _insert(_dedup_table).values(
-                    event_id=event_id, expires_at=expires_at
-                )
+                stmt = _insert(_dedup_table).values(event_id=event_id, expires_at=expires_at)
                 # on_conflict_do_nothing is available on pg and sqlite dialect inserts.
                 if hasattr(stmt, "on_conflict_do_nothing"):
                     stmt = stmt.on_conflict_do_nothing(index_elements=["event_id"])
@@ -421,11 +419,7 @@ class SADeduplicator(AbstractDeduplicator):
     # ── Repr ──────────────────────────────────────────────────────────────────
 
     def __repr__(self) -> str:
-        return (
-            f"SADeduplicator("
-            f"engine={self._engine!r}, "
-            f"ttl_seconds={self._config.ttl_seconds})"
-        )
+        return f"SADeduplicator(engine={self._engine!r}, ttl_seconds={self._config.ttl_seconds})"
 
 
 _register_fw_metadata("varco_sa.deduplication", dedup_metadata)

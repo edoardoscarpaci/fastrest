@@ -148,9 +148,7 @@ class TokenProfile:
 
         for claim in self.required_claims:
             if not _has_claim(token, claim):
-                return (
-                    f"required claim {claim!r} is missing for profile " f"{self.name!r}"
-                )
+                return f"required claim {claim!r} is missing for profile {self.name!r}"
 
         return None
 
@@ -390,11 +388,7 @@ def resolve_token_profile(
     if profile is None:
         return token
 
-    if (
-        token.auth_ctx is None
-        and not profile.implied_roles
-        and not profile.implied_scopes
-    ):
+    if token.auth_ctx is None and not profile.implied_roles and not profile.implied_scopes:
         # Nothing to add and nothing to materialise for — keep auth_ctx as
         # None, matching today's behaviour for a profile that carries no
         # elevated trust.

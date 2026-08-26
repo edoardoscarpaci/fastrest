@@ -106,9 +106,7 @@ class EventBusConformance:
         assert len(received) == 1
         assert received[0].value == "hello"  # type: ignore[attr-defined]
 
-    async def test_multiple_subscribers_on_one_channel(
-        self, bus: AbstractEventBus
-    ) -> None:
+    async def test_multiple_subscribers_on_one_channel(self, bus: AbstractEventBus) -> None:
         channel = self._channel()
         received_1: list[Event] = []
         received_2: list[Event] = []
@@ -161,18 +159,14 @@ class EventBusConformance:
 
         assert received == []
 
-    async def test_publish_with_no_subscriber_does_not_raise(
-        self, bus: AbstractEventBus
-    ) -> None:
+    async def test_publish_with_no_subscriber_does_not_raise(self, bus: AbstractEventBus) -> None:
         channel = self._channel()
         # Must not raise.
         await bus.publish(_ConformanceEventA(value="nobody-listening"), channel=channel)
         if hasattr(bus, "drain"):
             await bus.drain()
 
-    async def test_event_payload_fidelity_round_trip(
-        self, bus: AbstractEventBus
-    ) -> None:
+    async def test_event_payload_fidelity_round_trip(self, bus: AbstractEventBus) -> None:
         channel = self._channel()
         received: list[Event] = []
 
@@ -202,9 +196,7 @@ class EventBusConformance:
         await bus.stop()
         await bus.stop()  # idempotent — must not raise
 
-    async def test_async_context_manager_entry_exit(
-        self, bus: AbstractEventBus
-    ) -> None:
+    async def test_async_context_manager_entry_exit(self, bus: AbstractEventBus) -> None:
         if not self.supports_lifecycle:
             pytest.skip("bus does not support the async context manager protocol")
         if not (hasattr(bus, "__aenter__") and hasattr(bus, "__aexit__")):

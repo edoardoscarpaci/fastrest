@@ -293,9 +293,7 @@ class BeanieEncryptionKeyStore:
         if tenant_id is None:
             # None → match explicit null in MongoDB
             docs = (
-                await EncryptionKeyDocument.find({"tenant_id": None})
-                .sort("+created_at")
-                .to_list()
+                await EncryptionKeyDocument.find({"tenant_id": None}).sort("+created_at").to_list()
             )
         else:
             docs = (
@@ -354,11 +352,7 @@ class BeanieEncryptionKeyStore:
 
     async def load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
         """Load all entries for ``scope``, ordered by ``created_at`` ascending."""
-        docs = (
-            await EncryptionKeyDocument.find({"scope": scope})
-            .sort("+created_at")
-            .to_list()
-        )
+        docs = await EncryptionKeyDocument.find({"scope": scope}).sort("+created_at").to_list()
         return [_doc_to_entry(doc) for doc in docs]
 
     async def list_scopes(self) -> list[str]:
@@ -378,9 +372,7 @@ class BeanieEncryptionKeyStore:
             Tuple of kids tombstoned by this call — ``()`` for an unknown
             scope or one whose entries are already all destroyed.
         """
-        docs = await EncryptionKeyDocument.find(
-            {"scope": scope, "destroyed_at": None}
-        ).to_list()
+        docs = await EncryptionKeyDocument.find({"scope": scope, "destroyed_at": None}).to_list()
         now = datetime.now(UTC)
         destroyed_kids: list[str] = []
         for doc in docs:
@@ -414,11 +406,7 @@ def _doc_to_entry(doc: EncryptionKeyDocument) -> EncryptionKeyEntry:
         created_at = created_at.replace(tzinfo=UTC)
 
     destroyed_at = doc.destroyed_at
-    if (
-        destroyed_at is not None
-        and hasattr(destroyed_at, "tzinfo")
-        and destroyed_at.tzinfo is None
-    ):
+    if destroyed_at is not None and hasattr(destroyed_at, "tzinfo") and destroyed_at.tzinfo is None:
         destroyed_at = destroyed_at.replace(tzinfo=UTC)
 
     return EncryptionKeyEntry(

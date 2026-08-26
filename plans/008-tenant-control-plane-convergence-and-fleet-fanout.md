@@ -435,6 +435,7 @@ exactly the class of gap this plan exists to close. Kept deliberately minimal (R
        dlq: AbstractDeadLetterQueue | None = None,
    ) -> None: ...
 
+
    @listen(TenantNodeReady, channel=CHANNEL_TENANCY)
    async def on_node_ready(self, event: Event) -> None: ...
    ```

@@ -163,8 +163,9 @@ class TestAsyncBootstrap:
         # (not at module level), so we must patch it at its source module.
         # Patching "varco_memcached.di.MemcachedCacheConfiguration" would fail
         # because the name doesn't exist in the di module's namespace.
-        with patch("varco_memcached.di.bootstrap", return_value=container), patch(
-            "varco_memcached.cache.MemcachedCacheConfiguration"
+        with (
+            patch("varco_memcached.di.bootstrap", return_value=container),
+            patch("varco_memcached.cache.MemcachedCacheConfiguration"),
         ):
             result = await async_bootstrap(container)
 
@@ -180,9 +181,10 @@ class TestAsyncBootstrap:
         """
         container = _make_mock_container()
 
-        with patch(
-            "varco_memcached.di.bootstrap", return_value=container
-        ) as mock_bs, patch("varco_memcached.cache.MemcachedCacheConfiguration"):
+        with (
+            patch("varco_memcached.di.bootstrap", return_value=container) as mock_bs,
+            patch("varco_memcached.cache.MemcachedCacheConfiguration"),
+        ):
             await async_bootstrap(container)
 
         mock_bs.assert_called_once_with(container)
@@ -237,9 +239,10 @@ class TestAsyncBootstrap:
         """
         mock_container = _make_mock_container()
 
-        with patch(
-            "varco_memcached.di.bootstrap", return_value=mock_container
-        ) as mock_bs, patch("varco_memcached.cache.MemcachedCacheConfiguration"):
+        with (
+            patch("varco_memcached.di.bootstrap", return_value=mock_container) as mock_bs,
+            patch("varco_memcached.cache.MemcachedCacheConfiguration"),
+        ):
             await async_bootstrap(None)
 
         # None must be forwarded — not resolved here — so bootstrap() can apply
@@ -360,9 +363,9 @@ class TestPackageReexport:
         """Both helpers must appear in ``__all__`` for star-import clarity."""
         import varco_memcached  # noqa: PLC0415
 
-        assert (
-            "bootstrap" in varco_memcached.__all__
-        ), "'bootstrap' missing from varco_memcached.__all__"
-        assert (
-            "async_bootstrap" in varco_memcached.__all__
-        ), "'async_bootstrap' missing from varco_memcached.__all__"
+        assert "bootstrap" in varco_memcached.__all__, (
+            "'bootstrap' missing from varco_memcached.__all__"
+        )
+        assert "async_bootstrap" in varco_memcached.__all__, (
+            "'async_bootstrap' missing from varco_memcached.__all__"
+        )

@@ -198,8 +198,7 @@ class RedisCache(CacheBackend):
         """
         if self._redis is not None:
             raise RuntimeError(
-                "RedisCache.start() called on an already-started cache. "
-                "Call stop() first."
+                "RedisCache.start() called on an already-started cache. Call stop() first."
             )
         self._redis = aioredis.from_url(
             self._settings.url,
@@ -257,9 +256,7 @@ class RedisCache(CacheBackend):
         try:
             return self._serializer.deserialize(raw, type_hint)
         except Exception as exc:
-            _logger.warning(
-                "RedisCache: failed to deserialize key %r: %s", key, exc, exc_info=True
-            )
+            _logger.warning("RedisCache: failed to deserialize key %r: %s", key, exc, exc_info=True)
             return None
 
     async def set(self, key: Any, value: Any, *, ttl: float | None = None) -> None:
@@ -327,9 +324,7 @@ class RedisCache(CacheBackend):
 
     # ── Bulk operations (Plan 011 C5) — native Redis batch commands ──────────
 
-    async def get_many(
-        self, keys: list[Any], *, type_hint: type | None = None
-    ) -> dict[Any, Any]:
+    async def get_many(self, keys: list[Any], *, type_hint: type | None = None) -> dict[Any, Any]:
         """
         Native ``MGET`` — one round trip for every key.
 
@@ -361,9 +356,7 @@ class RedisCache(CacheBackend):
                 )
         return result
 
-    async def set_many(
-        self, items: dict[Any, Any], *, ttl: float | None = None
-    ) -> None:
+    async def set_many(self, items: dict[Any, Any], *, ttl: float | None = None) -> None:
         """
         Pipelined ``SET``/``PSETEX`` — one round trip for every key via a
         Redis pipeline (``ttl`` applies uniformly, same as ``set()``).
@@ -464,9 +457,7 @@ class RedisCache(CacheBackend):
         # backend's namespace even when multiple apps share a Redis instance.
         pattern = f"{self._settings.key_prefix}{prefix}*"
         deleted = await self._scan_and_delete(pattern)
-        _logger.debug(
-            "RedisCache: delete_prefix(%r) removed %d key(s).", prefix, deleted
-        )
+        _logger.debug("RedisCache: delete_prefix(%r) removed %d key(s).", prefix, deleted)
 
     async def _scan_and_delete(self, pattern: str) -> int:
         """

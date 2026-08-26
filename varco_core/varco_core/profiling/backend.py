@@ -218,9 +218,7 @@ def register_cpu_backend(name: str, factory: Callable[[], CpuProfilerBackend]) -
     _cpu_backends[name] = factory
 
 
-def register_memory_backend(
-    name: str, factory: Callable[[], MemoryProfilerBackend]
-) -> None:
+def register_memory_backend(name: str, factory: Callable[[], MemoryProfilerBackend]) -> None:
     """Register a memory profiling backend factory under a name.
 
     Args:
@@ -250,10 +248,7 @@ def get_cpu_backend(name: str) -> Callable[[], CpuProfilerBackend]:
     """
     if name not in _cpu_backends:
         available = list(_cpu_backends)
-        raise KeyError(
-            f"CPU profiler backend '{name}' is not registered. "
-            f"Available: {available}"
-        )
+        raise KeyError(f"CPU profiler backend '{name}' is not registered. Available: {available}")
     return _cpu_backends[name]
 
 
@@ -272,8 +267,7 @@ def get_memory_backend(name: str) -> Callable[[], MemoryProfilerBackend]:
     if name not in _memory_backends:
         available = list(_memory_backends)
         raise KeyError(
-            f"Memory profiler backend '{name}' is not registered. "
-            f"Available: {available}"
+            f"Memory profiler backend '{name}' is not registered. Available: {available}"
         )
     return _memory_backends[name]
 

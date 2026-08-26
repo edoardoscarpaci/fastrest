@@ -297,9 +297,10 @@ in `varco_redis`** — the same seam as `AbstractEventBus`/`RedisEventBus` and
 @dataclass(frozen=True)
 class InvalidationMessage:
     kind: Literal["key", "prefix", "clear"]
-    payload: str          # key name | key prefix | "" for clear
-    origin: str           # publisher node id — echo suppression
+    payload: str  # key name | key prefix | "" for clear
+    origin: str  # publisher node id — echo suppression
     ts: float
+
 
 class CacheBackplane(abc.ABC):
     @property

@@ -36,9 +36,7 @@ from varco_core.event.redrive import DeadLetterNotAddressable, DlqRedriver
 
 def register(subparsers: argparse._SubParsersAction) -> None:
     """Register the ``dlq`` subcommand parser and its verbs."""
-    parser = subparsers.add_parser(
-        "dlq", help="Browse, redrive, or purge a dead letter queue"
-    )
+    parser = subparsers.add_parser("dlq", help="Browse, redrive, or purge a dead letter queue")
     parser.set_defaults(_run=_run)
 
     verb_parsers = parser.add_subparsers(dest="verb", required=True)
@@ -51,9 +49,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="module:callable → AbstractDeadLetterQueue",
     )
     list_p.add_argument("--channel", default=None)
-    list_p.add_argument(
-        "--source", default=None, choices=[s.value for s in DeadLetterSource]
-    )
+    list_p.add_argument("--source", default=None, choices=[s.value for s in DeadLetterSource])
     list_p.add_argument("--limit", type=int, default=50)
 
     redrive_p = verb_parsers.add_parser("redrive")
@@ -63,16 +59,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         required=True,
         help="module:callable → AbstractDeadLetterQueue",
     )
-    redrive_p.add_argument(
-        "-b", "--bus", required=True, help="module:callable → AbstractEventBus"
-    )
+    redrive_p.add_argument("-b", "--bus", required=True, help="module:callable → AbstractEventBus")
     redrive_p.add_argument("--entry-id", default=None)
     redrive_p.add_argument("--batch", action="store_true")
     redrive_p.add_argument("--limit", type=int, default=10)
     redrive_p.add_argument("--channel", default=None)
-    redrive_p.add_argument(
-        "--source", default=None, choices=[s.value for s in DeadLetterSource]
-    )
+    redrive_p.add_argument("--source", default=None, choices=[s.value for s in DeadLetterSource])
     redrive_p.add_argument("--dry-run", action="store_true", dest="dry_run")
 
     purge_p = verb_parsers.add_parser("purge")
@@ -112,9 +104,7 @@ def _resolve(target: str) -> Any:
 async def _run_list(args: argparse.Namespace, dlq: Any) -> int:
     source = DeadLetterSource(args.source) if args.source else None
     try:
-        entries = await dlq.list_entries(
-            limit=args.limit, channel=args.channel, source=source
-        )
+        entries = await dlq.list_entries(limit=args.limit, channel=args.channel, source=source)
     except NotImplementedError:
         entries = await dlq.pop_batch(limit=args.limit)
     for e in entries:
@@ -134,23 +124,15 @@ async def _run_redrive(args: argparse.Namespace, dlq: Any, bus: Any) -> int:
     try:
         if args.entry_id:
             outcome = await redriver.redrive(UUID(args.entry_id), dry_run=args.dry_run)
-            print(
-                f"{outcome.entry_id}: published={outcome.published} error={outcome.error}"
-            )
-            return (
-                0
-                if (outcome.published or args.dry_run) and outcome.error != "not found"
-                else 1
-            )
+            print(f"{outcome.entry_id}: published={outcome.published} error={outcome.error}")
+            return 0 if (outcome.published or args.dry_run) and outcome.error != "not found" else 1
         report = await redriver.redrive_batch(
             limit=args.limit,
             channel=args.channel,
             source=DeadLetterSource(args.source) if args.source else None,
             dry_run=args.dry_run,
         )
-        print(
-            f"attempted={report.attempted} succeeded={report.succeeded} failed={report.failed}"
-        )
+        print(f"attempted={report.attempted} succeeded={report.succeeded} failed={report.failed}")
         return 1 if report.failed > 0 else 0
     except DeadLetterNotAddressable as exc:
         print(str(exc), file=sys.stderr)

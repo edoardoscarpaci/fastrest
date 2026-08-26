@@ -31,9 +31,7 @@ class TestBeanieAuditSeqCollectionResolution:
     registration for ``AuditSeqDocument``.
     """
 
-    def test_regression_seq_collection_rides_on_audit_documents_database(
-        self, monkeypatch
-    ) -> None:
+    def test_regression_seq_collection_rides_on_audit_documents_database(self, monkeypatch) -> None:
         """
         User reports: the first ``hash_chain=True`` save raised
         ``beanie.exceptions.CollectionWasNotInitialized`` after following the
@@ -114,9 +112,7 @@ class TestBeanieAuditChainBsonPrecision:
         from varco_beanie.audit import _to_bson_precision
 
         entry = _entry(prev_hash=None, seq=1)
-        stored = dataclasses.replace(
-            entry, occurred_at=_to_bson_precision(entry.occurred_at)
-        )
+        stored = dataclasses.replace(entry, occurred_at=_to_bson_precision(entry.occurred_at))
         # What Mongo returns on read-back: the truncated timestamp.
         round_tripped = dataclasses.replace(stored)
 
@@ -135,15 +131,9 @@ class TestBeanieAuditChainBsonPrecision:
             seq=1,
             prev_hash=None,
         )
-        first = dataclasses.replace(
-            first, occurred_at=_to_bson_precision(first.occurred_at)
-        )
-        second = dataclasses.replace(
-            _entry(entity_id="1"), seq=2, prev_hash=first.entry_hash()
-        )
-        second = dataclasses.replace(
-            second, occurred_at=_to_bson_precision(second.occurred_at)
-        )
+        first = dataclasses.replace(first, occurred_at=_to_bson_precision(first.occurred_at))
+        second = dataclasses.replace(_entry(entity_id="1"), seq=2, prev_hash=first.entry_hash())
+        second = dataclasses.replace(second, occurred_at=_to_bson_precision(second.occurred_at))
 
         assert AuditRepository.verify_chain([first, second]) is True
 
@@ -172,9 +162,7 @@ class TestBeanieAuditChainIntegration:
             await client.drop_database(db_name)
             await client.close()
 
-    async def test_sequential_saves_produce_a_verifiable_chain(
-        self, chained_repo
-    ) -> None:
+    async def test_sequential_saves_produce_a_verifiable_chain(self, chained_repo) -> None:
         for i in range(5):
             await chained_repo.save(_entry(entity_id=str(i)))
 
@@ -186,9 +174,7 @@ class TestBeanieAuditChainIntegration:
         all_entries.sort(key=lambda e: e.seq or 0)
         assert AuditRepository.verify_chain(all_entries) is True
 
-    async def test_counter_document_created_with_upsert_on_first_write(
-        self, chained_repo
-    ) -> None:
+    async def test_counter_document_created_with_upsert_on_first_write(self, chained_repo) -> None:
         """Beanie's counter document missing -> created on first write with
         upsert=True."""
         await chained_repo.save(_entry())

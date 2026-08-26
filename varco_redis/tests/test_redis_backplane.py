@@ -29,18 +29,14 @@ class FakePubSub:
     async def subscribe(self, channel: str) -> None:
         self.subscribed_channels.append(channel)
 
-    async def get_message(
-        self, ignore_subscribe_messages: bool = True, timeout: float = 1.0
-    ):
+    async def get_message(self, ignore_subscribe_messages: bool = True, timeout: float = 1.0):
         try:
             return await asyncio.wait_for(self._queue.get(), timeout=timeout)
         except TimeoutError:
             return None
 
     def push(self, channel: str, data: bytes) -> None:
-        self._queue.put_nowait(
-            {"type": "message", "channel": channel.encode(), "data": data}
-        )
+        self._queue.put_nowait({"type": "message", "channel": channel.encode(), "data": data})
 
     async def close(self) -> None:
         pass
@@ -71,13 +67,9 @@ class TestRedisPubSubBackplaneUnit:
         from varco_redis.backplane import RedisPubSubBackplane
 
         client = FakePubSubRedis()
-        backplane = RedisPubSubBackplane(
-            client=client, channel="varco.cache.invalidate"
-        )
+        backplane = RedisPubSubBackplane(client=client, channel="varco.cache.invalidate")
 
-        msg = InvalidationMessage(
-            kind="key", payload="user:1", origin=backplane.origin, ts=1.0
-        )
+        msg = InvalidationMessage(kind="key", payload="user:1", origin=backplane.origin, ts=1.0)
         await backplane.publish(msg)
 
         assert len(client.published) == 1
@@ -93,22 +85,16 @@ class TestRedisPubSubBackplaneUnit:
         from varco_redis.backplane import RedisPubSubBackplane
 
         client = FakePubSubRedis(fail_publish=True)
-        backplane = RedisPubSubBackplane(
-            client=client, channel="varco.cache.invalidate"
-        )
+        backplane = RedisPubSubBackplane(client=client, channel="varco.cache.invalidate")
 
-        msg = InvalidationMessage(
-            kind="key", payload="user:1", origin=backplane.origin, ts=1.0
-        )
+        msg = InvalidationMessage(kind="key", payload="user:1", origin=backplane.origin, ts=1.0)
         await backplane.publish(msg)  # must swallow, not raise
 
     async def test_received_self_origin_message_is_skipped(self) -> None:
         from varco_redis.backplane import RedisPubSubBackplane
 
         client = FakePubSubRedis()
-        backplane = RedisPubSubBackplane(
-            client=client, channel="varco.cache.invalidate"
-        )
+        backplane = RedisPubSubBackplane(client=client, channel="varco.cache.invalidate")
 
         received: list = []
 

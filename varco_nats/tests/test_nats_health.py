@@ -55,9 +55,7 @@ class TestHealthy:
 
 
 class TestUnhealthy:
-    async def test_unhealthy_when_connect_fails(
-        self, settings: NatsEventBusSettings
-    ) -> None:
+    async def test_unhealthy_when_connect_fails(self, settings: NatsEventBusSettings) -> None:
         async def _fake_connect(**_: object) -> FakeNatsClient:
             raise ConnectionRefusedError("no server")
 

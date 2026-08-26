@@ -644,9 +644,7 @@ def test_paged_response_next_carries_raw_query():
     params = QueryParams(limit=10, offset=0)
     results = _make_items(10)
 
-    response = paged_response(
-        results, params=params, total_count=50, raw_query='status = "active"'
-    )
+    response = paged_response(results, params=params, total_count=50, raw_query='status = "active"')
 
     assert response.next is not None
     assert response.next.query == 'status = "active"'

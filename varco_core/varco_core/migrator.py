@@ -157,7 +157,7 @@ class StepSpec:
 
     def __repr__(self) -> str:
         has_down = self.down is not None
-        return f"StepSpec(name={self.display_name!r}, " f"has_rollback={has_down})"
+        return f"StepSpec(name={self.display_name!r}, has_rollback={has_down})"
 
 
 # ── MigrationPlan ─────────────────────────────────────────────────────────────

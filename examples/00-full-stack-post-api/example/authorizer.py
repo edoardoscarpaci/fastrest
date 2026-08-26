@@ -73,9 +73,7 @@ _ROLE_EDITOR = "editor"
 
 # Actions that any authenticated user (editor or above) can perform freely.
 # LIST and READ are also allowed anonymously (see _check_post_authorization).
-_EDITOR_OPEN_ACTIONS: frozenset[Action] = frozenset(
-    {Action.LIST, Action.READ, Action.CREATE}
-)
+_EDITOR_OPEN_ACTIONS: frozenset[Action] = frozenset({Action.LIST, Action.READ, Action.CREATE})
 
 
 @Singleton
@@ -224,9 +222,9 @@ class PostAuthorizer(AbstractAuthorizer):
         # Compare author_id (UUID) with the caller's user_id (str).
         # str(entity.author_id) normalises the UUID to a lowercase string
         # identical to the form stored in the JWT sub claim.
-        caller_owns_post = entity.author_id is not None and str(
-            entity.author_id
-        ) == str(ctx.user_id)
+        caller_owns_post = entity.author_id is not None and str(entity.author_id) == str(
+            ctx.user_id
+        )
 
         if caller_owns_post:
             return  # ✅ editor acting on own post

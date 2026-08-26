@@ -44,9 +44,7 @@ def kafka_bootstrap(request: pytest.FixtureRequest) -> str:
 
     override = os.environ.get("VARCO_TEST_KAFKA_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("kafka", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("kafka", override))
         yield override
         return
 

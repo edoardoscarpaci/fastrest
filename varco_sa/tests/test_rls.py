@@ -160,8 +160,7 @@ async def rls_protected_table(engine):
     async with engine.begin() as conn:
         await conn.execute(
             sa.text(
-                f"CREATE TABLE {table} "
-                "(id SERIAL PRIMARY KEY, tenant_id UUID NOT NULL, value TEXT)"
+                f"CREATE TABLE {table} (id SERIAL PRIMARY KEY, tenant_id UUID NOT NULL, value TEXT)"
             )
         )
         await conn.execute(
@@ -187,9 +186,7 @@ async def rls_protected_table(engine):
     reason="Integration tests disabled — set VARCO_RUN_INTEGRATION=1",
 )
 class TestRlsPolicyEnforcement:
-    async def test_unset_session_sees_zero_rows(
-        self, session_factory, rls_protected_table
-    ) -> None:
+    async def test_unset_session_sees_zero_rows(self, session_factory, rls_protected_table) -> None:
         import sqlalchemy as sa
 
         table, _tenant_a, _tenant_b = rls_protected_table

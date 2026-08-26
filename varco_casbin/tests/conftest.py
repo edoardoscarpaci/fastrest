@@ -48,9 +48,7 @@ def postgres_url(request: pytest.FixtureRequest) -> str:
 
     override = os.environ.get("VARCO_TEST_POSTGRES_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("postgres", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("postgres", override))
         yield override
         return
 
@@ -58,9 +56,9 @@ def postgres_url(request: pytest.FixtureRequest) -> str:
 
     with PostgresContainer("postgres:16-alpine") as container:
         url = container.get_connection_url(driver="asyncpg")
-        assert url.startswith(
-            "postgresql+asyncpg://"
-        ), f"expected an asyncpg DSN from the container, got: {url}"
+        assert url.startswith("postgresql+asyncpg://"), (
+            f"expected an asyncpg DSN from the container, got: {url}"
+        )
         yield url
 
 
@@ -99,9 +97,7 @@ async def casbin_db_url(postgres_url: str) -> AsyncIterator[str]:
         await admin_engine.dispose()
 
     isolated_url = (
-        make_url(postgres_url)
-        .set(database=db_name)
-        .render_as_string(hide_password=False)
+        make_url(postgres_url).set(database=db_name).render_as_string(hide_password=False)
     )
     yield isolated_url
 
@@ -149,9 +145,7 @@ def make_app(engine: CasbinPolicyEngine, ctx: AuthContext) -> FastAPI:
     app.include_router(build_policy_router(engine, server_auth=StaticAuth(ctx)))
 
     @app.exception_handler(ServiceAuthorizationError)
-    async def _forbidden(
-        request: Request, exc: ServiceAuthorizationError
-    ) -> JSONResponse:
+    async def _forbidden(request: Request, exc: ServiceAuthorizationError) -> JSONResponse:
         return JSONResponse(status_code=403, content={"detail": "forbidden"})
 
     return app
@@ -200,9 +194,7 @@ def mongo_url(request: pytest.FixtureRequest) -> str:
 
     override = os.environ.get("VARCO_TEST_MONGO_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("mongo", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("mongo", override))
         yield override
         return
 

@@ -201,13 +201,9 @@ class ClaimRule:
     def _raise_if_required(self) -> None:
         if not self.required:
             return
-        tried = (
-            ", ".join(".".join(p.segments) for p in self.sources)
-            or "(no sources configured)"
-        )
+        tried = ", ".join(".".join(p.segments) for p in self.sources) or "(no sources configured)"
         raise ClaimTransformError(
-            f"Required claim {self.target.value!r} is missing — tried source "
-            f"path(s): {tried}."
+            f"Required claim {self.target.value!r} is missing — tried source path(s): {tried}."
         )
 
     def invert(self) -> str:
@@ -332,15 +328,9 @@ class ClaimMapping:
             rules=tuple(by_target.values()),
             metadata_fields=override.metadata_fields or self.metadata_fields,
             separator=(
-                override.separator
-                if override.rules or override.metadata_fields
-                else self.separator
+                override.separator if override.rules or override.metadata_fields else self.separator
             ),
-            strict=(
-                override.strict
-                if override.rules or override.metadata_fields
-                else self.strict
-            ),
+            strict=(override.strict if override.rules or override.metadata_fields else self.strict),
         )
 
     def invert(self) -> dict[str, str]:

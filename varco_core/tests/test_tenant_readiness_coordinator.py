@@ -13,9 +13,7 @@ class _CountingProvisioner:
     async def provision(self, tenant_id: str, **kwargs) -> None:
         pass
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         pass
 
 
@@ -71,9 +69,7 @@ async def test_subset_of_stores_leaves_tenant_pending_and_no_catalog_write() -> 
     from varco_core.tenancy.routing import routing_decision_for_status
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, bus = _make_authority_service(catalog)
     coordinator = TenantReadinessCoordinator(
         control_service=service, expected_stores=frozenset({"orders", "billing"})
@@ -103,9 +99,7 @@ async def test_last_expected_store_flips_active_exactly_once() -> None:
     from varco_core.tenancy.control.readiness import TenantReadinessCoordinator
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, bus = _make_authority_service(catalog)
     coordinator = TenantReadinessCoordinator(
         control_service=service, expected_stores=frozenset({"orders", "billing"})
@@ -113,9 +107,7 @@ async def test_last_expected_store_flips_active_exactly_once() -> None:
     coordinator.register_to(bus)
 
     received: list[TenantCatalogChanged] = []
-    bus.subscribe(
-        TenantCatalogChanged, lambda e: received.append(e), channel=CHANNEL_TENANCY
-    )
+    bus.subscribe(TenantCatalogChanged, lambda e: received.append(e), channel=CHANNEL_TENANCY)
 
     await bus.publish(
         TenantNodeReady(tenant_id="acme", node_id="n1", store_id="orders"),
@@ -138,9 +130,7 @@ async def test_duplicate_node_ready_from_already_seen_store_is_a_noop() -> None:
     from varco_core.tenancy.control.readiness import TenantReadinessCoordinator
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, bus = _make_authority_service(catalog)
     coordinator = TenantReadinessCoordinator(
         control_service=service, expected_stores=frozenset({"orders", "billing"})
@@ -167,9 +157,7 @@ async def test_unexpected_store_id_is_ignored_with_one_warning_and_never_counts(
     from varco_core.tenancy.control.readiness import TenantReadinessCoordinator
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, bus = _make_authority_service(catalog)
     coordinator = TenantReadinessCoordinator(
         control_service=service, expected_stores=frozenset({"orders"})
@@ -202,9 +190,7 @@ async def test_timeout_elapsed_with_store_missing_logs_error_and_never_activates
     from varco_core.tenancy.control.readiness import TenantReadinessCoordinator
     from varco_core.tenancy.settings import TenantStatus
 
-    catalog = StaticTenantCatalog(
-        [TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)]
-    )
+    catalog = StaticTenantCatalog([TenantDescriptor(tenant_id="acme", status=TenantStatus.PENDING)])
     service, bus = _make_authority_service(catalog)
     coordinator = TenantReadinessCoordinator(
         control_service=service,
@@ -214,9 +200,7 @@ async def test_timeout_elapsed_with_store_missing_logs_error_and_never_activates
     coordinator.register_to(bus)
 
     received: list[TenantCatalogChanged] = []
-    bus.subscribe(
-        TenantCatalogChanged, lambda e: received.append(e), channel=CHANNEL_TENANCY
-    )
+    bus.subscribe(TenantCatalogChanged, lambda e: received.append(e), channel=CHANNEL_TENANCY)
 
     caplog.set_level("ERROR")
     await bus.publish(
@@ -241,9 +225,7 @@ def test_coordinator_over_non_authority_service_raises_value_error() -> None:
     service, _bus = _make_worker_service()
 
     with pytest.raises(ValueError):
-        TenantReadinessCoordinator(
-            control_service=service, expected_stores=frozenset({"orders"})
-        )
+        TenantReadinessCoordinator(control_service=service, expected_stores=frozenset({"orders"}))
 
 
 async def test_readiness_for_tenant_a_is_independent_of_tenant_b() -> None:

@@ -124,9 +124,7 @@ class StaticTenantCatalog(AbstractTenantCatalog):
     """
 
     def __init__(self, descriptors: list[TenantDescriptor] | None = None) -> None:
-        self._tenants: dict[str, TenantDescriptor] = {
-            d.tenant_id: d for d in (descriptors or [])
-        }
+        self._tenants: dict[str, TenantDescriptor] = {d.tenant_id: d for d in (descriptors or [])}
         self._lock: asyncio.Lock | None = None
 
     def _get_lock(self) -> asyncio.Lock:

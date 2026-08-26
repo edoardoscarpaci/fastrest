@@ -98,9 +98,7 @@ class CProfileCpuBackend:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _extract_top(
-        stats: pstats.Stats, top_n: int, sort_by: str
-    ) -> tuple[FunctionStat, ...]:
+    def _extract_top(stats: pstats.Stats, top_n: int, sort_by: str) -> tuple[FunctionStat, ...]:
         """Convert pstats internal dict to sorted ``FunctionStat`` tuples.
 
         Args:
@@ -129,8 +127,6 @@ class CProfileCpuBackend:
                 )
             )
 
-        key_fn = (
-            (lambda r: r.cumtime_ms) if "cum" in sort_by else (lambda r: r.tottime_ms)
-        )
+        key_fn = (lambda r: r.cumtime_ms) if "cum" in sort_by else (lambda r: r.tottime_ms)
         rows.sort(key=key_fn, reverse=True)
         return tuple(rows[:top_n])

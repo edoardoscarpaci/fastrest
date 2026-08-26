@@ -122,9 +122,7 @@ class TTLStrategy(InvalidationStrategy):
         # always present in metadata (set to None when no per-entry TTL was
         # given), so .get("ttl", fallback) would never reach the fallback.
         entry_ttl: float | None = metadata.get("ttl")
-        effective_ttl: float | None = (
-            entry_ttl if entry_ttl is not None else self._default_ttl
-        )
+        effective_ttl: float | None = entry_ttl if entry_ttl is not None else self._default_ttl
         if effective_ttl is None:
             # No TTL configured — entry never expires via this strategy.
             return False
@@ -200,9 +198,7 @@ class ExplicitStrategy(InvalidationStrategy):
         """
         for key in keys:
             self._invalidated.add(key)
-        _logger.debug(
-            "ExplicitStrategy: marked %d keys for invalidation.", len(self._invalidated)
-        )
+        _logger.debug("ExplicitStrategy: marked %d keys for invalidation.", len(self._invalidated))
 
     def clear_invalidated(self, key: Any) -> None:
         """
@@ -561,9 +557,7 @@ class EventDrivenStrategy(InvalidationStrategy):
 
     def __repr__(self) -> str:
         return (
-            f"EventDrivenStrategy("
-            f"channel={self._consumer._channel!r}, "
-            f"explicit={self._explicit!r})"
+            f"EventDrivenStrategy(channel={self._consumer._channel!r}, explicit={self._explicit!r})"
         )
 
 

@@ -21,9 +21,7 @@ class TestNatsDeliverySemantics:
         assert NatsDeliverySemantics.EXACTLY_ONCE.value == "exactly_once"
 
     def test_constructable_from_value(self) -> None:
-        assert (
-            NatsDeliverySemantics("exactly_once") is NatsDeliverySemantics.EXACTLY_ONCE
-        )
+        assert NatsDeliverySemantics("exactly_once") is NatsDeliverySemantics.EXACTLY_ONCE
 
 
 # ── NatsEventBusSettings — defaults ───────────────────────────────────────────
@@ -88,9 +86,7 @@ class TestNatsEventBusSettingsSubjects:
         assert cfg.durable_for("orders") == "svc-orders"
 
     def test_to_servers_list_splits_on_comma(self) -> None:
-        cfg = NatsEventBusSettings(
-            servers="nats://a:4222, nats://b:4222 ,nats://c:4222"
-        )
+        cfg = NatsEventBusSettings(servers="nats://a:4222, nats://b:4222 ,nats://c:4222")
         # Whitespace around comma-separated entries is stripped.
         assert cfg.to_servers_list() == [
             "nats://a:4222",

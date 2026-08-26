@@ -26,17 +26,20 @@ uv add varco-kafka
 from varco_kafka import KafkaEventBus, KafkaEventBusSettings
 from varco_core.event import BusEventProducer, EventConsumer, listen, Event
 
+
 # Define your events
 class OrderPlacedEvent(Event):
     __event_type__ = "order.placed"
     order_id: str
     total: float
 
+
 # Configure the bus
 settings = KafkaEventBusSettings(
     bootstrap_servers="localhost:9092",
     group_id="order-service",
 )
+
 
 async def main():
     async with KafkaEventBus(settings) as bus:
@@ -66,11 +69,11 @@ async def main():
 from varco_kafka import KafkaEventBusSettings
 
 settings = KafkaEventBusSettings(
-    bootstrap_servers="kafka.internal:9092",   # broker address(es)
-    group_id="my-service",                     # consumer group ID
-    channel_prefix="prod.",                    # optional — "orders" → "prod.orders"
-    auto_offset_reset="latest",                # "latest" or "earliest"
-    enable_auto_commit=True,                   # at-least-once delivery
+    bootstrap_servers="kafka.internal:9092",  # broker address(es)
+    group_id="my-service",  # consumer group ID
+    channel_prefix="prod.",  # optional — "orders" → "prod.orders"
+    auto_offset_reset="latest",  # "latest" or "earliest"
+    enable_auto_commit=True,  # at-least-once delivery
 )
 ```
 
@@ -98,8 +101,8 @@ admin_settings = KafkaChannelManagerSettings(
 )
 
 async with KafkaChannelManager(admin_settings) as manager:
-    await manager.declare_channel("orders")      # create topic if absent
-    await manager.delete_channel("orders")       # delete topic
+    await manager.declare_channel("orders")  # create topic if absent
+    await manager.delete_channel("orders")  # delete topic
 ```
 
 | Field | Default | Env var | Description |
@@ -114,9 +117,9 @@ async with KafkaChannelManager(admin_settings) as manager:
 ```python
 # Explicit lifecycle
 bus = KafkaEventBus(settings)
-await bus.start()     # connects producer, starts consumer task
+await bus.start()  # connects producer, starts consumer task
 # ... use bus ...
-await bus.stop()      # flushes producer, cancels consumer task
+await bus.stop()  # flushes producer, cancels consumer task
 
 # Context manager (recommended)
 async with KafkaEventBus(settings) as bus:
@@ -135,7 +138,7 @@ from providify import DIContainer
 from varco_core.event import AbstractEventBus, ChannelManager
 from varco_kafka.di import bootstrap
 
-container = bootstrap(DIContainer())   # scans varco_kafka, registers @Singletons
+container = bootstrap(DIContainer())  # scans varco_kafka, registers @Singletons
 bus = await container.aget(AbstractEventBus)
 manager = await container.aget(ChannelManager)
 

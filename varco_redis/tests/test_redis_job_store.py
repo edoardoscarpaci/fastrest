@@ -512,9 +512,7 @@ class TestRedisJobStoreLease:
         _, store = _make_store()
         job = _pending_job()
         await store.save(job)
-        claimed = await store.try_claim(
-            job.job_id, owner_id="worker-1", lease_ttl=0.001
-        )
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=0.001)
 
         await asyncio.sleep(0.05)
         reaped = await store.reap_expired_leases()
@@ -544,6 +542,4 @@ class TestRedisJobStoreConcurrentClaimFencing:
     """
 
     async def test_two_concurrent_claimers_exactly_one_wins_loser_fenced(self) -> None:
-        pytest.skip(
-            "requires a real Redis instance — not available in this environment"
-        )
+        pytest.skip("requires a real Redis instance — not available in this environment")

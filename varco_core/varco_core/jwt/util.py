@@ -322,9 +322,7 @@ class JwtUtil:
 
     # ── Token profile helpers (Plan 002 §B) ───────────────────────────────────
 
-    def matches_profile(
-        self, name: str, *, registry: TokenProfileRegistry | None = None
-    ) -> bool:
+    def matches_profile(self, name: str, *, registry: TokenProfileRegistry | None = None) -> bool:
         """
         Return ``True`` iff the wrapped token matches the named profile.
 
@@ -343,9 +341,7 @@ class JwtUtil:
         reg = registry if registry is not None else self._global_profile_registry()
         return reg.matches(name, self._token)
 
-    def profile_name(
-        self, *, registry: TokenProfileRegistry | None = None
-    ) -> str | None:
+    def profile_name(self, *, registry: TokenProfileRegistry | None = None) -> str | None:
         """
         Return the name of the first profile that matches the wrapped
         token, or ``None`` if no registered profile matches.
@@ -361,9 +357,7 @@ class JwtUtil:
         resolved = reg.resolve(self._token)
         return resolved.name if resolved is not None else None
 
-    def assert_profile(
-        self, name: str, *, registry: TokenProfileRegistry | None = None
-    ) -> None:
+    def assert_profile(self, name: str, *, registry: TokenProfileRegistry | None = None) -> None:
         """
         Assert that the wrapped token matches the named profile.
 

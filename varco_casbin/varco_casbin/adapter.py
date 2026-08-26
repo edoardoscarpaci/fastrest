@@ -122,8 +122,7 @@ def build_adapter(settings: CasbinSettings) -> Any | None:
     # Unreachable while the Literal and this branch stay in sync, but guards
     # against a future settings change that forgets to update the factory.
     raise ValueError(
-        f"Unknown Casbin adapter {kind!r}. "
-        f"Valid options: 'memory', 'file', 'sqlalchemy', 'beanie'."
+        f"Unknown Casbin adapter {kind!r}. Valid options: 'memory', 'file', 'sqlalchemy', 'beanie'."
     )
 
 

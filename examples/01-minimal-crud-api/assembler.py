@@ -33,9 +33,7 @@ from varco_core.model import domain_replace
 
 
 @Singleton
-class ProductAssembler(
-    AbstractDTOAssembler[Product, ProductCreate, ProductRead, ProductUpdate]
-):
+class ProductAssembler(AbstractDTOAssembler[Product, ProductCreate, ProductRead, ProductUpdate]):
     """
     Assembler for the ``Product`` entity.
 
@@ -103,11 +101,7 @@ class ProductAssembler(
             # Guard: fall back to created_at so updated_at is never None
             # in the response, even on a brand-new entity where the repo has
             # not yet refreshed the field.
-            updated_at=(
-                entity.updated_at
-                if entity.updated_at is not None
-                else entity.created_at
-            ),
+            updated_at=(entity.updated_at if entity.updated_at is not None else entity.created_at),
         )
 
     def apply_update(self, entity: Product, dto: ProductUpdate) -> Product:
@@ -135,9 +129,7 @@ class ProductAssembler(
         return domain_replace(
             entity,
             name=dto.name if dto.name is not None else entity.name,
-            description=(
-                dto.description if dto.description is not None else entity.description
-            ),
+            description=(dto.description if dto.description is not None else entity.description),
             price=dto.price if dto.price is not None else entity.price,
             in_stock=dto.in_stock if dto.in_stock is not None else entity.in_stock,
         )

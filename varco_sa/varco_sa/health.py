@@ -195,9 +195,7 @@ class SAHealthCheck(HealthCheck):
             )
 
     def __repr__(self) -> str:
-        return (
-            f"SAHealthCheck(" f"engine={self._engine!r}, " f"timeout={self._timeout})"
-        )
+        return f"SAHealthCheck(engine={self._engine!r}, timeout={self._timeout})"
 
 
 # ── SAPoolSaturationCheck ─────────────────────────────────────────────────────

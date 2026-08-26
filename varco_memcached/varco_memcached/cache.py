@@ -227,8 +227,7 @@ class MemcachedCache(CacheBackend):
         """
         if self._client is not None:
             raise RuntimeError(
-                "MemcachedCache.start() called on an already-started cache. "
-                "Call stop() first."
+                "MemcachedCache.start() called on an already-started cache. Call stop() first."
             )
         # pool_size controls the aiomcache connection pool size — higher values
         # allow more concurrent requests without blocking on a single connection.
@@ -408,9 +407,7 @@ class MemcachedCache(CacheBackend):
                 "control character, which Memcached does not permit."
             )
 
-    async def get_many(
-        self, keys: list[Any], *, type_hint: type | None = None
-    ) -> dict[Any, Any]:
+    async def get_many(self, keys: list[Any], *, type_hint: type | None = None) -> dict[Any, Any]:
         """Native ``multi_get`` — one round trip for every key."""
         self._require_started()
         if not keys:
@@ -425,16 +422,14 @@ class MemcachedCache(CacheBackend):
                 result[key] = self._serializer.deserialize(raw, type_hint)
             except Exception as exc:
                 _logger.warning(
-                    "MemcachedCache: failed to deserialize key %r in " "get_many(): %s",
+                    "MemcachedCache: failed to deserialize key %r in get_many(): %s",
                     key,
                     exc,
                     exc_info=True,
                 )
         return result
 
-    async def set_many(
-        self, items: dict[Any, Any], *, ttl: float | None = None
-    ) -> None:
+    async def set_many(self, items: dict[Any, Any], *, ttl: float | None = None) -> None:
         """
         Bulk store. ``aiomcache`` has no native multi-set command, so this
         loops over ``set()`` — the DEFAULT SERIALIZER reproduces
@@ -520,9 +515,7 @@ class MemcachedCache(CacheBackend):
                 self._settings.memcached_key(logical_key)
             )
             self._key_registry.discard(logical_key)
-        _logger.debug(
-            "MemcachedCache: deleted %d key(s) with prefix %r.", len(matching), prefix
-        )
+        _logger.debug("MemcachedCache: deleted %d key(s) with prefix %r.", len(matching), prefix)
 
     async def clear(self) -> None:
         """
@@ -667,8 +660,7 @@ class MemcachedCacheConfiguration:
                              not on ``start()``).
         """
         _logger.info(
-            "MemcachedCacheConfiguration: starting MemcachedCache "
-            "(host=%s, port=%s, prefix=%r).",
+            "MemcachedCacheConfiguration: starting MemcachedCache (host=%s, port=%s, prefix=%r).",
             settings.host,
             settings.port,
             settings.key_prefix,

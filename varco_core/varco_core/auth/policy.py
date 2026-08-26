@@ -535,9 +535,7 @@ class RequestMapper:
             # str() round-trips both Action members and custom StrEnum verbs.
             action=str(action),
             subject_attrs=attributes_of_context(ctx),
-            object_attrs=attributes_of(
-                resource.entity, exclude=self.object_attr_excludes
-            ),
+            object_attrs=attributes_of(resource.entity, exclude=self.object_attr_excludes),
             domain=self.domain_for(ctx, action, resource),
         )
 

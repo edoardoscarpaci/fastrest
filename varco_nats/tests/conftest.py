@@ -46,9 +46,7 @@ def nats_url(request: pytest.FixtureRequest) -> str:
 
     override = os.environ.get("VARCO_TEST_NATS_URL")
     if override:
-        request.config.stash.setdefault("varco_test_overrides", []).append(
-            ("nats", override)
-        )
+        request.config.stash.setdefault("varco_test_overrides", []).append(("nats", override))
         yield override
         return
 

@@ -134,9 +134,7 @@ def config() -> RedisEventBusSettings:
 
 
 @pytest.fixture
-async def bus(
-    config: RedisEventBusSettings, fake_redis: FakeRedis
-) -> AsyncIterator[RedisEventBus]:
+async def bus(config: RedisEventBusSettings, fake_redis: FakeRedis) -> AsyncIterator[RedisEventBus]:
     """
     ``RedisEventBus`` with redis.asyncio fakes injected via monkeypatch.
     """
@@ -247,9 +245,7 @@ class TestRedisEventBusPublish:
         self,
         fake_redis: FakeRedis,
     ) -> None:
-        config = RedisEventBusSettings(
-            url="redis://fake:6379/0", channel_prefix="prod:"
-        )
+        config = RedisEventBusSettings(url="redis://fake:6379/0", channel_prefix="prod:")
         with patch("varco_redis.bus.aioredis") as mock_aioredis:
             mock_aioredis.from_url.return_value = fake_redis
             async with RedisEventBus(config) as bus:
@@ -317,9 +313,7 @@ class TestRedisEventBusListenerDispatch:
     ) -> None:
         received: list[Event] = []
         event = OrderPlacedEvent(order_id="prefix-test")
-        config = RedisEventBusSettings(
-            url="redis://fake:6379/0", channel_prefix="prod:"
-        )
+        config = RedisEventBusSettings(url="redis://fake:6379/0", channel_prefix="prod:")
 
         with patch("varco_redis.bus.aioredis") as mock_aioredis:
             mock_aioredis.from_url.return_value = fake_redis

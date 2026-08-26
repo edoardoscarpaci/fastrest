@@ -238,9 +238,7 @@ def _build_input_schema(route: ResolvedRoute) -> dict[str, Any]:
                     required.append(field)
         except Exception:  # noqa: BLE001
             # model_json_schema() can raise for complex generics — skip gracefully
-            _logger.debug(
-                "MCPAdapter: could not build schema for %s", route.request_model
-            )
+            _logger.debug("MCPAdapter: could not build schema for %s", route.request_model)
 
     # ── 3. List-specific pagination/filter params ─────────────────────────────
     if route.crud_action == "list":
@@ -417,9 +415,7 @@ class MCPAuthMiddleware:
 
     def __repr__(self) -> str:
         return (
-            f"MCPAuthMiddleware("
-            f"server_auth={self._server_auth!r}, "
-            f"mount_path={self._mount_path!r})"
+            f"MCPAuthMiddleware(server_auth={self._server_auth!r}, mount_path={self._mount_path!r})"
         )
 
 
@@ -510,7 +506,9 @@ class MCPAdapter:
                 tool_name = f"{self._prefix}{route.mcp_name}"
             else:
                 tool_name = _auto_tool_name(route, self._resource, self._prefix)
-            auto_desc = f"Perform the '{route.crud_action or route.name}' operation on {self._resource}."
+            auto_desc = (
+                f"Perform the '{route.crud_action or route.name}' operation on {self._resource}."
+            )
             description = _resolve_description(
                 route.mcp_description,
                 route.summary,
@@ -527,9 +525,7 @@ class MCPAdapter:
                 )
             )
         # Build a lookup from tool name → tool definition for O(1) dispatch
-        self._tool_by_name: dict[str, MCPToolDefinition] = {
-            t.name: t for t in self._tools
-        }
+        self._tool_by_name: dict[str, MCPToolDefinition] = {t.name: t for t in self._tools}
 
     # ── Public read-only properties ────────────────────────────────────────────
 
@@ -858,9 +854,7 @@ def bind_mcp_adapter(
             enabled_routes=_enabled,
         )
 
-    container.provide(
-        Provider(singleton=True)(_mcp_adapter_factory), returns=MCPAdapter
-    )
+    container.provide(Provider(singleton=True)(_mcp_adapter_factory), returns=MCPAdapter)
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────

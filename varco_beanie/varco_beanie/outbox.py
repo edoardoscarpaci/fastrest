@@ -378,9 +378,7 @@ class BeanieOutboxRepository(OutboxRepository):
         )
         if doc is not None:
             await doc.delete(**delete_kwargs)
-            _logger.debug(
-                "BeanieOutboxRepository.delete: deleted entry_id=%s", entry_id
-            )
+            _logger.debug("BeanieOutboxRepository.delete: deleted entry_id=%s", entry_id)
         else:
             # Not found — no-op.  Another relay instance may have deleted it.
             _logger.debug(
@@ -439,9 +437,7 @@ class BeanieOutboxRepository(OutboxRepository):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"BeanieOutboxRepository(" f"session={'set' if self._session else 'None'})"
-        )
+        return f"BeanieOutboxRepository(session={'set' if self._session else 'None'})"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

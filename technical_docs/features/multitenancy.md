@@ -114,9 +114,9 @@ async with engine.connect() as conn:
     await assert_rls_enabled(
         conn,
         tables={"orders", "invoices"},
-        global_tables={"reference_data"},   # TenantScope.GLOBAL — always skipped
+        global_tables={"reference_data"},  # TenantScope.GLOBAL — always skipped
         framework_tables=framework_table_names(),
-        enforce=True,   # raises TenantIsolationError naming the fix + doc path
+        enforce=True,  # raises TenantIsolationError naming the fix + doc path
     )
 ```
 
@@ -137,8 +137,10 @@ table names to enable in one revision:
 ```python
 from varco_sa.rls_framework import framework_rls_upgrade, framework_rls_downgrade
 
+
 def upgrade() -> None:
-    framework_rls_upgrade(op)     # varco_audit_log + varco_dead_letters, both by default
+    framework_rls_upgrade(op)  # varco_audit_log + varco_dead_letters, both by default
+
 
 def downgrade() -> None:
     framework_rls_downgrade(op)
@@ -183,8 +185,8 @@ Provisioning a schema:
 from varco_sa.tenancy.provisioner import SASchemaProvisioner
 
 provisioner = SASchemaProvisioner(engine=engine)
-await provisioner.provision("acme")                              # CREATE SCHEMA IF NOT EXISTS
-await provisioner.deprovision("acme", confirm_destroy=True)       # DROP SCHEMA ... CASCADE
+await provisioner.provision("acme")  # CREATE SCHEMA IF NOT EXISTS
+await provisioner.deprovision("acme", confirm_destroy=True)  # DROP SCHEMA ... CASCADE
 ```
 
 ## Recipe 3 — strategy 4: Postgres database-per-tenant
@@ -194,10 +196,11 @@ from varco_sa.tenancy.engine_registry import SAEngineRegistry
 
 registry = SAEngineRegistry(
     db_template="db_{tenant_id}",
-    pool_size=1, max_overflow=2,   # per-tenant engines are mostly idle
+    pool_size=1,
+    max_overflow=2,  # per-tenant engines are mostly idle
     max_entries=50,
 )
-engine = await registry.ensure("acme")   # cached, LRU-evicted, refcounted
+engine = await registry.ensure("acme")  # cached, LRU-evicted, refcounted
 ```
 
 Cluster DDL (`CREATE DATABASE`/`DROP DATABASE`) is **confined to the control
@@ -217,7 +220,7 @@ pool = BeanieTenantPool(
     document_models=[UserDocument, OrderDocument],
     max_entries=50,
 )
-binding = await pool.ensure("acme")   # BeanieTenantBinding — per-tenant Document clones
+binding = await pool.ensure("acme")  # BeanieTenantBinding — per-tenant Document clones
 UserClone = binding.clone_for(UserDocument)
 ```
 
@@ -267,7 +270,7 @@ shared copy:
 ```python
 class ReferenceData(DomainModel):
     class Meta:
-        tenant_scope = TenantScope.GLOBAL   # default: TENANT
+        tenant_scope = TenantScope.GLOBAL  # default: TENANT
 ```
 
 The default (`TENANT`, when `Meta.tenant_scope` is absent) is **fail-closed**
@@ -326,7 +329,9 @@ mistake structurally:
 from varco_core.tenancy.scope_guard import validate_service_scope
 
 validate_service_scope(
-    ArtifactService, entity_cls=Artifact, tenant_scope=TenantScope.GLOBAL,
+    ArtifactService,
+    entity_cls=Artifact,
+    tenant_scope=TenantScope.GLOBAL,
 )
 # raises TenantIsolationError if ArtifactService mixes in TenantAwareService
 ```
@@ -365,9 +370,9 @@ that is *not* namespaced is a cross-tenant leak; a `GLOBAL`-scoped key that
 ```python
 from varco_core.tenancy import tenancy_cache_key
 
-tenancy_cache_key(Order, "42")           # "tenant:acme:Order:42" — inside tenant_context()
-tenancy_cache_key(ReferenceData, "42")   # "global:ReferenceData:42" — identical across tenants
-tenancy_cache_key(Order, "42")           # RuntimeError outside tenant_context() — fails closed
+tenancy_cache_key(Order, "42")  # "tenant:acme:Order:42" — inside tenant_context()
+tenancy_cache_key(ReferenceData, "42")  # "global:ReferenceData:42" — identical across tenants
+tenancy_cache_key(Order, "42")  # RuntimeError outside tenant_context() — fails closed
 ```
 
 ---
@@ -433,7 +438,9 @@ limiting for a persistently-unknown id).
 from varco_fastapi.tenancy.router import build_tenant_router
 
 router = build_tenant_router(
-    control_service, server_auth=admin_auth, admin_role="tenant-admin",
+    control_service,
+    server_auth=admin_auth,
+    admin_role="tenant-admin",
 )
 ```
 
@@ -459,6 +466,7 @@ await producer._produce(TenantProvisionRequested(tenant_id="acme"), channel="var
 from varco_core.tenancy.control.consumer import TenantProvisionConsumer
 from varco_core.tenancy.control.service import TenantControlService
 
+
 class TenancyWiring:
     def __init__(
         self,
@@ -468,10 +476,13 @@ class TenancyWiring:
         producer: Inject[AbstractEventProducer],
     ):
         self._control_service = TenantControlService(
-            catalog=catalog, provisioner=provisioner, producer=producer,
+            catalog=catalog,
+            provisioner=provisioner,
+            producer=producer,
         )
         self._consumer = TenantProvisionConsumer(
-            control_service=self._control_service, dlq=my_dlq,
+            control_service=self._control_service,
+            dlq=my_dlq,
         )
         self._bus = bus
 
@@ -584,14 +595,15 @@ Bundle explicitly, with `mount_tenant_admin`:
 ```python
 from varco_fastapi.tenancy.mount import mount_tenant_admin
 
-app = create_varco_app(container, routers=[...])       # tenant traffic
+app = create_varco_app(container, routers=[...])  # tenant traffic
 mount_tenant_admin(
-    app, control_service,
-    acknowledge_bundled_admin=True,   # required; ValueError without it
+    app,
+    control_service,
+    acknowledge_bundled_admin=True,  # required; ValueError without it
     server_auth=admin_auth,
-    admin_role="tenant-admin",        # deliberately distinct from a generic "admin"
+    admin_role="tenant-admin",  # deliberately distinct from a generic "admin"
     prefix="/tenancy",
-    dependencies=[Depends(ip_allowlist)],   # optional extra network-level gate
+    dependencies=[Depends(ip_allowlist)],  # optional extra network-level gate
 )
 ```
 
@@ -677,10 +689,10 @@ looping into each other now that they share one code path.
 
 ```python
 # On the control plane / a node that must ALSO provision itself locally:
-await control_service.provision(tenant_id)           # 1. local, synchronous — surfaces
-                                                       #    a DDL failure to the caller
-await control_service.request_provision(tenant_id)   # 2. broadcast — tells the rest
-                                                       #    of the fleet
+await control_service.provision(tenant_id)  # 1. local, synchronous — surfaces
+#    a DDL failure to the caller
+await control_service.request_provision(tenant_id)  # 2. broadcast — tells the rest
+#    of the fleet
 ```
 
 `request_provision()`/`request_deprovision()` emit the command event and do
@@ -692,14 +704,14 @@ this node too is a call the caller must make explicitly.
 ```python
 # Worker-mode service (e.g. the "orders" microservice's own control service)
 worker_service = TenantControlService(
-    catalog=catalog,            # still reads the catalog (refuses DELETED/DEPROVISIONING)
+    catalog=catalog,  # still reads the catalog (refuses DELETED/DEPROVISIONING)
     provisioner=orders_provisioner,
     producer=producer,
-    catalog_authority=False,    # never writes the catalog — RD-16
-    store_id="orders",          # or VARCO_TENANCY_STORE_ID
+    catalog_authority=False,  # never writes the catalog — RD-16
+    store_id="orders",  # or VARCO_TENANCY_STORE_ID
 )
 worker_consumer = TenantProvisionConsumer(control_service=worker_service, dlq=my_dlq)
-worker_consumer.register_to(bus)   # from @PostConstruct
+worker_consumer.register_to(bus)  # from @PostConstruct
 ```
 
 `request_deprovision(tenant_id, confirm=False)` raises
@@ -736,12 +748,12 @@ is that terminator, aggregating per-store `TenantNodeReady` facts.
 from varco_core.tenancy.control.readiness import TenantReadinessCoordinator
 
 coordinator = TenantReadinessCoordinator(
-    control_service=authority_service,          # catalog_authority=True — required
+    control_service=authority_service,  # catalog_authority=True — required
     expected_stores=frozenset({"orders", "billing", "inventory"}),
-    timeout_s=900.0,                             # None disables the watchdog
+    timeout_s=900.0,  # None disables the watchdog
     dlq=my_dlq,
 )
-coordinator.register_to(bus)                     # from @PostConstruct — never __init__
+coordinator.register_to(bus)  # from @PostConstruct — never __init__
 ```
 
 ### Why the unit is a store, not a pod
@@ -838,9 +850,9 @@ be published** unless fan-out is enabled.
 from varco_core.tenancy.fanout import TenantFanoutSupervisor
 
 supervisor = TenantFanoutSupervisor(
-    child_factory=lambda tid: build_outbox_relay_for(tid),   # your own factory
-    max_entries=50,     # mirrors the resource pool's cap — same bound, no second knob
-    enabled=settings.fanout_framework_tables,   # False by default
+    child_factory=lambda tid: build_outbox_relay_for(tid),  # your own factory
+    max_entries=50,  # mirrors the resource pool's cap — same bound, no second knob
+    enabled=settings.fanout_framework_tables,  # False by default
 )
 await supervisor.start()
 ```

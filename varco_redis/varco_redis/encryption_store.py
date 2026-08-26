@@ -230,9 +230,7 @@ class RedisEncryptionKeyStore:
         # Load each entry by kid; skip tombstoned entries (Set/Hash inconsistency)
         entries: list[EncryptionKeyEntry] = []
         for kid_bytes in kids_raw:
-            kid = (
-                kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
-            )
+            kid = kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
             entry = await self.load(kid)
             if entry is not None:
                 entries.append(entry)
@@ -314,9 +312,7 @@ class RedisEncryptionKeyStore:
             return []
         entries: list[EncryptionKeyEntry] = []
         for kid_bytes in kids_raw:
-            kid = (
-                kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
-            )
+            kid = kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
             entry = await self.load(kid)
             if entry is not None:
                 entries.append(entry)
@@ -352,15 +348,11 @@ class RedisEncryptionKeyStore:
         kids_raw = await self._client.smembers(self._scope_set_key(scope))  # type: ignore[misc]
         destroyed_kids: list[str] = []
         for kid_bytes in kids_raw:
-            kid = (
-                kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
-            )
+            kid = kid_bytes.decode("utf-8") if isinstance(kid_bytes, bytes) else kid_bytes
             entry = await self.load(kid)
             if entry is None or entry.is_destroyed:
                 continue
-            tombstoned = dataclasses.replace(
-                entry, key_material="", destroyed_at=datetime.now(UTC)
-            )
+            tombstoned = dataclasses.replace(entry, key_material="", destroyed_at=datetime.now(UTC))
             await self._client.hset(  # type: ignore[misc]
                 self._hash_key(kid), mapping=_entry_to_redis_mapping(tombstoned)
             )
@@ -385,9 +377,7 @@ class RedisEncryptionKeyStore:
 
         # SCAN iterates without blocking the Redis event loop (vs KEYS)
         while True:
-            cursor, keys = await self._client.scan(
-                cursor, match=scan_pattern, count=100
-            )
+            cursor, keys = await self._client.scan(cursor, match=scan_pattern, count=100)
             for key in keys:
                 raw = await self._client.hgetall(key)  # type: ignore[misc]
                 if not raw:

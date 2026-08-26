@@ -51,9 +51,7 @@ class Post(DomainModel):
     """
 
     # STR_ASSIGNED + init=True: pk is part of __init__ with default=None.
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     # Empty default keeps Post constructible without title for collection tests.
     title: str = ""
 
@@ -209,9 +207,7 @@ class TestBaseAuthorizerAuthorize:
         for action in Action:
             await authorizer.authorize(anon_ctx, action, instance_resource)
 
-    async def test_returns_none(
-        self, anon_ctx: AuthContext, collection_resource: Resource
-    ):
+    async def test_returns_none(self, anon_ctx: AuthContext, collection_resource: Resource):
         # authorize() must return None on success — callers treat non-None
         # returns as errors, so an accidental truthy return would be a bug.
         authorizer = BaseAuthorizer()
@@ -296,9 +292,7 @@ class TestBaseAuthorizerDI:
         resolved = container.get(AbstractAuthorizer)
         assert isinstance(resolved, BaseAuthorizer)
 
-    async def test_di_resolved_instance_works_end_to_end(
-        self, fresh_container: DIContainer
-    ):
+    async def test_di_resolved_instance_works_end_to_end(self, fresh_container: DIContainer):
         # Full round-trip: resolve from container, then call authorize().
         # Validates that the DI-constructed instance is actually functional —
         # not just the right type.

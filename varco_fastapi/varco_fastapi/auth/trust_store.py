@@ -112,18 +112,10 @@ class TrustStore:
             - Paths are not validated at construction time — ``build_ssl_context()``
               will raise if a path does not exist.
         """
-        ca_cert: Path | None = (
-            Path(v) if (v := os.environ.get("VARCO_CA_CERT")) else None
-        )
-        ca_folder: Path | None = (
-            Path(v) if (v := os.environ.get("VARCO_TRUST_STORE_DIR")) else None
-        )
-        client_cert: Path | None = (
-            Path(v) if (v := os.environ.get("VARCO_CLIENT_CERT")) else None
-        )
-        client_key: Path | None = (
-            Path(v) if (v := os.environ.get("VARCO_CLIENT_KEY")) else None
-        )
+        ca_cert: Path | None = Path(v) if (v := os.environ.get("VARCO_CA_CERT")) else None
+        ca_folder: Path | None = Path(v) if (v := os.environ.get("VARCO_TRUST_STORE_DIR")) else None
+        client_cert: Path | None = Path(v) if (v := os.environ.get("VARCO_CLIENT_CERT")) else None
+        client_key: Path | None = Path(v) if (v := os.environ.get("VARCO_CLIENT_KEY")) else None
         return cls(
             ca_cert=ca_cert,
             ca_folder=ca_folder,
@@ -231,9 +223,7 @@ class TrustStore:
         # Step 2: load ca_folder
         if self.ca_folder is not None:
             folder = Path(self.ca_folder)
-            for cert_path in sorted(
-                list(folder.glob("*.pem")) + list(folder.glob("*.crt"))
-            ):
+            for cert_path in sorted(list(folder.glob("*.pem")) + list(folder.glob("*.crt"))):
                 ctx.load_verify_locations(cafile=str(cert_path))
 
         # Step 3: load explicit ca_cert

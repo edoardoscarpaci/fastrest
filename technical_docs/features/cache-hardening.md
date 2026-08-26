@@ -32,8 +32,10 @@ from varco_core.cache import CachePolicy, InMemoryCache, Singleflight, read_thro
 policy = CachePolicy(ttl=300.0, ttl_jitter=0.1, soft_ttl=240.0, singleflight=True)
 sf = Singleflight(name="users")
 
+
 async def loader() -> dict:
     return await db.fetch_one(...)
+
 
 async with InMemoryCache() as cache:
     value = await read_through(cache, "tenant:acme:User:42", loader, policy, singleflight=sf)
@@ -83,9 +85,11 @@ shared recompute.
 ```python
 from varco_core.cache import CachePolicy, cached
 
+
 @cached(cache, policy=CachePolicy(ttl=300.0), singleflight=True, namespace="users")
 async def get_user(user_id: int) -> dict:
     return await db.fetch_one("SELECT * FROM users WHERE id = $1", user_id)
+
 
 # 100 concurrent await get_user(42) on a cold key → loader runs once.
 await get_user.aclose()  # drains any outstanding background SWR refresh tasks
@@ -183,7 +187,7 @@ l2 = RedisCache(RedisCacheSettings(url="redis://localhost:6379/0"))
 backplane = RedisPubSubBackplane()
 
 async with LayeredCache(l1, l2, promote_ttl=60, backplane=backplane) as cache:
-    await cache.set("product:1", product, ttl=300)   # other pods' L1 is invalidated
+    await cache.set("product:1", product, ttl=300)  # other pods' L1 is invalidated
 ```
 
 Five design rules, each closing a hazard named in research brief 002:
@@ -253,10 +257,10 @@ only C4 activates `soft_expires_at`.
 from varco_core.cache import CachePolicy
 
 policy = CachePolicy(
-    ttl=300.0,             # hard TTL
-    ttl_jitter=0.1,        # ±10% randomized TTL — avoids a synchronized expiry cliff
-    soft_ttl=240.0,        # stale-while-revalidate window (must be < ttl)
-    negative_ttl=30.0,     # opt-in negative caching (D-4) — shorter than ttl
+    ttl=300.0,  # hard TTL
+    ttl_jitter=0.1,  # ±10% randomized TTL — avoids a synchronized expiry cliff
+    soft_ttl=240.0,  # stale-while-revalidate window (must be < ttl)
+    negative_ttl=30.0,  # opt-in negative caching (D-4) — shorter than ttl
     stale_if_error=600.0,  # serve stale if the loader raises within this window of hard expiry
     singleflight=True,
 )

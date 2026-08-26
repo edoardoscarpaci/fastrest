@@ -327,9 +327,7 @@ def create_varco_app(
     resolved_migration_settings = migration_settings or MigrationSettings.from_env()
     if migrations is not None:
         migrators: tuple[AbstractMigrator, ...] = (
-            (migrations,)
-            if isinstance(migrations, AbstractMigrator)
-            else tuple(migrations)
+            (migrations,) if isinstance(migrations, AbstractMigrator) else tuple(migrations)
         )
         if resolved_migration_settings.mode != "off":
             from varco_fastapi.migrate import MigrationLifecycle
@@ -376,9 +374,7 @@ def create_varco_app(
         from varco_fastapi.reliability import ReliabilityLifecycle
 
         _preset = (
-            reliability
-            if isinstance(reliability, ReliabilityPreset)
-            else ReliabilityPreset.off()
+            reliability if isinstance(reliability, ReliabilityPreset) else ReliabilityPreset.off()
         )
         lifespan_components = [
             *lifespan_components,
@@ -402,9 +398,7 @@ def create_varco_app(
     # now fails fast with an AttributeError on `.enabled` instead of being
     # silently discarded.
     _resolved_i18n_settings = i18n if i18n is not None else I18nSettings()
-    _resolved_timezone_settings = (
-        timezone if timezone is not None else TimezoneSettings()
-    )
+    _resolved_timezone_settings = timezone if timezone is not None else TimezoneSettings()
     # RD-3 (drift item 4): resolved once here and threaded into BOTH
     # add_exception_handlers() and ErrorMiddleware below, so the error path
     # actually localizes message_key/params via request.state.varco_request_context
@@ -418,9 +412,7 @@ def create_varco_app(
 
         try:
             _catalog = container.get(MessageCatalog)
-        except (
-            Exception
-        ):  # noqa: BLE001 — no catalog bound; NullMessageCatalog-equivalent
+        except Exception:  # noqa: BLE001 — no catalog bound; NullMessageCatalog-equivalent
             _catalog = None
         if _catalog is not None:
             lifespan_components = [*lifespan_components, I18nLifecycle(_catalog)]
@@ -534,9 +526,7 @@ def create_varco_app(
             app.add_middleware(mw_entry)
 
     # Outermost: CORS (must run before auth so OPTIONS preflight passes)
-    cors_config = cors or (
-        CORSConfig.from_env() if container is None else _resolve_cors(container)
-    )
+    cors_config = cors or (CORSConfig.from_env() if container is None else _resolve_cors(container))
     install_cors(app, cors_config)
 
     # ── Step 9: Mount CRUD routers ────────────────────────────────────────────
@@ -568,7 +558,7 @@ def create_varco_app(
         _mount_metrics_router(app)
 
     _logger.info(
-        "create_varco_app: created '%s' v%s with %d router(s), " "mcp=%s, skill=%s",
+        "create_varco_app: created '%s' v%s with %d router(s), mcp=%s, skill=%s",
         title,
         version,
         len(resolved_routers),
@@ -723,12 +713,8 @@ def _collect_lifecycle_components(container: Any) -> list[Any]:
     # before we call container.get() — this is the idiomatic providify pattern.
     # AbstractEventBus / AbstractJobRunner are core infra you almost certainly
     # meant to wire — warn_if_missing stays at its default (True).
-    _try_resolve_component(
-        container, components, "varco_core.event.base", "AbstractEventBus"
-    )
-    _try_resolve_component(
-        container, components, "varco_core.job.base", "AbstractJobRunner"
-    )
+    _try_resolve_component(container, components, "varco_core.event.base", "AbstractEventBus")
+    _try_resolve_component(container, components, "varco_core.job.base", "AbstractJobRunner")
     # varco_ws push adapters — discovered when container.scan("varco_ws") was called.
     # Only added when the caller explicitly registered them — warn_if_missing=False
     # so an app that never uses varco_ws doesn't get two guaranteed startup WARNINGs.
@@ -1086,9 +1072,7 @@ def _mount_metrics_router(app: Any) -> None:
         app.include_router(MetricsRouter().build_router())
         _logger.debug("_mount_metrics_router: MetricsRouter mounted at /metrics.")
     except ImportError as exc:
-        _logger.warning(
-            "_mount_metrics_router: could not import MetricsRouter: %s", exc
-        )
+        _logger.warning("_mount_metrics_router: could not import MetricsRouter: %s", exc)
     except Exception as exc:  # noqa: BLE001
         _logger.warning("_mount_metrics_router: could not mount MetricsRouter: %s", exc)
 

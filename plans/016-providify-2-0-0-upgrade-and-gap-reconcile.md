@@ -113,7 +113,7 @@ Two mechanical shapes replace `provide_factory(container, f, returns=X, singleto
 provide_factory(container, _factory, returns=WebSocketEventBus, singleton=True)
 
 # after
-_factory.__name__ = "…"                       # ONLY where name= was passed (see below)
+_factory.__name__ = "…"  # ONLY where name= was passed (see below)
 container.provide(Provider(singleton=True)(_factory), returns=WebSocketEventBus)
 ```
 
@@ -128,7 +128,7 @@ is container-less by design (its tests import `_make_repo_provider()` and assert
 the container-less builder can now express its intent natively:
 
 ```python
-return Provider(returns=AsyncRepository[entity_cls])(_repo_factory)   # replaces di.py:207
+return Provider(returns=AsyncRepository[entity_cls])(_repo_factory)  # replaces di.py:207
 ```
 
 so `di.py:207`'s `_repo_factory.__annotations__["return"] = …` goes away too, and the

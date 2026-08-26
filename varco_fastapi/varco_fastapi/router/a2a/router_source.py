@@ -305,13 +305,9 @@ class RouterSkillSource:
         """
         skill = self._skill_by_id.get(skill_id)
         if skill is None:
-            raise KeyError(
-                f"Unknown skill '{skill_id}'. Available: {list(self._skill_by_id)}."
-            )
+            raise KeyError(f"Unknown skill '{skill_id}'. Available: {list(self._skill_by_id)}.")
         if self._client is None:
-            raise RuntimeError(
-                "RouterSkillSource has no client — pass client= to dispatch skills."
-            )
+            raise RuntimeError("RouterSkillSource has no client — pass client= to dispatch skills.")
         assert skill.route is not None  # router-derived skills always carry a route
         return await _dispatch_route(self._client, skill.route, dict(payload))
 

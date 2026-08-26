@@ -199,9 +199,9 @@ def test_http_query_params_empty_string_raises_service_validation_error():
     with pytest.raises(ServiceValidationError) as exc_info:
         params.to_query_params()
     # Any parse error must produce a ServiceValidationError (never a raw LarkError → 500)
-    assert "Filter syntax error" in str(
+    assert "Filter syntax error" in str(exc_info.value) or "Invalid filter expression" in str(
         exc_info.value
-    ) or "Invalid filter expression" in str(exc_info.value)
+    )
 
 
 def test_http_query_params_valid_double_quoted_filter_still_works():
@@ -290,9 +290,7 @@ class _MockService:
         return 0
 
 
-class ItemRouter(
-    AllRouteMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-):
+class ItemRouter(AllRouteMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
     _prefix = "/items"
     _tags = ["items"]
     _service = _MockService()
@@ -465,9 +463,7 @@ def test_all_route_mixin_combines_six_mixins():
         DeleteMixin,
         ListMixin,
     ):
-        assert issubclass(
-            AllRouteMixin, mixin
-        ), f"AllRouteMixin missing {mixin.__name__}"
+        assert issubclass(AllRouteMixin, mixin), f"AllRouteMixin missing {mixin.__name__}"
 
 
 def test_crud_router_inherits_all_route_mixin():

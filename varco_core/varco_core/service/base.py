@@ -301,9 +301,7 @@ class AsyncService(ABC, Generic[D, PK, C, R, U]):
         # any event infrastructure wired.  Concrete subclasses that want
         # events must add this parameter with InjectMeta(optional=True) so
         # the DI container supplies BusEventProducer when a bus is registered.
-        producer: Annotated[
-            AbstractEventProducer | None, InjectMeta(optional=True)
-        ] = None,
+        producer: Annotated[AbstractEventProducer | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -944,9 +942,7 @@ class AsyncService(ABC, Generic[D, PK, C, R, U]):
             self.list(params, ctx),
             self.count(params, ctx),
         )
-        return paged_response(
-            results, params=params, total_count=total, raw_query=raw_query
-        )
+        return paged_response(results, params=params, total_count=total, raw_query=raw_query)
 
     async def exists(self, pk: PK, ctx: AuthContext) -> bool:
         """

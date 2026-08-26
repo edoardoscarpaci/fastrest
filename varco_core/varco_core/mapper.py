@@ -50,9 +50,7 @@ D = TypeVar("D", bound=DomainModel)
 O = TypeVar("O")  # noqa: E741
 
 # System field names that receive special treatment in to_orm / sync_to_orm.
-_SYSTEM_FIELDS = frozenset(
-    {"created_at", "updated_at", "definition_version", "row_version"}
-)
+_SYSTEM_FIELDS = frozenset({"created_at", "updated_at", "definition_version", "row_version"})
 
 
 class AbstractMapper(ABC, Generic[D, O]):
@@ -299,11 +297,7 @@ class AbstractMapper(ABC, Generic[D, O]):
         Returns:
             Ciphertext ``bytes`` if encrypted, original ``value`` otherwise.
         """
-        if (
-            self._encryptor is None
-            or name not in self._encrypted_fields
-            or value is None
-        ):
+        if self._encryptor is None or name not in self._encrypted_fields or value is None:
             return value
         return self._encryptor.encrypt(self._value_to_bytes(value), context=context)
 
@@ -329,11 +323,7 @@ class AbstractMapper(ABC, Generic[D, O]):
         Returns:
             Plaintext value of the original Python type, or original ``value``.
         """
-        if (
-            self._encryptor is None
-            or name not in self._encrypted_fields
-            or value is None
-        ):
+        if self._encryptor is None or name not in self._encrypted_fields or value is None:
             return value
         raw = self._encryptor.decrypt(bytes(value), context=context)
         target_type = self._encrypted_field_types.get(name, str)
@@ -508,9 +498,7 @@ class AbstractMapper(ABC, Generic[D, O]):
         context = self._context_from_domain(domain)
 
         for name in self._init_fields:
-            setattr(
-                orm_obj, name, self._encrypt_value(name, getattr(domain, name), context)
-            )
+            setattr(orm_obj, name, self._encrypt_value(name, getattr(domain, name), context))
 
         # ── System fields ─────────────────────────────────────────────────────
         now = datetime.now(tz=UTC)

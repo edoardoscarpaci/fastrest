@@ -38,13 +38,14 @@ flowchart TD
 ```python
 @dataclass(frozen=True)
 class ServiceContract:
-    contract_version: str          # wire-format version, e.g. "1.0"
+    contract_version: str  # wire-format version, e.g. "1.0"
     service_name: str
     routes: tuple[RouteContract, ...]
     schemas: dict[str, dict[str, Any]] = field(default_factory=dict)  # flat $defs registry
     base_path: str = ""
-    service_version: str | None = None   # your app's own version, independent of contract_version
+    service_version: str | None = None  # your app's own version, independent of contract_version
     description: str | None = None
+
 
 @dataclass(frozen=True)
 class RouteContract:
@@ -63,10 +64,11 @@ class RouteContract:
     description: str | None = None
     tags: tuple[str, ...] = ()
 
+
 @dataclass(frozen=True)
 class ParamContract:
     name: str
-    kind: str              # "path" | "query" | "body" | "header"
+    kind: str  # "path" | "query" | "body" | "header"
     schema: dict[str, Any]  # JSON Schema fragment, may be a $ref
     required: bool = True
     default: Any = None
@@ -131,11 +133,13 @@ varco gen-client-stubs -c order.contract.json -o order_client.pyi
 ```python
 # 4a. Runtime one-liner (scripts/notebooks) — no generated file at all:
 from varco_fastapi.contract.runtime import contract_client
+
 client = contract_client("order.contract.json", "https://orders.internal")
 order = await client.read(order_id)
 
 # 4b. Generated module (checked in, step 3a):
 from order_client import OrderClient
+
 client = OrderClient("https://orders.internal")
 order = await client.read(order_id)
 ```

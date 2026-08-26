@@ -24,6 +24,7 @@ and one FastAPI lifespan component.
 ```python
 from varco_core.reliability import ReliabilityPreset
 
+
 @dataclass(frozen=True)
 class ReliabilityPreset:
     retry_policy: RetryPolicy | None = None
@@ -34,14 +35,16 @@ class ReliabilityPreset:
     outbox_max_attempts: int | None = None
 
     @classmethod
-    def off(cls) -> ReliabilityPreset: ...       # the default — byte-identical to pre-Plan-009
+    def off(cls) -> ReliabilityPreset: ...  # the default — byte-identical to pre-Plan-009
 
     @classmethod
     def best_effort(cls, *, dlq: AbstractDeadLetterQueue) -> ReliabilityPreset: ...
+
     # RetryPolicy(max_attempts=3, base_delay=0.5) + dlq; no outbox/audit/metrics
 
     @classmethod
     def durable(cls, *, dlq: AbstractDeadLetterQueue) -> ReliabilityPreset: ...
+
     # RetryPolicy.durable_delivery() + dlq + outbox=True + audit=True + metrics=ReliabilityMetricsConfig()
 ```
 
@@ -77,7 +80,7 @@ into the app's startup/shutdown sequence:
 ```python
 class ReliabilityLifecycle:
     def __init__(self, preset: ReliabilityPreset, *, container: Any) -> None: ...
-    async def startup(self) -> None: ...   # metrics + OutboxRelay + AuditConsumer, per preset
+    async def startup(self) -> None: ...  # metrics + OutboxRelay + AuditConsumer, per preset
     async def shutdown(self) -> None: ...  # stops the OutboxRelay it started
 ```
 
@@ -101,8 +104,9 @@ from varco_core.reliability import ReliabilityPreset, set_default_reliability_pr
 
 set_default_reliability_preset(ReliabilityPreset.durable(dlq=my_dlq))
 
+
 class OrderConsumer(EventConsumer):
-    @listen(OrderPlacedEvent, channel="orders")   # inherits the durable preset
+    @listen(OrderPlacedEvent, channel="orders")  # inherits the durable preset
     async def on_order(self, event: OrderPlacedEvent) -> None: ...
 ```
 
@@ -130,8 +134,10 @@ already defined still applies — the decorator only stores `_UNSET` at
 class-definition time.
 
 ```python
-@listen(OrderPlacedEvent, channel="orders", retry_policy=None)   # explicit opt-out
+@listen(OrderPlacedEvent, channel="orders", retry_policy=None)  # explicit opt-out
 async def on_order(self, event: OrderPlacedEvent) -> None: ...
+
+
 # no retry, no DLQ — even with a durable() default preset process-wide
 ```
 

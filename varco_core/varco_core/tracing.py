@@ -83,9 +83,7 @@ from uuid import uuid4
 
 # Stores the active correlation ID for the current async task.
 # Default is None — unset until correlation_context() is entered.
-_correlation_id: ContextVar[str | None] = ContextVar(
-    "varco_correlation_id", default=None
-)
+_correlation_id: ContextVar[str | None] = ContextVar("varco_correlation_id", default=None)
 
 
 # ── Public helpers ─────────────────────────────────────────────────────────────

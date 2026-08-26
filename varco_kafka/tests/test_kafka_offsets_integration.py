@@ -36,9 +36,7 @@ class OffsetsOrderEvent(Event):
     order_id: str
 
 
-def _settings(
-    kafka_bootstrap: str, *, group_id: str, prefix: str
-) -> KafkaEventBusSettings:
+def _settings(kafka_bootstrap: str, *, group_id: str, prefix: str) -> KafkaEventBusSettings:
     return KafkaEventBusSettings(
         bootstrap_servers=kafka_bootstrap,
         group_id=group_id,
@@ -63,9 +61,7 @@ async def test_messages_published_while_consumer_stopped_are_delivered_after_res
     group_id = f"offsets-it-{run_id}"
     channel = "orders"
 
-    publish_settings = _settings(
-        kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix
-    )
+    publish_settings = _settings(kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix)
     await _publish_n(publish_settings, channel, 5)
 
     consume_settings = _settings(kafka_bootstrap, group_id=group_id, prefix=prefix)
@@ -92,14 +88,10 @@ async def test_fresh_group_id_rereads_from_configured_offset_reset(
     prefix = f"offit2{run_id}-"
     channel = "orders"
 
-    publish_settings = _settings(
-        kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix
-    )
+    publish_settings = _settings(kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix)
     await _publish_n(publish_settings, channel, 3)
 
-    fresh_settings = _settings(
-        kafka_bootstrap, group_id=f"fresh-{run_id}", prefix=prefix
-    )
+    fresh_settings = _settings(kafka_bootstrap, group_id=f"fresh-{run_id}", prefix=prefix)
     received: list[str] = []
 
     async def handler(event: OffsetsOrderEvent) -> None:
@@ -125,9 +117,7 @@ async def test_redelivery_after_failed_handler_does_not_silently_advance_offset(
     group_id = f"redeliver-it-{run_id}"
     channel = "orders"
 
-    publish_settings = _settings(
-        kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix
-    )
+    publish_settings = _settings(kafka_bootstrap, group_id=f"pub-{run_id}", prefix=prefix)
     await _publish_n(publish_settings, channel, 1)
 
     consume_settings = _settings(kafka_bootstrap, group_id=group_id, prefix=prefix)

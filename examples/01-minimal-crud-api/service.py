@@ -67,9 +67,7 @@ class ProductService(
         authorizer: Inject[AbstractAuthorizer],
         # Full generic alias required so providify resolves the correct
         # ProductAssembler binding (registered under the generic alias).
-        assembler: Inject[
-            AbstractDTOAssembler[Product, ProductCreate, ProductRead, ProductUpdate]
-        ],
+        assembler: Inject[AbstractDTOAssembler[Product, ProductCreate, ProductRead, ProductUpdate]],
         # Optional event producer — no-op when no bus is wired (this example).
         # Declared here so a bus can be added later without changing __init__.
         producer: Annotated[AbstractEventProducer, InjectMeta(optional=True)] = None,

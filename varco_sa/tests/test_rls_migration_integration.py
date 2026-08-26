@@ -54,8 +54,7 @@ async def test_rls_upgrade_hides_cross_tenant_rows_then_downgrade_restores(
     async with engine.begin() as conn:
         await conn.execute(
             sa.text(
-                f"CREATE TABLE {table} "
-                "(id SERIAL PRIMARY KEY, tenant_id UUID NOT NULL, value TEXT)"
+                f"CREATE TABLE {table} (id SERIAL PRIMARY KEY, tenant_id UUID NOT NULL, value TEXT)"
             )
         )
         await conn.execute(
@@ -78,8 +77,6 @@ async def test_rls_upgrade_hides_cross_tenant_rows_then_downgrade_restores(
         await conn.run_sync(lambda sync_conn: rls_downgrade(_SyncOp(sync_conn), table))
 
     async with engine.connect() as conn:
-        result = await conn.execute(
-            sa.text(f"SELECT value FROM {table} ORDER BY value")
-        )
+        result = await conn.execute(sa.text(f"SELECT value FROM {table} ORDER BY value"))
         rows = [r[0] for r in result.fetchall()]
         assert rows == ["a-row", "b-row"]

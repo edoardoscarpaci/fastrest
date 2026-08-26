@@ -45,9 +45,7 @@ async def _seed_soft_expired(cache: InMemoryCache, key: str, value) -> None:
 
 
 class TestStaleWhileRevalidate:
-    async def test_soft_expired_entry_returned_immediately_one_refresh(
-        self, cache
-    ) -> None:
+    async def test_soft_expired_entry_returned_immediately_one_refresh(self, cache) -> None:
         await _seed_soft_expired(cache, "k", "stale-value")
 
         sf = Singleflight()
@@ -71,9 +69,7 @@ class TestStaleWhileRevalidate:
         await asyncio.sleep(0.1)
         assert refresh_calls == 1
 
-    async def test_fifty_concurrent_soft_stale_reads_trigger_one_refresh(
-        self, cache
-    ) -> None:
+    async def test_fifty_concurrent_soft_stale_reads_trigger_one_refresh(self, cache) -> None:
         await _seed_soft_expired(cache, "k", "stale-value")
 
         sf = Singleflight()
@@ -87,19 +83,14 @@ class TestStaleWhileRevalidate:
 
         policy = CachePolicy(ttl=1000.0, soft_ttl=1.0, singleflight=True)
         results = await asyncio.gather(
-            *[
-                read_through(cache, "k", loader, policy, singleflight=sf)
-                for _ in range(50)
-            ]
+            *[read_through(cache, "k", loader, policy, singleflight=sf) for _ in range(50)]
         )
         assert all(r == "stale-value" for r in results)
 
         await asyncio.sleep(0.15)
         assert refresh_calls == 1
 
-    async def test_cold_reader_during_in_flight_refresh_becomes_follower(
-        self, cache
-    ) -> None:
+    async def test_cold_reader_during_in_flight_refresh_becomes_follower(self, cache) -> None:
         sf = Singleflight()
         calls = 0
 
@@ -112,15 +103,11 @@ class TestStaleWhileRevalidate:
         policy = CachePolicy(ttl=1000.0, singleflight=True)
 
         # Start a cold-miss recompute in the background.
-        first = asyncio.create_task(
-            read_through(cache, "k", slow_loader, policy, singleflight=sf)
-        )
+        first = asyncio.create_task(read_through(cache, "k", slow_loader, policy, singleflight=sf))
         await asyncio.sleep(0.01)
         # A second cold reader for the same key must become a follower, not
         # start a second recompute.
-        second = asyncio.create_task(
-            read_through(cache, "k", slow_loader, policy, singleflight=sf)
-        )
+        second = asyncio.create_task(read_through(cache, "k", slow_loader, policy, singleflight=sf))
 
         val1, val2 = await asyncio.gather(first, second)
         assert calls == 1
@@ -155,12 +142,8 @@ class TestStaleWhileRevalidate:
             await asyncio.sleep(0.02)
             return "fresh-value"
 
-        policy = CachePolicy(
-            ttl=1000.0, soft_ttl=1.0, singleflight=True, refresh_mode="blocking"
-        )
-        result = await read_through(
-            cache, "k", loader, policy, singleflight=Singleflight()
-        )
+        policy = CachePolicy(ttl=1000.0, soft_ttl=1.0, singleflight=True, refresh_mode="blocking")
+        result = await read_through(cache, "k", loader, policy, singleflight=Singleflight())
         # Blocking mode must wait for the refresh and return the fresh value.
         assert result == "fresh-value"
 

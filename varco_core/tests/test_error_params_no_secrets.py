@@ -22,17 +22,13 @@ class SomeEntity:
 
 
 def test_service_authorization_error_params_excludes_reason() -> None:
-    exc = ServiceAuthorizationError(
-        "delete", SomeEntity, reason="internal ownership check failed"
-    )
+    exc = ServiceAuthorizationError("delete", SomeEntity, reason="internal ownership check failed")
     params = exc.error_params()
     assert "reason" not in params
 
 
 def test_service_authorization_error_reason_absent_from_serialized_body() -> None:
-    exc = ServiceAuthorizationError(
-        "delete", SomeEntity, reason="internal ownership check failed"
-    )
+    exc = ServiceAuthorizationError("delete", SomeEntity, reason="internal ownership check failed")
     msg = error_message_for(exc)
     body = msg.model_dump(exclude_none=True)
     serialized = str(body)

@@ -50,9 +50,7 @@ class ASTVisitor(ABC):
     # ── Abstract handlers — implement one per node type ───────────────────────
 
     @abstractmethod
-    def _visit_comparison(
-        self, node: ComparisonNode, args: Any = None, **kwargs: Any
-    ) -> Any:
+    def _visit_comparison(self, node: ComparisonNode, args: Any = None, **kwargs: Any) -> Any:
         """
         Handle a comparison leaf node.
 
@@ -100,9 +98,7 @@ class ASTVisitor(ABC):
 
     # ── Validated public entry points ─────────────────────────────────────────
 
-    def visit_comparison(
-        self, node: ComparisonNode, args: Any = None, **kwargs: Any
-    ) -> Any:
+    def visit_comparison(self, node: ComparisonNode, args: Any = None, **kwargs: Any) -> Any:
         """
         Validate then dispatch to ``_visit_comparison``.
 

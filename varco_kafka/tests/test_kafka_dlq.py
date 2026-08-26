@@ -176,16 +176,12 @@ class TestKafkaDLQConstruction:
         dlq = KafkaDLQ(settings)
         assert "started=False" in repr(dlq)
 
-    def test_default_dlq_topic_uses_prefix(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    def test_default_dlq_topic_uses_prefix(self, settings: KafkaEventBusSettings) -> None:
         # Default DLQ topic = "{prefix}__dlq__"
         dlq = KafkaDLQ(settings)
         assert dlq._dlq_topic == "__dlq__"
 
-    def test_custom_dlq_topic_not_prefixed(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    def test_custom_dlq_topic_not_prefixed(self, settings: KafkaEventBusSettings) -> None:
         # When dlq_topic is provided explicitly, no prefix is prepended.
         dlq = KafkaDLQ(settings, dlq_topic="custom-dlq")
         assert dlq._dlq_topic == "custom-dlq"
@@ -195,9 +191,7 @@ class TestKafkaDLQConstruction:
         assert dlq._dlq_consumer_group == "my-relay-group"
 
     def test_prefix_applied_to_default_topic(self) -> None:
-        settings = KafkaEventBusSettings(
-            bootstrap_servers="fake:9092", channel_prefix="prod."
-        )
+        settings = KafkaEventBusSettings(bootstrap_servers="fake:9092", channel_prefix="prod.")
         dlq = KafkaDLQ(settings)
         assert dlq._dlq_topic == "prod.__dlq__"
 
@@ -225,9 +219,7 @@ class TestKafkaDLQLifecycle:
             assert d._started is True
             await d.stop()
 
-    async def test_stop_before_start_is_noop(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    async def test_stop_before_start_is_noop(self, settings: KafkaEventBusSettings) -> None:
         d = KafkaDLQ(settings)
         await d.stop()  # must not raise
 
@@ -270,9 +262,7 @@ class TestKafkaDLQPush:
         topic, value, key = fake_producer.sent[0]
         assert topic == dlq._dlq_topic
 
-    async def test_push_key_is_entry_id(
-        self, dlq: KafkaDLQ, fake_producer: FakeProducer
-    ) -> None:
+    async def test_push_key_is_entry_id(self, dlq: KafkaDLQ, fake_producer: FakeProducer) -> None:
         entry = _make_entry()
         await dlq.push(entry)
 
@@ -317,9 +307,7 @@ class TestKafkaDLQPopBatch:
         with pytest.raises(ValueError, match="limit"):
             await dlq.pop_batch(limit=0)
 
-    async def test_pop_batch_before_start_raises(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    async def test_pop_batch_before_start_raises(self, settings: KafkaEventBusSettings) -> None:
         d = KafkaDLQ(settings)
         with pytest.raises(RuntimeError, match="start"):
             await d.pop_batch()
@@ -448,9 +436,7 @@ class TestKafkaDLQAck:
 
 
 class TestKafkaDLQSerialization:
-    def test_serialize_deserialize_roundtrip(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    def test_serialize_deserialize_roundtrip(self, settings: KafkaEventBusSettings) -> None:
         dlq = KafkaDLQ(settings)
         entry = _make_entry("MyConsumer.handler")
         payload = dlq._serialize_entry(entry)
@@ -466,9 +452,7 @@ class TestKafkaDLQSerialization:
         assert recovered.attempts == entry.attempts
         assert isinstance(recovered.event, SampleEvent)
 
-    def test_serialize_contains_event_payload(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    def test_serialize_contains_event_payload(self, settings: KafkaEventBusSettings) -> None:
         dlq = KafkaDLQ(settings)
         entry = _make_entry()
         payload = dlq._serialize_entry(entry)
@@ -489,9 +473,7 @@ class TestKafkaDLQSerialization:
 
 
 class TestKafkaDLQConfiguration:
-    async def test_provides_abstract_dead_letter_queue(
-        self, fake_producer: FakeProducer
-    ) -> None:
+    async def test_provides_abstract_dead_letter_queue(self, fake_producer: FakeProducer) -> None:
         from providify import DIContainer
         from varco_core.event.dlq import AbstractDeadLetterQueue
 
@@ -512,9 +494,7 @@ class TestKafkaDLQConfiguration:
 
 
 class TestKafkaDLQRandomAccessCapabilityFlag:
-    def test_supports_random_access_is_false(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    def test_supports_random_access_is_false(self, settings: KafkaEventBusSettings) -> None:
         dlq = KafkaDLQ(settings)
         assert dlq.supports_random_access is False
 
@@ -529,9 +509,7 @@ class TestKafkaDLQDeleteWhereRaises:
 
 
 class TestKafkaDLQGetRaises:
-    async def test_get_raises_not_implemented(
-        self, settings: KafkaEventBusSettings
-    ) -> None:
+    async def test_get_raises_not_implemented(self, settings: KafkaEventBusSettings) -> None:
         dlq = KafkaDLQ(settings)
         with pytest.raises(NotImplementedError):
             await dlq.get(uuid.uuid4())

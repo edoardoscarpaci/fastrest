@@ -129,9 +129,7 @@ class KafkaConnectionSettings(ConnectionSettings):
     group_id: str = "varco-default"
     """Consumer group ID.  Env: ``KAFKA_GROUP_ID``."""
 
-    auth: Annotated[
-        SaslConfig | BasicAuthConfig | None, Field(discriminator="type")
-    ] = None
+    auth: Annotated[SaslConfig | BasicAuthConfig | None, Field(discriminator="type")] = None
     """
     Optional SASL or Basic authentication config.
     ``BasicAuthConfig`` is treated as SASL PLAIN in ``to_aiokafka_kwargs()``.

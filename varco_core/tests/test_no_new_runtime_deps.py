@@ -37,9 +37,9 @@ def test_pyproject_declared_dependencies_unchanged_by_this_plan() -> None:
         data = tomllib.load(f)
     deps = data["project"]["dependencies"]
     for forbidden in FORBIDDEN_RUNTIME_IMPORTS:
-        assert not any(
-            forbidden in dep for dep in deps
-        ), f"unexpected new runtime dependency {forbidden!r} in {deps!r}"
+        assert not any(forbidden in dep for dep in deps), (
+            f"unexpected new runtime dependency {forbidden!r} in {deps!r}"
+        )
 
 
 def test_tz_optional_extra_is_declared_and_not_a_hard_dependency() -> None:
@@ -68,6 +68,6 @@ def test_plan_011_modules_import_only_stdlib_and_pydantic() -> None:
             else:
                 continue
             for name in names:
-                assert (
-                    name not in FORBIDDEN_RUNTIME_IMPORTS
-                ), f"{mod_name} imports forbidden runtime dep {name!r}"
+                assert name not in FORBIDDEN_RUNTIME_IMPORTS, (
+                    f"{mod_name} imports forbidden runtime dep {name!r}"
+                )

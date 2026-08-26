@@ -295,9 +295,7 @@ def _build_rsa_registry_and_authority():
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     )
-    authority = JwtAuthority.from_pem(
-        pem, kid="test-kid", issuer="kc-issuer", algorithm="RS256"
-    )
+    authority = JwtAuthority.from_pem(pem, kid="test-kid", issuer="kc-issuer", algorithm="RS256")
     registry = TrustedIssuerRegistry()
     registry.register_authority(authority)
     return authority, registry
@@ -309,11 +307,7 @@ class TestJwtBearerAuthEnvClaimTransform:
         authority, registry = _build_rsa_registry_and_authority()
         await registry.load_all()
 
-        builder = (
-            authority.token()
-            .subject("usr_1")
-            .claim("realm_access", {"roles": ["editor"]})
-        )
+        builder = authority.token().subject("usr_1").claim("realm_access", {"roles": ["editor"]})
         raw_token = authority.sign(builder)
 
         auth = JwtBearerAuth(registry, allow_any_audience=True)
@@ -413,9 +407,7 @@ class TestPassthroughAuthRefactorRegression:
         assert ctx.scopes == frozenset({"write:posts"})
         assert ctx.metadata.get("custom_meta") == "hello"
 
-    async def test_passthrough_auth_applies_claim_transform_for_foreign_roles(
-        self, monkeypatch
-    ):
+    async def test_passthrough_auth_applies_claim_transform_for_foreign_roles(self, monkeypatch):
         """PassthroughAuth refactor must route through the same claim
         transformer as JwtBearerAuth/JwtParser.parse() (plan step 36)."""
         from varco_core.jwt import JwtBuilder

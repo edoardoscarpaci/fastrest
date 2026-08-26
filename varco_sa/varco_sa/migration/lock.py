@@ -123,9 +123,7 @@ async def migration_lock(
         try:
             trans = await conn.begin()
             try:
-                await conn.execute(
-                    text("SET LOCAL idle_in_transaction_session_timeout = 0")
-                )
+                await conn.execute(text("SET LOCAL idle_in_transaction_session_timeout = 0"))
 
                 xact_lock = SAXactAdvisoryLock()
                 session = AsyncSession(bind=conn)

@@ -66,9 +66,7 @@ def test_dependency_groups_dev_includes_lint_group():
     groups = data.get("dependency-groups", {})
     dev = groups.get("dev", [])
     include_entries = [
-        item
-        for item in dev
-        if isinstance(item, dict) and item.get("include-group") == "lint"
+        item for item in dev if isinstance(item, dict) and item.get("include-group") == "lint"
     ]
     assert include_entries, f"dev group does not include-group 'lint': {dev}"
 
@@ -96,8 +94,7 @@ def test_tool_ruff_table_exact_settings():
         "UP",
     ], f"select must be exactly ['E','F','I','UP'], got {lint.get('select')}"
     assert lint.get("ignore") == ["E501", "UP046", "UP047"], (
-        f"ignore must be exactly ['E501','UP046','UP047'] "
-        f"(never widened), got {lint.get('ignore')}"
+        f"ignore must be exactly ['E501','UP046','UP047'] (never widened), got {lint.get('ignore')}"
     )
 
 
@@ -125,9 +122,7 @@ def test_tool_mypy_table_settings():
     assert entries, f"mypy_path has no parseable entries: {mypy_path!r}"
     for entry in entries:
         candidate = REPO_ROOT / entry.strip()
-        assert (
-            candidate.is_dir()
-        ), f"mypy_path entry {entry!r} is not an existing directory"
+        assert candidate.is_dir(), f"mypy_path entry {entry!r} is not an existing directory"
 
 
 # ---------------------------------------------------------------------------
@@ -164,12 +159,10 @@ def test_no_bare_type_ignore_in_source_trees():
             text = path.read_text(errors="ignore")
             for lineno, line in enumerate(text.splitlines(), start=1):
                 if _BARE_IGNORE_RE.search(line):
-                    offenders.append(
-                        f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}"
-                    )
-    assert (
-        not offenders
-    ), "bare '# type: ignore' found (must carry [<code>]):\n" + "\n".join(offenders)
+                    offenders.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {line.strip()}")
+    assert not offenders, "bare '# type: ignore' found (must carry [<code>]):\n" + "\n".join(
+        offenders
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -227,9 +220,9 @@ def test_makefile_uses_uv_run_ruff_not_uvx():
     only `uv run ruff` reads the pinned version from uv.lock."""
     makefile_text = MAKEFILE.read_text()
     assert "uvx" not in makefile_text, "Makefile must not invoke 'uvx' anywhere"
-    assert re.search(
-        r"RUFF\s*:=\s*uv run ruff", makefile_text
-    ), "Makefile RUFF variable must be 'uv run ruff'"
+    assert re.search(r"RUFF\s*:=\s*uv run ruff", makefile_text), (
+        "Makefile RUFF variable must be 'uv run ruff'"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,9 +239,7 @@ def _read_workflow(name: str) -> str:
 def _count_comment_lines(text: str) -> tuple[int, int]:
     lines = text.splitlines()
     total = len(lines)
-    commented = sum(
-        1 for line in lines if line.strip().startswith("#") or not line.strip()
-    )
+    commented = sum(1 for line in lines if line.strip().startswith("#") or not line.strip())
     return commented, total
 
 
@@ -257,22 +248,16 @@ def test_test_workflow_is_live_yaml_not_fully_commented():
     become a live workflow — this test fails while every line is still '#'."""
     text = _read_workflow("test.yml")
     non_comment_non_blank = [
-        line
-        for line in text.splitlines()
-        if line.strip() and not line.strip().startswith("#")
+        line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")
     ]
     assert non_comment_non_blank, "test.yml is still 100% commented — nothing is live"
-    assert re.search(
-        r"^jobs:\s*$", text, re.MULTILINE
-    ), "test.yml has no top-level 'jobs:' key"
+    assert re.search(r"^jobs:\s*$", text, re.MULTILINE), "test.yml has no top-level 'jobs:' key"
 
 
 def test_test_workflow_has_exactly_lint_unit_all_green_jobs():
     """§RL-5-shape: exactly three jobs, no more, no less."""
     text = _read_workflow("test.yml")
-    jobs_match = re.search(
-        r"^jobs:\s*\n((?:^  \S.*\n(?:^(?:    |\t).*\n)*)*)", text, re.MULTILINE
-    )
+    jobs_match = re.search(r"^jobs:\s*\n((?:^  \S.*\n(?:^(?:    |\t).*\n)*)*)", text, re.MULTILINE)
     assert jobs_match, "could not locate a 'jobs:' block in test.yml"
     job_names = re.findall(r"^  (\w[\w-]*):\s*$", jobs_match.group(1), re.MULTILINE)
     assert set(job_names) == {
@@ -287,12 +272,10 @@ def test_test_workflow_unit_job_has_fail_fast_false_and_python_matrix():
     doesn't hide the other; matrix must include 3.12 (3.13 may legitimately be
     dropped per Step 12's decision table — we don't assert on that)."""
     text = _read_workflow("test.yml")
-    assert re.search(
-        r"fail-fast:\s*false", text
-    ), "no 'fail-fast: false' found in test.yml"
-    assert re.search(
-        r"python-version:\s*\[[^\]]*3\.12[^\]]*\]", text
-    ), "unit job matrix must include python-version 3.12"
+    assert re.search(r"fail-fast:\s*false", text), "no 'fail-fast: false' found in test.yml"
+    assert re.search(r"python-version:\s*\[[^\]]*3\.12[^\]]*\]", text), (
+        "unit job matrix must include python-version 3.12"
+    )
 
 
 def test_test_workflow_all_green_job_shape():
@@ -314,9 +297,7 @@ def test_test_workflow_all_green_job_shape():
 def test_test_workflow_permissions_contents_read():
     """§RL-5-pinning: least-privilege workflow-level permissions."""
     text = _read_workflow("test.yml")
-    assert re.search(
-        r"^permissions:\s*\n\s*contents:\s*read", text, re.MULTILINE
-    ) or re.search(
+    assert re.search(r"^permissions:\s*\n\s*contents:\s*read", text, re.MULTILINE) or re.search(
         r"permissions:\s*\{\s*contents:\s*read\s*\}", text
     ), "test.yml must set workflow-level permissions.contents: read"
 
@@ -325,23 +306,15 @@ def test_integration_workflow_is_live_yaml():
     """§RL-5-integration: integration.yml today is 100% dead comments (200/200)."""
     text = _read_workflow("integration.yml")
     non_comment_non_blank = [
-        line
-        for line in text.splitlines()
-        if line.strip() and not line.strip().startswith("#")
+        line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")
     ]
-    assert (
-        non_comment_non_blank
-    ), "integration.yml is still 100% commented — nothing is live"
-    assert re.search(
-        r"^jobs:\s*$", text, re.MULTILINE
-    ), "integration.yml has no 'jobs:' key"
+    assert non_comment_non_blank, "integration.yml is still 100% commented — nothing is live"
+    assert re.search(r"^jobs:\s*$", text, re.MULTILINE), "integration.yml has no 'jobs:' key"
 
 
 def test_integration_workflow_permissions_contents_read():
     text = _read_workflow("integration.yml")
-    assert re.search(
-        r"^permissions:\s*\n\s*contents:\s*read", text, re.MULTILINE
-    ) or re.search(
+    assert re.search(r"^permissions:\s*\n\s*contents:\s*read", text, re.MULTILINE) or re.search(
         r"permissions:\s*\{\s*contents:\s*read\s*\}", text
     ), "integration.yml must set workflow-level permissions.contents: read"
 
@@ -350,13 +323,11 @@ def test_integration_workflow_has_no_services_block():
     """§RL-5-integration: resurrecting `services:` blocks is explicitly wrong —
     the repo moved to session-scoped testcontainers fixtures."""
     text = _read_workflow("integration.yml")
-    live_lines = [
-        line for line in text.splitlines() if not line.strip().startswith("#")
-    ]
+    live_lines = [line for line in text.splitlines() if not line.strip().startswith("#")]
     live_text = "\n".join(live_lines)
-    assert not re.search(
-        r"^\s*services:\s*$", live_text, re.MULTILINE
-    ), "integration.yml must not declare a 'services:' block anywhere"
+    assert not re.search(r"^\s*services:\s*$", live_text, re.MULTILINE), (
+        "integration.yml must not declare a 'services:' block anywhere"
+    )
 
 
 def test_integration_workflow_sets_no_bare_broker_env_names():
@@ -364,9 +335,7 @@ def test_integration_workflow_sets_no_bare_broker_env_names():
     namespaced VARCO_TEST_<SERVICE>_URL contract is honoured by conftests, and
     a stray bare name could point destructive tests at a real database."""
     text = _read_workflow("integration.yml")
-    live_lines = [
-        line for line in text.splitlines() if not line.strip().startswith("#")
-    ]
+    live_lines = [line for line in text.splitlines() if not line.strip().startswith("#")]
     live_text = "\n".join(live_lines)
     for bare_name in (
         "KAFKA_BOOTSTRAP_SERVERS",
@@ -374,41 +343,33 @@ def test_integration_workflow_sets_no_bare_broker_env_names():
         "MONGODB_URL",
         "DATABASE_URL",
     ):
-        assert not re.search(
-            rf"^\s*{bare_name}:", live_text, re.MULTILINE
-        ), f"integration.yml must not set bare env var {bare_name}"
+        assert not re.search(rf"^\s*{bare_name}:", live_text, re.MULTILINE), (
+            f"integration.yml must not set bare env var {bare_name}"
+        )
 
 
 def test_integration_workflow_invokes_clean_room_make_target():
     text = _read_workflow("integration.yml")
-    live_lines = [
-        line for line in text.splitlines() if not line.strip().startswith("#")
-    ]
+    live_lines = [line for line in text.splitlines() if not line.strip().startswith("#")]
     live_text = "\n".join(live_lines)
-    assert (
-        "make integration-test-clean" in live_text
-    ), "integration.yml must invoke 'make integration-test-clean'"
+    assert "make integration-test-clean" in live_text, (
+        "integration.yml must invoke 'make integration-test-clean'"
+    )
 
 
 def test_integration_workflow_triggers():
     """§RL-5-triggers: push(main) + schedule (nightly) + workflow_dispatch —
     not on every PR."""
     text = _read_workflow("integration.yml")
-    live_lines = [
-        line for line in text.splitlines() if not line.strip().startswith("#")
-    ]
+    live_lines = [line for line in text.splitlines() if not line.strip().startswith("#")]
     live_text = "\n".join(live_lines)
-    on_match = re.search(
-        r"^on:\s*\n((?:^  \S.*\n(?:^(?:    |\t).*\n)*)*)", live_text, re.MULTILINE
-    )
+    on_match = re.search(r"^on:\s*\n((?:^  \S.*\n(?:^(?:    |\t).*\n)*)*)", live_text, re.MULTILINE)
     assert on_match, "integration.yml has no live 'on:' trigger block"
     on_block = on_match.group(1)
     assert "push" in on_block, "integration.yml must trigger on push"
     assert "main" in on_block, "integration.yml push trigger must target main"
     assert "schedule" in on_block, "integration.yml must trigger on schedule (nightly)"
-    assert (
-        "workflow_dispatch" in on_block
-    ), "integration.yml must trigger on workflow_dispatch"
+    assert "workflow_dispatch" in on_block, "integration.yml must trigger on workflow_dispatch"
 
 
 # ---------------------------------------------------------------------------
@@ -444,9 +405,7 @@ def test_all_uses_lines_pinned_by_commit_sha():
             sha = ref.rsplit("@", 1)[1]
             if not SHA_RE.match(sha):
                 offenders.append(f"{name}:{lineno}: not a 40-hex SHA: {ref}")
-    assert not offenders, "unpinned/floating action refs found:\n" + "\n".join(
-        offenders
-    )
+    assert not offenders, "unpinned/floating action refs found:\n" + "\n".join(offenders)
 
 
 # ---------------------------------------------------------------------------
@@ -463,9 +422,7 @@ def test_publish_workflow_still_exists_and_still_fully_commented():
     assert path.is_file(), ".github/workflows/publish.yml must still exist"
     text = path.read_text()
     non_comment_non_blank = [
-        line
-        for line in text.splitlines()
-        if line.strip() and not line.strip().startswith("#")
+        line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")
     ]
     assert not non_comment_non_blank, (
         "publish.yml must remain fully commented (Non-goal: RL-10 owns its "

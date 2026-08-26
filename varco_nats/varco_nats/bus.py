@@ -177,9 +177,7 @@ class NatsEventBus(AbstractEventBus):
         *,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[
-            Serializer[Event] | None, InjectMeta(optional=True)
-        ] = None,
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -200,9 +198,7 @@ class NatsEventBus(AbstractEventBus):
         elif isinstance(middleware, list):
             self._middleware = middleware
         else:
-            self._middleware = (
-                list(middleware.get_all()) if middleware.resolvable() else []
-            )
+            self._middleware = list(middleware.get_all()) if middleware.resolvable() else []
 
         # Use the provided serializer or fall back to JSON.  Stored as an
         # instance so stateful serializers (e.g. ones caching TypeAdapters)
@@ -228,9 +224,7 @@ class NatsEventBus(AbstractEventBus):
         self._started = False
 
         # Pre-build the middleware chain — same approach as KafkaEventBus.
-        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = (
-            self._build_chain()
-        )
+        self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = self._build_chain()
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -526,9 +520,7 @@ class NatsEventBus(AbstractEventBus):
             manual_ack=True,
         )
         self._jetstream_subs[subject] = sub
-        _logger.debug(
-            "Opened JetStream consumer (subject=%r, durable=%r)", subject, durable
-        )
+        _logger.debug("Opened JetStream consumer (subject=%r, durable=%r)", subject, durable)
 
     async def _on_message(self, msg: Any) -> None:
         """
@@ -566,9 +558,7 @@ class NatsEventBus(AbstractEventBus):
             await self._chain(event, channel)
         except asyncio.CancelledError:
             raise
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 — a bad message must not stop consumption
+        except Exception as exc:  # noqa: BLE001 — a bad message must not stop consumption
             _logger.warning(
                 "Failed to process NATS message from subject %s: %s",
                 msg.subject,
@@ -595,9 +585,7 @@ class NatsEventBus(AbstractEventBus):
             await msg.ack()
         except asyncio.CancelledError:
             raise
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 — ack failure must not crash the consumer
+        except Exception as exc:  # noqa: BLE001 — ack failure must not crash the consumer
             _logger.warning(
                 "NATS message ack failed (subject=%s): %s",
                 getattr(msg, "subject", "<unknown>"),
@@ -645,8 +633,7 @@ class NatsEventBus(AbstractEventBus):
                     errors.append(exc)
                 elif self._error_policy is ErrorPolicy.FIRE_FORGET:
                     _logger.warning(
-                        "NATS event handler %r raised and was ignored "
-                        "(FIRE_FORGET): %s",
+                        "NATS event handler %r raised and was ignored (FIRE_FORGET): %s",
                         entry.handler,
                         exc,
                         exc_info=True,

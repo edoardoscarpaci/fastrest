@@ -201,9 +201,7 @@ def coerce(value: Any, type_hint: type | None) -> Any:
 
         return TypeAdapter(type_hint).validate_python(value)
     except Exception as exc:  # noqa: BLE001 - coercion must never raise
-        _logger.debug(
-            "envelope.coerce(): could not coerce value to %r: %s", type_hint, exc
-        )
+        _logger.debug("envelope.coerce(): could not coerce value to %r: %s", type_hint, exc)
         return value
 
 

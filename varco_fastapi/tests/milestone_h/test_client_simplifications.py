@@ -37,9 +37,7 @@ class ItemUpdate(BaseModel):
     name: str | None = None
 
 
-class ItemRouter(
-    AllRouteMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]
-):
+class ItemRouter(AllRouteMixin, VarcoRouter[Any, UUID, ItemCreate, ItemRead, ItemUpdate]):
     _prefix = "/items"
 
 
@@ -129,9 +127,7 @@ def test_client_config_production_with_authority_adds_jwt():
     from varco_fastapi.client.middleware import JwtMiddleware
 
     mock_authority = object()  # JwtAuthority stand-in
-    config = ClientConfig.production(
-        "https://api.example.com", authority=mock_authority
-    )
+    config = ClientConfig.production("https://api.example.com", authority=mock_authority)
     assert any(isinstance(mw, JwtMiddleware) for mw in config.middleware)
 
 

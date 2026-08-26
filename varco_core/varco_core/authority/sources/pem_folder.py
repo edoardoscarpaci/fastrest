@@ -190,9 +190,7 @@ class PemFolderSource:
         """
         try:
             # Build the current mtime map — stat() each found PEM file
-            current: dict[Path, float] = {
-                p: p.stat().st_mtime for p in self._path.glob("*.pem")
-            }
+            current: dict[Path, float] = {p: p.stat().st_mtime for p in self._path.glob("*.pem")}
         except OSError:
             # If we can't even stat the directory, treat as changed so the
             # next scan will produce a proper KeyLoadError with context.

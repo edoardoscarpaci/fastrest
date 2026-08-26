@@ -40,9 +40,7 @@ async def test_breaker_opens_on_real_disconnect_and_recovers_after_restart(
     # A short connect/socket timeout so a real network failure surfaces
     # quickly and "calls then fail fast" is meaningfully measurable, rather
     # than waiting out redis-py's much longer default timeouts.
-    client = aioredis.Redis(
-        host=host, port=port, socket_connect_timeout=1.0, socket_timeout=1.0
-    )
+    client = aioredis.Redis(host=host, port=port, socket_connect_timeout=1.0, socket_timeout=1.0)
 
     # Shared breaker instance for the whole test (CLAUDE.md's per-call-breaker
     # pitfall) — one CircuitBreaker per external dependency, reused across

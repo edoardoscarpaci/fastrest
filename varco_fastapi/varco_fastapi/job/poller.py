@@ -173,9 +173,7 @@ class JobPoller:
             await self._recover_stale_jobs()
         except Exception:
             # Recovery failure must never prevent the poller from starting
-            logger.exception(
-                "JobPoller: startup recovery pass failed; continuing anyway"
-            )
+            logger.exception("JobPoller: startup recovery pass failed; continuing anyway")
 
         self._task = asyncio.create_task(
             self._poll_loop(),
@@ -357,9 +355,7 @@ class JobPoller:
                 await self._store.save(failed_job)
                 stale_count += 1
             except Exception:
-                logger.exception(
-                    "JobPoller: failed to mark job %s as stale", job.job_id
-                )
+                logger.exception("JobPoller: failed to mark job %s as stale", job.job_id)
 
         if stale_count:
             logger.info("JobPoller: recovered %d stale RUNNING jobs", stale_count)

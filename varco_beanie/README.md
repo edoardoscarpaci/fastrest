@@ -63,14 +63,16 @@ from varco_beanie import BeanieConfig, BeanieFastrestApp
 
 client = AsyncIOMotorClient("mongodb://localhost:27017")
 
-app = BeanieFastrestApp(BeanieConfig(
-    motor_client=client,
-    db_name="myapp",
-    entity_classes=(User, Post),
-))
+app = BeanieFastrestApp(
+    BeanieConfig(
+        motor_client=client,
+        db_name="myapp",
+        entity_classes=(User, Post),
+    )
+)
 
-await app.init()                    # calls beanie.init_beanie() internally
-uow_provider = app.uow_provider     # ready to inject as IUoWProvider
+await app.init()  # calls beanie.init_beanie() internally
+uow_provider = app.uow_provider  # ready to inject as IUoWProvider
 ```
 
 ### Manual setup
@@ -93,7 +95,7 @@ async with provider.make_uow() as uow:
 provider = BeanieRepositoryProvider(
     motor_client=client,
     db_name="myapp",
-    transactional=True,   # wraps each UoW in a Motor session transaction
+    transactional=True,  # wraps each UoW in a Motor session transaction
 )
 ```
 
@@ -132,15 +134,17 @@ behind the same `varco_core.migration.AbstractMigrator` contract `varco_sa` impl
 ```python
 from varco_beanie import Migration, MigrationRegistry, BeanieMigrator
 
+
 class BackfillOrderStatus(Migration):
-    version = "20260812_001"      # sortable; uniqueness validated at register() time
+    version = "20260812_001"  # sortable; uniqueness validated at register() time
     name = "backfill order status"
 
     async def up(self, db) -> None:
         await db.orders.update_many({"status": None}, {"$set": {"status": "pending"}})
 
-    async def down(self, db) -> None:     # optional — omit and downgrade raises
+    async def down(self, db) -> None:  # optional — omit and downgrade raises
         await db.orders.update_many({"status": "pending"}, {"$set": {"status": None}})
+
 
 registry = MigrationRegistry()
 registry.register(BackfillOrderStatus)

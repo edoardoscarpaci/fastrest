@@ -329,11 +329,7 @@ class ClientConfigurator(Generic[R]):
                 and issubclass(origin, ClientConfigurator)
             ):
                 args = typing.get_args(base)
-                if (
-                    args
-                    and isinstance(args[0], type)
-                    and issubclass(args[0], VarcoRouter)
-                ):
+                if args and isinstance(args[0], type) and issubclass(args[0], VarcoRouter):
                     return args[0]
         raise TypeError(
             f"{type(self).__name__} must be parameterized with a VarcoRouter subclass "

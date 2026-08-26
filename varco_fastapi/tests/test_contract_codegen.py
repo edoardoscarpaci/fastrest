@@ -65,9 +65,7 @@ class TestSignatureParity:
         contract = build_contract(OrderRouter, service_name="orders")
         route = contract.route("cancel")
 
-        imported_method = build_client_method(
-            route, ImportedTypeResolver(contract, OrderRouter)
-        )
+        imported_method = build_client_method(route, ImportedTypeResolver(contract, OrderRouter))
         imported_sig = inspect.signature(imported_method)
 
         source = render_client_module(contract, class_name="OrderClient")
@@ -76,9 +74,7 @@ class TestSignatureParity:
             module_path = Path(tmpdir) / "generated_order_client.py"
             module_path.write_text(source)
 
-            spec = importlib.util.spec_from_file_location(
-                "generated_order_client", module_path
-            )
+            spec = importlib.util.spec_from_file_location("generated_order_client", module_path)
             assert spec is not None and spec.loader is not None
             module = importlib.util.module_from_spec(spec)
             sys.modules["generated_order_client"] = module
@@ -87,6 +83,4 @@ class TestSignatureParity:
             generated_cls = getattr(module, "OrderClient")
             generated_sig = inspect.signature(generated_cls.cancel)
 
-        assert list(imported_sig.parameters.keys()) == list(
-            generated_sig.parameters.keys()
-        )
+        assert list(imported_sig.parameters.keys()) == list(generated_sig.parameters.keys())

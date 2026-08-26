@@ -256,10 +256,7 @@ class SQLAlchemyQueryCompiler(BinaryWalkingVisitor):
         if op == Operation.IS_NOT_NULL:
             return col.isnot(None)
 
-        raise ValueError(
-            f"Unsupported operation {op!r}. "
-            f"Supported: {[o.value for o in Operation]}"
-        )
+        raise ValueError(f"Unsupported operation {op!r}. Supported: {[o.value for o in Operation]}")
 
     # ── BinaryWalkingVisitor combine hooks ────────────────────────────────────
 

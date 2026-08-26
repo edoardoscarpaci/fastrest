@@ -98,9 +98,7 @@ class TestStripPrefix:
     def test_strip_prefix_applied_per_element(self):
         from varco_core.jwt.transform.shape import ValueShape, normalize
 
-        result = normalize(
-            ["ROLE_admin", "ROLE_editor"], ValueShape.AUTO, strip_prefix="ROLE_"
-        )
+        result = normalize(["ROLE_admin", "ROLE_editor"], ValueShape.AUTO, strip_prefix="ROLE_")
         assert result == ["admin", "editor"]
 
     def test_strip_prefix_no_match_leaves_element_unchanged(self):
@@ -252,9 +250,7 @@ class TestClaimMappingApply:
         from varco_core.jwt.transform.mapping import ClaimMapping
         from varco_core.jwt.transform.path import ClaimPath
 
-        mapping = ClaimMapping(
-            metadata_fields=(("tenant_id", ClaimPath.parse("org.id")),)
-        )
+        mapping = ClaimMapping(metadata_fields=(("tenant_id", ClaimPath.parse("org.id")),))
         raw = {"org": {"id": "t_123"}}
         out = mapping.apply(raw)
         assert out["tenant_id"] == "t_123"
@@ -398,12 +394,7 @@ class TestParserIntegrationWithExplicitTransformer:
         )
         tf = MappingClaimTransformer(mapping)
 
-        signed = (
-            JwtBuilder()
-            .subject("usr_1")
-            .claim("sofy-roles", ["editor"])
-            .encode(_SECRET)
-        )
+        signed = JwtBuilder().subject("usr_1").claim("sofy-roles", ["editor"]).encode(_SECRET)
         token = JwtParser.parse(signed, _SECRET, transformer=tf)
 
         assert token.auth_ctx is not None
@@ -432,9 +423,7 @@ class TestParserIntegrationWithExplicitTransformer:
         )
         tf = MappingClaimTransformer(mapping)
 
-        signed = (
-            JwtBuilder().subject("usr_1").claim("org", {"id": "t_1"}).encode(_SECRET)
-        )
+        signed = JwtBuilder().subject("usr_1").claim("org", {"id": "t_1"}).encode(_SECRET)
         token = JwtParser.parse(signed, _SECRET, transformer=tf)
 
         assert token.auth_ctx is not None
@@ -459,12 +448,7 @@ class TestParserIntegrationWithExplicitTransformer:
         )
         tf = MappingClaimTransformer(mapping)
 
-        signed = (
-            JwtBuilder()
-            .subject("usr_1")
-            .claim("act", {"sub": "svc_admin"})
-            .encode(_SECRET)
-        )
+        signed = JwtBuilder().subject("usr_1").claim("act", {"sub": "svc_admin"}).encode(_SECRET)
         token = JwtParser.parse(signed, _SECRET, transformer=tf)
 
         assert token.auth_ctx is not None

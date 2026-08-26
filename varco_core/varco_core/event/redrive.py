@@ -191,9 +191,7 @@ class DlqRedriver:
         for entry in entries:
             outcomes.append(await self._redrive_entry(entry, dry_run=dry_run))
 
-        succeeded = sum(
-            1 for o in outcomes if o.published or (dry_run and o.error is None)
-        )
+        succeeded = sum(1 for o in outcomes if o.published or (dry_run and o.error is None))
         failed = len(outcomes) - succeeded
         return RedriveReport(
             attempted=len(outcomes),
@@ -203,9 +201,7 @@ class DlqRedriver:
             dry_run=dry_run,
         )
 
-    async def _redrive_entry(
-        self, entry: DeadLetterEntry, *, dry_run: bool
-    ) -> RedriveOutcome:
+    async def _redrive_entry(self, entry: DeadLetterEntry, *, dry_run: bool) -> RedriveOutcome:
         """Apply the per-entry redrive decision table to one already-resolved entry."""
         if entry.source == DeadLetterSource.JOB:
             return RedriveOutcome(
@@ -231,23 +227,17 @@ class DlqRedriver:
             )
 
         if dry_run:
-            return RedriveOutcome(
-                entry_id=entry.entry_id, published=False, acked=False, error=None
-            )
+            return RedriveOutcome(entry_id=entry.entry_id, published=False, acked=False, error=None)
 
         try:
             await self._bus.publish(entry.event, channel=channel)
-        except (
-            Exception
-        ) as exc:  # noqa: BLE001 - record per-entry failure, continue batch
+        except Exception as exc:  # noqa: BLE001 - record per-entry failure, continue batch
             return RedriveOutcome(
                 entry_id=entry.entry_id, published=False, acked=False, error=str(exc)
             )
 
         await self._dlq.ack(entry.entry_id)
-        return RedriveOutcome(
-            entry_id=entry.entry_id, published=True, acked=True, error=None
-        )
+        return RedriveOutcome(entry_id=entry.entry_id, published=True, acked=True, error=None)
 
 
 __all__ = [

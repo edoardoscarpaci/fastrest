@@ -254,7 +254,7 @@ class InMemoryConversationStore(AbstractConversationStore):
         return len(self._store)
 
     def __repr__(self) -> str:
-        return f"InMemoryConversationStore(" f"conversations={self.conversation_count})"
+        return f"InMemoryConversationStore(conversations={self.conversation_count})"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

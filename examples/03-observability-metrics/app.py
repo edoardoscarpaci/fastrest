@@ -122,9 +122,7 @@ def _setup_prometheus_meter_provider() -> bool:
     provider = MeterProvider(metric_readers=[reader])
     otel_metrics.set_meter_provider(provider)
 
-    _logger.info(
-        "observability-metrics: OTel MeterProvider with PrometheusMetricReader installed."
-    )
+    _logger.info("observability-metrics: OTel MeterProvider with PrometheusMetricReader installed.")
     return True
 
 

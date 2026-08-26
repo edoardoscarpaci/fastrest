@@ -44,9 +44,7 @@ class _RematStore(AbstractJobStore):
         return [
             j
             for j in self._jobs.values()
-            if j.status == JobStatus.PENDING
-            and j.run_at_tz is not None
-            and j.run_at < before
+            if j.status == JobStatus.PENDING and j.run_at_tz is not None and j.run_at < before
         ][:limit]
 
 

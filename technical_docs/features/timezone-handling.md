@@ -20,8 +20,10 @@ interpretation* layer only — it never touches persistence.
 ```python
 from varco_core.tz.resolve import to_user_tz, now_local
 
-to_user_tz(order.created_at)   # UTC-aware in -> ambient-timezone-aware out (identity if none resolved)
-now_local()                    # datetime.now() in the ambient timezone, else aware-UTC
+to_user_tz(
+    order.created_at
+)  # UTC-aware in -> ambient-timezone-aware out (identity if none resolved)
+now_local()  # datetime.now() in the ambient timezone, else aware-UTC
 ```
 
 ## T1 — per-request timezone resolution (the five-source chain)
@@ -71,9 +73,9 @@ the extra just makes sure a zone actually resolves in a minimal container.
 ### Storage: three additive `Job` columns, `run_at` is materialized, not replaced
 
 ```python
-run_at_wall: datetime | None = None   # naive local wall-clock, no tzinfo — the INTENT
-run_at_tz:   str | None    = None     # IANA zone name, e.g. "America/New_York"
-run_at_fold: int           = 0        # PEP 495 fold — disambiguates an overlap
+run_at_wall: datetime | None = None  # naive local wall-clock, no tzinfo — the INTENT
+run_at_tz: str | None = None  # IANA zone name, e.g. "America/New_York"
+run_at_fold: int = 0  # PEP 495 fold — disambiguates an overlap
 ```
 
 `run_at: datetime | None` — the pre-existing field — keeps its **exact
@@ -105,10 +107,11 @@ persist all three columns/fields.
 from varco_core.tz.schedule import GapPolicy, OverlapPolicy, resolve_zoned
 
 instant = resolve_zoned(
-    wall, zone,
+    wall,
+    zone,
     fold=0,
-    gap=GapPolicy.NEXT_VALID,      # default
-    overlap=OverlapPolicy.FIRST,   # default
+    gap=GapPolicy.NEXT_VALID,  # default
+    overlap=OverlapPolicy.FIRST,  # default
 ).astimezone(timezone.utc)
 ```
 
@@ -147,7 +150,7 @@ transition date years after the fact), the recommended discipline (brief
 from varco_core.job.reschedule import ScheduleRematerializer
 
 rematerializer = ScheduleRematerializer(store, interval=300.0, horizon=timedelta(hours=48))
-await rematerializer.start()   # spawns a background asyncio.Task
+await rematerializer.start()  # spawns a background asyncio.Task
 ```
 
 Sweeps pending zoned jobs inside `horizon` of now, recomputes `run_at` from
@@ -168,7 +171,7 @@ package happens to be installed.
 
 ```python
 class AbstractJobStore(ABC):
-    supports_zoned_schedules: ClassVar[bool] = False   # opt-in per store
+    supports_zoned_schedules: ClassVar[bool] = False  # opt-in per store
 ```
 
 `AbstractJobRunner._prepare_zoned_job(job, store, run_at_wall=..., tz=...,
@@ -278,7 +281,7 @@ AST pipeline, or register a field-specific coercer
 ```python
 from varco_core.tz.format import format_rfc9557
 
-format_rfc9557(instant, zone)   # "2026-03-08T09:00:00-05:00[America/New_York]"
+format_rfc9557(instant, zone)  # "2026-03-08T09:00:00-05:00[America/New_York]"
 ```
 
 No production-ready Python RFC 9557/IXDTF *parser* exists (brief 004 §A4 +

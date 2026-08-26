@@ -100,9 +100,7 @@ class MultiKeyAuthority:
                                signing key immediately.
         """
         # dict[kid → JwtAuthority] — GIL protects reads; _lock protects writes
-        self._authorities: dict[str, JwtAuthority] = {
-            initial_authority.kid: initial_authority
-        }
+        self._authorities: dict[str, JwtAuthority] = {initial_authority.kid: initial_authority}
         self._active_kid: str = initial_authority.kid
         # Separate lock for rotate/retire — verify/sign do not acquire it
         self._lock: threading.Lock = threading.Lock()

@@ -52,9 +52,7 @@ def test_resolve_zoned_gap_previous_valid_rolls_backward() -> None:
     # only pins down NEXT_VALID's worked example (03:00 local). Asserting
     # only the documented invariant here: the resolved wall time must be
     # BEFORE the gap start (02:00 local), not after it.
-    resolved = resolve_zoned(
-        datetime(2026, 3, 8, 2, 30), LA, gap=GapPolicy.PREVIOUS_VALID
-    )
+    resolved = resolve_zoned(datetime(2026, 3, 8, 2, 30), LA, gap=GapPolicy.PREVIOUS_VALID)
     local = resolved.astimezone(LA).replace(tzinfo=None)
     assert local < datetime(2026, 3, 8, 2, 0)
 
@@ -76,9 +74,7 @@ def test_resolve_zoned_overlap_default_fold_zero_first_occurrence() -> None:
 
 
 def test_resolve_zoned_overlap_last_uses_fold_one() -> None:
-    resolved = resolve_zoned(
-        datetime(2026, 11, 1, 1, 30), LA, overlap=OverlapPolicy.LAST
-    )
+    resolved = resolve_zoned(datetime(2026, 11, 1, 1, 30), LA, overlap=OverlapPolicy.LAST)
     assert resolved.utcoffset().total_seconds() == -8 * 3600
 
 
@@ -97,6 +93,4 @@ def test_resolve_zoned_southern_hemisphere_zone() -> None:
     sydney = ZoneInfo("Australia/Sydney")
     # Ordinary, unambiguous time — should simply materialize.
     resolved = resolve_zoned(datetime(2026, 6, 1, 12, 0), sydney)
-    assert resolved.astimezone(sydney).replace(tzinfo=None) == datetime(
-        2026, 6, 1, 12, 0
-    )
+    assert resolved.astimezone(sydney).replace(tzinfo=None) == datetime(2026, 6, 1, 12, 0)

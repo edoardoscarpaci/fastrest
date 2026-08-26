@@ -306,10 +306,7 @@ class InMemoryDeduplicator(AbstractDeduplicator):
             )
 
     def __repr__(self) -> str:
-        return (
-            f"InMemoryDeduplicator("
-            f"seen={len(self._seen)}, max_size={self._max_size})"
-        )
+        return f"InMemoryDeduplicator(seen={len(self._seen)}, max_size={self._max_size})"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

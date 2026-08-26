@@ -29,12 +29,8 @@ from varco_fastapi.router.presets import GenericRouter
 def _make_app():
     from varco_fastapi.auth.guard import require_token_profile
 
-    internal_ctx = AuthContext(
-        user_id="svc_internal", metadata={"token_profile": "internal"}
-    )
-    other_profile_ctx = AuthContext(
-        user_id="svc_partner", metadata={"token_profile": "partner"}
-    )
+    internal_ctx = AuthContext(user_id="svc_internal", metadata={"token_profile": "internal"})
+    other_profile_ctx = AuthContext(user_id="svc_partner", metadata={"token_profile": "partner"})
     no_profile_ctx = AuthContext(user_id="usr_plain")  # metadata has no key at all
 
     auth = ApiKeyAuth(

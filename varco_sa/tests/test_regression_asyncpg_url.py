@@ -58,9 +58,7 @@ def test_regression_no_test_module_hand_rolls_the_broken_replace() -> None:
     """
     broken = re.compile(r"get_connection_url\(\)\s*\.replace\(")
     offenders = [
-        path.name
-        for path in _TESTS_DIR.glob("test_*.py")
-        if broken.search(path.read_text())
+        path.name for path in _TESTS_DIR.glob("test_*.py") if broken.search(path.read_text())
     ]
     assert offenders == [], (
         f"these modules convert the DSN by hand instead of using "

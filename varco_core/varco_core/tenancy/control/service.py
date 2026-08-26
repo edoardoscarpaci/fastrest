@@ -206,9 +206,7 @@ class TenantControlService:
         except TenantNotFoundError:
             from varco_core.tenancy.catalog import TenantDescriptor
 
-            descriptor = TenantDescriptor(
-                tenant_id=tenant_id, status=TenantStatus.PENDING
-            )
+            descriptor = TenantDescriptor(tenant_id=tenant_id, status=TenantStatus.PENDING)
             await self._catalog.add(descriptor)
 
         if descriptor.status == TenantStatus.ACTIVE:
@@ -222,9 +220,7 @@ class TenantControlService:
         # the REST response must show what was actually persisted.
         return await self._catalog.get(tenant_id)
 
-    async def _provision_worker(
-        self, tenant_id: str, **kwargs: object
-    ) -> TenantDescriptor:
+    async def _provision_worker(self, tenant_id: str, **kwargs: object) -> TenantDescriptor:
         from varco_core.tenancy.catalog import TenantDescriptor
 
         try:
@@ -259,9 +255,7 @@ class TenantControlService:
         # the authority has not created the row yet. Deliberately NOT
         # persisted — the terminator (coordinator / POST …/activate) owns
         # the transition to ACTIVE.
-        return descriptor or TenantDescriptor(
-            tenant_id=tenant_id, status=TenantStatus.PENDING
-        )
+        return descriptor or TenantDescriptor(tenant_id=tenant_id, status=TenantStatus.PENDING)
 
     async def deprovision(self, tenant_id: str, *, confirm: bool = False) -> None:
         """
@@ -383,9 +377,7 @@ class TenantControlService:
             channel=CHANNEL_TENANCY,
         )
 
-    async def request_deprovision(
-        self, tenant_id: str, *, confirm: bool = False
-    ) -> None:
+    async def request_deprovision(self, tenant_id: str, *, confirm: bool = False) -> None:
         """
         Broadcast-only (RD-14) mirror of ``request_provision``.
 
@@ -396,13 +388,10 @@ class TenantControlService:
         """
         if not confirm:
             raise DestructiveOperationRefused(
-                f"Refusing to broadcast deprovision for tenant {tenant_id!r} "
-                "without confirm=True."
+                f"Refusing to broadcast deprovision for tenant {tenant_id!r} without confirm=True."
             )
         await self._producer._produce(
-            TenantDeprovisionRequested(
-                tenant_id=tenant_id, confirm=True, origin=self.node_id
-            ),
+            TenantDeprovisionRequested(tenant_id=tenant_id, confirm=True, origin=self.node_id),
             channel=CHANNEL_TENANCY,
         )
 

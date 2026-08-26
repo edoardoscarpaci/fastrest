@@ -309,9 +309,7 @@ class TestJwkBuilderRsa:
 
     def test_from_rsa_public_key_produces_valid_jwk(self) -> None:
         """from_rsa_public_key must set kty, kid, use, alg, n, e with no private params."""
-        jwk = JwkBuilder.from_rsa_public_key(
-            _RSA_PUB_KEY, kid="k1", use="sig", alg="RS256"
-        )
+        jwk = JwkBuilder.from_rsa_public_key(_RSA_PUB_KEY, kid="k1", use="sig", alg="RS256")
         assert jwk.kty == "RSA"
         assert jwk.kid == "k1"
         assert jwk.use == "sig"
@@ -325,9 +323,7 @@ class TestJwkBuilderRsa:
 
     def test_from_rsa_public_key_n_is_base64url_no_padding(self) -> None:
         """n must be a valid base64url string with no '=' padding."""
-        jwk = JwkBuilder.from_rsa_public_key(
-            _RSA_PUB_KEY, kid="k1", use="sig", alg="RS256"
-        )
+        jwk = JwkBuilder.from_rsa_public_key(_RSA_PUB_KEY, kid="k1", use="sig", alg="RS256")
         assert "=" not in jwk.n  # type: ignore[operator]
         # Must decode back to bytes without error
         padded = jwk.n + "=" * (-len(jwk.n) % 4)  # type: ignore[operator]
@@ -335,9 +331,7 @@ class TestJwkBuilderRsa:
 
     def test_from_rsa_private_key_default_returns_public_only(self) -> None:
         """from_rsa_private_key with include_private=False must omit private params."""
-        jwk = JwkBuilder.from_rsa_private_key(
-            _RSA_KEY, kid="k1", use="sig", alg="RS256"
-        )
+        jwk = JwkBuilder.from_rsa_private_key(_RSA_KEY, kid="k1", use="sig", alg="RS256")
         assert jwk.d is None
         assert jwk.p is None
         assert jwk.n is not None  # public params present
@@ -360,12 +354,8 @@ class TestJwkBuilderRsa:
 
     def test_from_rsa_private_key_public_matches_from_public_key(self) -> None:
         """JWK from private (public only) must match JWK from the public key directly."""
-        from_priv = JwkBuilder.from_rsa_private_key(
-            _RSA_KEY, kid="k1", use="sig", alg="RS256"
-        )
-        from_pub = JwkBuilder.from_rsa_public_key(
-            _RSA_PUB_KEY, kid="k1", use="sig", alg="RS256"
-        )
+        from_priv = JwkBuilder.from_rsa_private_key(_RSA_KEY, kid="k1", use="sig", alg="RS256")
+        from_pub = JwkBuilder.from_rsa_public_key(_RSA_PUB_KEY, kid="k1", use="sig", alg="RS256")
         assert from_priv == from_pub
 
     def test_from_rsa_public_key_wrong_type_raises(self) -> None:
@@ -416,18 +406,16 @@ class TestJwkBuilderEc:
         def _decode_b64url(s: str) -> bytes:
             return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
-        assert (
-            len(_decode_b64url(jwk.x)) == coord_bytes
-        ), f"x coordinate must be {coord_bytes} bytes for {expected_crv}"
-        assert (
-            len(_decode_b64url(jwk.y)) == coord_bytes
-        ), f"y coordinate must be {coord_bytes} bytes for {expected_crv}"
+        assert len(_decode_b64url(jwk.x)) == coord_bytes, (
+            f"x coordinate must be {coord_bytes} bytes for {expected_crv}"
+        )
+        assert len(_decode_b64url(jwk.y)) == coord_bytes, (
+            f"y coordinate must be {coord_bytes} bytes for {expected_crv}"
+        )
 
     def test_from_ec_private_key_default_returns_public_only(self) -> None:
         """from_ec_private_key with include_private=False must omit d."""
-        jwk = JwkBuilder.from_ec_private_key(
-            _EC_P256_KEY, kid="k1", use="sig", alg="ES256"
-        )
+        jwk = JwkBuilder.from_ec_private_key(_EC_P256_KEY, kid="k1", use="sig", alg="ES256")
         assert jwk.d is None
         assert jwk.x is not None
 
@@ -507,12 +495,8 @@ class TestJwkBuilderPem:
 
     def test_from_pem_rsa_public_matches_from_private(self) -> None:
         """JWK from public PEM must match JWK from private PEM (public only)."""
-        from_priv_pem = JwkBuilder.from_pem(
-            _RSA_PRIVATE_PEM, kid="k1", use="sig", alg="RS256"
-        )
-        from_pub_pem = JwkBuilder.from_pem(
-            _RSA_PUBLIC_PEM, kid="k1", use="sig", alg="RS256"
-        )
+        from_priv_pem = JwkBuilder.from_pem(_RSA_PRIVATE_PEM, kid="k1", use="sig", alg="RS256")
+        from_pub_pem = JwkBuilder.from_pem(_RSA_PUBLIC_PEM, kid="k1", use="sig", alg="RS256")
         assert from_priv_pem == from_pub_pem
 
     def test_from_pem_ec_private_key_default_public_only(self) -> None:
@@ -553,9 +537,7 @@ class TestJwkBuilderKeyset:
 
     def test_keyset_wraps_multiple_keys(self) -> None:
         """keyset() must wrap all provided keys in a JsonWebKeySet."""
-        k1 = JwkBuilder.from_rsa_public_key(
-            _RSA_PUB_KEY, kid="rsa", use="sig", alg="RS256"
-        )
+        k1 = JwkBuilder.from_rsa_public_key(_RSA_PUB_KEY, kid="rsa", use="sig", alg="RS256")
         k2 = JwkBuilder.from_ec_public_key(
             _EC_P256_KEY.public_key(), kid="ec", use="sig", alg="ES256"
         )
@@ -570,9 +552,7 @@ class TestJwkBuilderKeyset:
 
     def test_keyset_to_dict_is_json_serializable(self) -> None:
         """The JWKS dict must be fully JSON-serializable without errors."""
-        k1 = JwkBuilder.from_rsa_public_key(
-            _RSA_PUB_KEY, kid="k1", use="sig", alg="RS256"
-        )
+        k1 = JwkBuilder.from_rsa_public_key(_RSA_PUB_KEY, kid="k1", use="sig", alg="RS256")
         ks = JwkBuilder.keyset(k1)
         # Must not raise — verifies no non-serializable types slipped through
         json_str = json.dumps(ks.public_set().to_dict())

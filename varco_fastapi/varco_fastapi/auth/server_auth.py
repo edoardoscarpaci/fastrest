@@ -213,9 +213,7 @@ class JwtBearerAuth(AbstractServerAuth):
         self._leeway = leeway if leeway is not None else settings.leeway_seconds
 
         effective_allow_any_audience = (
-            allow_any_audience
-            if allow_any_audience is not None
-            else settings.allow_any_audience
+            allow_any_audience if allow_any_audience is not None else settings.allow_any_audience
         )
 
         if self._audience is None and audience_omitted:
@@ -356,9 +354,7 @@ class ApiKeyAuth(AbstractServerAuth):
             HTTPException 401: Key is missing (when required) or not recognized.
         """
         # Header takes priority
-        api_key = request.headers.get(self._header) or request.query_params.get(
-            self._param
-        )
+        api_key = request.headers.get(self._header) or request.query_params.get(self._param)
 
         if not api_key:
             if self._required:

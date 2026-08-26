@@ -190,9 +190,7 @@ class CORSConfig:
             ),
             allow_credentials=bool(d.get("allow_credentials", True)),
             max_age=int(d.get("max_age", 600)),
-            expose_headers=tuple(
-                d.get("expose_headers", ("X-Total-Count", "X-Page-Size", "Link"))
-            ),
+            expose_headers=tuple(d.get("expose_headers", ("X-Total-Count", "X-Page-Size", "Link"))),
             allow_origin_regex=d.get("allow_origin_regex"),
             allow_private_network=bool(d.get("allow_private_network", False)),
         )

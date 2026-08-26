@@ -30,9 +30,7 @@ from varco_memcached.health import MemcachedHealthCheck
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
-def _make_settings(
-    host: str = "localhost", port: int = 11211
-) -> MemcachedCacheSettings:
+def _make_settings(host: str = "localhost", port: int = 11211) -> MemcachedCacheSettings:
     return MemcachedCacheSettings(host=host, port=port)
 
 
@@ -140,9 +138,7 @@ async def test_timeout_detail_includes_host_and_port() -> None:
     import aiomcache
 
     with patch.object(aiomcache, "Client", return_value=mock_client):
-        check = MemcachedHealthCheck(
-            _make_settings(host="mc-prod", port=11211), timeout=0.001
-        )
+        check = MemcachedHealthCheck(_make_settings(host="mc-prod", port=11211), timeout=0.001)
         result = await check.check()
 
     assert "mc-prod" in (result.detail or "")
@@ -276,9 +272,7 @@ async def test_close_not_called_if_client_constructor_raises() -> None:
 
 
 def test_repr_contains_host_and_port() -> None:
-    check = MemcachedHealthCheck(
-        _make_settings(host="mc-server", port=11311), timeout=3.0
-    )
+    check = MemcachedHealthCheck(_make_settings(host="mc-server", port=11311), timeout=3.0)
     text = repr(check)
     assert "mc-server" in text
     assert "11311" in text

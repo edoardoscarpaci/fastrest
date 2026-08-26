@@ -140,10 +140,7 @@ class ComparisonNode(TransformerNode):
             raise TypeError(
                 f"Operation.IN requires a list value, got {type(self.value).__name__!r}"
             )
-        if (
-            self.op in (Operation.IS_NULL, Operation.IS_NOT_NULL)
-            and self.value is not None
-        ):
+        if self.op in (Operation.IS_NULL, Operation.IS_NOT_NULL) and self.value is not None:
             raise TypeError(f"{self.op} must not have a value (got {self.value!r})")
 
 

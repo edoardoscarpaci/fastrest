@@ -126,9 +126,7 @@ def _make_error_response(
             return message_catalog.format_message(key, locale, params)
 
     try:
-        msg = error_message_for(
-            exc, envelope_settings=settings, message_resolver=message_resolver
-        )
+        msg = error_message_for(exc, envelope_settings=settings, message_resolver=message_resolver)
         status_code = msg.http_status
         body: dict[str, Any] = {
             "code": msg.code,
@@ -164,9 +162,7 @@ def _make_error_response(
     if cid:
         body["correlation_id"] = cid
 
-    response = JSONResponse(
-        status_code=status_code, content=body, media_type=media_type
-    )
+    response = JSONResponse(status_code=status_code, content=body, media_type=media_type)
     if set_content_language and locale:
         response.headers["Content-Language"] = locale
     return response

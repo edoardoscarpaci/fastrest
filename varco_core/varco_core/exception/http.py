@@ -292,18 +292,14 @@ def error_message_for(
         return JSONResponse(status_code=msg.http_status, content=msg.model_dump())
     """
     error_code = error_code_for(exc)
-    settings = (
-        envelope_settings if envelope_settings is not None else ErrorEnvelopeSettings()
-    )
+    settings = envelope_settings if envelope_settings is not None else ErrorEnvelopeSettings()
 
     # Key resolution order: type(exc).message_key -> error_code.message_key -> None.
     message_key: str | None = getattr(type(exc), "message_key", None)
     if message_key is None:
         message_key = getattr(error_code, "message_key", None)
 
-    params: dict[str, Any] = (
-        exc.error_params() if isinstance(exc, ServiceException) else {}
-    )
+    params: dict[str, Any] = exc.error_params() if isinstance(exc, ServiceException) else {}
 
     message: str | None = None
     if message_resolver is not None and message_key is not None:

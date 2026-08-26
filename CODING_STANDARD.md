@@ -94,12 +94,11 @@ impractical.
 
 ```python
 # ✅ Correct
-def compute_delay(attempt: int, policy: RetryPolicy) -> float:
-    ...
+def compute_delay(attempt: int, policy: RetryPolicy) -> float: ...
+
 
 # ❌ Wrong — unannotated parameters
-def compute_delay(attempt, policy):
-    ...
+def compute_delay(attempt, policy): ...
 ```
 
 ### Use standard library types from `collections.abc`
@@ -108,8 +107,10 @@ Import abstract types from `collections.abc`, not `typing`:
 ```python
 from collections.abc import Callable, Awaitable, Sequence, Mapping
 
+
 # ✅
 def register(handler: Callable[[Event], Awaitable[None]]) -> None: ...
+
 
 # ❌ — deprecated aliases
 from typing import Callable, List
@@ -122,8 +123,11 @@ Prefer PEP 604 union syntax over `Optional[X]` or `Union[X, Y]`:
 # ✅
 def get(key: str) -> str | None: ...
 
+
 # ❌
 from typing import Optional, Union
+
+
 def get(key: str) -> Optional[str]: ...
 ```
 
@@ -308,8 +312,10 @@ either the base (broad) or a subclass (precise):
 class VarcoError(Exception):
     """Base class for all varco errors."""
 
+
 class RepositoryError(VarcoError):
     """Base class for repository-layer errors."""
+
 
 class EntityNotFoundError(RepositoryError):
     """Raised when a requested entity does not exist."""
@@ -329,9 +335,7 @@ object construction time, analogous to `TypeError`.
 ```python
 def __post_init__(self) -> None:
     if self.failure_threshold < 1:
-        raise ValueError(
-            f"failure_threshold must be ≥ 1, got {self.failure_threshold}."
-        )
+        raise ValueError(f"failure_threshold must be ≥ 1, got {self.failure_threshold}.")
 ```
 
 ### `except` clauses
@@ -430,6 +434,7 @@ for `@abstractmethod` — it does not prevent instantiation.
 ```python
 from abc import ABC, abstractmethod
 
+
 class AbstractEventBus(ABC):
     @abstractmethod
     async def publish(self, event: Event, channel: str) -> None: ...
@@ -442,6 +447,7 @@ interfaces like `AsyncCache`:
 
 ```python
 from typing import Protocol, runtime_checkable
+
 
 @runtime_checkable
 class AsyncCache(Protocol[_K, _V]):
@@ -486,6 +492,7 @@ two functions or use an enum:
 # ❌
 def fetch(include_deleted: bool = False) -> list[User]: ...
 
+
 # ✅
 def fetch_active() -> list[User]: ...
 def fetch_including_deleted() -> list[User]: ...
@@ -499,6 +506,7 @@ object inside the function:
 # ❌
 def process(items: list[str] = []) -> None: ...
 
+
 # ✅
 def process(items: list[str] | None = None) -> None:
     if items is None:
@@ -508,9 +516,7 @@ def process(items: list[str] | None = None) -> None:
 For frozen dataclasses, use `field(default_factory=...)`:
 
 ```python
-monitored_on: tuple[type[Exception], ...] = field(
-    default_factory=lambda: (Exception,)
-)
+monitored_on: tuple[type[Exception], ...] = field(default_factory=lambda: (Exception,))
 ```
 
 ### Return types
@@ -564,6 +570,7 @@ classes in `di.py` files may reference concrete types:
 class OrderService:
     def __init__(self, producer: AbstractEventProducer) -> None: ...
 
+
 # ❌ Service knows about Kafka — breaks swappability and testability
 class OrderService:
     def __init__(self, producer: KafkaEventProducer) -> None: ...
@@ -582,6 +589,7 @@ event loop` in Python 3.10+. Always create them on first use inside a method:
 class MyService:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()  # No event loop yet!
+
 
 # ✅
 class MyService:
@@ -646,6 +654,7 @@ async def test_publishes_event() -> None:
     bus = InMemoryEventBus()
     ...
 
+
 # ❌ — redundant decorator
 @pytest.mark.asyncio
 async def test_publishes_event() -> None: ...
@@ -678,9 +687,9 @@ async def test_ttl_evicts() -> None:
     await asyncio.sleep(0.2)  # ← real wall-clock delay
     assert await cache.get("k") is None
 
+
 # ✅ Control time explicitly
-async def test_ttl_evicts(freezegun_or_clock_mock) -> None:
-    ...
+async def test_ttl_evicts(freezegun_or_clock_mock) -> None: ...
 ```
 
 ### Test structure: one class per unit under test
@@ -755,9 +764,9 @@ This keeps `uv run pytest` fast for contributors without Docker:
 ```python
 import pytest
 
+
 @pytest.mark.integration
-async def test_round_trip_with_real_redis() -> None:
-    ...
+async def test_round_trip_with_real_redis() -> None: ...
 ```
 
 ### Container fixture pattern
@@ -769,6 +778,7 @@ tests in a file. Derive per-test settings from the running container:
 def redis_container():
     with RedisContainer() as container:
         yield container
+
 
 @pytest.fixture
 def redis_settings(redis_container: RedisContainer) -> RedisSettings:

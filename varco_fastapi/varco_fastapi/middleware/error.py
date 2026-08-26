@@ -132,9 +132,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         self._message_catalog = message_catalog
         self._set_content_language = set_content_language
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         """
         Process the request, catching all exceptions and mapping them to JSON.
 
@@ -248,9 +246,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         except Exception as exc:  # noqa: BLE001
             return self._internal_error_response(exc)
 
-    def _service_error_response(
-        self, exc: ServiceException, request: Request
-    ) -> JSONResponse:
+    def _service_error_response(self, exc: ServiceException, request: Request) -> JSONResponse:
         """
         Map a ``ServiceException`` to the correct HTTP status code and body.
 

@@ -88,9 +88,7 @@ _logger = logging.getLogger(__name__)
 # Module-level ContextVar — one per process; isolated per asyncio Task.
 # Accessed exclusively via ``CorrelationMiddleware.current_id()`` so callers
 # never need to import the raw ContextVar.
-_CORRELATION_ID: Final[ContextVar[str | None]] = ContextVar(
-    "varco_correlation_id", default=None
-)
+_CORRELATION_ID: Final[ContextVar[str | None]] = ContextVar("varco_correlation_id", default=None)
 
 
 # ── LoggingMiddleware ──────────────────────────────────────────────────────────
@@ -254,9 +252,7 @@ class CorrelationMiddleware(EventMiddleware):
         """
         # Resolve: event attribute > current context > fresh UUID
         correlation_id: str = (
-            getattr(event, "correlation_id", None)
-            or _CORRELATION_ID.get()
-            or str(uuid4())
+            getattr(event, "correlation_id", None) or _CORRELATION_ID.get() or str(uuid4())
         )
         token = _CORRELATION_ID.set(correlation_id)
         try:
@@ -374,8 +370,7 @@ class RetryMiddleware(EventMiddleware):
                         self._max_delay,
                     )
                     _logger.debug(
-                        "RetryMiddleware: %s → %s failed (attempt %d/%d), "
-                        "retrying in %.2fs: %s",
+                        "RetryMiddleware: %s → %s failed (attempt %d/%d), retrying in %.2fs: %s",
                         type(event).__name__,
                         channel,
                         attempt + 1,

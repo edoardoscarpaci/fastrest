@@ -93,9 +93,7 @@ class TestKafkaConnectionSettings:
         assert conn.bootstrap_servers == "broker1:9093,broker2:9093"
 
     def test_bootstrap_servers_synthesised_from_host_port(self) -> None:
-        conn = KafkaConnectionSettings.model_validate(
-            {"host": "my-broker", "port": 9093}
-        )
+        conn = KafkaConnectionSettings.model_validate({"host": "my-broker", "port": 9093})
         assert conn.bootstrap_servers == "my-broker:9093"
 
     def test_bootstrap_servers_not_synthesised_when_default_host_port(self) -> None:

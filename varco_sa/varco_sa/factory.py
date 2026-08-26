@@ -385,13 +385,9 @@ class SAModelFactory:
             ann = raw_hints.get(field_name)
             inner_type, _ = MetaReader.extract_inner_type(ann or Any)
             hint = meta.fields.get(field_name)
-            col_type = _sa_type(
-                inner_type, field_name, hint.max_length if hint else None
-            )
+            col_type = _sa_type(inner_type, field_name, hint.max_length if hint else None)
             sa_fk_args = SAModelFactory._resolve_fk(field_name, meta)
-            columns[field_name] = Column(
-                field_name, col_type, *sa_fk_args, primary_key=True
-            )
+            columns[field_name] = Column(field_name, col_type, *sa_fk_args, primary_key=True)
             pk_attr_names.append(field_name)
 
         return columns, pk_attr_names
@@ -435,9 +431,7 @@ class SAModelFactory:
                 col_type = LargeBinary()
                 nullable = is_optional
             else:
-                col_type = _sa_type(
-                    inner_type, field.name, hint.max_length if hint else None
-                )
+                col_type = _sa_type(inner_type, field.name, hint.max_length if hint else None)
                 nullable = hint.nullable if hint is not None else is_optional
             unique = hint.unique if hint else False
             index = hint.index if hint else False
@@ -470,9 +464,7 @@ class SAModelFactory:
         ]
 
     @staticmethod
-    def _build_table_args(
-        meta: ParsedMeta, *, schema: str | None = None
-    ) -> tuple | dict:
+    def _build_table_args(meta: ParsedMeta, *, schema: str | None = None) -> tuple | dict:
         """
         Translate domain constraints (+ optional symbolic schema, Plan 007
         RD-3) to SA ``__table_args__`` entries.
@@ -501,9 +493,7 @@ class SAModelFactory:
         return {"schema": schema}
 
     @staticmethod
-    def _symbolic_schema_for(
-        meta: ParsedMeta, isolation: TenantIsolation | str
-    ) -> str | None:
+    def _symbolic_schema_for(meta: ParsedMeta, isolation: TenantIsolation | str) -> str | None:
         """
         Return the symbolic schema token for this table, or ``None``.
 
@@ -572,11 +562,7 @@ class SAModelFactory:
 
             # Resolve foreign_keys to actual Column objects on the source ORM class.
             # SA accepts a list of Column objects or an empty list (auto-infer).
-            fk_cols = (
-                [getattr(orm_cls, fk) for fk in rel.foreign_keys]
-                if rel.foreign_keys
-                else []
-            )
+            fk_cols = [getattr(orm_cls, fk) for fk in rel.foreign_keys] if rel.foreign_keys else []
 
             # DESIGN: lambda form for lazy target resolution
             #   ✅ Defers class lookup to mapper init — both sides can be registered in any order
@@ -641,12 +627,8 @@ class SAModelFactory:
                 # Determine the SA column type from the source / target PK columns.
                 # We look up the mapped table's PK to infer the correct type rather
                 # than hard-coding Integer — domain PKs can be UUID or String.
-                src_pk_col: sa.Column[Any] = list(
-                    sa.inspect(orm_cls).mapper.primary_key
-                )[0]
-                tgt_pk_col: sa.Column[Any] = list(
-                    sa.inspect(target_orm_cls).mapper.primary_key
-                )[0]
+                src_pk_col: sa.Column[Any] = list(sa.inspect(orm_cls).mapper.primary_key)[0]
+                tgt_pk_col: sa.Column[Any] = list(sa.inspect(target_orm_cls).mapper.primary_key)[0]
 
                 # DESIGN: assoc table FK column types mirror the actual PK types
                 #   ✅ Handles UUID, String, and Integer PKs without hard-coding

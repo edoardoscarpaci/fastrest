@@ -40,9 +40,7 @@ class _FakeControlService:
     async def request_provision(self, tenant_id: str) -> None:
         self.request_provision_calls.append(tenant_id)
 
-    async def request_deprovision(
-        self, tenant_id: str, *, confirm: bool = False
-    ) -> None:
+    async def request_deprovision(self, tenant_id: str, *, confirm: bool = False) -> None:
         if not confirm:
             from varco_core.tenancy.provisioner import DestructiveOperationRefused
 
@@ -140,9 +138,7 @@ def test_broadcast_delete_with_confirm_calls_request_deprovision() -> None:
         ("POST", "/tenancy/tenants/acme/activate"),
     ],
 )
-def test_new_routes_are_admin_guarded_non_admin_gets_403(
-    method: str, path: str
-) -> None:
+def test_new_routes_are_admin_guarded_non_admin_gets_403(method: str, path: str) -> None:
     app = _build_app("not-an-admin")
     client = TestClient(app, raise_server_exceptions=False)
 

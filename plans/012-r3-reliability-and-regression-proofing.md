@@ -75,7 +75,7 @@ is loudly reported.** Concretely: every shared container fixture starts with
 ```python
 override = os.environ.get("VARCO_TEST_REDIS_URL")
 if override:
-    request.config.stash[_OVERRIDES].add(("redis", override))   # reported in the summary
+    request.config.stash[_OVERRIDES].add(("redis", override))  # reported in the summary
     yield override
     return
 ```
@@ -133,9 +133,10 @@ from varco_conformance.event_bus import EventBusConformance
 
 pytestmark = pytest.mark.integration
 
+
 class TestRedisEventBusConformance(EventBusConformance):
     @pytest.fixture
-    async def bus(self, redis_url: str):          # ← the package's own shared fixture
+    async def bus(self, redis_url: str):  # ← the package's own shared fixture
         async with RedisEventBus(RedisEventBusSettings(url=redis_url)) as bus:
             yield bus
 ```

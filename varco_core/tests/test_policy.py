@@ -47,9 +47,7 @@ class Post(DomainModel):
     """Minimal domain entity with an owner field for ABAC-style tests."""
 
     # STR_ASSIGNED pk so it can be passed in the constructor directly.
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     owner_id: str = ""
     title: str = ""
 
@@ -188,9 +186,7 @@ def test_mapper_excludes_propagate_to_object_attrs() -> None:
     """object_attr_excludes strips sensitive fields from the mapped request."""
     mapper = RequestMapper(object_attr_excludes=frozenset({"title"}))
     post = Post(pk="42", owner_id="u1", title="secret")
-    req = mapper.to_request(
-        AuthContext(user_id="u1"), Action.READ, Resource(Post, post)
-    )
+    req = mapper.to_request(AuthContext(user_id="u1"), Action.READ, Resource(Post, post))
     assert "title" not in req.object_attrs
 
 
@@ -205,9 +201,7 @@ def test_mapper_override_subject_and_domain() -> None:
         def domain_for(self, ctx, action, resource) -> str | None:
             return ctx.metadata.get("tenant_id")
 
-    ctx = AuthContext(
-        user_id="u1", roles=frozenset({"editor"}), metadata={"tenant_id": "t9"}
-    )
+    ctx = AuthContext(user_id="u1", roles=frozenset({"editor"}), metadata={"tenant_id": "t9"})
     req = TenantMapper().to_request(ctx, Action.READ, Resource(Post))
     assert req.subject == "editor"
     assert req.domain == "t9"
@@ -215,9 +209,7 @@ def test_mapper_override_subject_and_domain() -> None:
 
 def test_mapper_custom_action_verb() -> None:
     """A custom StrEnum action round-trips as its string value."""
-    req = RequestMapper().to_request(
-        AuthContext(user_id="u1"), PostAction.PUBLISH, Resource(Post)
-    )
+    req = RequestMapper().to_request(AuthContext(user_id="u1"), PostAction.PUBLISH, Resource(Post))
     assert req.action == "publish"
 
 
@@ -282,9 +274,7 @@ async def test_authorizer_propagates_engine_failure_fail_closed() -> None:
 
     authorizer = PolicyEngineAuthorizer(_BrokenEngine())
     with pytest.raises(RuntimeError, match="store unreachable"):
-        await authorizer.authorize(
-            AuthContext(user_id="u1"), Action.READ, Resource(Post)
-        )
+        await authorizer.authorize(AuthContext(user_id="u1"), Action.READ, Resource(Post))
 
 
 # ── ABC contract ──────────────────────────────────────────────────────────────

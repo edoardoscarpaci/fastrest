@@ -127,9 +127,7 @@ class TestIndexDriftReport:
         assert report.has_drift is False
 
     def test_has_drift_true_when_missing_indexes(self) -> None:
-        report = IndexDriftReport(
-            missing_indexes={"users": ["unique index on 'email'"]}
-        )
+        report = IndexDriftReport(missing_indexes={"users": ["unique index on 'email'"]})
         assert report.has_drift is True
 
     def test_has_drift_false_for_only_unexpected(self) -> None:
@@ -142,9 +140,7 @@ class TestIndexDriftReport:
         assert "No index drift" in report.format()
 
     def test_format_missing_indexes(self) -> None:
-        report = IndexDriftReport(
-            missing_indexes={"users": ["unique index on 'email'"]}
-        )
+        report = IndexDriftReport(missing_indexes={"users": ["unique index on 'email'"]})
         text = report.format()
         assert "MISSING" in text
         assert "email" in text
@@ -189,9 +185,7 @@ class TestIndexDrift:
         assert exc.report is report
 
     def test_str_contains_format(self) -> None:
-        report = IndexDriftReport(
-            missing_indexes={"users": ["unique index on 'email'"]}
-        )
+        report = IndexDriftReport(missing_indexes={"users": ["unique index on 'email'"]})
         exc = IndexDrift(report)
         assert "email" in str(exc)
 

@@ -120,9 +120,7 @@ def test_migrate_with_step_specs_full_chain():
 
 
 def test_migrate_with_step_specs_partial_chain():
-    result = SlugBioMigratorSpec().migrate(
-        {"name": "Test", "slug": "test"}, from_version=2
-    )
+    result = SlugBioMigratorSpec().migrate({"name": "Test", "slug": "test"}, from_version=2)
     assert result["slug"] == "test"  # step 1 skipped
     assert result["bio"] == ""
     assert result["definition_version"] == 3

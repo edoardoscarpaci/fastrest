@@ -73,9 +73,7 @@ async def test_bus_onboarded_tenant_is_200_not_404_through_middleware() -> None:
     consumer = TenantProvisionConsumer(control_service=control_service)
     consumer.register_to(bus)
 
-    await bus.publish(
-        TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY
-    )
+    await bus.publish(TenantProvisionRequested(tenant_id="acme"), channel=CHANNEL_TENANCY)
     await bus.drain()
 
     catalog = control_service._catalog  # type: ignore[attr-defined]

@@ -60,9 +60,7 @@ class BeanieDatabaseProvisioner(AbstractTenantProvisioner):
         reconciler = IndexReconciler(self._index_guard, self._client[db_name])
         await reconciler.apply()
 
-    async def deprovision(
-        self, tenant_id: str, *, confirm_destroy: bool = False
-    ) -> None:
+    async def deprovision(self, tenant_id: str, *, confirm_destroy: bool = False) -> None:
         """
         ``dropDatabase`` — the per-tenant GDPR erasure primitive.
 

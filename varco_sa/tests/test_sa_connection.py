@@ -106,9 +106,7 @@ class TestPostgresConnectionSettings:
 
     def test_with_ssl_factory(self) -> None:
         ssl_cfg = SSLConfig(verify=False, check_hostname=False)
-        conn = PostgresConnectionSettings.with_ssl(
-            ssl_cfg, host="secure-db", database="prod"
-        )
+        conn = PostgresConnectionSettings.with_ssl(ssl_cfg, host="secure-db", database="prod")
         assert conn.host == "secure-db"
         assert conn.database == "prod"
         assert conn.ssl is not None

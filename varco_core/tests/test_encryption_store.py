@@ -81,9 +81,7 @@ class TestEncryptionKeyEntry:
             e.kid = "new-kid"  # type: ignore[misc]
 
     def test_to_dict_round_trip(self) -> None:
-        original = _make_entry(
-            kid="rt-1", tenant_id="globex", is_primary=False, wrapped=True
-        )
+        original = _make_entry(kid="rt-1", tenant_id="globex", is_primary=False, wrapped=True)
         d = original.to_dict()
         restored = EncryptionKeyEntry.from_dict(d)
         assert restored == original

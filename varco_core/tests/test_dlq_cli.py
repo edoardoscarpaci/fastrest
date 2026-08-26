@@ -54,17 +54,13 @@ class TestDlqCliListExitCodes:
     def test_list_returns_0_on_success(self) -> None:
         from varco_core.cli.main import main
 
-        exit_code = main(
-            ["dlq", "list", "--target", "tests.test_dlq_cli:_dlq_target_factory"]
-        )
+        exit_code = main(["dlq", "list", "--target", "tests.test_dlq_cli:_dlq_target_factory"])
         assert exit_code == 0
 
     def test_list_empty_dlq_still_returns_0(self) -> None:
         from varco_core.cli.main import main
 
-        exit_code = main(
-            ["dlq", "list", "--target", "tests.test_dlq_cli:_empty_dlq_factory"]
-        )
+        exit_code = main(["dlq", "list", "--target", "tests.test_dlq_cli:_empty_dlq_factory"])
         assert exit_code == 0
 
 

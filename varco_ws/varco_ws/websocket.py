@@ -182,9 +182,7 @@ class WebSocketConnection:
         # Drain task — created in _start_drain, cancelled in _stop_drain.
         self._drain_task: asyncio.Task[None] | None = None
         # Callback invoked when send_text raises — set by _start_drain.
-        self._on_send_error: Callable[[WebSocketConnection, Exception], None] | None = (
-            None
-        )
+        self._on_send_error: Callable[[WebSocketConnection, Exception], None] | None = None
 
     async def _enqueue(self, message: str) -> bool:
         """
@@ -509,9 +507,7 @@ class WebSocketEventBus:
         conn = WebSocketConnection(
             websocket,
             connection_id=connection_id,
-            max_queue_size=(
-                max_queue_size if max_queue_size is not None else self._max_queue_size
-            ),
+            max_queue_size=(max_queue_size if max_queue_size is not None else self._max_queue_size),
             backpressure_policy=(
                 backpressure_policy
                 if backpressure_policy is not None

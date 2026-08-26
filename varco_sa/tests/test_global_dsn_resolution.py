@@ -22,9 +22,7 @@ async def test_global_dsn_set_builds_and_disposes_a_separate_engine() -> None:
 
     app_engine = create_async_engine("sqlite+aiosqlite://")
 
-    resolved = await resolve_global_engine(
-        app_engine=app_engine, global_dsn="sqlite+aiosqlite://"
-    )
+    resolved = await resolve_global_engine(app_engine=app_engine, global_dsn="sqlite+aiosqlite://")
 
     assert resolved is not app_engine
     await resolved.dispose()

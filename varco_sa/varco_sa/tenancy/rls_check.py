@@ -102,17 +102,13 @@ async def assert_rls_enabled(
         )
         return []
 
-    candidates = sorted(
-        t for t in tables if t not in global_tables and t not in framework_tables
-    )
+    candidates = sorted(t for t in tables if t not in global_tables and t not in framework_tables)
     if not candidates:
         return []
 
     import sqlalchemy as sa
 
-    result = await conn.execute(
-        sa.text(_RLS_ENABLED_QUERY), {"table_names": candidates}
-    )
+    result = await conn.execute(sa.text(_RLS_ENABLED_QUERY), {"table_names": candidates})
     enabled: set[str] = set(result.scalars().all())
 
     missing = sorted(t for t in candidates if t not in enabled)

@@ -102,9 +102,7 @@ class LocalizationMiddleware(BaseHTTPMiddleware):
             tenant_defaults_provider or NullTenantDefaults()
         )
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         locale: str | None = None
         zone: ZoneInfo | None = None
         tenant_id = current_tenant()
@@ -144,11 +142,7 @@ class LocalizationMiddleware(BaseHTTPMiddleware):
             request.state.varco_request_context = ctx
             response = await call_next(request)
 
-        if (
-            self._i18n_settings.enabled
-            and self._i18n_settings.set_content_language
-            and locale
-        ):
+        if self._i18n_settings.enabled and self._i18n_settings.set_content_language and locale:
             response.headers["Content-Language"] = locale
 
         return response

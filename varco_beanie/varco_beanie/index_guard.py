@@ -423,9 +423,7 @@ class BeanieIndexGuard:
 
         for collection_name, expected_for_coll in by_collection.items():
             # Fetch all actual indexes from the live collection.
-            actual_raw: MutableMapping[str, Any] = await db[
-                collection_name
-            ].index_information()
+            actual_raw: MutableMapping[str, Any] = await db[collection_name].index_information()
 
             # Build a set of (key_fields_tuple, unique) from actual indexes for
             # O(1) lookup.  Skip the _id_ index — it is always present and never

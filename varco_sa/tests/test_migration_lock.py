@@ -84,9 +84,7 @@ async def test_two_migrators_concurrent_upgrade_exactly_one_applies(
     # Sanity-check the premise: there must be work to contend over.
     assert not (await migrator_a.plan()).is_empty
 
-    report_a, report_b = await asyncio.gather(
-        migrator_a.upgrade(), migrator_b.upgrade()
-    )
+    report_a, report_b = await asyncio.gather(migrator_a.upgrade(), migrator_b.upgrade())
 
     reports = [report_a, report_b]
     did_apply = [r for r in reports if r.applied]
@@ -100,8 +98,7 @@ async def test_two_migrators_concurrent_upgrade_exactly_one_applies(
     async with engine.connect() as conn:
         count = await conn.scalar(
             sa.text(
-                "SELECT count(*) FROM information_schema.tables "
-                "WHERE table_name = 'varco_outbox'"
+                "SELECT count(*) FROM information_schema.tables WHERE table_name = 'varco_outbox'"
             )
         )
     assert count == 1
@@ -144,9 +141,7 @@ async def test_set_local_idle_in_transaction_timeout_overrides_role_setting(
 
     async with engine.begin() as conn:
         await conn.execute(
-            text(
-                "ALTER ROLE CURRENT_USER SET idle_in_transaction_session_timeout = '1s'"
-            )
+            text("ALTER ROLE CURRENT_USER SET idle_in_transaction_session_timeout = '1s'")
         )
 
     async with migration_lock(engine, "varco:migrate", timeout=30.0):

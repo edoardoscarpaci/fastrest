@@ -230,8 +230,10 @@ mode, flag, or env var that makes it do so.
 from alembic import op
 from varco_sa.migration.ops import rls_upgrade, rls_downgrade
 
+
 def upgrade() -> None:
     rls_upgrade(op, "orders")
+
 
 def downgrade() -> None:
     rls_downgrade(op, "orders")
@@ -266,11 +268,13 @@ in production.
 ```python
 from varco_sa.rls import enable_rls_ddl, set_tenant_local
 
+
 # The lower-level form — rls_upgrade() above wraps exactly this. Use it when
 # you need the raw statements (inspection, a non-Alembic migration tool):
 def upgrade() -> None:
     for stmt in enable_rls_ddl("orders"):
         op.execute(stmt)
+
 
 # In request/transaction setup, before issuing tenant-scoped queries:
 async with session.begin():

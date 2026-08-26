@@ -54,9 +54,7 @@ async def test_health_is_anonymous():
 async def test_typed_path_param_is_coerced():
     """An ``int`` path param arrives coerced; the query currency is echoed."""
     async with _client() as c:
-        resp = await c.get(
-            "/catalog/items/42", params={"currency": "eur"}, headers=_READER
-        )
+        resp = await c.get("/catalog/items/42", params={"currency": "eur"}, headers=_READER)
     assert resp.status_code == 200
     body = resp.json()
     assert body["item_id"] == 42  # int, not "42"
@@ -74,9 +72,7 @@ async def test_path_param_non_int_rejected():
 async def test_query_validation_rejects_bad_currency():
     """The ``currency`` pattern constraint rejects invalid values with 422."""
     async with _client() as c:
-        resp = await c.get(
-            "/catalog/items/1", params={"currency": "US"}, headers=_READER
-        )
+        resp = await c.get("/catalog/items/1", params={"currency": "US"}, headers=_READER)
     assert resp.status_code == 422
 
 
@@ -101,9 +97,7 @@ async def test_body_model_is_parsed():
 async def test_body_validation_rejects_missing_field():
     """A body missing the required ``name`` field is rejected with 422."""
     async with _client() as c:
-        resp = await c.post(
-            "/catalog/items", json={"price_cents": 500}, headers=_READER
-        )
+        resp = await c.post("/catalog/items", json={"price_cents": 500}, headers=_READER)
     assert resp.status_code == 422
 
 
@@ -140,9 +134,7 @@ async def test_search_requires_q():
 async def test_guarded_report_allows_scoped_caller():
     """A caller with ``catalog:read`` reaches the guarded report (200)."""
     async with _client() as c:
-        resp = await c.get(
-            "/catalog/reports/summary", params={"window": "7"}, headers=_READER
-        )
+        resp = await c.get("/catalog/reports/summary", params={"window": "7"}, headers=_READER)
     assert resp.status_code == 200
     assert resp.json()["window_days"] == 7
 

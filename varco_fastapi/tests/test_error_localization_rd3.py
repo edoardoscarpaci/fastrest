@@ -40,9 +40,7 @@ def _fr_catalog() -> DictMessageCatalog:
     return DictMessageCatalog({"fr": {"varco.error.not_found": "Introuvable"}})
 
 
-async def test_regression_error_message_is_catalog_localized_via_route_handler() -> (
-    None
-):
+async def test_regression_error_message_is_catalog_localized_via_route_handler() -> None:
     # This exercises the FastAPI @app.exception_handler path
     # (add_exception_handlers) — a ServiceException raised from inside a
     # route handler is caught by Starlette's ExceptionMiddleware, which
@@ -84,9 +82,7 @@ async def test_regression_error_message_is_english_default_without_catalog() -> 
     assert body["message"] != "Introuvable"
 
 
-async def test_regression_error_middleware_reads_request_state_mirror_directly() -> (
-    None
-):
+async def test_regression_error_middleware_reads_request_state_mirror_directly() -> None:
     # RD-3's documented ordering hazard, exercised directly against
     # ErrorMiddleware: by the time ErrorMiddleware runs (it sits OUTSIDE
     # LocalizationMiddleware), the ambient ContextVar this middleware set

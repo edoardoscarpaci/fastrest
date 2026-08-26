@@ -85,9 +85,7 @@ class Post(AuditedDomainModel):
     """
 
     # STR_ASSIGNED + init=True: pk is part of __init__ with default=None.
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     # Default empty string so Post() is valid for collection-level operations.
     title: str = ""
 
@@ -133,9 +131,7 @@ _SENTINEL_TS: datetime = datetime(2026, 1, 1, 0, 0, 0)
 
 
 @Singleton
-class PostAssembler(
-    AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class PostAssembler(AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     """
     Concrete assembler for the Post entity used in all service tests.
 
@@ -488,9 +484,7 @@ class DenyAllAuthorizer(AbstractAuthorizer):
 
 
 @Singleton
-class ConcretePostService(
-    AsyncService[Post, str, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-):
+class ConcretePostService(AsyncService[Post, str, CreatePostDTO, PostReadDTO, UpdatePostDTO]):
     """
     Concrete ``AsyncService`` for ``Post`` used in all service tests.
 
@@ -506,9 +500,7 @@ class ConcretePostService(
         self,
         uow_provider: Inject[IUoWProvider],
         authorizer: Inject[AbstractAuthorizer],
-        assembler: Inject[
-            AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]
-        ],
+        assembler: Inject[AbstractDTOAssembler[Post, CreatePostDTO, PostReadDTO, UpdatePostDTO]],
     ) -> None:
         """
         Args:
@@ -579,9 +571,7 @@ def svc(uow_provider: FakeUoWProvider, assembler: PostAssembler) -> ConcretePost
 
 
 @pytest.fixture()
-def deny_svc(
-    uow_provider: FakeUoWProvider, assembler: PostAssembler
-) -> ConcretePostService:
+def deny_svc(uow_provider: FakeUoWProvider, assembler: PostAssembler) -> ConcretePostService:
     """
     Service wired with a deny-all ``DenyAllAuthorizer``.
 
@@ -1011,9 +1001,7 @@ class TestAsyncServiceDI:
         svc = di_container.get(ConcretePostService)
         assert isinstance(svc, ConcretePostService)
 
-    def test_injected_authorizer_is_base_authorizer(
-        self, di_container: DIContainer
-    ) -> None:
+    def test_injected_authorizer_is_base_authorizer(self, di_container: DIContainer) -> None:
         # AbstractAuthorizer resolves to BaseAuthorizer (only binding registered).
         svc = di_container.get(ConcretePostService)
         assert isinstance(svc._authorizer, BaseAuthorizer)
@@ -1023,9 +1011,7 @@ class TestAsyncServiceDI:
         svc = di_container.get(ConcretePostService)
         assert isinstance(svc._uow_provider, FakeUoWProvider)
 
-    def test_injected_assembler_is_post_assembler(
-        self, di_container: DIContainer
-    ) -> None:
+    def test_injected_assembler_is_post_assembler(self, di_container: DIContainer) -> None:
         # AbstractDTOAssembler[Post, ...] resolves to PostAssembler.
         svc = di_container.get(ConcretePostService)
         assert isinstance(svc._assembler, PostAssembler)
@@ -1036,9 +1022,7 @@ class TestAsyncServiceDI:
         second = di_container.get(ConcretePostService)
         assert first is second
 
-    async def test_di_wired_service_executes_end_to_end(
-        self, di_container: DIContainer
-    ) -> None:
+    async def test_di_wired_service_executes_end_to_end(self, di_container: DIContainer) -> None:
         # Full round-trip: resolve service from DI, call create() + get().
         # Validates that the DI-constructed service is fully functional —
         # not just the right type.

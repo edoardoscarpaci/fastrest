@@ -141,8 +141,7 @@ class InMemoryDocumentRepository(AsyncRepository[Document, UUID]):
         """
         if entity.pk is None:
             raise ValueError(
-                "Cannot delete an unpersisted Document — pk is None. "
-                "Call save() before delete()."
+                "Cannot delete an unpersisted Document — pk is None. Call save() before delete()."
             )
         pk = UUID(str(entity.pk)) if not isinstance(entity.pk, UUID) else entity.pk
         self._store.pop(pk, None)

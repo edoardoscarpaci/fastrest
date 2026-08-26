@@ -91,9 +91,7 @@ class TestSerializerAnnotationsAreResolvable:
             serializer: Annotated[Serializer[Event] | None, "marker"] = None,
         ) -> None: ...
 
-        target.__annotations__["serializer"] = (
-            'Annotated[Serializer[Event] | None, "marker"]'
-        )
+        target.__annotations__["serializer"] = 'Annotated[Serializer[Event] | None, "marker"]'
 
         hints = get_type_hints(
             target,

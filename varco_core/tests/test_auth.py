@@ -41,9 +41,7 @@ class Post(DomainModel):
 
     # STR_ASSIGNED + pk_field(init=True): pk is part of __init__ and has
     # default=None so it can precede title without causing a dataclass error.
-    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(
-        init=True
-    )
+    pk: Annotated[str, PrimaryKey(strategy=PKStrategy.STR_ASSIGNED)] = pk_field(init=True)
     # Default empty string keeps Post constructible without title when only
     # the type is needed (collection-level resource tests).
     title: str = ""
@@ -126,9 +124,7 @@ class TestResourceGrant:
         # ResourceGrant must be hashable to be stored in sets and dict keys.
         grants = {
             ResourceGrant("posts", frozenset({Action.READ})),
-            ResourceGrant(
-                "posts", frozenset({Action.READ})
-            ),  # duplicate — deduplicated
+            ResourceGrant("posts", frozenset({Action.READ})),  # duplicate — deduplicated
         }
         assert len(grants) == 1
 

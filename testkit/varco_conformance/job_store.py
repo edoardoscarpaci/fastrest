@@ -69,14 +69,10 @@ class JobStoreConformance:
         assert first.status == JobStatus.RUNNING
         assert second is None
 
-    async def test_try_claim_unknown_job_returns_none(
-        self, store: AbstractJobStore
-    ) -> None:
+    async def test_try_claim_unknown_job_returns_none(self, store: AbstractJobStore) -> None:
         assert await store.try_claim(uuid4(), owner_id="worker-a") is None
 
-    async def test_run_at_in_future_not_claimable(
-        self, store: AbstractJobStore
-    ) -> None:
+    async def test_run_at_in_future_not_claimable(self, store: AbstractJobStore) -> None:
         future = datetime.now(UTC) + timedelta(hours=1)
         job = self._job(status=JobStatus.PENDING, run_at=future)
         await store.save(job)
@@ -85,9 +81,7 @@ class JobStoreConformance:
 
         assert claimed is None or claimed.job_id != job.job_id
 
-    async def test_save_with_stale_expected_epoch_raises(
-        self, store: AbstractJobStore
-    ) -> None:
+    async def test_save_with_stale_expected_epoch_raises(self, store: AbstractJobStore) -> None:
         job = self._job(status=JobStatus.PENDING)
         await store.save(job)
         claimed = await store.try_claim(job.job_id, owner_id="worker-a", lease_ttl=30.0)
@@ -135,9 +129,7 @@ class JobStoreConformance:
 
         assert any(j.job_id == job.job_id for j in reaped)
 
-    async def test_delete_where_no_predicate_raises(
-        self, store: AbstractJobStore
-    ) -> None:
+    async def test_delete_where_no_predicate_raises(self, store: AbstractJobStore) -> None:
         with pytest.raises(ValueError):
             await store.delete_where()
 
@@ -149,15 +141,12 @@ class JobStoreConformance:
 
         assert deleted >= 1
         assert (
-            await store.get(job.job_id) is None
-            or (await store.get(job.job_id)) is not None
+            await store.get(job.job_id) is None or (await store.get(job.job_id)) is not None
         )  # backend-defined: deletion of THIS row is verified below
         remaining = await store.list_by_status(JobStatus.PENDING, limit=1000)
         assert job.job_id not in {j.job_id for j in remaining}
 
-    async def test_supports_zoned_schedules_flag_honoured(
-        self, store: AbstractJobStore
-    ) -> None:
+    async def test_supports_zoned_schedules_flag_honoured(self, store: AbstractJobStore) -> None:
         if not store.supports_zoned_schedules:
             pytest.skip("store does not declare zoned-schedule support")
 

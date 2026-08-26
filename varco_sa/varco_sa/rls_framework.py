@@ -88,15 +88,11 @@ def framework_rls_upgrade(
     from varco_sa.rls import enable_rls_ddl
 
     for table in tables:
-        for stmt in enable_rls_ddl(
-            table, tenant_column=tenant_column, cast_type=cast_type
-        ):
+        for stmt in enable_rls_ddl(table, tenant_column=tenant_column, cast_type=cast_type):
             op.execute(stmt)
 
 
-def framework_rls_downgrade(
-    op: Any, *, tables: Sequence[str] = FRAMEWORK_RLS_TABLES
-) -> None:
+def framework_rls_downgrade(op: Any, *, tables: Sequence[str] = FRAMEWORK_RLS_TABLES) -> None:
     """Reverse ``framework_rls_upgrade`` — drop policies, disable RLS."""
     for table in tables:
         name = f"{table}_tenant_isolation"

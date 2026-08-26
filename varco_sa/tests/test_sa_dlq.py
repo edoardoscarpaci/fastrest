@@ -66,17 +66,13 @@ class TestSADeadLetterQueueGet:
 
 
 class TestSADeadLetterQueueListEntries:
-    async def test_list_entries_is_non_destructive(
-        self, dlq: SADeadLetterQueue
-    ) -> None:
+    async def test_list_entries_is_non_destructive(self, dlq: SADeadLetterQueue) -> None:
         await dlq.push(_entry())
         entries = await dlq.list_entries()
         assert len(entries) == 1
         assert await dlq.count() == 1  # still there
 
-    async def test_list_entries_filters_by_channel(
-        self, dlq: SADeadLetterQueue
-    ) -> None:
+    async def test_list_entries_filters_by_channel(self, dlq: SADeadLetterQueue) -> None:
         await dlq.push(_entry(channel="orders"))
         await dlq.push(_entry(channel="payments"))
         entries = await dlq.list_entries(channel="payments")
@@ -85,9 +81,7 @@ class TestSADeadLetterQueueListEntries:
 
 
 class TestSADeadLetterQueueDeleteWhereSweep:
-    async def test_chunked_sweep_deletes_all_matching(
-        self, dlq: SADeadLetterQueue
-    ) -> None:
+    async def test_chunked_sweep_deletes_all_matching(self, dlq: SADeadLetterQueue) -> None:
         for _ in range(5):
             await dlq.push(_entry())
 

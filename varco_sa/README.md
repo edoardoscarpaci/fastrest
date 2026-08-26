@@ -70,18 +70,23 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from varco_sa import SAConfig, SAFastrestApp
 
-class Base(DeclarativeBase): pass
+
+class Base(DeclarativeBase):
+    pass
+
 
 engine = create_async_engine("postgresql+asyncpg://user:pass@localhost/mydb")
 
-app = SAFastrestApp(SAConfig(
-    engine=engine,
-    base=Base,
-    entity_classes=(User, Post),
-))
+app = SAFastrestApp(
+    SAConfig(
+        engine=engine,
+        base=Base,
+        entity_classes=(User, Post),
+    )
+)
 
-await app.create_all()              # CREATE TABLE IF NOT EXISTS ...
-uow_provider = app.uow_provider     # ready to inject as IUoWProvider
+await app.create_all()  # CREATE TABLE IF NOT EXISTS ...
+uow_provider = app.uow_provider  # ready to inject as IUoWProvider
 ```
 
 ### Manual setup
@@ -154,8 +159,8 @@ from varco_sa.migration import AlembicMigrator
 
 migrator = AlembicMigrator(engine, script_location="alembic")
 
-await migrator.plan()        # → MigrationPlan(current=..., pending=...)
-await migrator.upgrade()     # → applies both branches, under the lock
+await migrator.plan()  # → MigrationPlan(current=..., pending=...)
+await migrator.upgrade()  # → applies both branches, under the lock
 ```
 
 ```bash
@@ -179,8 +184,8 @@ from varco_sa.migration.env_template import include_object, configure_kwargs
 context.configure(
     connection=connection,
     target_metadata=target_metadata,
-    include_object=include_object,      # skip framework-owned tables
-    **configure_kwargs(),               # transaction_per_migration=True, compare_type=True
+    include_object=include_object,  # skip framework-owned tables
+    **configure_kwargs(),  # transaction_per_migration=True, compare_type=True
 )
 ```
 
@@ -297,10 +302,12 @@ to any generated table unless your own Alembic revision calls `enable_rls_ddl()`
 ```python
 from varco_sa.rls import enable_rls_ddl, set_tenant_local
 
+
 # In your own Alembic revision:
 def upgrade() -> None:
     for stmt in enable_rls_ddl("orders"):
         op.execute(stmt)
+
 
 # Before issuing tenant-scoped queries, inside the transaction:
 async with session.begin():
@@ -490,9 +497,7 @@ classmethod:
 provider = SQLAlchemyRepositoryProvider(base=Base, session_factory=sessions)
 
 # After (2.0)
-provider = SQLAlchemyRepositoryProvider.from_components(
-    base=Base, session_factory=sessions
-)
+provider = SQLAlchemyRepositoryProvider.from_components(base=Base, session_factory=sessions)
 ```
 
 The DI path (`container.get(SQLAlchemyRepositoryProvider)` with an `SAConfig`

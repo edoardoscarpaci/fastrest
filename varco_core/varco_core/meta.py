@@ -186,8 +186,7 @@ class FieldHint:
             )
         if self.max_length is not None and self.max_length <= 0:
             raise ValueError(
-                f"FieldHint: max_length must be a positive integer, "
-                f"got {self.max_length!r}."
+                f"FieldHint: max_length must be a positive integer, got {self.max_length!r}."
             )
 
 
@@ -784,12 +783,8 @@ class MetaReader:
         # They are silently split here into two typed lists so SAModelFactory
         # can process them without isinstance checks in hot code.
         raw_rels = getattr(meta_cls, "relationships", [])
-        orm_relationships: list[Relationship] = [
-            r for r in raw_rels if isinstance(r, Relationship)
-        ]
-        orm_many_to_many: list[ManyToMany] = [
-            r for r in raw_rels if isinstance(r, ManyToMany)
-        ]
+        orm_relationships: list[Relationship] = [r for r in raw_rels if isinstance(r, Relationship)]
+        orm_many_to_many: list[ManyToMany] = [r for r in raw_rels if isinstance(r, ManyToMany)]
 
         # ── 6. Post-build customisation hook ──────────────────────────────────
         # Meta.customize must be a staticmethod or plain callable — it receives
@@ -862,9 +857,7 @@ class MetaReader:
 
         args = typing.get_args(pk_ann)
         raw_pk_type = args[0]
-        pk_hint: PrimaryKey | None = next(
-            (a for a in args[1:] if isinstance(a, PrimaryKey)), None
-        )
+        pk_hint: PrimaryKey | None = next((a for a in args[1:] if isinstance(a, PrimaryKey)), None)
 
         pk_type, _ = MetaReader.extract_inner_type(raw_pk_type)
         strategy = pk_hint.strategy if pk_hint else PKStrategy.CUSTOM
@@ -878,19 +871,14 @@ class MetaReader:
 
         # Type / strategy compatibility checks
         if strategy is PKStrategy.INT_AUTO and pk_type is not int:
-            raise TypeError(
-                f"{domain_cls.__name__}.pk: INT_AUTO requires 'int', "
-                f"got {pk_type!r}."
-            )
+            raise TypeError(f"{domain_cls.__name__}.pk: INT_AUTO requires 'int', got {pk_type!r}.")
         if strategy is PKStrategy.UUID_AUTO and pk_type is not UUID:
             raise TypeError(
-                f"{domain_cls.__name__}.pk: UUID_AUTO requires 'UUID', "
-                f"got {pk_type!r}."
+                f"{domain_cls.__name__}.pk: UUID_AUTO requires 'UUID', got {pk_type!r}."
             )
         if strategy is PKStrategy.STR_ASSIGNED and pk_type is not str:
             raise TypeError(
-                f"{domain_cls.__name__}.pk: STR_ASSIGNED requires 'str', "
-                f"got {pk_type!r}."
+                f"{domain_cls.__name__}.pk: STR_ASSIGNED requires 'str', got {pk_type!r}."
             )
 
         return pk_type, strategy  # type: ignore[return-value]

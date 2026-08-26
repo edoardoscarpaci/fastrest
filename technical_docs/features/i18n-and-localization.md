@@ -46,10 +46,10 @@ containment.
 
 ```python
 class MessageCatalog(abc.ABC):
-    def get_message(self, key: str, locale: str) -> str | None: ...        # abstract
+    def get_message(self, key: str, locale: str) -> str | None: ...  # abstract
     def format_message(self, key, locale, params=None) -> str | None: ...  # default: str.format_map
     def available_locales(self) -> frozenset[str]: ...
-    async def start(self) -> None: ...   # blocking I/O lives here, never lazily
+    async def start(self) -> None: ...  # blocking I/O lives here, never lazily
     async def stop(self) -> None: ...
 ```
 
@@ -108,7 +108,7 @@ pybabel compile -d locale
 from varco_core.i18n.gettext_catalog import GettextMessageCatalog
 
 catalog = GettextMessageCatalog("locale", domain="messages", locales=("en", "fr"))
-await catalog.start()   # blocking .mo load — call once at app startup, never per-request
+await catalog.start()  # blocking .mo load — call once at app startup, never per-request
 ```
 
 A locale with no `.mo` file is skipped with one WARNING; `start()` never
@@ -142,7 +142,7 @@ resolved = await resolve_locale(
     query_param=request.query_params.get("lang"),
     user_profile_locale=auth_ctx_locale_claim,
     tenant_id=current_tenant(),
-    tenant_defaults_provider=provider,       # awaited only if tenant_id is set
+    tenant_defaults_provider=provider,  # awaited only if tenant_id is set
     accept_language_header=request.headers.get("accept-language"),
     supported_locales=("en", "fr"),
     default_locale="en",
@@ -177,6 +177,7 @@ every deployment, for a value most tenants never set. Instead:
 
 ```python
 from varco_core.context.defaults import TenantDefaultsProvider, TenantLocalizationDefaults
+
 
 class MyTenantDefaults:
     async def defaults_for(self, tenant_id: str) -> TenantLocalizationDefaults:

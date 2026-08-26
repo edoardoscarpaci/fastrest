@@ -173,9 +173,7 @@ def _seed(uow_provider: FakeUoWProvider, *titles: str) -> list[Post]:
 class TestCreateMany:
     """Tests for ``BulkServiceMixin.create_many``."""
 
-    async def test_empty_returns_empty_list(
-        self, svc: BulkPostService, ctx: AuthContext
-    ) -> None:
+    async def test_empty_returns_empty_list(self, svc: BulkPostService, ctx: AuthContext) -> None:
         result = await svc.create_many([], ctx)
         assert result == []
 
@@ -451,9 +449,7 @@ class TestDeleteMany:
         from varco_core.auth import AbstractAuthorizer, Action, Resource
 
         class CountingAuthorizer(AbstractAuthorizer):
-            async def authorize(
-                self, ctx: AuthContext, action: Action, resource: Resource
-            ) -> None:
+            async def authorize(self, ctx: AuthContext, action: Action, resource: Resource) -> None:
                 if resource.entity is not None:
                     authorize_calls.append(str(resource.entity.pk))
 

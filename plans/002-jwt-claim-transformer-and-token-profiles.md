@@ -139,43 +139,55 @@ adapter class satisfies it without inheriting from varco.
 ### Value objects (all `@dataclass(frozen=True)`)
 
 ```python
-class CanonicalClaim(StrEnum):        # the canonical target field set
-    USER_ID    = "user_id"            # → AuthContext.user_id   (default source: "sub")
-    ROLES      = "roles"              # → AuthContext.roles
-    SCOPES     = "scopes"             # → AuthContext.scopes
-    GRANTS     = "grants"             # → AuthContext.grants
-    TENANT_ID  = "tenant_id"          # → AuthContext.metadata["tenant_id"]
-    ACTOR      = "actor"              # → AuthContext.metadata["actor"]  (RFC 8693 `act`)
-    TOKEN_TYPE = "token_type"         # → JsonWebToken.token_type
+class CanonicalClaim(StrEnum):  # the canonical target field set
+    USER_ID = "user_id"  # → AuthContext.user_id   (default source: "sub")
+    ROLES = "roles"  # → AuthContext.roles
+    SCOPES = "scopes"  # → AuthContext.scopes
+    GRANTS = "grants"  # → AuthContext.grants
+    TENANT_ID = "tenant_id"  # → AuthContext.metadata["tenant_id"]
+    ACTOR = "actor"  # → AuthContext.metadata["actor"]  (RFC 8693 `act`)
+    TOKEN_TYPE = "token_type"  # → JsonWebToken.token_type
+
 
 class ValueShape(StrEnum):
-    AUTO = "auto"; LIST = "list"; SPACE = "space"; CSV = "csv"
-    SCALAR = "scalar"; DICT_KEYS = "dict_keys"; GRANTS = "grants"; RAW = "raw"
+    AUTO = "auto"
+    LIST = "list"
+    SPACE = "space"
+    CSV = "csv"
+    SCALAR = "scalar"
+    DICT_KEYS = "dict_keys"
+    GRANTS = "grants"
+    RAW = "raw"
+
 
 @dataclass(frozen=True)
-class ClaimPath:                      # "realm_access.roles" → ("realm_access", "roles")
+class ClaimPath:  # "realm_access.roles" → ("realm_access", "roles")
     segments: tuple[str, ...]
+
     @classmethod
     def parse(cls, spec: str, *, separator: str = ".") -> ClaimPath: ...
     def read(self, claims: Mapping[str, Any]) -> Any | _MISSING: ...
 
+
 @dataclass(frozen=True)
 class ClaimRule:
     target: CanonicalClaim
-    sources: tuple[ClaimPath, ...]    # fallback chain, in order
+    sources: tuple[ClaimPath, ...]  # fallback chain, in order
     shape: ValueShape = ValueShape.AUTO
     strip_prefix: str | None = None
-    merge: bool = False               # False = first non-empty wins; True = union all
-    required: bool = False            # missing → ClaimTransformError
+    merge: bool = False  # False = first non-empty wins; True = union all
+    required: bool = False  # missing → ClaimTransformError
+
 
 @dataclass(frozen=True)
 class ClaimMapping:
     rules: tuple[ClaimRule, ...] = ()
-    metadata_fields: tuple[tuple[str, ClaimPath], ...] = ()   # extra → metadata[key]
+    metadata_fields: tuple[tuple[str, ClaimPath], ...] = ()  # extra → metadata[key]
     separator: str = "."
-    strict: bool = False              # shape/type errors raise vs. log-and-skip
+    strict: bool = False  # shape/type errors raise vs. log-and-skip
+
     def apply(self, claims: Mapping[str, Any]) -> dict[str, Any]: ...
-    def merged_with(self, override: ClaimMapping) -> ClaimMapping: ...   # per-issuer inherit
+    def merged_with(self, override: ClaimMapping) -> ClaimMapping: ...  # per-issuer inherit
     def invert(self) -> dict[str, str]: ...  # raises for non-invertible rules
 ```
 
@@ -270,7 +282,7 @@ comes from a **process-global, read-mostly registry** in `varco_core.jwt.transfo
 ```python
 def resolve_claim_transformer(iss: str | None) -> ClaimTransformer: ...
 def configure_claim_transforms(registry: ClaimTransformerRegistry | None = None) -> None: ...
-def reset_claim_transforms() -> None: ...       # test hook
+def reset_claim_transforms() -> None: ...  # test hook
 ```
 
 `resolve_claim_transformer` lazily builds the registry from `os.environ` on first call and

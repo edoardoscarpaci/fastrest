@@ -60,9 +60,7 @@ def test_build_adapter_beanie_missing_db_url() -> None:
 def test_build_adapter_beanie_missing_db_name() -> None:
     """adapter='beanie' without db_name raises ValueError with VARCO_CASBIN_DB_NAME hint."""
     with pytest.raises(ValueError, match="VARCO_CASBIN_DB_NAME"):
-        build_adapter(
-            CasbinSettings(adapter="beanie", db_url="mongodb://localhost:27017")
-        )
+        build_adapter(CasbinSettings(adapter="beanie", db_url="mongodb://localhost:27017"))
 
 
 def test_build_adapter_beanie_import_error_gives_install_hint() -> None:
@@ -99,9 +97,7 @@ async def test_create_table_calls_init_beanie(adapter) -> None:
     """create_table() calls init_beanie with the correct connection_string and model."""
     from varco_casbin.beanie_adapter import CasbinRuleDocument
 
-    with patch(
-        "varco_casbin.beanie_adapter.init_beanie", new_callable=AsyncMock
-    ) as mock_init:
+    with patch("varco_casbin.beanie_adapter.init_beanie", new_callable=AsyncMock) as mock_init:
         await adapter.create_table()
 
     mock_init.assert_awaited_once_with(
@@ -154,9 +150,7 @@ async def test_save_policy_deletes_all_then_inserts(adapter) -> None:
 
     with (
         patch.object(CasbinRuleDocument, "find_all", return_value=mock_find_result),
-        patch.object(
-            CasbinRuleDocument, "insert_many", new_callable=AsyncMock
-        ) as mock_insert,
+        patch.object(CasbinRuleDocument, "insert_many", new_callable=AsyncMock) as mock_insert,
     ):
         result = await adapter.save_policy(mock_model)
 
@@ -181,9 +175,7 @@ async def test_add_policy_inserts_one_document(adapter) -> None:
     """add_policy() inserts a single CasbinRuleDocument with the correct fields."""
     from varco_casbin.beanie_adapter import CasbinRuleDocument
 
-    with patch.object(
-        CasbinRuleDocument, "insert", new_callable=AsyncMock
-    ) as mock_insert:
+    with patch.object(CasbinRuleDocument, "insert", new_callable=AsyncMock) as mock_insert:
         await adapter.add_policy("p", "p", ["alice", "data1", "read"])
 
     mock_insert.assert_awaited_once()
@@ -208,9 +200,7 @@ async def test_remove_policy_noop_when_not_found(adapter) -> None:
     """remove_policy() is a no-op when no matching document exists."""
     from varco_casbin.beanie_adapter import CasbinRuleDocument
 
-    with patch.object(
-        CasbinRuleDocument, "find_one", new_callable=AsyncMock, return_value=None
-    ):
+    with patch.object(CasbinRuleDocument, "find_one", new_callable=AsyncMock, return_value=None):
         # Should not raise.
         await adapter.remove_policy("p", "p", ["alice", "data1", "read"])
 
@@ -234,9 +224,7 @@ async def test_remove_filtered_policy_field_index_0(adapter) -> None:
     mock_find_result = MagicMock()
     mock_find_result.delete = mock_delete
 
-    with patch.object(
-        CasbinRuleDocument, "find", return_value=mock_find_result
-    ) as mock_find:
+    with patch.object(CasbinRuleDocument, "find", return_value=mock_find_result) as mock_find:
         await adapter.remove_filtered_policy("p", "p", 0, "alice")
 
     # Filter must include ptype and v0.
@@ -252,9 +240,7 @@ async def test_remove_filtered_policy_field_index_1(adapter) -> None:
     mock_find_result = MagicMock()
     mock_find_result.delete = mock_delete
 
-    with patch.object(
-        CasbinRuleDocument, "find", return_value=mock_find_result
-    ) as mock_find:
+    with patch.object(CasbinRuleDocument, "find", return_value=mock_find_result) as mock_find:
         await adapter.remove_filtered_policy("p", "p", 1, "data1", "read")
 
     mock_find.assert_called_once_with({"ptype": "p", "v1": "data1", "v2": "read"})
@@ -269,9 +255,7 @@ async def test_remove_filtered_policy_empty_string_is_wildcard(adapter) -> None:
     mock_find_result = MagicMock()
     mock_find_result.delete = mock_delete
 
-    with patch.object(
-        CasbinRuleDocument, "find", return_value=mock_find_result
-    ) as mock_find:
+    with patch.object(CasbinRuleDocument, "find", return_value=mock_find_result) as mock_find:
         # v0="" is skipped; v1="data1" is included.
         await adapter.remove_filtered_policy("p", "p", 0, "", "data1")
 
@@ -314,9 +298,7 @@ def test_rule_document_str_ptype_only_when_all_fields_empty() -> None:
     """__str__() returns just 'p' when all v* fields are empty."""
     from varco_casbin.beanie_adapter import CasbinRuleDocument
 
-    doc = CasbinRuleDocument.model_construct(
-        ptype="p", v0="", v1="", v2="", v3="", v4="", v5=""
-    )
+    doc = CasbinRuleDocument.model_construct(ptype="p", v0="", v1="", v2="", v3="", v4="", v5="")
     assert str(doc) == "p"
 
 

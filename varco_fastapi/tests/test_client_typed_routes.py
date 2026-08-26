@@ -107,21 +107,12 @@ class TestResolverParity:
         contract = build_contract(OrderRouter, service_name="orders")
         route = contract.route("cancel")
 
-        imported_method = build_client_method(
-            route, ImportedTypeResolver(contract, OrderRouter)
-        )
-        synthesized_method = build_client_method(
-            route, SynthesizedTypeResolver(contract)
-        )
+        imported_method = build_client_method(route, ImportedTypeResolver(contract, OrderRouter))
+        synthesized_method = build_client_method(route, SynthesizedTypeResolver(contract))
 
         imported_sig = inspect.signature(imported_method)
         synthesized_sig = inspect.signature(synthesized_method)
 
-        assert list(imported_sig.parameters.keys()) == list(
-            synthesized_sig.parameters.keys()
-        )
+        assert list(imported_sig.parameters.keys()) == list(synthesized_sig.parameters.keys())
         for name in imported_sig.parameters:
-            assert (
-                imported_sig.parameters[name].kind
-                == synthesized_sig.parameters[name].kind
-            )
+            assert imported_sig.parameters[name].kind == synthesized_sig.parameters[name].kind

@@ -186,9 +186,7 @@ class PostgresConnectionSettings(ConnectionSettings):
         """
         user = quote_plus(self._effective_username())
         pw = quote_plus(self._effective_password())
-        return (
-            f"postgresql+asyncpg://{user}:{pw}@{self.host}:{self.port}/{self.database}"
-        )
+        return f"postgresql+asyncpg://{user}:{pw}@{self.host}:{self.port}/{self.database}"
 
     def to_sqlalchemy_url(self) -> str:
         """

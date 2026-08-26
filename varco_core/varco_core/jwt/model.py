@@ -197,9 +197,7 @@ class JsonWebToken:
     # Catch-all for application-specific or unknown non-standard claims.
     # compare=False, hash=False: unhashable claim values (lists, dicts) would
     # break frozen=True; excluding them keeps the dataclass safely hashable.
-    extra_claims: dict[str, Any] = field(
-        default_factory=dict, compare=False, hash=False
-    )
+    extra_claims: dict[str, Any] = field(default_factory=dict, compare=False, hash=False)
 
     # ── Serialization ─────────────────────────────────────────────────────────
 
@@ -237,9 +235,7 @@ class JsonWebToken:
             claims["iss"] = self.iss
         if self.aud is not None:
             # PyJWT expects str or list — frozenset must be normalised to list
-            claims["aud"] = (
-                sorted(self.aud) if isinstance(self.aud, frozenset) else self.aud
-            )
+            claims["aud"] = sorted(self.aud) if isinstance(self.aud, frozenset) else self.aud
         if self.exp is not None:
             claims["exp"] = _to_utc_timestamp(self.exp)
         if self.iat is not None:

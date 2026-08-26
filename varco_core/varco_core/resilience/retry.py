@@ -177,13 +177,9 @@ class RetryPolicy:
                 "Use max_attempts=1 to disable retries entirely."
             )
         if self.base_delay < 0:
-            raise ValueError(
-                f"RetryPolicy.base_delay must be ≥ 0, got {self.base_delay}."
-            )
+            raise ValueError(f"RetryPolicy.base_delay must be ≥ 0, got {self.base_delay}.")
         if self.max_delay < 0:
-            raise ValueError(
-                f"RetryPolicy.max_delay must be ≥ 0, got {self.max_delay}."
-            )
+            raise ValueError(f"RetryPolicy.max_delay must be ≥ 0, got {self.max_delay}.")
         if self.exponential_base <= 0:
             raise ValueError(
                 f"RetryPolicy.exponential_base must be > 0, got {self.exponential_base}."
@@ -208,9 +204,7 @@ class RetryPolicy:
               before jitter is applied — no overflow risk.
         """
         # Exponential growth capped at max_delay
-        raw = min(
-            self.base_delay * (self.exponential_base**attempt_index), self.max_delay
-        )
+        raw = min(self.base_delay * (self.exponential_base**attempt_index), self.max_delay)
         if self.jitter:
             # Uniform jitter in [0.5, 1.5] — preserves average delay while
             # desynchronising retries from multiple callers.
@@ -452,18 +446,14 @@ def _wrap_async(
                 if attempt < policy.max_attempts:
                     # Calculate delay using 0-based index for backoff math
                     delay = policy.compute_delay(attempt - 1)
-                    _log_retry_attempt(
-                        func.__qualname__, attempt, policy.max_attempts, exc, delay
-                    )
+                    _log_retry_attempt(func.__qualname__, attempt, policy.max_attempts, exc, delay)
                     await asyncio.sleep(delay)
 
         # All attempts exhausted — last_exc is always set here because the
         # loop body always assigns it before reaching this point.
         assert last_exc is not None  # invariant: loop ran ≥ 1 time
         _log_exhausted(func.__qualname__, policy.max_attempts, last_exc)
-        raise RetryExhaustedError(
-            func.__qualname__, policy.max_attempts, last_exc
-        ) from last_exc
+        raise RetryExhaustedError(func.__qualname__, policy.max_attempts, last_exc) from last_exc
 
     return wrapper
 
@@ -508,17 +498,13 @@ def _wrap_sync(
 
                 if attempt < policy.max_attempts:
                     delay = policy.compute_delay(attempt - 1)
-                    _log_retry_attempt(
-                        func.__qualname__, attempt, policy.max_attempts, exc, delay
-                    )
+                    _log_retry_attempt(func.__qualname__, attempt, policy.max_attempts, exc, delay)
                     # Blocking sleep — intentional for sync context.
                     # Callers in async code should decorate async functions instead.
                     time.sleep(delay)
 
         assert last_exc is not None
         _log_exhausted(func.__qualname__, policy.max_attempts, last_exc)
-        raise RetryExhaustedError(
-            func.__qualname__, policy.max_attempts, last_exc
-        ) from last_exc
+        raise RetryExhaustedError(func.__qualname__, policy.max_attempts, last_exc) from last_exc
 
     return wrapper

@@ -93,8 +93,7 @@ async def test_enqueue_saves_job_as_pending_before_task_starts():
 
     # save must come before submit — this is the invariant
     assert save_order == ["save", "submit"], (
-        "store.save() must be called BEFORE runner.submit(); "
-        f"actual order: {save_order}"
+        f"store.save() must be called BEFORE runner.submit(); actual order: {save_order}"
     )
     await asyncio.sleep(0.05)  # let task finish cleanly
     await runner.stop()
@@ -125,9 +124,7 @@ async def test_enqueue_job_transitions_to_completed():
 
     completed = await store.get(job.job_id)
     assert completed is not None, "job must be findable in store after enqueue()"
-    assert (
-        completed.status == JobStatus.COMPLETED
-    ), f"expected COMPLETED, got {completed.status}"
+    assert completed.status == JobStatus.COMPLETED, f"expected COMPLETED, got {completed.status}"
     assert ran == [True], "coro must actually execute"
     await runner.stop()
 
@@ -166,9 +163,7 @@ async def test_enqueue_raises_and_coro_does_not_execute_if_store_save_raises():
     # Give any accidentally scheduled task time to run
     await asyncio.sleep(0.05)
 
-    assert (
-        executed == []
-    ), "coroutine body must not execute when enqueue() fails on store.save()"
+    assert executed == [], "coroutine body must not execute when enqueue() fails on store.save()"
     await runner.stop()
 
 
@@ -380,12 +375,12 @@ async def test_poller_start_recovers_stale_running_jobs_immediately():
 
     recovered = await store.get(stale_job.job_id)
     assert recovered is not None
-    assert (
-        recovered.status == JobStatus.FAILED
-    ), f"stale RUNNING job must be marked FAILED on startup, got {recovered.status}"
-    assert "stale_job_timeout" in (
-        recovered.error or ""
-    ), f"error message must indicate stale timeout, got {recovered.error!r}"
+    assert recovered.status == JobStatus.FAILED, (
+        f"stale RUNNING job must be marked FAILED on startup, got {recovered.status}"
+    )
+    assert "stale_job_timeout" in (recovered.error or ""), (
+        f"error message must indicate stale timeout, got {recovered.error!r}"
+    )
 
     await poller.stop()
 
@@ -410,9 +405,9 @@ async def test_poller_start_does_not_recover_recent_running_jobs():
 
     not_recovered = await store.get(recent_job.job_id)
     assert not_recovered is not None
-    assert (
-        not_recovered.status == JobStatus.RUNNING
-    ), "recently started job must NOT be marked as stale"
+    assert not_recovered.status == JobStatus.RUNNING, (
+        "recently started job must NOT be marked as stale"
+    )
 
     await poller.stop()
 
@@ -423,9 +418,7 @@ async def test_poller_start_is_idempotent_with_no_stale_jobs():
     Validates the InMemoryJobStore no-stale-jobs code path.
     """
     store = InMemoryJobStore()
-    poller = JobPoller(
-        store=store, stale_threshold=timedelta(minutes=5), poll_interval=9999.0
-    )
+    poller = JobPoller(store=store, stale_threshold=timedelta(minutes=5), poll_interval=9999.0)
 
     # Should not raise even with an empty store
     await poller.start()
@@ -453,9 +446,7 @@ async def test_poller_start_recovery_failure_does_not_prevent_loop():
 
     store.list_by_status = _failing_list  # type: ignore[method-assign]
 
-    poller = JobPoller(
-        store=store, stale_threshold=timedelta(minutes=5), poll_interval=9999.0
-    )
+    poller = JobPoller(store=store, stale_threshold=timedelta(minutes=5), poll_interval=9999.0)
 
     # Must not raise — recovery failure is logged, loop starts anyway
     await poller.start()
@@ -471,9 +462,7 @@ async def test_poller_calling_start_twice_is_idempotent():
     The first task is reused if still running.
     """
     store = InMemoryJobStore()
-    poller = JobPoller(
-        store=store, stale_threshold=timedelta(minutes=5), poll_interval=9999.0
-    )
+    poller = JobPoller(store=store, stale_threshold=timedelta(minutes=5), poll_interval=9999.0)
 
     await poller.start()
     task_after_first = poller._task
@@ -481,7 +470,5 @@ async def test_poller_calling_start_twice_is_idempotent():
     await poller.start()  # second call — must reuse existing task
     task_after_second = poller._task
 
-    assert (
-        task_after_first is task_after_second
-    ), "second start() call must not create a new task"
+    assert task_after_first is task_after_second, "second start() call must not create a new task"
     await poller.stop()

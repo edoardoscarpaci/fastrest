@@ -82,9 +82,7 @@ async def test_login_alice_returns_token(client: httpx.AsyncClient) -> None:
     assert body["expires_in"] == 3600
 
     # JWT tokens start with "eyJ" (base64url-encoded {"alg":...} header)
-    assert body["access_token"].startswith(
-        "eyJ"
-    ), "access_token does not look like a JWT"
+    assert body["access_token"].startswith("eyJ"), "access_token does not look like a JWT"
 
 
 @pytest.mark.integration
@@ -305,9 +303,9 @@ async def test_anonymous_cannot_patch_post_returns_403(
         f"/v1/posts/{pk}",
         json={"title": "Should not change"},
     )
-    assert (
-        patch_resp.status_code == 403
-    ), f"Expected 403 for anonymous patch, got {patch_resp.status_code}: {patch_resp.text}"
+    assert patch_resp.status_code == 403, (
+        f"Expected 403 for anonymous patch, got {patch_resp.status_code}: {patch_resp.text}"
+    )
 
 
 @pytest.mark.integration
@@ -327,9 +325,9 @@ async def test_anonymous_cannot_delete_post_returns_403(
     pk = create_resp.json()["pk"]
 
     delete_resp = await client.delete(f"/v1/posts/{pk}")
-    assert (
-        delete_resp.status_code == 403
-    ), f"Expected 403 for anonymous delete, got {delete_resp.status_code}: {delete_resp.text}"
+    assert delete_resp.status_code == 403, (
+        f"Expected 403 for anonymous delete, got {delete_resp.status_code}: {delete_resp.text}"
+    )
 
     # Verify the post still exists — the 403 blocked the delete.
     get_resp = await client.get(f"/v1/posts/{pk}")
@@ -390,9 +388,9 @@ async def test_admin_can_patch_any_post(
         json={"title": "Admin patched this"},
         headers={"Authorization": f"Bearer {alice_token}"},
     )
-    assert (
-        patch_resp.status_code == 200
-    ), f"Admin PATCH of other's post failed: {patch_resp.status_code} {patch_resp.text}"
+    assert patch_resp.status_code == 200, (
+        f"Admin PATCH of other's post failed: {patch_resp.status_code} {patch_resp.text}"
+    )
     assert patch_resp.json()["title"] == "Admin patched this"
 
 
@@ -421,9 +419,9 @@ async def test_admin_can_delete_any_post(
         f"/v1/posts/{pk}",
         headers={"Authorization": f"Bearer {alice_token}"},
     )
-    assert (
-        delete_resp.status_code == 204
-    ), f"Admin DELETE of other's post failed: {delete_resp.status_code} {delete_resp.text}"
+    assert delete_resp.status_code == 204, (
+        f"Admin DELETE of other's post failed: {delete_resp.status_code} {delete_resp.text}"
+    )
 
     # Confirm gone.
     get_resp = await client.get(f"/v1/posts/{pk}")
@@ -483,9 +481,9 @@ async def test_editor_can_patch_own_post(
         json={"title": "Bob patched his own post"},
         headers={"Authorization": f"Bearer {bob_token}"},
     )
-    assert (
-        patch_resp.status_code == 200
-    ), f"Editor PATCH of own post failed: {patch_resp.status_code} {patch_resp.text}"
+    assert patch_resp.status_code == 200, (
+        f"Editor PATCH of own post failed: {patch_resp.status_code} {patch_resp.text}"
+    )
     assert patch_resp.json()["title"] == "Bob patched his own post"
 
 
@@ -509,9 +507,9 @@ async def test_editor_can_delete_own_post(
         f"/v1/posts/{pk}",
         headers={"Authorization": f"Bearer {bob_token}"},
     )
-    assert (
-        delete_resp.status_code == 204
-    ), f"Editor DELETE of own post failed: {delete_resp.status_code} {delete_resp.text}"
+    assert delete_resp.status_code == 204, (
+        f"Editor DELETE of own post failed: {delete_resp.status_code} {delete_resp.text}"
+    )
 
     # Verify deletion.
     get_resp = await client.get(f"/v1/posts/{pk}")

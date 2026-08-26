@@ -268,9 +268,7 @@ class BeanieQueryCompiler(BinaryWalkingVisitor):
 
     # ── BinaryWalkingVisitor combine hooks ────────────────────────────────────
 
-    def _combine_and(
-        self, left: dict[str, Any], right: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _combine_and(self, left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
         """
         Combine two compiled sub-expressions with MongoDB ``$and``.
 
@@ -288,9 +286,7 @@ class BeanieQueryCompiler(BinaryWalkingVisitor):
         """
         return {"$and": [left, right]}
 
-    def _combine_or(
-        self, left: dict[str, Any], right: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _combine_or(self, left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
         """
         Combine two compiled sub-expressions with MongoDB ``$or``.
 

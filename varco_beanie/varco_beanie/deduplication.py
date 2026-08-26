@@ -185,9 +185,7 @@ class DeduplicationDocument(Document):
 
     def __repr__(self) -> str:
         return (
-            f"DeduplicationDocument("
-            f"event_id={self.event_id}, "
-            f"processed_at={self.processed_at!r})"
+            f"DeduplicationDocument(event_id={self.event_id}, processed_at={self.processed_at!r})"
         )
 
 

@@ -25,9 +25,7 @@ async def test_admin_can_add_and_list_policies(engine) -> None:
     """An admin adds a policy rule and reads it back."""
     app = make_app(engine, ADMIN)
     async with client_for(app) as cl:
-        r = await cl.post(
-            "/authz/policies", json={"values": ["admin", "posts", "read"]}
-        )
+        r = await cl.post("/authz/policies", json={"values": ["admin", "posts", "read"]})
         assert r.status_code == 201
         assert r.json() == {"added": True}
 
@@ -46,9 +44,7 @@ async def test_admin_role_assignment_flow(engine) -> None:
         r = await cl.get("/authz/roles", params={"user": "alice"})
         assert r.json() == ["admin"]
 
-        r = await cl.request(
-            "DELETE", "/authz/roles", json={"user": "alice", "role": "admin"}
-        )
+        r = await cl.request("DELETE", "/authz/roles", json={"user": "alice", "role": "admin"})
         assert r.status_code == 200 and r.json() == {"removed": True}
 
 
@@ -126,9 +122,7 @@ async def test_custom_admin_role(engine) -> None:
     superuser = AuthContext(user_id="root", roles=frozenset({"superuser"}))
     app = FastAPI()
     app.include_router(
-        build_policy_router(
-            engine, server_auth=StaticAuth(superuser), admin_role="superuser"
-        )
+        build_policy_router(engine, server_auth=StaticAuth(superuser), admin_role="superuser")
     )
 
     @app.exception_handler(ServiceAuthorizationError)

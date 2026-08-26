@@ -19,9 +19,7 @@ async def test_migrate_upgrade_all_tenants_flag_is_recognised() -> None:
     assert exit_code != 0
 
 
-async def test_migrate_check_all_tenants_exits_nonzero_when_wired_to_behind_tenants() -> (
-    None
-):
+async def test_migrate_check_all_tenants_exits_nonzero_when_wired_to_behind_tenants() -> None:
     from varco_core.cli.main import main
 
     exit_code = main(["migrate", "check", "--all-tenants"])

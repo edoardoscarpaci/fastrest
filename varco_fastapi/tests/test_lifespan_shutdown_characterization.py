@@ -72,9 +72,7 @@ async def test_ashutdown_raises_single_aggregated_shutdown_error() -> None:
     except ShutdownError as exc:
         raised = exc
 
-    assert (
-        raised is not None
-    ), "ashutdown() must raise ShutdownError, not swallow failures"
+    assert raised is not None, "ashutdown() must raise ShutdownError, not swallow failures"
 
 
 async def test_ashutdown_error_carries_exactly_two_shutdown_failures() -> None:
@@ -145,6 +143,5 @@ async def test_ashutdown_clears_singleton_cache_even_after_failures() -> None:
     second = container.get(_EarliestCreatedFailingComponent)
 
     assert first is not second, (
-        "singleton cache must be cleared after ashutdown(), even though its "
-        "@PreDestroy hook raised"
+        "singleton cache must be cleared after ashutdown(), even though its @PreDestroy hook raised"
     )

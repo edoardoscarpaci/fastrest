@@ -315,9 +315,7 @@ async def test_polling_pending_job_returns_working():
 # ── _job_to_task_response ─────────────────────────────────────────────────────
 
 
-def _make_job(
-    status: JobStatus, result: bytes | None = None, error: str | None = None
-) -> Job:
+def _make_job(status: JobStatus, result: bytes | None = None, error: str | None = None) -> Job:
     job = Job(job_id=uuid4())
     if status == JobStatus.RUNNING:
         job = job.as_running()

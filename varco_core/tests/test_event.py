@@ -801,10 +801,7 @@ class TestEventConsumerAndListen:
             assert len(caught) == 1
             w = caught[0]
             assert issubclass(w.category, RuntimeWarning)
-            assert (
-                "twice" in str(w.message).lower()
-                or "duplicate" in str(w.message).lower()
-            )
+            assert "twice" in str(w.message).lower() or "duplicate" in str(w.message).lower()
 
         # Only one subscription was created — event delivered once, not twice.
         await bus.publish(OrderPlacedEvent(order_id="1"))
@@ -835,9 +832,7 @@ class TestEventConsumerAndListen:
             consumer.register_to(bus_a)
             consumer.register_to(bus_b)
             # No warning — different buses
-            runtime_warnings = [
-                w for w in caught if issubclass(w.category, RuntimeWarning)
-            ]
+            runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
             assert runtime_warnings == []
 
         # Both buses deliver the event — consumer receives it from each.
@@ -871,9 +866,7 @@ class TestEventConsumerAndListen:
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             consumer.register_to(bus)  # must be allowed after stop
-            runtime_warnings = [
-                w for w in caught if issubclass(w.category, RuntimeWarning)
-            ]
+            runtime_warnings = [w for w in caught if issubclass(w.category, RuntimeWarning)]
             assert runtime_warnings == [], "No warning expected after stop()"
 
         await bus.publish(OrderPlacedEvent(order_id="restart"))
@@ -1227,9 +1220,7 @@ class TestRetryMiddleware:
             nonlocal call_count
             call_count += 1
 
-        bus = InMemoryEventBus(
-            middleware=[RetryMiddleware(max_attempts=3, base_delay=0.0)]
-        )
+        bus = InMemoryEventBus(middleware=[RetryMiddleware(max_attempts=3, base_delay=0.0)])
         bus.subscribe(OrderEvent, handler)
         await bus.publish(OrderEvent(order_id="1"), channel="orders")
 
@@ -1245,9 +1236,7 @@ class TestRetryMiddleware:
             if attempts < 3:
                 raise RuntimeError("transient failure")
 
-        bus = InMemoryEventBus(
-            middleware=[RetryMiddleware(max_attempts=3, base_delay=0.0)]
-        )
+        bus = InMemoryEventBus(middleware=[RetryMiddleware(max_attempts=3, base_delay=0.0)])
         bus.subscribe(OrderEvent, flaky_handler)
         await bus.publish(OrderEvent(order_id="1"), channel="orders")
 
@@ -1259,9 +1248,7 @@ class TestRetryMiddleware:
         def always_fails(event: Event) -> None:
             raise ValueError("permanent failure")
 
-        bus = InMemoryEventBus(
-            middleware=[RetryMiddleware(max_attempts=2, base_delay=0.0)]
-        )
+        bus = InMemoryEventBus(middleware=[RetryMiddleware(max_attempts=2, base_delay=0.0)])
         bus.subscribe(OrderEvent, always_fails)
 
         # Bus wraps handler errors in ExceptionGroup before middleware sees them
@@ -1277,9 +1264,7 @@ class TestRetryMiddleware:
             attempts += 1
             raise RuntimeError("fail")
 
-        bus = InMemoryEventBus(
-            middleware=[RetryMiddleware(max_attempts=1, base_delay=0.0)]
-        )
+        bus = InMemoryEventBus(middleware=[RetryMiddleware(max_attempts=1, base_delay=0.0)])
         bus.subscribe(OrderEvent, handler)
 
         with pytest.raises(RuntimeError):

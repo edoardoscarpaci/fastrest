@@ -58,9 +58,7 @@ SIMPLE_SPEC: dict[str, Any] = {
                 "responses": {
                     "201": {
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Todo"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Todo"}}
                         }
                     }
                 },
@@ -75,9 +73,7 @@ SIMPLE_SPEC: dict[str, Any] = {
                 "responses": {
                     "200": {
                         "content": {
-                            "application/json": {
-                                "schema": {"$ref": "#/components/schemas/Todo"}
-                            }
+                            "application/json": {"schema": {"$ref": "#/components/schemas/Todo"}}
                         }
                     }
                 },

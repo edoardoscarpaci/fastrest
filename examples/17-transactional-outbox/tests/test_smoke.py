@@ -143,9 +143,7 @@ async def _wait_for_events(
         if len(events) >= min_count:
             return events
         if asyncio.get_event_loop().time() >= deadline:
-            raise TimeoutError(
-                f"Timed out waiting for {min_count} event(s); got {len(events)}"
-            )
+            raise TimeoutError(f"Timed out waiting for {min_count} event(s); got {len(events)}")
         await asyncio.sleep(0.1)
 
 
@@ -170,9 +168,7 @@ class TestCreateOrder:
         should not assume the event has reached consumers by response time.
         """
         resp = await app_client.post("/v1/orders", json={"amount": 42.5})
-        assert (
-            resp.status_code == 202
-        ), f"Expected 202, got {resp.status_code}: {resp.text}"
+        assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.text}"
         body = resp.json()
         assert body["amount"] == 42.5
         assert body["status"] == "pending"
@@ -223,9 +219,7 @@ class TestOutboxRelay:
 
         # Find our specific event by order_id.
         matching = [e for e in events if e["order_id"] == order_pk]
-        assert (
-            len(matching) >= 1
-        ), f"No event found for order_id={order_pk!r}. Events: {events}"
+        assert len(matching) >= 1, f"No event found for order_id={order_pk!r}. Events: {events}"
         assert matching[0]["amount"] == 99.99
 
     async def test_outbox_row_deleted_after_delivery(self, app_client) -> None:

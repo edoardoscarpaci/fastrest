@@ -39,12 +39,8 @@ from varco_sa.tenancy.models import tenants_metadata, tenants_table
 # `deleted` is a terminal tombstone; nothing transitions out of it.
 _LEGAL_TRANSITIONS: dict[TenantStatus, frozenset[TenantStatus]] = {
     TenantStatus.PENDING: frozenset({TenantStatus.ACTIVE, TenantStatus.DELETED}),
-    TenantStatus.ACTIVE: frozenset(
-        {TenantStatus.SUSPENDED, TenantStatus.DEPROVISIONING}
-    ),
-    TenantStatus.SUSPENDED: frozenset(
-        {TenantStatus.ACTIVE, TenantStatus.DEPROVISIONING}
-    ),
+    TenantStatus.ACTIVE: frozenset({TenantStatus.SUSPENDED, TenantStatus.DEPROVISIONING}),
+    TenantStatus.SUSPENDED: frozenset({TenantStatus.ACTIVE, TenantStatus.DEPROVISIONING}),
     TenantStatus.DEPROVISIONING: frozenset({TenantStatus.DELETED}),
     TenantStatus.DELETED: frozenset(),
 }
@@ -132,9 +128,7 @@ class SATenantCatalog(AbstractTenantCatalog):
             raise TenantNotFoundError(tenant_id)
         return self._row_to_descriptor(row)
 
-    async def add(
-        self, descriptor: TenantDescriptor, *, allow_literal_dsn: bool = False
-    ) -> None:
+    async def add(self, descriptor: TenantDescriptor, *, allow_literal_dsn: bool = False) -> None:
         """
         Insert or idempotently re-insert ``descriptor``.
 

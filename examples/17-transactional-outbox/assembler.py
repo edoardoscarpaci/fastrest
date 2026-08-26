@@ -95,9 +95,7 @@ class OrderAssembler(AbstractDTOAssembler[Order, OrderCreate, OrderRead, OrderUp
             A new ``Order`` with updated fields and preserved identity fields.
         """
         changes = {
-            k: v
-            for k, v in {"amount": dto.amount, "status": dto.status}.items()
-            if v is not None
+            k: v for k, v in {"amount": dto.amount, "status": dto.status}.items() if v is not None
         }
         return domain_replace(entity, **changes)
 

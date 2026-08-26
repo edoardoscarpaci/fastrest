@@ -68,7 +68,8 @@ class TestBuildContractEdgeCases:
 
             @route("GET", "/thing")
             async def thing(
-                self, weird: SomeUnresolvableForwardRef  # noqa: F821
+                self,
+                weird: SomeUnresolvableForwardRef,  # noqa: F821
             ) -> dict:  # noqa: F821
                 return {}
 

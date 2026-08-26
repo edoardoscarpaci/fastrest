@@ -27,9 +27,7 @@ class TestMemcachedCacheConformance(CacheBackendConformance):
     @pytest.fixture
     async def cache(self, memcached_host_port: tuple[str, int]):
         host, port = memcached_host_port
-        async with MemcachedCache(
-            MemcachedCacheSettings(host=host, port=port)
-        ) as cache:
+        async with MemcachedCache(MemcachedCacheSettings(host=host, port=port)) as cache:
             yield cache
 
     async def test_ttl_expiry(self, cache) -> None:  # type: ignore[override]
