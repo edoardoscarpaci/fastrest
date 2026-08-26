@@ -91,6 +91,25 @@ register already imposes on entries filed off documentation rather than source. 
 `examples/00-full-stack-post-api/example/tests/` (51 passed); `scripts/unit_tests.sh`'s
 `EXTRA_SUITES` array; commit `f03e613`.
 
+🔴 **RL-21 — `scripts/unit_tests.sh` produces intermittent, non-reproducible suite failures**,
+🔴 must, M. Observed **twice** on trees later proven green, in different packages: once on
+`examples/00-full-stack-post-api` (8 failed; 51 passed on re-run) and once on `varco_fastapi`
+(suite reported ✘ by the runner; `cd varco_fastapi && uv run pytest tests/` immediately after
+gave **848 passed, 8 skipped**, and the very next `make test` was fully green). Both happened on
+a byte-identical tree with no intervening edit.
+
+**Why this matters more than a nuisance:** `scripts/unit_tests.sh` is the entry point for CI's
+`unit` job, and `all-green` — the single required status check — is downstream of it. A runner
+that intermittently reports a false red makes the required check untrustworthy exactly where
+trust is the whole point, and trains reviewers to re-run rather than investigate.
+
+**Leading hypothesis, unconfirmed:** `uv run` re-resolving/re-syncing the workspace concurrently
+with pytest collection, since each of the eleven suites invokes `uv run` separately and the
+first invocation after any dependency change performs a sync. Worth testing whether a single
+`uv sync` before the loop, plus `--no-sync` on each `uv run`, removes it. **Do not close this by
+adding a retry** — that would hide the failure mode rather than fix it. Evidence: this session's
+`make test` runs; `scripts/unit_tests.sh`; RL-20 above (same root cause, first sighting).
+
 | ID | Feature | Severity | Complexity | Rationale | Evidence |
 |----|---------|----------|------------|-----------|----------|
 | RL-14 | **Deferred mypy strictness ramp** (§RL-6-mypy, not enabled) — `disallow_untyped_defs` (High cost, "often 500+ locations", largest single jump), `check_untyped_defs` (medium-high, "exposes type mismatches inside functions that were previously unchecked" — would invalidate the measured 219-error baseline entirely), `disallow_any_generics` (medium, bare `list`/`dict`/`tuple`, cheap-ish but unmeasured), `no_implicit_reexport` (medium, needs `__all__` everywhere — research 003 §3 says this is the flag that matters *most* for a `py.typed` library, and the one whose blast radius across ten `__init__.py` files is least predictable; whether `__all__` is already defined is unverified), `warn_return_any` (medium, real unsoundness catcher, unmeasured); `disallow_untyped_calls`/`disallow_any_unimported`/`disallow_any_expr` recommended skipped outright ("saves ~20–30% effort", research 003 §5) | 🟡 should | M | Transcribed verbatim from plan 017's Design §RL-6-mypy per-flag table so the ramp survives the plan file. `rg -c 'type: ignore' varco_*/varco_*` (currently 219) is the progress metric — it should trend to 0 as each flag is enabled and its fallout fixed | `plans/017-ci-green-workflows-and-lint-type-gates.md` §RL-6-mypy; `pyproject.toml` root `[tool.mypy]` |
