@@ -232,7 +232,7 @@ class JwksUrlSource:
 
     def __repr__(self) -> str:
         loaded = self._keyset is not None
-        key_count = len(self._keyset.keys) if loaded else 0
+        key_count = len(self._keyset.keys) if self._keyset is not None else 0
         return (
             f"JwksUrlSource("
             f"url={self._url!r}, "

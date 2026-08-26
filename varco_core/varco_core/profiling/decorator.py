@@ -114,7 +114,7 @@ def profile(
             with ProfileSession(op_name, _config):
                 return func(*args, **kwargs)
 
-        return sync_wrapper  # type: ignore[return-value]
+        return sync_wrapper
 
     return decorator
 

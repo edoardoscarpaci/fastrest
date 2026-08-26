@@ -54,6 +54,8 @@ from varco_core.observability.attributes import wrap_gauge_callback
 from varco_core.observability.metric import Metric
 
 if TYPE_CHECKING:
+    import concurrent.futures
+
     from varco_core.event.dlq import AbstractDeadLetterQueue
     from varco_core.service.outbox import OutboxRepository
 
@@ -132,7 +134,10 @@ def _run_sync(coro: Awaitable[_T]) -> _T:
         except RuntimeError:  # pragma: no cover - defensive
             alive = False
         if alive:
-            future = asyncio.run_coroutine_threadsafe(coro, owner)  # type: ignore[arg-type]
+            # `coro` is `Awaitable[_T]`, not always a `Coroutine` — these three
+            # call sites accept anything awaitable at runtime; the stricter
+            # `Coroutine[Any, Any, _T]` stub signatures are what's ignored.
+            future: concurrent.futures.Future[_T] = asyncio.run_coroutine_threadsafe(coro, owner)  # type: ignore[arg-type]
             return future.result(timeout=_OBSERVATION_TIMEOUT_S)
 
     if running is None:
@@ -141,7 +146,7 @@ def _run_sync(coro: Awaitable[_T]) -> _T:
     import concurrent.futures
 
     def _runner() -> _T:
-        return asyncio.new_event_loop().run_until_complete(coro)  # type: ignore[arg-type]
+        return asyncio.new_event_loop().run_until_complete(coro)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(_runner).result()

@@ -471,12 +471,12 @@ def load_global_attributes_from_env(environ: Mapping[str, str] | None = None) ->
             )
             continue
         key, env_var_name = kv
-        value = env.get(env_var_name)
-        if value is not None:
-            literal_attrs[key] = value
+        env_value = env.get(env_var_name)
+        if env_value is not None:
+            literal_attrs[key] = env_value
 
-    for key, value in literal_attrs.items():
-        registry.add(key, value)
+    for attr_key, attr_value in literal_attrs.items():
+        registry.add(attr_key, attr_value)
 
     spans_raw = env.get("VARCO_OTEL_GLOBAL_ATTRS_SPANS")
     metrics_raw = env.get("VARCO_OTEL_GLOBAL_ATTRS_METRICS")

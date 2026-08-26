@@ -180,9 +180,7 @@ class DeadLetterEntry:
     )
     """UTC datetime of the first failed attempt."""
 
-    last_failed_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=UTC)
-    )
+    last_failed_at: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     """UTC datetime of the most recent (final) failed attempt."""
 
     source: DeadLetterSource = DeadLetterSource.CONSUMER

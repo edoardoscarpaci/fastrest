@@ -97,7 +97,8 @@ CHANNEL_DEFAULT: Final[str] = "default"
 # ── ErrorPolicy ───────────────────────────────────────────────────────────────
 
 
-class ErrorPolicy(str, Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class ErrorPolicy(str, Enum):  # noqa: UP042
     """
     Controls how ``AbstractEventBus`` handles exceptions raised by handlers.
 
@@ -135,7 +136,8 @@ class ErrorPolicy(str, Enum):
     """Log handler errors at WARNING level; never propagate them."""
 
 
-class DispatchMode(str, Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class DispatchMode(str, Enum):  # noqa: UP042
     """
     Controls whether ``AbstractEventBus.publish`` waits for handlers to complete.
 

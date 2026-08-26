@@ -98,9 +98,7 @@ class InMemoryInboxRepository(InboxRepository):
         from dataclasses import replace
         from datetime import datetime
 
-        self._entries[entry_id] = replace(
-            original, processed_at=datetime.now(UTC)
-        )
+        self._entries[entry_id] = replace(original, processed_at=datetime.now(UTC))
 
     async def get_unprocessed(self, *, limit: int = 100) -> list[InboxEntry]:
         """

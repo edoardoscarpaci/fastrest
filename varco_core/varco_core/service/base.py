@@ -301,7 +301,9 @@ class AsyncService(ABC, Generic[D, PK, C, R, U]):
         # any event infrastructure wired.  Concrete subclasses that want
         # events must add this parameter with InjectMeta(optional=True) so
         # the DI container supplies BusEventProducer when a bus is registered.
-        producer: Annotated[AbstractEventProducer, InjectMeta(optional=True)] = None,
+        producer: Annotated[
+            AbstractEventProducer | None, InjectMeta(optional=True)
+        ] = None,
     ) -> None:
         """
         Args:

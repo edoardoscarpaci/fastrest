@@ -74,7 +74,8 @@ _R = TypeVar("_R")
 # ── CircuitState ──────────────────────────────────────────────────────────────
 
 
-class CircuitState(str, Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class CircuitState(str, Enum):  # noqa: UP042
     """
     Operational state of a ``CircuitBreaker``.
 

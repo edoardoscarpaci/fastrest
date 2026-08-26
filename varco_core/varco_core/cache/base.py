@@ -176,7 +176,7 @@ class AsyncCache(Protocol[K, V]):  # type: ignore[misc]
 
 
 @runtime_checkable
-class BulkCache(Protocol[K, V]):  # type: ignore[misc]
+class BulkCache(Protocol[K, V]):
     """
     Structural protocol for **batch** get/set/delete — a SEPARATE Protocol
     from ``AsyncCache``, deliberately (Plan 011 D-11).

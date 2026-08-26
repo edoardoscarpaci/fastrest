@@ -1199,7 +1199,7 @@ class AbstractJobRunner(ABC):
         tz: str | None = None,
         fold: int = 0,
         gap: GapPolicy = GapPolicy.NEXT_VALID,
-        overlap: GapPolicy = OverlapPolicy.FIRST,
+        overlap: OverlapPolicy = OverlapPolicy.FIRST,
     ) -> Job:
         """
         Concrete, reusable RD-5 guard + T2 materialization step every
@@ -1255,6 +1255,18 @@ class AbstractJobRunner(ABC):
                 "zoned schedule (RD-5). Persist run_at_wall/run_at_tz/"
                 "run_at_fold in your store, then set "
                 "supports_zoned_schedules = True."
+            )
+
+        # BUG (surfaced by RL-6's mypy gate, plans/017): `tz` alone does not
+        # imply `run_at_wall` is set — without this guard, a caller passing
+        # `tz=` but not `run_at_wall=` would fall through to
+        # `resolve_zoned(None, ...)` and crash inside it with an opaque
+        # AttributeError instead of the descriptive ValueError every other
+        # misuse in this function raises.
+        if run_at_wall is None:
+            raise ValueError(
+                "enqueue() received tz= without run_at_wall= — a zoned "
+                "schedule requires both."
             )
 
         from zoneinfo import ZoneInfo

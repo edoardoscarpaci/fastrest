@@ -78,7 +78,9 @@ class CProfileCpuBackend:
 
         # Total CPU time = sum of all primitive call tottime
         total_cpu_ms = (
-            sum(v[2] for v in stats.stats.values()) * 1000.0 if stats.stats else 0.0
+            sum(v[2] for v in stats.stats.values()) * 1000.0  # type: ignore[attr-defined]
+            if stats.stats  # type: ignore[attr-defined]
+            else 0.0
         )
 
         artifact = ProfileArtifact(
@@ -110,13 +112,13 @@ class CProfileCpuBackend:
         Returns:
             Tuple of up to ``top_n`` ``FunctionStat`` entries, sorted descending.
         """
-        if not stats.stats:
+        if not stats.stats:  # type: ignore[attr-defined]
             return ()
 
         # stats.stats keys: (filename, lineno, funcname)
         # values: (cc, nc, tt, ct, callers_dict)  — cc=primitive, nc=total, tt=tot, ct=cum
         rows: list[FunctionStat] = []
-        for (filename, lineno, func), (cc, nc, tt, ct, _) in stats.stats.items():
+        for (filename, lineno, func), (cc, nc, tt, ct, _) in stats.stats.items():  # type: ignore[attr-defined]
             label = f"{filename}:{lineno}({func})"
             rows.append(
                 FunctionStat(

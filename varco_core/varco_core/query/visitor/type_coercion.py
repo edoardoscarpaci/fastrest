@@ -434,7 +434,9 @@ class ASTTypeCoercion(BinaryWalkingVisitor):
             return node
 
         if node.op == Operation.IN or isinstance(node.value, list):
-            coerced: Any = [self._coerce_value(field_info, v) for v in node.value]
+            coerced: Any = [
+                self._coerce_value(field_info, v) for v in node.value  # type: ignore[union-attr]
+            ]
         else:
             coerced = self._coerce_value(field_info, node.value)
 

@@ -189,11 +189,15 @@ class TestDeserialize:
     def test_optional_uuid(self):
         """Optional[UUID] / UUID | None should deserialize the inner UUID."""
         uid_str = "12345678-1234-5678-1234-567812345678"
-        result = self.s.deserialize(uid_str, Optional[uuid.UUID])
+        # Intentionally exercises the pre-PEP-604 Optional[] spelling for
+        # backward compatibility (see docstring above) — not a static
+        # annotation, so this is suppressed rather than rewritten.
+        result = self.s.deserialize(uid_str, Optional[uuid.UUID])  # noqa: UP045
         assert isinstance(result, uuid.UUID)
 
     def test_optional_none_passthrough(self):
-        assert self.s.deserialize(None, Optional[uuid.UUID]) is None
+        # See test_optional_uuid's noqa comment above.
+        assert self.s.deserialize(None, Optional[uuid.UUID]) is None  # noqa: UP045
 
     def test_list_of_uuid(self):
         uid_strs = [str(uuid.uuid4()), str(uuid.uuid4())]

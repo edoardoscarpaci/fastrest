@@ -938,21 +938,21 @@ class EncryptionKeyManager:
     async def _load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
         fn = getattr(self._store, "load_for_scope", None)
         if fn is not None:
-            return await fn(scope)  # type: ignore[no-any-return]
+            return await fn(scope)
         self._warn_shim_once("load_for_scope")
         return await self._store.load_for_tenant(scope)
 
     async def _list_scopes(self) -> list[str]:
         fn = getattr(self._store, "list_scopes", None)
         if fn is not None:
-            return await fn()  # type: ignore[no-any-return]
+            return await fn()
         self._warn_shim_once("list_scopes")
         return await self._store.list_tenants()
 
     async def _destroy_scope_on_store(self, scope: str) -> tuple[str, ...]:
         fn = getattr(self._store, "destroy_scope", None)
         if fn is not None:
-            return await fn(scope)  # type: ignore[no-any-return]
+            return await fn(scope)
         self._warn_shim_once("destroy_scope")
 
         # Portable fallback for a tenant-only store — mirrors

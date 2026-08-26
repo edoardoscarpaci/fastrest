@@ -140,6 +140,7 @@ Async safety:   ✅ All overrides are ``async def``.
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import logging
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Generic, TypeVar
@@ -557,7 +558,13 @@ class CacheServiceMixin(
             # No tenant context — fall back to full clear (single-tenant path).
             await self._cache.clear()
 
-    async def _publish_invalidated(self, keys: list[str], *, operation: str) -> None:
+    # `builtins.list`, not `list`: this mixin defines an instance method
+    # named `list()` elsewhere in the MRO chain, which shadows the builtin
+    # `list` name for mypy's static analysis — same footgun class as the
+    # `object`-shadowing fix in varco_casbin/router.py.
+    async def _publish_invalidated(
+        self, keys: builtins.list[str], *, operation: str
+    ) -> None:
         """
         Publish a ``CacheInvalidated`` event via the injected producer (if any).
 

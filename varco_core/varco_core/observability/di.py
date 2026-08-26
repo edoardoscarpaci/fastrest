@@ -500,7 +500,7 @@ def _build_resource(config: OtelConfig) -> Resource:
     # (varco_core.observability.attributes) into the Resource — two
     # independent knobs, no silent double-labelling by default.
     if config.promote_global_attrs_to_resource:
-        attrs.update(current_global_attributes())
+        attrs.update(current_global_attributes())  # type: ignore[arg-type]
 
     # Resource.create() merges with OTEL_RESOURCE_ATTRIBUTES env var and
     # SDK-detected attributes (process.pid, telemetry.sdk.*, etc.).

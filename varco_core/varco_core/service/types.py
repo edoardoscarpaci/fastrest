@@ -33,7 +33,7 @@ Async safety:   ✅ Pure type-level constructs — no I/O.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import TypeAlias, TypeVar
+from typing import TypeVar
 
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AuthContext
@@ -57,7 +57,7 @@ U = TypeVar("U", bound=UpdateDTO)
 
 # DESIGN: alias rather than subclass — adds zero overhead, just improves
 # readability at call sites by dropping 8 characters of prefix ("Abstract").
-Assembler: TypeAlias = AbstractDTOAssembler
+type Assembler = AbstractDTOAssembler
 
 
 # ── ServiceProtocol ───────────────────────────────────────────────────────────

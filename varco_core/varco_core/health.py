@@ -72,7 +72,8 @@ _HEALTH_SEVERITY: dict[str, int] = {
 }
 
 
-class HealthStatus(str, Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class HealthStatus(str, Enum):  # noqa: UP042
     """
     Enumeration of possible component health states.
 

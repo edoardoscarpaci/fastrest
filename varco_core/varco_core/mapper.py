@@ -493,12 +493,12 @@ class AbstractMapper(ABC, Generic[D, O]):
         # ── Optimistic lock check ─────────────────────────────────────────────
         if "row_version" in self._post_init_fields:
             stored_rv = getattr(orm_obj, "row_version", None)
-            if stored_rv is not None and stored_rv != domain.row_version:
+            if stored_rv is not None and stored_rv != domain.row_version:  # type: ignore[attr-defined]
                 from .exception.repository import StaleEntityError
 
                 raise StaleEntityError(
                     entity_cls=type(domain),
-                    expected_version=domain.row_version,
+                    expected_version=domain.row_version,  # type: ignore[attr-defined]
                     actual_version=stored_rv,
                 )
 
@@ -520,7 +520,7 @@ class AbstractMapper(ABC, Generic[D, O]):
             elif name == "updated_at":
                 setattr(orm_obj, name, now)
             elif name == "row_version":
-                setattr(orm_obj, name, domain.row_version + 1)
+                setattr(orm_obj, name, domain.row_version + 1)  # type: ignore[attr-defined]
             else:
                 # definition_version and any future system fields
                 setattr(orm_obj, name, getattr(domain, name))

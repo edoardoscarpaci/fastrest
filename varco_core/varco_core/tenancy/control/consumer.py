@@ -378,9 +378,16 @@ def _make_tenant_retry_wrapper(
         else:
             from varco_core.resilience.retry import RetryExhaustedError
 
+            # BUG (surfaced by RL-6's mypy gate, plans/017): this call was
+            # missing the required `attempts`/`last_exc` positional args —
+            # a TypeError at construction time (masking the real retry
+            # failure with a confusing unrelated traceback) on any code path
+            # that reaches this no-DLQ-configured branch. Fixed to construct
+            # the error correctly per its documented signature.
             raise RetryExhaustedError(
-                f"{handler_name} exhausted {max_attempts} attempt(s) on "
-                f"channel {channel!r}"
+                f"{handler_name} on channel {channel!r}",
+                attempts=max_attempts,
+                last_exc=last_exc,
             ) from last_exc
 
     return wrapper
@@ -389,7 +396,7 @@ def _make_tenant_retry_wrapper(
 # Exposed purely for introspection (documents the safe-by-default retry+DLQ
 # contract without depending on decorator-time instance state, which is not
 # available at class-body evaluation time — see test_tenant_provision_consumer.py).
-TenantProvisionConsumer.on_provision_requested._listen_metadata = SimpleNamespace(  # type: ignore[attr-defined]
+TenantProvisionConsumer.on_provision_requested._listen_metadata = SimpleNamespace(
     retry_policy=TenantProvisionConsumer._default_retry_policy,
     dlq=object(),
 )

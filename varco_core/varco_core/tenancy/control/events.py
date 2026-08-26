@@ -24,7 +24,7 @@ from varco_core.event.base import Event
 CHANNEL_TENANCY = "varco.tenancy"
 
 
-class TenantProvisionRequested(Event):
+class TenantProvisionRequested(Event, frozen=True):
     """
     Command: requests that ``tenant_id`` be provisioned (event-driven
     onboarding, RD-1).
@@ -44,7 +44,7 @@ class TenantProvisionRequested(Event):
     origin: str | None = None
 
 
-class TenantDeprovisionRequested(Event):
+class TenantDeprovisionRequested(Event, frozen=True):
     """
     Command: requests that ``tenant_id`` be deprovisioned.
 
@@ -66,7 +66,7 @@ class TenantDeprovisionRequested(Event):
     origin: str | None = None
 
 
-class TenantCatalogChanged(Event):
+class TenantCatalogChanged(Event, frozen=True):
     """
     Fact: fired whenever a tenant's catalog entry changes (status
     transition, add, remove). Drives cross-pod ``CachedTenantCatalog``
@@ -78,7 +78,7 @@ class TenantCatalogChanged(Event):
     tenant_id: str
 
 
-class TenantNodeReady(Event):
+class TenantNodeReady(Event, frozen=True):
     """
     Fact: one node/store has finished provisioning ``tenant_id`` locally.
 

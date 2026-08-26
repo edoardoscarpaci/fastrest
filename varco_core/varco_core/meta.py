@@ -54,7 +54,7 @@ from __future__ import annotations
 import dataclasses
 import typing
 from enum import Enum
-from typing import Annotated, Any, TypeAlias, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from varco_core.tenancy.settings import TenantScope
 
@@ -85,13 +85,13 @@ _T2 = TypeVar("_T2")
 _T3 = TypeVar("_T3")
 
 # Two-field composite key — the most common case (e.g. user_id + role_id).
-CompositeKey2: TypeAlias = tuple[_T1, _T2]
+type CompositeKey2[_T1, _T2] = tuple[_T1, _T2]
 
 # Three-field composite key — less common but present in ternary junction tables.
-CompositeKey3: TypeAlias = tuple[_T1, _T2, _T3]
+type CompositeKey3[_T1, _T2, _T3] = tuple[_T1, _T2, _T3]
 
 # Untyped alias for generic code that only checks ``isinstance(pk, tuple)``.
-CompositeKey: TypeAlias = tuple
+type CompositeKey = tuple
 
 
 @dataclasses.dataclass(frozen=True)
@@ -196,7 +196,8 @@ class FieldHint:
 # ════════════════════════════════════════════════════════════════════════════════
 
 
-class PKStrategy(str, Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class PKStrategy(str, Enum):  # noqa: UP042
     """
     Controls how a *single* primary key value is generated.
 
@@ -892,7 +893,7 @@ class MetaReader:
                 f"got {pk_type!r}."
             )
 
-        return pk_type, strategy
+        return pk_type, strategy  # type: ignore[return-value]
 
     # ── Constraint validation ─────────────────────────────────────────────────
 
@@ -969,7 +970,13 @@ class MetaReader:
 
         non_none = [a for a in args if a is not type(None)]
         is_optional = len(non_none) < len(args)
-        inner = non_none[0] if len(non_none) == 1 else typing.Union[tuple(non_none)]
+        if len(non_none) == 1:
+            inner = non_none[0]
+        else:
+            # `typing.Union[tuple(non_none)]`, not `X | Y`: built dynamically
+            # from a variable-length tuple — `X | Y` syntax needs literal
+            # operands, so this can't be rewritten to it.
+            inner = typing.Union[tuple(non_none)]  # noqa: UP007
         return inner, is_optional
 
     @staticmethod

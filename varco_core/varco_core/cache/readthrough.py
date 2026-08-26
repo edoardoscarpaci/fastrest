@@ -479,13 +479,16 @@ async def read_through_many(
         return value
 
     outcomes = await asyncio.gather(
-        *(singleflight.do(k, (lambda k=k: _wrapper(k))) for k in missing),
+        *(singleflight.do(k, (lambda k=k: _wrapper(k))) for k in missing),  # type: ignore[misc]
         return_exceptions=True,
     )
     for outcome in outcomes:
         if isinstance(outcome, BaseException):
             raise outcome
-    for k, (value, is_leader) in zip(missing, outcomes):
+    # Every `outcome` that could have been a BaseException was re-raised
+    # above — the remaining loop only ever sees `tuple[Any, bool]`, but mypy
+    # doesn't narrow `outcomes`'s element type across the two separate loops.
+    for k, (value, is_leader) in zip(missing, outcomes):  # type: ignore[misc]
         if not is_leader:
             record_stampede_suppressed(cache=policy.name)
         result[k] = value

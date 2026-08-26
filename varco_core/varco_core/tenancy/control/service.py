@@ -248,7 +248,9 @@ class TenantControlService:
         await self._provisioner.provision(tenant_id, **kwargs)
         await self._producer._produce(
             TenantNodeReady(
-                tenant_id=tenant_id, node_id=self.node_id, store_id=self.store_id
+                tenant_id=tenant_id,
+                node_id=self.node_id,
+                store_id=self.store_id,  # type: ignore[arg-type]
             ),
             channel=CHANNEL_TENANCY,
         )

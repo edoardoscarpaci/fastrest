@@ -496,8 +496,8 @@ class TenantAwareService(
         tid = self._require_tenant(ctx)
         # dataclasses.replace preserves _raw_orm (None on new entities) and
         # all other fields; only the named kwarg is changed.
-        # type: ignore[return-value] because dataclasses.replace returns D but
-        # mypy infers DomainModel for the **{field: val} unpacking pattern.
+        # dataclasses.replace returns D, but mypy infers DomainModel for the
+        # **{field: val} unpacking pattern — hence the ignore below.
         stamped: D = dataclasses.replace(entity, **{self._tenant_field: tid})
         # Chain to super so additional mixins can stamp their own fields.
         return super()._prepare_for_create(stamped, ctx)

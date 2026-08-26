@@ -99,6 +99,7 @@ Usage example::
 
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
 import logging
@@ -322,7 +323,16 @@ class CachedService:
         """
         key = self._list_key(**kwargs)
         # List results are typed as list[entity_type], not entity_type itself.
-        list_hint = list[self._entity_type] if self._entity_type is not None else None
+        # `builtins.list`, not `list`: this class defines an instance method
+        # named `list()` (below), which shadows the builtin `list` name for
+        # mypy's static analysis — same footgun class as the `object`-shadowing
+        # fix in varco_casbin/router.py, and the `builtins.list` fix in
+        # varco_core.service.audit.AuditRepository.verify_chain.
+        list_hint = (
+            builtins.list[self._entity_type]  # type: ignore[name-defined]
+            if self._entity_type is not None
+            else None
+        )
         return await self._get_or_set(
             key, lambda: self._service.list(**kwargs), type_hint=list_hint
         )
@@ -464,7 +474,9 @@ class CachedService:
         # are cleared even if the explicit strategy isn't consulted yet.
         await self._cache.delete(list_key)
 
-    async def _publish_invalidation(self, keys: list[str], *, operation: str) -> None:
+    async def _publish_invalidation(
+        self, keys: builtins.list[str], *, operation: str
+    ) -> None:
         """
         Publish a ``CacheInvalidated`` event via the injected producer.
 

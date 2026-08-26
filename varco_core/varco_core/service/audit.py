@@ -59,6 +59,7 @@ Async safety:   ✅ All mixin hooks and consumer methods are ``async def``.
 
 from __future__ import annotations
 
+import builtins
 import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -384,7 +385,11 @@ class AuditRepository(ABC):
     @staticmethod
     def verify_chain(
         entries: Sequence[AuditEntry],
-    ) -> Literal[True] | list[ChainGap | HashMismatch]:
+    ) -> Literal[True] | builtins.list[ChainGap | HashMismatch]:
+        # `builtins.list`, not `list`: this class defines an instance method
+        # named `list()` (above), which shadows the builtin `list` name for
+        # mypy's annotation resolution within this class body — same footgun
+        # class as the `object`-shadowing fix in varco_casbin/router.py.
         """
         Verify a hash chain over already-fetched entries (Plan 009, Phase 12 / R8).
 
@@ -690,8 +695,8 @@ class AuditConsumer(EventConsumer):
         self,
         bus: AbstractEventBus,
         *,
-        retry_policy: RetryPolicy | None = _UNSET,  # type: ignore[assignment]
-        dlq: AbstractDeadLetterQueue | None = _UNSET,  # type: ignore[assignment]
+        retry_policy: RetryPolicy | None = _UNSET,
+        dlq: AbstractDeadLetterQueue | None = _UNSET,
     ) -> list[Subscription]:
         """
         Wire this consumer to ``bus``, applying the safe-by-default

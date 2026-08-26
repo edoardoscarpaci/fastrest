@@ -65,7 +65,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 from collections.abc import Callable, Mapping
-from typing import Any, TypeAlias
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -103,7 +103,7 @@ class FieldError:
 
 # Both types expose .code, .http_status, .default_message.
 # FastrestErrorCodes = built-in; ErrorCode = app-registered custom code.
-AnyErrorCode: TypeAlias = FastrestErrorCodes | ErrorCode
+type AnyErrorCode = FastrestErrorCodes | ErrorCode
 
 
 # ── Error response model ──────────────────────────────────────────────────────

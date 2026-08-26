@@ -91,9 +91,7 @@ async def test_unchanged_run_at_produces_zero_writes() -> None:
 
 async def test_run_at_tz_is_null_job_is_never_touched() -> None:
     store = _RematStore()
-    unzoned = Job(
-        job_id=uuid4(), run_at=datetime.now(UTC) + timedelta(hours=1)
-    )
+    unzoned = Job(job_id=uuid4(), run_at=datetime.now(UTC) + timedelta(hours=1))
     await store.save(unzoned)
     store.save_calls.clear()
 

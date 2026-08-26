@@ -103,6 +103,7 @@ class TracemallocMemoryBackend:
         Returns:
             Tuple of up to ``top_n`` ``AllocationStat`` entries sorted by size desc.
         """
+        stats: list[tracemalloc.Statistic] | list[tracemalloc.StatisticDiff]
         if before is None:
             stats = after.statistics("lineno")
         else:

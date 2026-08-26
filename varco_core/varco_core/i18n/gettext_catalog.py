@@ -93,6 +93,7 @@ class GettextMessageCatalog(MessageCatalog):
             return None
         params = params or {}
         count = params.get("count")
+        template: str | None
         if isinstance(count, int) and not isinstance(count, bool):
             # ngettext gives CLDR plural forms for free when the .mo's
             # plural msgid/msgid_plural pair was compiled from `key`.

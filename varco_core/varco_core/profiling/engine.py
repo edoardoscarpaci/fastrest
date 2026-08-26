@@ -119,10 +119,10 @@ class ProfileSession:
 
         # Resolve backends
         if cfg.cpu:
-            self._cpu_backend = self._resolve_backend(cfg.cpu_backend, "cpu")
+            self._cpu_backend = self._resolve_backend(cfg.cpu_backend, "cpu")  # type: ignore[assignment]
 
         if cfg.memory:
-            self._memory_backend = self._resolve_backend(cfg.memory_backend, "memory")
+            self._memory_backend = self._resolve_backend(cfg.memory_backend, "memory")  # type: ignore[assignment]
 
         # Baseline wall + CPU time
         self._t_start = time.perf_counter()

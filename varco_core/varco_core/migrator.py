@@ -153,7 +153,7 @@ class StepSpec:
     @property
     def display_name(self) -> str:
         """Human-readable step name (``name`` field or ``up.__name__``)."""
-        return self.name or getattr(self.up, "__name__", repr(self.up))
+        return self.name or getattr(self.up, "__name__", repr(self.up))  # type: ignore[return-value]
 
     def __repr__(self) -> str:
         has_down = self.down is not None
@@ -484,7 +484,7 @@ class DomainMigrator:
         # ── Execute rollback ──────────────────────────────────────────────────
         for step in reversed(steps_to_undo):
             # Pre-flight guarantees step is a StepSpec with a non-None down
-            data = step.down(data)
+            data = step.down(data)  # type: ignore[attr-defined]
 
         data["definition_version"] = to_version
         return data

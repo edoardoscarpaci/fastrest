@@ -434,10 +434,10 @@ def listen(
             # Attached directly to the function object — bound method lookup
             # proxies attribute access to __func__, so this is visible via
             # `getattr(bound_method, "__listen_entries__")` at register time.
-            func.__listen_entries__: list[_ListenEntry] = []  # type: ignore[misc]
+            func.__listen_entries__: list[_ListenEntry] = []  # type: ignore[misc,attr-defined]
 
         for et in event_types:
-            func.__listen_entries__.append(
+            func.__listen_entries__.append(  # type: ignore[attr-defined]
                 _ListenEntry(
                     event_type=et,
                     channel=channel,
@@ -933,7 +933,7 @@ class EventConsumer:
                     from varco_core.service.inbox import _make_inbox_wrapper
 
                     actual_handler: Callable[[Event], Awaitable[None] | None] = (
-                        _make_inbox_wrapper(
+                        _make_inbox_wrapper(  # type: ignore[assignment]
                             inner_handler,
                             entry.inbox,
                             resolved_channel,
@@ -1061,7 +1061,7 @@ class EventConsumer:
         # Clear the bus-id set — after stop() all subscriptions are gone so
         # the "same bus" guard must allow re-registration on the next start().
         if hasattr(self, "_registered_buses"):
-            self._registered_buses.clear()  # type: ignore[attr-defined]
+            self._registered_buses.clear()
 
     def __repr__(self) -> str:
         # Count @listen entries across all methods for a useful repr

@@ -901,8 +901,8 @@ class TrustedIssuerRegistry:
         # Less common (users are encouraged to wrap in MultiKeyAuthority for
         # rotation support) but perfectly valid to register directly.
         if jwt_authorities.resolvable():
-            for authority in await jwt_authorities.aget_all():
-                registry.register_authority(authority)
+            for jwt_authority in await jwt_authorities.aget_all():
+                registry.register_authority(jwt_authority)
 
         # load_all() bootstraps every registered source:
         #   - AuthoritySource → instant (in-memory jwks() call, no I/O)
