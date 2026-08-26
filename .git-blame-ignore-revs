@@ -5,5 +5,11 @@
 # Configure locally with:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
-# (populated with the Step 5/6/7 ruff-sweep commit SHAs by Step 9 —
-# plans/017-ci-green-workflows-and-lint-type-gates.md)
+# (plans/017-ci-green-workflows-and-lint-type-gates.md, Step 9). The plan's
+# Step 5/6/7 called for one commit per rule family; this landed as a single
+# combined ruff-sweep + mypy-suppression commit instead (see that commit's
+# own message for why) — it is not purely mechanical (it also carries
+# hand-written `# type: ignore[...]`/`# noqa: ...` suppressions and a
+# handful of real bug fixes), so treat `git blame` output on lines it
+# touches with that caveat in mind.
+f03e6133b9bc62c77a2052e5ee0032952dd79e49
