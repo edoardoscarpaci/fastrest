@@ -3,10 +3,12 @@
 #
 # Tests spin up their own Docker containers via pytest fixtures — no manual
 # service setup required.  The only prerequisite is a running Docker daemon.
-# This is a purely local, developer-run command — nothing in this script
-# runs in CI (.github/workflows/integration.yml is intentionally inert; see
-# BACKLOG.md:50-56 and the Non-goals section of
-# plans/012-r3-reliability-and-regression-proofing.md).
+# This script IS what CI runs: .github/workflows/integration.yml's
+# integration job calls `make integration-test-clean`, which is this script
+# with every VARCO_TEST_*_URL override unset first (Makefile) — so a run
+# invoked directly by a developer (with overrides honoured) and a CI run
+# (always clean-room) share this one entry point
+# (RL-5, plans/017-ci-green-workflows-and-lint-type-gates.md).
 #
 # Usage:
 #   scripts/integration_tests.sh                  # run all packages + example

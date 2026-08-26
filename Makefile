@@ -3,19 +3,23 @@
 #
 # Quick reference:
 #   make install          — sync all workspace deps
-#   make lint             — ruff check (all packages)
-#   make format           — ruff format (all packages)
-#   make type-check       — mypy (all packages)
-#   make test             — unit tests (all packages)
+#   make lint              — ruff check (whole repo; PKG= narrows to one package's source dirs)
+#   make format             — ruff format + fix (same PKG= narrowing as lint)
+#   make type-check        — mypy (all ten source dirs; PKG= narrows to one package)
+#   make test              — unit tests, all ten packages + the example suite
+#                            (scripts/unit_tests.sh — accumulates pass/fail/skip
+#                            instead of aborting on the first red package)
 #   make test PKG=varco_core — unit tests for one package
 #   make integration-test — integration tests (requires Docker; honors any
 #                            VARCO_TEST_*_URL override present in the shell)
 #   make integration-test PKG=varco_redis — integration tests for one package
 #   make integration-test-clean — integration tests, guaranteed clean-room
 #                            (unsets every VARCO_TEST_*_URL override first)
-#   Nothing under `make integration-test*` runs in CI, by design — see
-#   BACKLOG.md:50-56 and the Non-goals section of
-#   plans/012-r3-reliability-and-regression-proofing.md.
+#   `.github/workflows/integration.yml` runs `make integration-test-clean`
+#   (push:main + nightly + workflow_dispatch) — always the clean-room entry
+#   point, so every CI integration run is a genuine clean-room run. It is
+#   NOT a required check; `.github/workflows/test.yml`'s `all-green` job is
+#   the only one (RL-5, plans/017-ci-green-workflows-and-lint-type-gates.md).
 #   make build            — build wheels for all packages
 #   make build PKG=varco_redis — build one package
 #   make publish          — publish all dist/* to PyPI (requires UV_PUBLISH_TOKEN)
@@ -36,7 +40,8 @@ PACKAGES := \
 	varco_beanie \
 	varco_memcached \
 	varco_ws \
-	varco_fastapi
+	varco_fastapi \
+	varco_casbin
 
 # Optional single-package override: make test PKG=varco_redis
 PKG ?=
@@ -53,7 +58,11 @@ endif
 _SRC_DIRS := $(foreach p,$(_TARGETS),$(p)/$(p))
 
 # ── Formatting ────────────────────────────────────────────────────────────────
-RUFF  := uvx ruff
+# RL-6: `uv run ruff` resolves the pinned version from uv.lock (root
+# `[dependency-groups] lint`) — the previous ephemeral-resolve invocation
+# picked up whatever ruff release was newest at invocation time, so a local
+# green said nothing about CI.
+RUFF  := uv run ruff
 MYPY  := uv run mypy
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,19 +73,22 @@ help:
 	@echo ""
 	@echo "  make install                 sync all workspace deps"
 	@echo "  make sync                    alias for install"
-	@echo "  make lint                    ruff check (all packages)"
-	@echo "  make lint PKG=varco_redis    ruff check (one package)"
-	@echo "  make format                  ruff format + fix (all packages)"
-	@echo "  make format PKG=varco_redis  ruff format + fix (one package)"
-	@echo "  make type-check              mypy (all packages)"
-	@echo "  make test                    unit tests (all packages)"
+	@echo "  make lint                    ruff check (whole repo)"
+	@echo "  make lint PKG=varco_redis    ruff check (one package's source dirs)"
+	@echo "  make format                  ruff format + fix (whole repo)"
+	@echo "  make format PKG=varco_redis  ruff format + fix (one package's source dirs)"
+	@echo "  make type-check              mypy (all ten source dirs)"
+	@echo "  make test                    unit tests, all ten packages + example suite"
+	@echo "                                (scripts/unit_tests.sh; same script CI runs)"
 	@echo "  make test PKG=varco_core     unit tests (one package)"
 	@echo "  make integration-test        integration tests (requires Docker; honors"
 	@echo "                                VARCO_TEST_*_URL overrides if set)"
 	@echo "  make integration-test PKG=varco_redis  integration tests (one package)"
 	@echo "  make integration-test-clean  integration tests, clean-room (unsets every"
 	@echo "                                VARCO_TEST_*_URL override first)"
-	@echo "                                — nothing here runs in CI by design"
+	@echo "                                — .github/workflows/integration.yml runs"
+	@echo "                                exactly this target (push:main + nightly +"
+	@echo "                                workflow_dispatch); not a required check"
 	@echo "  make build                   build wheels + sdists (all packages)"
 	@echo "  make build PKG=varco_redis   build one package"
 	@echo "  make publish                 publish dist/* to PyPI"
@@ -92,15 +104,21 @@ install sync:
 	uv sync
 
 # ── Lint ──────────────────────────────────────────────────────────────────────
+# §RL-6-ruff: whole repo (`.`) by default — covers tests/, testkit/, examples/,
+# scripts/ and varco_casbin too, none of which the old $(_SRC_DIRS)-only scope
+# reached. `PKG=` still narrows to that one package's source dirs for local
+# iteration speed.
+_LINT_TARGET := $(if $(PKG),$(_SRC_DIRS),.)
+
 .PHONY: lint
 lint:
-	$(RUFF) check $(_SRC_DIRS)
+	$(RUFF) check $(_LINT_TARGET)
 
 # ── Format ────────────────────────────────────────────────────────────────────
 .PHONY: format
 format:
-	$(RUFF) format $(_SRC_DIRS)
-	$(RUFF) check --fix $(_SRC_DIRS)
+	$(RUFF) format $(_LINT_TARGET)
+	$(RUFF) check --fix $(_LINT_TARGET)
 
 # ── Type check ────────────────────────────────────────────────────────────────
 .PHONY: type-check
@@ -108,21 +126,24 @@ type-check:
 	$(MYPY) $(_SRC_DIRS)
 
 # ── Unit tests ────────────────────────────────────────────────────────────────
-# Each package is tested in its own directory so pytest picks up the package's
-# pyproject.toml (asyncio_mode = "auto", testpaths, etc.) rather than the root.
+# §RL-5-parity: delegates to scripts/unit_tests.sh, which accumulates
+# pass/fail/skip across every suite instead of aborting on the first red
+# package — the same script CI runs (bash scripts/unit_tests.sh), so a green
+# `make test` means a green CI `unit` leg. `PKG=` narrows to one package
+# (forwarded as a positional arg); unset runs all ten packages + the example
+# suite.
 .PHONY: test
 test:
-	@$(foreach pkg,$(_TARGETS), \
-		echo "── testing $(pkg) ──────────────────────────────────────────"; \
-		(cd $(pkg) && uv run pytest tests/ -v) || exit 1; \
-	)
+	@bash scripts/unit_tests.sh $(PKG)
 
 # ── Integration tests ─────────────────────────────────────────────────────────
 # `integration-test` honors any VARCO_TEST_*_URL override present in the
 # environment (see scripts/integration_tests.sh's header and Open Question 1
-# in plans/012-r3-reliability-and-regression-proofing.md). Nothing here runs
-# in CI by design — .github/workflows/integration.yml is intentionally inert
-# (BACKLOG.md:50-56).
+# in plans/012-r3-reliability-and-regression-proofing.md). This is the
+# developer-facing, override-honouring target — CI instead always calls
+# `integration-test-clean` below via .github/workflows/integration.yml
+# (push:main + nightly + workflow_dispatch), so a stray shell env var can
+# never point a CI run at a non-clean-room broker.
 .PHONY: integration-test
 integration-test:
 	@if [ -n "$(PKG)" ]; then \

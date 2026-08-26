@@ -1,6 +1,9 @@
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.1
+    # Bumped to match the root [dependency-groups] lint pin (RL-6, plan 017)
+    # — v0.4.1 predates rule codes now referenced in [tool.ruff.lint]
+    # (UP046/UP047), so it failed to parse the config at all.
+    rev: v0.16.4
     hooks:
       - id: ruff
         args: [--fix]

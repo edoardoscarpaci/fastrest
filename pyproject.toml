@@ -22,8 +22,17 @@ members = [
 ]
 
 [dependency-groups]
+# Exact `==` pins, not `>=`: a new ruff minor routinely adds rules and
+# re-classifies fixes, and a new mypy point release routinely finds new
+# errors. With `>=`, CI could go red on a commit that changed nothing.
+# (§RL-6-tooling, plans/017-ci-green-workflows-and-lint-type-gates.md)
+lint = [
+    "ruff==0.16.4",
+    "mypy==2.3.1",
+]
 dev = [
     "asyncpg>=0.31.0",
+    { include-group = "lint" },   # PEP 735 — `uv sync` installs lint tooling by default
 ]
 # Documentation tooling — MkDocs Material + mkdocstrings (Google-style docstrings).
 # Installed via `make docs-deps`; the built HTML site lands in ./site (gitignored).
@@ -37,3 +46,40 @@ docs = [
     "mkdocs-literate-nav>=0.6.1",
     "mkdocs-section-index>=0.3.9",
 ]
+
+# §RL-6-ruff (plans/017-ci-green-workflows-and-lint-type-gates.md): providify's
+# config ported verbatim. Scope: whole repo (`ruff check .`), not just source
+# dirs — Step 3's measurement showed the non-source tail (tests/testkit/
+# examples/scripts) is >=95% auto-fixable, so the plan's decision rule keeps
+# a single repo-wide select rather than a per-file-ignores carve-out.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# `.claude/worktrees/` holds OTHER agent sessions' git worktrees (separate
+# checkouts of sibling branches) mounted inside this repo's directory tree.
+# They are gitlinks, not part of this repo's own source — `ruff check .`
+# must never walk into them and mutate another session's working directory.
+extend-exclude = [".claude/worktrees"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+# E501: line-length is enforced by the formatter, not the linter (and this repo
+# does not run a formatter gate yet — Non-goal, plans/017).
+# UP046/UP047: flag `Generic[T]` subclasses and generic functions that predate
+# PEP 695 `class Foo[T]:` / `def foo[T]` syntax. Migrating varco's public
+# generic API (AsyncService[D, PK, C, R, U], AsyncCache[K, V], AsyncRepository[D],
+# ...) is a real but separate piece of work, not this CI-green change — ignored
+# here rather than silently drifting to red the moment the lint gate lands.
+ignore = ["E501", "UP046", "UP047"]
+
+# §RL-6-mypy (plans/017-ci-green-workflows-and-lint-type-gates.md): defaults +
+# monorepo plumbing. mypy_path lists each varco_X/ outer directory so
+# explicit_package_bases derives `varco_core.event` rather than
+# `varco_core.varco_core.event` for the varco_X/varco_X/ layout.
+[tool.mypy]
+python_version = "3.12"
+explicit_package_bases = true    # research 003 §4 — mandatory for a 10-package monorepo
+namespace_packages = true
+ignore_missing_imports = true    # research 003 §2 — unblocks untyped third-party
+warn_unused_ignores = true       # research 003 §5 — "low churn at first, high value over time"
+mypy_path = "varco_core:varco_kafka:varco_nats:varco_redis:varco_sa:varco_beanie:varco_memcached:varco_ws:varco_fastapi:varco_casbin:testkit"

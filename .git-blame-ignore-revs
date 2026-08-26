@@ -1,0 +1,9 @@
+# Commits listed here are mechanical, non-semantic sweeps (ruff autofix
+# passes) — `git blame` skips them so authorship attribution for the
+# surrounding lines stays meaningful through the RL-8 API-surface audit.
+#
+# Configure locally with:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# (populated with the Step 5/6/7 ruff-sweep commit SHAs by Step 9 —
+# plans/017-ci-green-workflows-and-lint-type-gates.md)
