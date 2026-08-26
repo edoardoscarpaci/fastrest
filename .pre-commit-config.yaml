@@ -1,3 +1,14 @@
+# Lint + type-check gates, kept byte-identical to what CI enforces.
+#
+# black was removed in favour of ruff, which now owns BOTH linting and
+# formatting (plan 017 / RL-6 made ruff the official linter; the formatter was
+# adopted immediately after, superseding that plan's `ruff format` Non-goal).
+#
+# The switch cost one 618-file reformat sweep, because black formatted to its
+# 88-column default while [tool.ruff] pins line-length = 100.  That sweep is a
+# single commit listed in .git-blame-ignore-revs, so `git blame` reads through
+# it.  Keeping black alongside ruff-format was never an option: two formatters
+# with different column budgets fight on every commit.
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Bumped to match the root [dependency-groups] lint pin (RL-6, plan 017)
@@ -7,11 +18,32 @@ repos:
     hooks:
       - id: ruff
         args: [--fix]
+      # Must run AFTER `ruff` — an autofix can leave a line the formatter then
+      # rewraps, and pre-commit runs hooks top-to-bottom within a repo block.
+      - id: ruff-format
 
-  - repo: https://github.com/psf/black
-    rev: 24.3.0
+  # ── Type checking ───────────────────────────────────────────────────────────
+  # Runs the SAME command as `make type-check` and as CI's `lint` job, rather
+  # than mirrors-mypy.  Two reasons:
+  #   ✅ mirrors-mypy installs its own mypy into an isolated pre-commit venv,
+  #      which would silently diverge from the `mypy==2.3.1` pin in the root
+  #      [dependency-groups] lint group that `uv.lock` and CI resolve.  Going
+  #      through `make` guarantees one mypy version everywhere.
+  #   ✅ `make type-check` derives its source-dir list from Makefile's PACKAGES,
+  #      so adding a workspace member updates lint, CI and this hook at once —
+  #      no fourth copy of the package list to drift (see BACKLOG's
+  #      package-list-triplication row).
+  # ❌ Slower than a file-scoped hook: mypy must see whole packages to resolve
+  #    cross-module types, so pass_filenames is false and every commit
+  #    type-checks all ten source trees.  Accepted — it is what CI asserts.
+  - repo: local
     hooks:
-      - id: black
+      - id: mypy
+        name: mypy (all packages)
+        entry: make type-check
+        language: system
+        pass_filenames: false
+        always_run: true
 
   # ── Per-package test suites ─────────────────────────────────────────────────
   # Each hook runs uv run --package <name> pytest from the repo root so all
