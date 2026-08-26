@@ -29,7 +29,7 @@ Async safety:   ✅ All handlers are ``async def`` and await the backend.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
@@ -95,8 +95,14 @@ class EnforceCheckDTO(BaseModel):
     subject: str
     object: str
     action: str
-    subject_attrs: dict[str, object] = Field(default_factory=dict)
-    object_attrs: dict[str, object] = Field(default_factory=dict)
+    # `dict[str, Any]`, not `dict[str, object]`: this class also declares a
+    # field named `object` (below), which shadows the builtin `object` type
+    # for mypy's annotation resolution within this class body (a real,
+    # mypy-only latent issue this gate surfaced — not a runtime bug, since
+    # `from __future__ import annotations` defers evaluation to module
+    # globals at runtime, but a static-analysis footgun regardless).
+    subject_attrs: dict[str, Any] = Field(default_factory=dict)
+    object_attrs: dict[str, Any] = Field(default_factory=dict)
     domain: str | None = None
 
 
@@ -143,7 +149,7 @@ def build_policy_router(
         from varco_casbin.router import build_policy_router
         app.include_router(build_policy_router(engine, server_auth=auth))
     """
-    router = APIRouter(prefix=prefix, tags=tags or ["authz"])
+    router = APIRouter(prefix=prefix, tags=tags or ["authz"])  # type: ignore[arg-type]
     # Reuse varco's own guard so authorization semantics match the rest of the app.
     guard = require_roles(admin_role)
 

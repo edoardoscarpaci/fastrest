@@ -110,7 +110,7 @@ class CasbinRuleDocument(Document):
     """
 
     # Surrogate PK — keeps Beanie identity separate from the policy-rule key.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     # Rule type ("p" = policy rule, "g" = role assignment).
     ptype: str
