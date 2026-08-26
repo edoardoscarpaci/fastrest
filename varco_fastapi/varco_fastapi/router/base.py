@@ -676,7 +676,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
                         f"`_auth` on the router or use `allow_anonymous()` guard."
                     )
 
-        api_router = APIRouter(prefix=prefix, tags=tags)
+        api_router = APIRouter(prefix=prefix, tags=tags)  # type: ignore[arg-type]
 
         for resolved_route in routes:
             self._register_route(api_router, resolved_route, type_args)
@@ -1491,7 +1491,7 @@ def _make_custom_handler(
         call_kwargs = {k: v for k, v in kwargs.items() if k not in hidden}
 
         if with_async:
-            callback_url = request.query_params.get("callback_url")
+            callback_url = request.query_params.get("callback_url")  # type: ignore[union-attr]
             # _submit_job calls coro_fn() with no args, so close over the captured
             # kwargs in a parameterless coroutine.
             captured = dict(call_kwargs)

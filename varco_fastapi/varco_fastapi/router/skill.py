@@ -447,7 +447,7 @@ class SkillAdapter:
 
         # ── Sync mode (v1): dispatch inline and return final state ─────────────
         try:
-            result = await self._dispatch(skill.route, body)
+            result = await self._dispatch(skill.route, body)  # type: ignore[arg-type]
             # Record agent response turn on success
             if self._conversation_store is not None:
                 try:
@@ -512,7 +512,7 @@ class SkillAdapter:
         #   ✅ The coro holds a reference to body until execution completes.
         #   ❌ body is not serialized to the store — non-recoverable after restart.
         #      Use enqueue_task() with a VarcoTask for full crash recovery.
-        coro = self._dispatch(skill.route, dict(body))  # copy to avoid mutation
+        coro = self._dispatch(skill.route, dict(body))  # type: ignore[arg-type]  # copy to avoid mutation
 
         try:
             await self._job_runner.enqueue(job, coro)  # type: ignore[union-attr]

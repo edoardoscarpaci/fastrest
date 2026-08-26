@@ -622,17 +622,17 @@ class WebSocketAuth(AbstractServerAuth):
                 if raw_token:
                     # Inject as synthetic Authorization header via a wrapped request
                     return await self._inner(
-                        _RequestWithBearerOverride(request, raw_token)
+                        _RequestWithBearerOverride(request, raw_token)  # type: ignore[arg-type]
                     )
 
         # 3. Query parameter fallback
-        raw_token = request.query_params.get(self._token_query_param)
-        if raw_token:
+        query_token = request.query_params.get(self._token_query_param)
+        if query_token:
             _logger.debug(
                 "WebSocketAuth: using query param token — visible in logs; "
                 "prefer Authorization header or sub-protocol for production."
             )
-            return await self._inner(_RequestWithBearerOverride(request, raw_token))
+            return await self._inner(_RequestWithBearerOverride(request, query_token))  # type: ignore[arg-type]
 
         # All extraction methods failed
         raise HTTPException(

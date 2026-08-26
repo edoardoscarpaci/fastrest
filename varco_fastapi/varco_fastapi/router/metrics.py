@@ -135,7 +135,7 @@ class MetricsRouter:
             - Called multiple times → returns a new ``APIRouter`` each time
               (no shared state).  Mount only once per app.
         """
-        router = APIRouter(tags=self._tags)
+        router = APIRouter(tags=self._tags)  # type: ignore[arg-type]
         # Capture self in a local variable — closures in Python capture by
         # reference, so we need a stable reference to the router instance.
         metrics_router = self

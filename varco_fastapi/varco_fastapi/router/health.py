@@ -150,7 +150,7 @@ class HealthRouter:
         Returns:
             An ``APIRouter`` with GET /, GET /ready, GET /live.
         """
-        router = APIRouter(prefix=self._prefix, tags=self._tags)
+        router = APIRouter(prefix=self._prefix, tags=self._tags)  # type: ignore[arg-type]
 
         # Capture instance in closure to avoid late-binding issues
         health_router = self

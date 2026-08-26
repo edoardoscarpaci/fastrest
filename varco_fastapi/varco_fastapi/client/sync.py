@@ -197,7 +197,7 @@ class SyncVarcoClient:
 
         data = response.json()
         try:
-            return response_model.model_validate(data)
+            return response_model.model_validate(data)  # type: ignore[attr-defined]
         except AttributeError:
             return data
 

@@ -168,7 +168,16 @@ async def _maybe_tenant_context(tenant_id: str | None) -> AsyncIterator[None]:
     if tenant_id:
         from varco_core.service.tenant import tenant_context
 
-        async with tenant_context(tenant_id):
+        # BUG (surfaced by RL-6's mypy gate, plans/017): `tenant_context()` is
+        # a sync `@contextmanager` (it only sets a ContextVar — no I/O), but
+        # this was entered with `async with`, which requires __aenter__/
+        # __aexit__ and would raise AttributeError at runtime on every
+        # request carrying a tenant_id. No test exercises this exact path
+        # (zero hits for `_maybe_tenant_context`/`tenant_context` under
+        # varco_fastapi/tests/), which is why it went undetected. Fixed to
+        # plain `with` — `tenant_context()` does no I/O, so no `async` is
+        # needed to enter it from this async function.
+        with tenant_context(tenant_id):
             yield
     else:
         yield

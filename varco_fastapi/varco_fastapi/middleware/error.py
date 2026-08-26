@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import HTTPException
@@ -197,7 +198,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
                         },
                     )
             # No recognised inner exception — treat the group itself as a 500
-            return self._internal_error_response(eg)
+            return self._internal_error_response(eg)  # type: ignore[arg-type]
         except HTTPException as exc:
             # Convert HTTPException to a JSON response here rather than re-raising.
             # When HTTPException is raised inside another BaseHTTPMiddleware (e.g.
@@ -265,7 +266,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         if self._message_catalog is not None and locale is not None:
             catalog = self._message_catalog
 
-            def message_resolver(key: str, params: dict[str, Any]) -> str | None:
+            def message_resolver(key: str, params: Mapping[str, Any]) -> str | None:
                 return catalog.format_message(key, locale, params)
 
         try:

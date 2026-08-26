@@ -556,7 +556,7 @@ async def _probe_all_services(
     return dict(results)
 
 
-async def _probe_one_service(service: ServiceMount) -> dict[str, dict[str, Any]]:
+async def _probe_one_service(service: ServiceMount) -> dict[str, Any]:
     """
     Probe a single service's health endpoint via an in-process ASGI call.
 

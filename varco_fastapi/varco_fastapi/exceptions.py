@@ -33,6 +33,7 @@ Async safety:   ✅ All exception handlers are ``async def``.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -121,7 +122,7 @@ def _make_error_response(
     message_resolver = None
     if message_catalog is not None and locale is not None:
 
-        def message_resolver(key: str, params: dict[str, Any]) -> str | None:
+        def message_resolver(key: str, params: Mapping[str, Any]) -> str | None:
             return message_catalog.format_message(key, locale, params)
 
     try:

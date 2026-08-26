@@ -131,9 +131,7 @@ class DISessionMiddleware(BaseHTTPMiddleware):
           accessible from ContextVar without per-request isolation.
     """
 
-    def __init__(
-        self, app: ASGIApp, *, container: DIContainer | None = None
-    ) -> None:
+    def __init__(self, app: ASGIApp, *, container: DIContainer | None = None) -> None:
         super().__init__(app)
         self._container = container or DIContainer.current()
 

@@ -317,7 +317,7 @@ class _VarcoClientMeta(type):
         router_cls = mcs._resolve_router_type(cls)
         if router_cls is not None:
             # Store on class so it can be accessed later (e.g. by bind_clients())
-            cls._router_class = router_cls
+            cls._router_class = router_cls  # type: ignore[attr-defined]
             # Generate methods based on the router's routes
             mcs._inject_crud_methods(cls, router_cls)
 
@@ -717,8 +717,9 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
                 timeout = config.timeout
 
         # Resolve configurator: per-instance > class-level
+        _cls_configurator_factory = type(self)._configurator
         _configurator = configurator or (
-            type(self)._configurator() if type(self)._configurator else None
+            _cls_configurator_factory() if _cls_configurator_factory else None
         )
 
         # Resolve base URL: explicit > configurator.get_url()
@@ -761,7 +762,7 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
         elif _configurator is not None:
             resolved_profile = _configurator.profile()
         elif type(self)._profile is not None:
-            resolved_profile = type(self)._profile
+            resolved_profile = type(self)._profile  # type: ignore[assignment]
         else:
             resolved_profile = ClientProfile()
 
@@ -909,7 +910,7 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
         data = response.json()
         # Pydantic model deserialization
         try:
-            return response_model.model_validate(data)
+            return response_model.model_validate(data)  # type: ignore[attr-defined]
         except AttributeError:
             # Not a Pydantic model — return raw dict
             return data
@@ -1048,7 +1049,7 @@ def make_client(
         (AsyncVarcoClient,),
         # __orig_bases__ is what Generic machinery stores; the metaclass reads it
         # to find the router type parameter.
-        {"__orig_bases__": (AsyncVarcoClient[router_cls],)},  # type: ignore[index]
+        {"__orig_bases__": (AsyncVarcoClient[router_cls],)},  # type: ignore[valid-type]
     )
     return ClientClass(
         base_url,

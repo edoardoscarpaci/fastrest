@@ -223,11 +223,11 @@ def _build_input_schema(route: ResolvedRoute) -> dict[str, Any]:
     defs: dict[str, Any] = {}
     if route.request_model is not None:
         try:
-            schema = route.request_model.model_json_schema()
+            body_schema = route.request_model.model_json_schema()  # type: ignore[attr-defined]
             # model_json_schema() may return $defs for nested models
-            defs = schema.pop("$defs", {})
-            body_props = schema.get("properties", {})
-            body_required = schema.get("required", [])
+            defs = body_schema.pop("$defs", {})
+            body_props = body_schema.get("properties", {})
+            body_required = body_schema.get("required", [])
             # Merge body properties — path params already present take precedence
             for key, val in body_props.items():
                 if key not in properties:

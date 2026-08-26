@@ -268,7 +268,7 @@ class ClientConfigurator(Generic[R]):
         # Append service-specific headers middleware if any headers are defined
         headers = self.get_headers()
         if headers:
-            base = base.with_middleware(HeadersMiddleware(headers))
+            base = base.with_middleware(HeadersMiddleware(headers))  # type: ignore[arg-type]
 
         # Override timeout from env if set
         timeout = self.get_timeout()

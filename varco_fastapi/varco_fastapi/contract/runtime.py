@@ -88,7 +88,7 @@ def contract_client(
 
     cls = contract_client_class(resolved_contract)
     instance = cls(base_url, profile=profile, **kwargs)
-    instance._client = instance._build_httpx_client()  # type: ignore[attr-defined]
+    instance._client = instance._build_httpx_client()
     return instance
 
 

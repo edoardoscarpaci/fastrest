@@ -105,7 +105,7 @@ class GenericClient(AsyncVarcoClient):
                 HeadersMiddleware,
             )  # noqa: PLC0415
 
-            effective_mw = (HeadersMiddleware(headers),) + middleware
+            effective_mw = (HeadersMiddleware(headers),) + middleware  # type: ignore[arg-type]
 
         super().__init__(
             base_url,

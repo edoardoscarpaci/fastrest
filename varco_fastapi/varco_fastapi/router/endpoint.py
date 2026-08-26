@@ -288,7 +288,7 @@ def route(
             skill_output_modes=skill_output_modes,
             requires=requires,
         )
-        func.__route_entry__ = entry
+        func.__route_entry__ = entry  # type: ignore[attr-defined]
         return func
 
     return decorator
@@ -362,7 +362,7 @@ def ws_route(
     """
 
     def decorator(func: Callable) -> Callable:
-        func.__ws_route_entry__ = _WSRouteEntry(
+        func.__ws_route_entry__ = _WSRouteEntry(  # type: ignore[attr-defined]
             path=path,
             route_order=route_order,
             auth=auth,
@@ -448,7 +448,7 @@ def sse_route(
     """
 
     def decorator(func: Callable) -> Callable:
-        func.__sse_route_entry__ = _SSERouteEntry(
+        func.__sse_route_entry__ = _SSERouteEntry(  # type: ignore[attr-defined]
             path=path,
             route_order=route_order,
             event_type=event_type,

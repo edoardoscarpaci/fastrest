@@ -210,7 +210,7 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
         report = session.report
 
         if report is None:
-            return response  # type: ignore[return-value]
+            return response
 
         # Threshold gating — only log when above thresholds
         slow_enough = report.wall_time_ms >= s.slow_threshold_ms
@@ -230,4 +230,4 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
                 mem_kb = report.mem_delta_bytes / 1024
                 response.headers["X-Profile-Mem-Kb"] = f"{mem_kb:.2f}"
 
-        return response  # type: ignore[return-value]
+        return response

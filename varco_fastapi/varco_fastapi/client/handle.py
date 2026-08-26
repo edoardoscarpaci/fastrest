@@ -283,7 +283,10 @@ class JobHandle:
             owns_client = False
 
         try:
-            async with client.stream("GET", self.events_url) as response:
+            # `_stream_sse()` is only ever reached via `stream_progress()`'s
+            # `self.events_url is None` early-return guard — mypy can't carry
+            # that narrowing across the method boundary onto `self.events_url`.
+            async with client.stream("GET", self.events_url) as response:  # type: ignore[arg-type]
                 async for line in response.aiter_lines():
                     line = line.strip()
                     if not line.startswith("data:"):

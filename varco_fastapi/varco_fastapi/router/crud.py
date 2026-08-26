@@ -297,13 +297,19 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
 
         if service is not None:
             # DI-injected: store on the instance, takes priority over ClassVar.
-            self._service = service
+            # `service`'s static type (AsyncService[D, PK, C, R, U], this
+            # constructor's own generic params) is never proven identical to
+            # `S` (VarcoCRUDRouter's own class TypeVar) — a real generic-
+            # variance gap, not a bug; see the class docstring's DESIGN block.
+            self._service = service  # type: ignore[assignment]
         # If service is None, fall back to ClassVar _service (test-only pattern).
 
         if auth is not None:
             # Instance attribute shadows the ClassVar — each router instance can
-            # carry its own auth strategy without touching the class definition.
-            self._auth = auth
+            # carry its own auth strategy without touching the class definition
+            # (documented DESIGN choice above); mypy forbids assigning to a
+            # ClassVar via `self.` on principle even though CPython allows it.
+            self._auth = auth  # type: ignore[misc]
 
         # Only write instance attributes when values are provided — same rationale as
         # _job_runner in VarcoRouter.__init__: if the param is None (default, no DI),
@@ -345,7 +351,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
                 f"one via __init__(service=...) (DI) or assign `_service` at "
                 f"class definition time (test idiom)."
             )
-        return svc  # type: ignore[return-value]  # narrowed by S at subclass sites
+        return svc  # narrowed by S at subclass sites
 
     def build_router(self) -> Any:
         """
@@ -470,11 +476,11 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
                     # Determine the create DTO type to reconstruct the Pydantic model
                     _c_type = type_args[2] if type_args and len(type_args) > 2 else None
                     body = _c_type(**body_dict) if _c_type is not None else body_dict
-                    return await _service_ref.create(body, ctx)
+                    return await _service_ref.create(body, ctx)  # type: ignore[union-attr]
             else:
                 _c_type = type_args[2] if type_args and len(type_args) > 2 else None
                 body = _c_type(**body_dict) if _c_type is not None else body_dict
-                return await _service_ref.create(body)
+                return await _service_ref.create(body)  # type: ignore[union-attr]
 
         registry.register(
             VarcoTask(
@@ -492,8 +498,8 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             if auth_snapshot is not None:
                 ctx = auth_context_from_snapshot(auth_snapshot)
                 async with _auth_ctx(ctx):
-                    return await _service_ref.read(pk, ctx)
-            return await _service_ref.read(pk)
+                    return await _service_ref.read(pk, ctx)  # type: ignore[union-attr]
+            return await _service_ref.read(pk)  # type: ignore[union-attr]
 
         registry.register(
             VarcoTask(name=f"{cls_name}.read", fn=_task_read, serializer=_serializer)
@@ -513,8 +519,8 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             if auth_snapshot is not None:
                 ctx = auth_context_from_snapshot(auth_snapshot)
                 async with _auth_ctx(ctx):
-                    return await _service_ref.update(pk, body, ctx)
-            return await _service_ref.update(pk, body)
+                    return await _service_ref.update(pk, body, ctx)  # type: ignore[union-attr]
+            return await _service_ref.update(pk, body)  # type: ignore[union-attr]
 
         registry.register(
             VarcoTask(
@@ -536,8 +542,8 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             if auth_snapshot is not None:
                 ctx = auth_context_from_snapshot(auth_snapshot)
                 async with _auth_ctx(ctx):
-                    return await _service_ref.patch(pk, body, ctx)
-            return await _service_ref.patch(pk, body)
+                    return await _service_ref.patch(pk, body, ctx)  # type: ignore[union-attr]
+            return await _service_ref.patch(pk, body)  # type: ignore[union-attr]
 
         registry.register(
             VarcoTask(name=f"{cls_name}.patch", fn=_task_patch, serializer=_serializer)
@@ -553,9 +559,9 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             if auth_snapshot is not None:
                 ctx = auth_context_from_snapshot(auth_snapshot)
                 async with _auth_ctx(ctx):
-                    await _service_ref.delete(pk, ctx)
+                    await _service_ref.delete(pk, ctx)  # type: ignore[union-attr]
             else:
-                await _service_ref.delete(pk)
+                await _service_ref.delete(pk)  # type: ignore[union-attr]
 
         registry.register(
             VarcoTask(

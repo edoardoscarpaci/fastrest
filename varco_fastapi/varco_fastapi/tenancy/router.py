@@ -115,7 +115,7 @@ def build_tenant_router(
             "never be satisfied is a startup error, not a per-request one."
         )
 
-    router = APIRouter(prefix=prefix, tags=tags or ["tenancy"])
+    router = APIRouter(prefix=prefix, tags=tags or ["tenancy"])  # type: ignore[arg-type]
     guard = require_roles(admin_role)
 
     async def _admin(request: Request) -> AuthContext:
@@ -135,9 +135,7 @@ def build_tenant_router(
     admin = Depends(_admin)
 
     @router.post("/tenants", status_code=201)
-    async def provision_tenant(
-        body: _ProvisionBody, _ctx: AuthContext = admin
-    ) -> dict:
+    async def provision_tenant(body: _ProvisionBody, _ctx: AuthContext = admin) -> dict:
         existing_before = None
         try:
             existing_before = [
@@ -294,7 +292,11 @@ def _descriptor_to_dict(descriptor: Any) -> dict:
 
 def _JSONWithStatus(
     descriptor: Any, status_code: int
-) -> dict:  # noqa: N802 - internal helper
+) -> Any:  # noqa: N802 - internal helper
+    # Returns a starlette JSONResponse, not a dict — FastAPI special-cases a
+    # returned Response subclass (bypasses normal serialization), which is
+    # exactly the point (see below). Typed Any rather than JSONResponse to
+    # avoid importing starlette at module scope for one internal helper.
     # FastAPI's `status_code=201` decorator kwarg sets the DEFAULT response
     # code; a successful redelivery must instead answer 200. Returning a
     # JSONResponse with an explicit status overrides the route decorator's

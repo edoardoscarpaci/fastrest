@@ -179,7 +179,12 @@ class JobRunner(AbstractJobRunner):
         dlq: AbstractDeadLetterQueue | None = None,
     ) -> None:
         self._store = store
-        self._event_bus = event_bus
+        # Starts as the unresolved DI proxy; `start()` upgrades it in place to
+        # the resolved `AbstractEventBus` once resolvable (see below) — the
+        # attribute type covers both states across the instance's lifetime.
+        self._event_bus: Instance[AbstractEventBus] | AbstractEventBus | None = (
+            event_bus
+        )
         self._max_concurrent = max_concurrent
         self._callback_retry_policy = callback_retry_policy
         self._enable_otel = enable_otel and self._check_otel()
@@ -707,7 +712,7 @@ class JobRunner(AbstractJobRunner):
             await self._store.save(retried)
             await self._publish_progress(job.job_id, JobStatus.PENDING, error=error_msg)
             if span is not None:
-                self._finish_otel_span(span, success=False, exc=exc)
+                self._finish_otel_span(span, success=False, exc=exc)  # type: ignore[arg-type]
             return
 
         if self._dlq is not None:
@@ -731,7 +736,7 @@ class JobRunner(AbstractJobRunner):
             await self._publish_progress(job.job_id, JobStatus.FAILED, error=error_msg)
 
         if span is not None:
-            self._finish_otel_span(span, success=False, exc=exc)
+            self._finish_otel_span(span, success=False, exc=exc)  # type: ignore[arg-type]
 
     async def cancel(self, job_id: UUID) -> bool:
         """
@@ -906,7 +911,7 @@ class JobRunner(AbstractJobRunner):
             error=error,
         )
         try:
-            await self._event_bus.publish(event)
+            await self._event_bus.publish(event)  # type: ignore[union-attr,arg-type]
         except Exception:
             # Progress event publish must never crash the job
             logger.exception(

@@ -73,7 +73,7 @@ def client_class_for(router_cls: type) -> type[AsyncVarcoClient]:
     cls = _VarcoClientMeta(
         f"{router_cls.__name__}Client",
         (AsyncVarcoClient,),
-        {"__orig_bases__": (AsyncVarcoClient[router_cls],)},  # type: ignore[index]
+        {"__orig_bases__": (AsyncVarcoClient[router_cls],)},  # type: ignore[valid-type]
     )
     _client_class_memo[router_cls] = cls
     return cls
@@ -138,7 +138,7 @@ def client_for(
     #      manager (AsyncVarcoClient._call_httpx's own documented fallback).
     #   ❌ Callers that never call `.aclose()`/use `async with` leak the pool
     #      until GC — same caveat as any long-lived httpx.AsyncClient.
-    instance._client = instance._build_httpx_client()  # type: ignore[attr-defined]
+    instance._client = instance._build_httpx_client()
     return instance
 
 

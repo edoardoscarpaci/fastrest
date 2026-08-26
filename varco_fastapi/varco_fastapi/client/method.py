@@ -126,7 +126,7 @@ class SynthesizedTypeResolver:
         for pname, pschema in properties.items():
             ptype = self.resolve(pschema) or Any
             fields[pname] = (ptype, ... if pname in required else None)
-        model = pydantic.create_model(name, **fields)  # type: ignore[call-overload]
+        model = pydantic.create_model(name, **fields)
         self._cache[name] = model
         return model
 

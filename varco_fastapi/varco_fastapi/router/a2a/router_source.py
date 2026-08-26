@@ -155,28 +155,39 @@ async def _dispatch_route(
     entity_id = body.pop("id", None)
 
     if action == "create":
-        return await client.create(body)
+        return await client.create(body)  # type: ignore[attr-defined]
     elif action == "read":
-        return await client.read(entity_id)
+        return await client.read(entity_id)  # type: ignore[attr-defined]
     elif action == "update":
-        return await client.update(entity_id, body)
+        return await client.update(entity_id, body)  # type: ignore[attr-defined]
     elif action == "patch":
-        return await client.patch(entity_id, body)
+        return await client.patch(entity_id, body)  # type: ignore[attr-defined]
     elif action == "delete":
-        return await client.delete(entity_id)
+        return await client.delete(entity_id)  # type: ignore[attr-defined]
     elif action == "list":
-        return await client.list(
+        return await client.list(  # type: ignore[attr-defined]
             q=body.get("q"),
             sort=body.get("sort"),
             limit=body.get("limit", 50),
             offset=body.get("offset", 0),
         )
     else:
+        # BUG (surfaced by RL-6's mypy gate, plans/017): this called
+        # `client.request(method=, path=, json=)` — a method/kwarg shape
+        # that has never existed on AsyncVarcoClient (only the private
+        # `_request(method, path, *, body=, path_params=, ...)` does, with a
+        # different kwarg name and unformatted-path-plus-path_params
+        # contract, not a pre-`.format()`-ed path). Any custom (non-CRUD)
+        # A2A skill route would have raised AttributeError at dispatch time.
+        # No test exercises this branch (grep for "router_source" under
+        # varco_fastapi/tests/ finds no custom-route dispatch case), which
+        # is why it went undetected.
         path_params = {p: body.pop(p) for p in route.path_params if p in body}
-        return await client.request(
+        return await client._request(
             method=route.method,
-            path=route.path.format(**path_params),
-            json=body or None,
+            path=route.path,
+            path_params=path_params,
+            body=body or None,
         )
 
 

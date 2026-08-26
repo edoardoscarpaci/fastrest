@@ -77,14 +77,21 @@ from varco_fastapi.router.mixins import (
 if TYPE_CHECKING:
     from typing import Any
 
+    from varco_core.model import DomainModel
     from varco_core.service import AsyncService
+    from varco_core.service.types import CreateDTO, ReadDTO, UpdateDTO
 
-# Generic type parameters — mirrors VarcoRouter[D, PK, C, R, U]
-D = _TypingTypeVar("D")
+# Generic type parameters — mirrors VarcoRouter[D, PK, C, R, U]. Bounds match
+# varco_core.service.types' canonical D/PK/C/R/U exactly (string forward-refs,
+# resolved only under TYPE_CHECKING — zero runtime import cost) so
+# `VarcoCRUDRouter[D, PK, C, R, U, S]` below type-checks: without matching
+# bounds these locally-redeclared TypeVars don't satisfy VarcoCRUDRouter's
+# own bound requirements.
+D = _TypingTypeVar("D", bound="DomainModel")
 PK = _TypingTypeVar("PK")
-C = _TypingTypeVar("C")
-R = _TypingTypeVar("R")
-U = _TypingTypeVar("U")
+C = _TypingTypeVar("C", bound="CreateDTO")
+R = _TypingTypeVar("R", bound="ReadDTO")
+U = _TypingTypeVar("U", bound="UpdateDTO")
 
 # 6th type parameter (Plan 001) — the concrete AsyncService subclass. Threaded
 # through every CRUD preset below so 6-arg subscription (e.g.

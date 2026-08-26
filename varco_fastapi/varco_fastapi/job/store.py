@@ -375,8 +375,7 @@ class InMemoryJobStore(AbstractJobStore):
                 return None
             renewed = dataclasses.replace(
                 job,
-                lease_expires_at=datetime.now(UTC)
-                + timedelta(seconds=lease_ttl),
+                lease_expires_at=datetime.now(UTC) + timedelta(seconds=lease_ttl),
             )
             self._jobs[job_id] = renewed
             return renewed
