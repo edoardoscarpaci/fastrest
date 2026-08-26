@@ -37,10 +37,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Generic, TypeVar
-from collections.abc import AsyncIterator, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 

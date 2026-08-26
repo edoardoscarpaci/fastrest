@@ -34,10 +34,10 @@ from __future__ import annotations
 
 import logging
 import time
-from contextlib import suppress
-from datetime import datetime, timezone, UTC
-from typing import TYPE_CHECKING, Any
 from collections.abc import Callable
+from contextlib import suppress
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from varco_core.profiling.backend import (
     CpuProfilerBackend,

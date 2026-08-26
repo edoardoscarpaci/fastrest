@@ -15,9 +15,9 @@ construction rather than silently behaving as ``SHARED``.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable
 
 from varco_core.tenancy.pool import TenantResourcePool
 from varco_core.tenancy.settings import TenantIsolation

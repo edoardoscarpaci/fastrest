@@ -43,10 +43,10 @@ Async safety:   ✅ Each ``asyncio.Task`` copies its parent's context at
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
 from typing import Generic, TypeVar
-from collections.abc import AsyncIterator, Iterator
 
 T = TypeVar("T")
 

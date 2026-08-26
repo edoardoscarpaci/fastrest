@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest

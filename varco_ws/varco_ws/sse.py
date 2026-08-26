@@ -72,9 +72,9 @@ import asyncio
 import json
 import logging
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
-from collections.abc import AsyncIterator
 from uuid import UUID
 
 from providify import Inject, Singleton

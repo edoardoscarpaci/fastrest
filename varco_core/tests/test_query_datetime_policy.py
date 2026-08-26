@@ -15,7 +15,7 @@ in this plan generates an AT TIME ZONE expression."
 
 from __future__ import annotations
 
-from datetime import timezone, UTC
+from datetime import UTC
 from zoneinfo import ZoneInfo
 
 import pytest

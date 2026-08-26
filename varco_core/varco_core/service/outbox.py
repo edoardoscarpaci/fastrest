@@ -97,10 +97,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone, UTC
-from typing import TYPE_CHECKING, ClassVar
 from collections.abc import Sequence
+from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, ClassVar
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event

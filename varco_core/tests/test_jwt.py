@@ -18,7 +18,7 @@ Testing strategy:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from varco_core.auth import Action, AuthContext, ResourceGrant

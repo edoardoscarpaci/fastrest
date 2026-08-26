@@ -17,7 +17,7 @@ Tests cover:
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone, UTC
+from datetime import UTC, date, datetime
 from typing import Any, Optional
 
 import pytest

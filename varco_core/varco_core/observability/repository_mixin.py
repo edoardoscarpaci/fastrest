@@ -79,6 +79,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
+from collections.abc import AsyncIterator, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -86,7 +87,6 @@ from typing import (
     Generic,
     TypeVar,
 )
-from collections.abc import AsyncIterator, Sequence
 
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode

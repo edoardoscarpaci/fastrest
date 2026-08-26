@@ -57,10 +57,9 @@ Async safety:   ✅ ``__call__`` is an async context manager (FastAPI lifespan).
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
-from collections.abc import AsyncIterator
 
 _logger = logging.getLogger(__name__)
 

@@ -27,9 +27,9 @@ InMemoryBulkOutboxRepository
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import AsyncIterator, Sequence
 from uuid import UUID, uuid4
 
 import pytest

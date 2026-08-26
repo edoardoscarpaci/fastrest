@@ -74,9 +74,9 @@ Async safety:   ✅ Each Task has its own context — mutations are isolated.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from collections.abc import AsyncIterator
 from uuid import uuid4
 
 # ── Internal context variable ─────────────────────────────────────────────────

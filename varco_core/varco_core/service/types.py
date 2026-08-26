@@ -32,8 +32,8 @@ Async safety:   ✅ Pure type-level constructs — no I/O.
 
 from __future__ import annotations
 
-from typing import TypeAlias, TypeVar
 from collections.abc import AsyncIterator
+from typing import TypeAlias, TypeVar
 
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AuthContext

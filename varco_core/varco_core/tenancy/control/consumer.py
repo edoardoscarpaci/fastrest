@@ -64,10 +64,10 @@ import asyncio
 import logging
 import warnings
 from collections import OrderedDict
-from datetime import datetime, timezone, UTC
+from collections.abc import Callable
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
-from collections.abc import Callable
 
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.resilience import RetryPolicy

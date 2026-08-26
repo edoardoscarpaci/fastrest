@@ -53,7 +53,7 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from providify import Singleton

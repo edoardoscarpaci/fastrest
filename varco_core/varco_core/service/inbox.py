@@ -110,7 +110,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event

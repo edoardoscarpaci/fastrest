@@ -28,9 +28,9 @@ Async safety:   ✅ ``install_cors`` is synchronous (called at startup).
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from collections.abc import Sequence
 
 if TYPE_CHECKING:
     from fastapi import FastAPI

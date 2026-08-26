@@ -44,6 +44,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable
 from dataclasses import dataclass
+from datetime import UTC
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from opentelemetry import metrics as otel_metrics
@@ -51,7 +52,6 @@ from opentelemetry.metrics import Observation
 
 from varco_core.observability.attributes import wrap_gauge_callback
 from varco_core.observability.metric import Metric
-from datetime import UTC
 
 if TYPE_CHECKING:
     from varco_core.event.dlq import AbstractDeadLetterQueue
@@ -363,7 +363,7 @@ def _outbox_lag_callback(_options: Any) -> list[Observation]:
         return []
     if oldest is None:
         return []
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     lag = (datetime.now(tz=UTC) - oldest).total_seconds()
     return [Observation(max(lag, 0.0))]

@@ -21,9 +21,9 @@ The flag is seeded from the ``VARCO_PROFILING_ENABLED`` environment variable
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
-from collections.abc import Callable
 
 if TYPE_CHECKING:
     pass

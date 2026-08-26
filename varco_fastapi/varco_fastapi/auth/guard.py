@@ -46,9 +46,9 @@ Async safety:   ✅ ``check()`` is ``async def``; predicate may be sync or async
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
     from varco_core.auth import Action, AuthContext

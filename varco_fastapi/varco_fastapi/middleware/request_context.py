@@ -36,9 +36,9 @@ Async safety:   ✅ All setup is ``async def`` via context managers.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
-from collections.abc import AsyncIterator
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request

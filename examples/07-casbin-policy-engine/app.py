@@ -57,8 +57,8 @@ Async safety:   ✅ Engine start/stop deferred to lifespan — safe for asyncio.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from uuid import UUID
 
 from auth import HeaderAuth

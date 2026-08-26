@@ -74,7 +74,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 

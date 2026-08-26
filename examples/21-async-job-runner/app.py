@@ -35,8 +35,8 @@ Async safety:   ✅ Synchronous factory; lifespan is an async context manager.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from router import build_router

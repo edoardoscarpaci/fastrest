@@ -39,9 +39,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone, UTC
-from typing import TYPE_CHECKING, Any
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext

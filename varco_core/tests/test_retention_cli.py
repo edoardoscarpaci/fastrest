@@ -11,7 +11,7 @@ so ``-t tests.test_retention_cli:factory_name`` resolves them.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue

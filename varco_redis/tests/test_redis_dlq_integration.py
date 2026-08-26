@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import os
 import uuid
+from datetime import UTC
 
 import pytest
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
-from datetime import UTC
 
 pytestmark = pytest.mark.integration
 
@@ -154,7 +154,7 @@ class TestRedisDLQRetentionSweepIntegration:
         recipe from technical_docs/features/job-scheduling-and-leases.md's
         retention pitfall."""
         import asyncio
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         for _ in range(5):
             await dlq.push(_make_entry())

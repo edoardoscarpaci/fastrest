@@ -60,7 +60,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import NullPool, StaticPool

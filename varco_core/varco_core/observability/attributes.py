@@ -78,10 +78,10 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
-from collections.abc import Callable, Mapping
 
 _logger = logging.getLogger(__name__)
 

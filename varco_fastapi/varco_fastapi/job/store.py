@@ -29,7 +29,7 @@ import asyncio
 import dataclasses
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from providify import Singleton

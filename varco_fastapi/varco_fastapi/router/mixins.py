@@ -28,8 +28,8 @@ Async safety:   ✅ No I/O at class definition time.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar
 from collections.abc import Callable
+from typing import Any, ClassVar
 
 from varco_fastapi.router.base import RouterMixin
 

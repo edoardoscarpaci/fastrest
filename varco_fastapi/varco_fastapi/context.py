@@ -63,10 +63,10 @@ Async safety:   ✅ All context managers are ``async def``.
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from collections.abc import AsyncIterator
 
 from providify import Provider
 from varco_core.auth.base import AuthContext

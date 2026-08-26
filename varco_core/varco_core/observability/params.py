@@ -74,13 +74,13 @@ from __future__ import annotations
 import inspect
 import logging
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
-from collections.abc import Callable, Mapping
 from uuid import UUID
 
 _logger = logging.getLogger(__name__)

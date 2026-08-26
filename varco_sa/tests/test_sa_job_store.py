@@ -25,6 +25,7 @@ Sections
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -35,7 +36,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from varco_core.job.base import Job, JobStatus
 from varco_core.job.task import TaskPayload
 from varco_sa.job_store import SAJobStore, jobs_metadata
-from datetime import UTC
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 
@@ -549,7 +549,7 @@ class TestSAJobStoreTryClaimSkipLocked:
 
 class TestSAJobStoreRunAtGating:
     async def test_job_with_future_run_at_is_not_claimed(self, store) -> None:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         job = _pending_job(run_at=datetime.now(UTC) + timedelta(seconds=60))
         await store.save(job)
@@ -558,7 +558,7 @@ class TestSAJobStoreRunAtGating:
         assert claimed is None
 
     async def test_job_is_claimed_after_run_at_passes(self, store) -> None:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         job = _pending_job(run_at=datetime.now(UTC) - timedelta(seconds=1))
         await store.save(job)

@@ -67,7 +67,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID, uuid4

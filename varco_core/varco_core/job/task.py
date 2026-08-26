@@ -72,9 +72,9 @@ from __future__ import annotations
 import inspect
 import json
 import typing
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any, overload
-from collections.abc import Callable, Coroutine
 
 from varco_core.job.serializer import (
     DEFAULT_SERIALIZER,

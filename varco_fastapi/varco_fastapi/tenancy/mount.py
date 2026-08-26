@@ -26,8 +26,8 @@ Three independent barriers against accidental bundling:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
 from collections.abc import Sequence
+from typing import TYPE_CHECKING, Any
 
 from varco_fastapi.tenancy.router import build_tenant_router
 

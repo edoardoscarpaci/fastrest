@@ -61,7 +61,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import ClassVar, Final
 from uuid import UUID, uuid4

@@ -18,8 +18,8 @@ DESIGN: a call-wrapping function, not a session event listener
 
 from __future__ import annotations
 
-from typing import Any, TypeVar
 from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 
 from varco_core.tenancy.global_scope import GlobalScopeReadOnlyError
 

@@ -78,9 +78,9 @@ import enum
 import json
 import logging
 import sys
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
-from collections.abc import AsyncIterator, Callable
 from uuid import UUID
 
 from providify import Inject, Singleton

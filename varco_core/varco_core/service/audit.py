@@ -63,7 +63,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 

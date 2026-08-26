@@ -14,7 +14,7 @@ Async safety:   ✅ Pure value object — no I/O.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import Any, Final
 
 from varco_core.auth import AuthContext

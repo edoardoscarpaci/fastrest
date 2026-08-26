@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import FrozenInstanceError
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest

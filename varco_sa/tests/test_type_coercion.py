@@ -7,7 +7,7 @@ SQLAlchemy model reflection), and the ASTTypeCoercion visitor.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import Boolean, Column, Integer, String

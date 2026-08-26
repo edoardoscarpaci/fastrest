@@ -27,7 +27,7 @@ Async safety:   ✅ Synchronous; safe to call from async contexts as long as a
 from __future__ import annotations
 
 import re
-from typing import Any, Union
+from typing import Any
 
 from sqlalchemy import BinaryExpression, ColumnElement, and_, not_, or_
 from sqlalchemy import inspect as sa_inspect

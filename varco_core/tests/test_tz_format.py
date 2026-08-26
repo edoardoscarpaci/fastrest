@@ -7,7 +7,7 @@ Plan line (step 49): "format_rfc9557(instant, zone) -> str emitting
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from varco_core.tz.format import format_rfc9557

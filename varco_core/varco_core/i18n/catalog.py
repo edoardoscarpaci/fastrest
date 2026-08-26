@@ -21,8 +21,8 @@ exception-rendering path, where raising would turn a 404 into a 500.
 from __future__ import annotations
 
 import abc
-from typing import Any
 from collections.abc import Mapping
+from typing import Any
 
 __all__ = ["MessageCatalog", "NullMessageCatalog", "DictMessageCatalog"]
 

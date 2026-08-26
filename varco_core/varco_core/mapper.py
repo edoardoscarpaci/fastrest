@@ -35,7 +35,7 @@ import dataclasses
 import json
 import typing
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .model import DomainModel

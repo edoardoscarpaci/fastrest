@@ -10,7 +10,7 @@ Relies on the same ``bypass_beanie_collection_check`` conftest fixture as
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from varco_beanie.job_store import BeanieJobStore, JobDocument, _doc_to_job, _job_to_doc

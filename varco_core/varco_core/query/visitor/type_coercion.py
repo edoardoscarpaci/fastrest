@@ -19,8 +19,7 @@ import json
 import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
-from datetime import timezone as dt_timezone, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from varco_core.exception.query import CoercionError

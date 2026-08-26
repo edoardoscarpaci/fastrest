@@ -76,8 +76,8 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 _logger = logging.getLogger(__name__)
 

@@ -9,7 +9,7 @@ the plan's explicit instruction (steps 55-57 are implementer-authored).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest

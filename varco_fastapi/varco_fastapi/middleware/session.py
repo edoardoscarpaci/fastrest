@@ -34,7 +34,7 @@ Async safety:   ✅ All generators and context managers are ``async``.
 from __future__ import annotations
 
 import logging
-from typing import Any, Final, Optional, TypeVar
+from typing import Any, Final, TypeVar
 from uuid import uuid4
 
 from providify import DIContainer

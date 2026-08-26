@@ -16,6 +16,7 @@ All tests use InMemoryEventBus — no broker required.
 
 from __future__ import annotations
 
+from datetime import UTC
 from uuid import UUID, uuid4
 
 import pytest
@@ -28,7 +29,6 @@ from varco_core.service.inbox import (
     InboxRepository,
     _make_inbox_wrapper,
 )
-from datetime import UTC
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 
@@ -96,7 +96,7 @@ class InMemoryInboxRepository(InboxRepository):
         # Replace with a new frozen instance with processed_at set.
         # dataclasses.replace() is used here because InboxEntry is frozen.
         from dataclasses import replace
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         self._entries[entry_id] = replace(
             original, processed_at=datetime.now(UTC)

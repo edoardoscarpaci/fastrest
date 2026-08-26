@@ -78,7 +78,7 @@ import asyncio
 import logging
 import socket
 from collections.abc import Awaitable, Callable, Coroutine
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import Annotated, Any
 
 import redis.asyncio as aioredis

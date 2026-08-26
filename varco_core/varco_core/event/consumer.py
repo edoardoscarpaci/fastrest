@@ -97,7 +97,7 @@ import logging
 import warnings
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from varco_core.event.base import CHANNEL_ALL, AbstractEventBus, Event, Subscription

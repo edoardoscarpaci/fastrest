@@ -47,7 +47,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import timezone, UTC
+from datetime import UTC
 from typing import Any
 
 import sqlalchemy as sa

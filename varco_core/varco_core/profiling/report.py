@@ -12,7 +12,7 @@ location; the primitive types (``FunctionStat``, ``AllocationStat``,
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from varco_core.profiling.backend import (

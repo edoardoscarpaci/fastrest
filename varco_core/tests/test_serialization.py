@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import BaseModel

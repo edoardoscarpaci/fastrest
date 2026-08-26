@@ -13,7 +13,7 @@ Uses SQLite in-memory with StaticPool — no real DB connection required.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine

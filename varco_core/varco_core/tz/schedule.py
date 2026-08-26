@@ -28,8 +28,7 @@ from __future__ import annotations
 
 import enum
 import logging
-from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone, UTC
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:

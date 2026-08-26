@@ -49,7 +49,7 @@ import inspect
 import logging
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 

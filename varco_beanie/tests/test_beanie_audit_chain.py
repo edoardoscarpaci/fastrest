@@ -12,10 +12,10 @@ MongoDB container (testcontainers[mongodb]); skipped without Docker.
 from __future__ import annotations
 
 import dataclasses
+from datetime import UTC
 
 import pytest
 from varco_core.service.audit import AuditEntry, AuditRepository
-from datetime import UTC
 
 
 def _entry(**kwargs) -> AuditEntry:
@@ -97,7 +97,7 @@ class TestBeanieAuditChainBsonPrecision:
         milliseconds, so a microsecond-precision ``occurred_at`` never
         round-trips.
         """
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from varco_beanie.audit import _to_bson_precision
 

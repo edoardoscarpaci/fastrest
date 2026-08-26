@@ -9,7 +9,7 @@ datetime.now(timezone.utc) call site is untouched."
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 
 from varco_core.context.request import current_timezone
 from varco_core.tz.settings import TimezoneSettings

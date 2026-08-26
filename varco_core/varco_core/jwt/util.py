@@ -13,7 +13,7 @@ Async safety:   ✅ Pure — no I/O, no shared mutable state.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, ClassVar, Final
 
 from varco_core.auth import AuthContext

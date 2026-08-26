@@ -1,7 +1,6 @@
 from contextlib import AbstractAsyncContextManager
 from contextvars import ContextVar, Token
 from functools import wraps
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 

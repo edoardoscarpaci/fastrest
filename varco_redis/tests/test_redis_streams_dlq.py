@@ -18,7 +18,7 @@ All tests are pure unit tests — no real Redis required.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 from varco_core.event.base import Event

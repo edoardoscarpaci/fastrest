@@ -19,7 +19,7 @@ Async safety:   ✅ No async operations; safe to call inside async contexts.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, Self
 
 # PyJWT — the only external dependency for this module.

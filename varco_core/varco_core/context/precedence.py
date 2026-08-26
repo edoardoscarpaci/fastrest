@@ -24,9 +24,9 @@ DESIGN: explicit ``(source, value)`` pairs over an ``or``-chain
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Generic, TypeVar
-from collections.abc import Sequence
 
 T = TypeVar("T")
 

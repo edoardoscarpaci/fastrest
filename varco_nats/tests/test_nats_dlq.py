@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from unittest.mock import patch
 from uuid import uuid4
 

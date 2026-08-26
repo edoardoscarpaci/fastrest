@@ -4,7 +4,7 @@ Tests for varco_core.job.base — Job, JobStatus, auth snapshot helpers.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone, UTC
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest

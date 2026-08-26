@@ -11,7 +11,7 @@ limit=None) -> int`` with a portable default over ``list_by_status`` +
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest

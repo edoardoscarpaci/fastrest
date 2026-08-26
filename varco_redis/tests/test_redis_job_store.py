@@ -19,13 +19,13 @@ Sections
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 from uuid import uuid4
 
 from varco_core.job.base import Job, JobStatus
 from varco_core.job.task import TaskPayload
 from varco_redis.job_store import RedisJobStore
-from datetime import UTC
 
 # ── FakeRedis ─────────────────────────────────────────────────────────────────
 
@@ -443,7 +443,7 @@ class TestRedisJobStoreLifecycle:
 
 class TestRedisJobStoreRunAtGating:
     async def test_job_with_future_run_at_is_not_claimed(self) -> None:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         _, store = _make_store()
         job = _pending_job(run_at=datetime.now(UTC) + timedelta(seconds=60))
@@ -453,7 +453,7 @@ class TestRedisJobStoreRunAtGating:
         assert claimed is None
 
     async def test_job_is_claimed_after_run_at_passes(self) -> None:
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         _, store = _make_store()
         job = _pending_job(run_at=datetime.now(UTC) - timedelta(seconds=1))

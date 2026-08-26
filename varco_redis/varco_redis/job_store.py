@@ -63,9 +63,9 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from datetime import datetime, timedelta, timezone, UTC
-from typing import TYPE_CHECKING, Any
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from redis.exceptions import WatchError

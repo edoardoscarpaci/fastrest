@@ -13,8 +13,8 @@ Async safety:   ✅ All methods are ``async def``.
 
 from __future__ import annotations
 
-from typing import Any, Generic, TypeVar
 from collections.abc import AsyncIterator, Sequence
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import asc, desc, func, select
 from sqlalchemy import delete as sa_delete

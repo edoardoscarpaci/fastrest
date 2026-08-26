@@ -28,10 +28,10 @@ Sections
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime, timezone, UTC
-from typing import Any
 from collections.abc import Generator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 

@@ -18,7 +18,7 @@ Sections
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from varco_core.service.conversation import ConversationTurn

@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
-from collections.abc import Callable
 
 from varco_core.tenancy.settings import TenantStatus
 
