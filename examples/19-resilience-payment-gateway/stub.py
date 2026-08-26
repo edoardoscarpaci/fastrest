@@ -22,7 +22,8 @@ from enum import Enum
 # ── FailMode ──────────────────────────────────────────────────────────────────
 
 
-class FailMode(str, Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class FailMode(str, Enum):  # noqa: UP042
     """
     Controls how the stub behaves on each call.
 
