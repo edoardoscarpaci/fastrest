@@ -10,6 +10,7 @@ Strategy
 - ``BusEventProducer``   — real producer wired to the in-memory bus.
 - ``PostAssembler``      — real assembler (pure functions, no DI).
 - ``InMemoryRepository`` — hand-rolled stub satisfying ``AsyncRepository[Post]``.
+- ``InMemoryUoW``       — real ``AsyncUnitOfWork`` exposing ``uow.posts``.
 - ``InMemoryUoWProvider``— minimal stub satisfying ``IUoWProvider``.
 - ``BaseAuthorizer``     — permissive no-op (default).
 
@@ -24,16 +25,16 @@ Test naming convention: ``test_<method>_<condition>_<expected>``
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-
 from varco_core.auth.authorizer import BaseAuthorizer
 from varco_core.auth.base import AuthContext
 from varco_core.cache.memory import InMemoryCache
 from varco_core.event import BusEventProducer, InMemoryEventBus
 from varco_core.query.params import QueryParams
+from varco_core.uow import AsyncUnitOfWork
 
 from example.assembler import PostAssembler
 from example.consumer import PostEventConsumer
@@ -41,7 +42,6 @@ from example.dtos import PostCreate, PostRead, PostUpdate
 from example.events import PostCreatedEvent, PostDeletedEvent
 from example.models import Post
 from example.service import PostService
-
 
 # ── Test doubles ──────────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ class InMemoryPostRepository:
         if entity.pk is None or entity.pk == UUID(int=0):
             # Assign a fresh UUID, matching PKStrategy.UUID_AUTO semantics.
             object.__setattr__(entity, "pk", uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if entity.created_at is None:
             object.__setattr__(entity, "created_at", now)
         # updated_at is always refreshed on every save() — matches SA behaviour
@@ -101,31 +101,68 @@ class InMemoryPostRepository:
         return pk in self._store
 
 
-class InMemoryUoW:
+class InMemoryUoW(AsyncUnitOfWork):
     """
-    Minimal stub for ``AsyncUnitOfWork``.
+    Minimal in-memory ``AsyncUnitOfWork`` for ``Post``.
 
     Wraps a shared ``InMemoryPostRepository`` so the same data is visible
-    inside and outside the "transaction".  No rollback semantics.
+    inside and outside the "transaction", and exposes it as ``uow.posts`` —
+    the entity-derived attribute name ``RepositoryProvider.make_uow()``
+    promises and ``SQLAlchemyUnitOfWork._begin()`` produces.
 
-    Async safety: ✅ Used in single-task tests.
+    WHY this shape (invariant that was previously violated): a UoW test double
+    must expose exactly the surface the production UoW exposes, or the tests
+    green-light a service that crashes in production.  The earlier version of
+    this double offered ``get_repository(entity_cls)`` — a
+    ``RepositoryProvider`` method that **no** UoW in varco_core / varco_sa /
+    varco_beanie defines — and never set ``.posts``, so every
+    ``PostService._get_repo()`` call raised ``AttributeError``.  It also
+    overrode ``__aenter__``/``__aexit__`` instead of subclassing
+    ``AsyncUnitOfWork``, which is why nothing flagged the drift.
+
+    DESIGN: subclass ``AsyncUnitOfWork`` instead of duck-typing the protocol
+        ✅ The ABC enforces ``_begin``/``commit``/``rollback``, so the double
+           cannot silently drift from the contract again.
+        ✅ ``__aenter__``/``__aexit__`` (including rollback-on-exception) come
+           from the ABC — the double exercises the same machinery as production.
+        ✅ Mirrors the sibling examples' doubles (``uow.products``,
+           ``uow.documents``) — one shape to learn across the catalog.
+        ❌ Requires implementing all three abstract methods even though the
+           in-memory store has no transaction — they are documented no-ops.
+
+    Thread safety:  ❌ Not thread-safe — single-task tests only.
+    Async safety:   ✅ All lifecycle methods are ``async def``.
     """
 
     def __init__(self, repo: InMemoryPostRepository) -> None:
+        """
+        Args:
+            repo: Shared ``InMemoryPostRepository`` — every UoW built by one
+                  provider must reference the same repo so data persists
+                  across unit-of-work boundaries within a test.
+        """
         self._repo = repo
-        # Mimic the committed flag that real UoWs set
+        # Exposed as ``uow.posts`` so ``PostService._get_repo()`` can return
+        # ``uow.posts`` without knowing the UoW's concrete type.  The real
+        # SQLAlchemyUnitOfWork sets this in _begin(); we set it eagerly since
+        # there is no session to open.
+        self.posts = repo
+        # Mimic the lifecycle flags real UoWs set, for test assertions.
+        self._begun = False
         self._committed = False
+        self._rolled_back = False
 
-    async def __aenter__(self) -> InMemoryUoW:
-        return self
+    async def _begin(self) -> None:
+        """No-op — the in-memory store needs no transaction opened."""
+        self._begun = True
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        if exc_type is None:
-            self._committed = True
+    async def commit(self) -> None:
+        """No-op — in-memory changes are always immediately visible."""
+        self._committed = True
 
-    def get_repository(self, entity_cls: type) -> InMemoryPostRepository:
-        # For this example, all entity classes map to the same stub repo.
-        return self._repo
+    async def rollback(self) -> None:
+        """No-op — the in-memory store has no rollback mechanism."""
+        self._rolled_back = True
 
 
 class InMemoryUoWProvider:
@@ -450,12 +487,8 @@ async def test_consumer_stop_cancels_subscriptions():
 
     # Verify the consumer IS receiving events before stop()
     received_before: list[PostCreatedEvent] = []
-    bus.subscribe(
-        PostCreatedEvent, lambda e: received_before.append(e), channel="posts"
-    )
-    await bus.publish(
-        PostCreatedEvent(post_id=uuid4(), author_id=uuid4()), channel="posts"
-    )
+    bus.subscribe(PostCreatedEvent, lambda e: received_before.append(e), channel="posts")
+    await bus.publish(PostCreatedEvent(post_id=uuid4(), author_id=uuid4()), channel="posts")
     assert len(received_before) == 1
 
     # Stop the consumer — subscriptions cancelled
@@ -465,9 +498,7 @@ async def test_consumer_stop_cancels_subscriptions():
     # We verify by counting events on a new subscriber only.
     received_after: list[PostCreatedEvent] = []
     bus.subscribe(PostCreatedEvent, lambda e: received_after.append(e), channel="posts")
-    await bus.publish(
-        PostCreatedEvent(post_id=uuid4(), author_id=uuid4()), channel="posts"
-    )
+    await bus.publish(PostCreatedEvent(post_id=uuid4(), author_id=uuid4()), channel="posts")
 
     # Only the post-stop subscriber should see this event.
     # The consumer's handler was cancelled — no double-dispatch.
@@ -485,3 +516,88 @@ async def test_consumer_start_requires_bus_attribute():
 
     with pytest.raises(AttributeError, match="_bus"):
         await consumer.start()
+
+
+# ── Regression: UoW test double must honour the framework contract ────────────
+
+
+async def test_regression_uow_double_exposes_repo_as_entity_attribute():
+    """
+    User reports: every ``PostService`` CRUD test dies with
+    ``AttributeError: 'InMemoryUoW' object has no attribute 'posts'``.
+
+    Correct behaviour is that ``make_uow()`` hands back a unit of work whose
+    registered repositories are reachable as entity-derived attributes
+    (``Post`` → ``uow.posts``), because that is the contract
+    ``RepositoryProvider.make_uow()`` documents and
+    ``SQLAlchemyUnitOfWork._begin()`` implements — a test double that omits
+    the attribute is lying about the object it stands in for.
+    """
+    provider = InMemoryUoWProvider()
+
+    async with provider.make_uow() as uow:
+        # The exact access PostService._get_repo() performs in production.
+        assert uow.posts is not None
+        assert isinstance(uow.posts, InMemoryPostRepository)
+
+
+async def test_regression_uow_double_is_a_real_async_unit_of_work():
+    """
+    The double drifted from the contract precisely because it subclassed
+    nothing — ``AsyncUnitOfWork``'s abstract methods could not flag the gap.
+
+    Correct behaviour is that the double *is* an ``AsyncUnitOfWork``, so the
+    ABC enforces ``_begin``/``commit``/``rollback`` and the drift cannot
+    silently reappear.
+    """
+    provider = InMemoryUoWProvider()
+    uow = provider.make_uow()
+
+    assert isinstance(uow, AsyncUnitOfWork)
+    # get_repository() belongs to RepositoryProvider, never to a UoW — no UoW
+    # in varco_core / varco_sa / varco_beanie defines it.
+    assert not hasattr(uow, "get_repository")
+
+
+async def test_regression_service_get_repo_returns_the_shared_repository():
+    """
+    ``PostService._get_repo(uow)`` must resolve through the same attribute the
+    real ``SQLAlchemyUnitOfWork`` exposes, and must yield the *shared* repo so
+    data written in one UoW is visible in the next.
+    """
+    service, uow_provider, _ = _make_service()
+
+    async with uow_provider.make_uow() as uow:
+        repo = service._get_repo(uow)
+
+    assert repo is uow_provider._repo
+
+
+async def test_regression_uow_begin_runs_and_commit_flag_is_set():
+    """
+    ``AsyncUnitOfWork.__aenter__`` calls ``_begin()`` and ``__aexit__`` commits
+    on a clean exit — the double must go through the ABC's machinery rather
+    than overriding the context-manager protocol.
+    """
+    uow = InMemoryUoWProvider().make_uow()
+
+    assert uow._begun is False
+    async with uow:
+        assert uow._begun is True
+        assert uow._committed is False
+    assert uow._committed is True
+
+
+async def test_regression_uow_rolls_back_on_exception_and_propagates():
+    """
+    An exception inside ``async with uow`` must trigger ``rollback()`` (not
+    ``commit()``) and still propagate — the ABC's documented edge case.
+    """
+    uow = InMemoryUoWProvider().make_uow()
+
+    with pytest.raises(ValueError, match="boom"):
+        async with uow:
+            raise ValueError("boom")
+
+    assert uow._committed is False
+    assert uow._rolled_back is True
