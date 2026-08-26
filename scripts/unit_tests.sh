@@ -88,6 +88,27 @@ for suite in "${SUITES[@]}"; do
   fi
 done
 
+# ── Sync the workspace ONCE, up front ──────────────────────────────────────────
+# RL-21: each suite below runs its own `uv run`, and `uv run` will re-resolve
+# and re-sync the environment if it thinks anything is stale.  Eleven of those,
+# interleaved with pytest collection, produced intermittent false failures on
+# trees that were green on the very next run (seen on both the examples suite
+# and varco_fastapi).  A false red here is expensive: this script is CI's `unit`
+# job, and `all-green` — the single required status check — sits downstream.
+#
+# So: sync deliberately once, then forbid every per-suite `uv run` from touching
+# the environment again via --no-sync.  A suite now either runs against a fully
+# prepared venv or fails loudly at this step, instead of racing a sync.
+#
+#   ✅ One sync instead of up to eleven; removes the race entirely rather than
+#      papering over it with a retry (which would hide real failures).
+#   ✅ Faster — the per-suite staleness check is skipped.
+#   ❌ A dependency changed mid-run is not picked up. Correct: a unit run should
+#      test one fixed environment, not a moving one.
+echo -e "${BOLD}── Syncing workspace ──────────────────────────────────────────────────────${RESET}"
+uv sync --all-packages --all-extras
+echo
+
 # ── Run pytest for each suite, accumulating results ────────────────────────────
 FAILED_SUITES=()
 PASSED_SUITES=()
@@ -109,13 +130,13 @@ for suite in "${SUITES[@]}"; do
   # shellcheck disable=SC2086  # PYTEST_EXTRA_ARGS intentionally word-splits
   status=0
   if [[ "$suite_run_from" == "root" ]]; then
-    (cd "$ROOT" && uv run pytest \
+    (cd "$ROOT" && uv run --no-sync pytest \
         "$suite_dir/$suite_testpath/" \
         -m "not integration" \
         -v \
         ${PYTEST_EXTRA_ARGS:-}) || status=$?
   else
-    (cd "$ROOT/$suite_dir" && uv run pytest \
+    (cd "$ROOT/$suite_dir" && uv run --no-sync pytest \
         "$suite_testpath/" \
         -m "not integration" \
         -v \

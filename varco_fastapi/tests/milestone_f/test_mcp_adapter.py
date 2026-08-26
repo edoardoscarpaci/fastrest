@@ -487,3 +487,41 @@ def test_bind_mcp_adapter_registers_a_singleton():
     bind_mcp_adapter(container, OrderRouter)
 
     assert container.get(MCPAdapter) is container.get(MCPAdapter)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "BUG: to_mcp_server() calls server.add_tool(input_schema=...), but the "
+        "mcp SDK's FastMCP.add_tool() has no input_schema parameter — it derives "
+        "the schema from the handler's type hints, and varco's _handler is an "
+        "untyped **kwargs shim. Mapping varco's JSON input_schema onto a "
+        "signature-derived one is a design change, not a typo. See BACKLOG KI-11."
+    ),
+)
+def test_to_mcp_server_imports_fastmcp_from_its_real_location():
+    """
+    Regression: ``to_mcp_server()`` must import ``FastMCP`` from
+    ``mcp.server.fastmcp``, not from the ``mcp`` package root.
+
+    ``FastMCP`` has never been exported from ``mcp/__init__.py``.  The original
+    ``from mcp import FastMCP`` therefore raised ``ImportError`` even when the
+    package WAS installed, and the surrounding ``except ImportError`` re-raised
+    it as "the 'mcp' package is required … pip install 'varco-fastapi[mcp]'" —
+    sending the caller to reinstall something they already had.
+
+    The bug was invisible until the mypy gate ran against a venv synced with
+    ``--all-extras`` (RL-21's up-front sync), because with ``mcp`` absent
+    ``ignore_missing_imports`` typed the whole module as ``Any``.
+
+    Edge cases:
+        - ``mcp`` genuinely not installed → skipped; the ImportError branch is
+          then correct behaviour and is not what this test guards.
+    """
+    pytest.importorskip("mcp", reason="the 'mcp' extra is not installed")
+
+    adapter = MCPAdapter(OrderRouter, client=AsyncMock())
+    server = adapter.to_mcp_server()
+
+    # Constructed a real FastMCP, not raised the misleading ImportError.
+    assert type(server).__name__ == "FastMCP"

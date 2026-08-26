@@ -91,8 +91,8 @@ register already imposes on entries filed off documentation rather than source. 
 `examples/00-full-stack-post-api/example/tests/` (51 passed); `scripts/unit_tests.sh`'s
 `EXTRA_SUITES` array; commit `f03e613`.
 
-🔴 **RL-21 — `scripts/unit_tests.sh` produces intermittent, non-reproducible suite failures**,
-🔴 must, M. Observed **twice** on trees later proven green, in different packages: once on
+🟡 **RL-21 — `scripts/unit_tests.sh` intermittent false failures — FIXED, watch for recurrence**,
+🟡 should, M. Observed **twice** on trees later proven green, in different packages: once on
 `examples/00-full-stack-post-api` (8 failed; 51 passed on re-run) and once on `varco_fastapi`
 (suite reported ✘ by the runner; `cd varco_fastapi && uv run pytest tests/` immediately after
 gave **848 passed, 8 skipped**, and the very next `make test` was fully green). Both happened on
@@ -103,12 +103,21 @@ a byte-identical tree with no intervening edit.
 that intermittently reports a false red makes the required check untrustworthy exactly where
 trust is the whole point, and trains reviewers to re-run rather than investigate.
 
-**Leading hypothesis, unconfirmed:** `uv run` re-resolving/re-syncing the workspace concurrently
-with pytest collection, since each of the eleven suites invokes `uv run` separately and the
-first invocation after any dependency change performs a sync. Worth testing whether a single
-`uv sync` before the loop, plus `--no-sync` on each `uv run`, removes it. **Do not close this by
-adding a retry** — that would hide the failure mode rather than fix it. Evidence: this session's
-`make test` runs; `scripts/unit_tests.sh`; RL-20 above (same root cause, first sighting).
+**Cause and fix (applied):** each of the eleven suites invoked `uv run` separately, and `uv run`
+re-resolves and re-syncs the environment whenever it judges it stale — up to eleven syncs
+interleaved with pytest collection. `scripts/unit_tests.sh` now runs `uv sync --all-packages
+--all-extras` **once**, up front, and every per-suite invocation is `uv run --no-sync`, so a
+suite either runs against a fully prepared venv or fails loudly at the sync step instead of
+racing one. A retry was deliberately **not** added — that would have hidden the failure mode
+rather than removed it. Side benefit: the run is materially faster without ten redundant
+staleness checks.
+
+⚠️ **Not provable by testing.** Four consecutive full-sweep runs were green after the fix, but
+an intermittent fault cannot be shown absent by a finite number of green runs — the mechanism
+argument (no concurrent sync is now possible) is the real evidence, and four green runs are
+only consistent with it. **If a false red is ever seen again, reopen this at 🔴 and do not
+assume the same cause.** Evidence: `scripts/unit_tests.sh`'s "Sync the workspace ONCE" block;
+this session's `make test` runs; RL-20 above (same root cause, first sighting).
 
 | ID | Feature | Severity | Complexity | Rationale | Evidence |
 |----|---------|----------|------------|-----------|----------|
@@ -120,6 +129,7 @@ adding a retry** — that would hide the failure mode rather than fix it. Eviden
 | RL-19 | **`.pre-commit-config.yaml` ruff rev bumped `v0.4.1` → `v0.16.4`, unplanned** | 🟢 nice | — | Not anticipated by plan 017 — required because `v0.4.1` predates the `UP046`/`UP047` rule codes now referenced in `[tool.ruff.lint] ignore` and could not even parse the config, which would have blocked every local commit via the pre-commit hook | `.pre-commit-config.yaml` |
 | KI-9 | **`varco_beanie.audit.BeanieAuditRepository.list_for_entity` is missing tenant scoping** — no `tenant_id` parameter, unlike the base `AuditRepository` class | 🔴 must | S | Surfaced by the mypy sweep, suppressed with a `# type: ignore` + inline note rather than silently patched (fix-first rule only covers trivially-local, obviously-correct fixes — adding tenant scoping to an audit query is a behaviour change, out of scope for a docstring/type-annotation pass). The Beanie audit trail is currently unscoped by tenant | `varco_beanie/varco_beanie/audit.py` (`list_for_entity`) |
 | KI-10 | **`varco_beanie.bootstrap.BeanieApp`'s non-DI construction path is out of sync with `BeanieRepositoryProvider`'s real signature** — it calls `BeanieRepositoryProvider(mongo_client=, db_name=, transactional=)`, but that class's actual `__init__` takes `settings=` | 🔴 must | S | Surfaced by the mypy sweep (a genuine type error, not a suppression candidate for the fix-first rule since reconciling the two constructors is a behaviour decision). The two construction paths (DI-managed vs. `BeanieApp`'s direct instantiation) need reconciling before `BeanieApp`'s non-DI path can be trusted | `varco_beanie/varco_beanie/bootstrap.py` (`BeanieApp`); `varco_beanie/varco_beanie/di.py` (`BeanieRepositoryProvider`) |
+| KI-11 | **`MCPAdapter.to_mcp_server()` has never worked against a real `mcp` install** — two independent defects: it imported `FastMCP` from the `mcp` package root (it lives in `mcp.server.fastmcp` and has never been exported from the root), and it calls `server.add_tool(input_schema=...)`, a parameter `FastMCP.add_tool()` does not have — the SDK derives tool schemas from the handler's type hints, while varco's `_handler` is an untyped `**kwargs` shim | 🔴 must | M | The import bug is FIXED (it made the method raise a misleading "the 'mcp' package is required, pip install varco-fastapi[mcp]" at callers who already had it installed). The `add_tool` mismatch is NOT fixed: mapping varco's JSON `input_schema` onto FastMCP's signature-derived schema is a design change, so it is marked `xfail(strict=True)` per the repo's "never an in-place production fix" norm — the marker fails loudly once it is fixed. Invisible until RL-21's up-front `--all-extras` sync put `mcp` in the venv; with it absent, `ignore_missing_imports` typed the module as `Any` and mypy saw nothing. ⚠️ CI's `lint` job syncs `--all-extras`, so this would have turned the first CI run red | `varco_fastapi/varco_fastapi/router/mcp.py` (`to_mcp_server`); `varco_fastapi/tests/milestone_f/test_mcp_adapter.py` (xfail regression test) |
 
 ---
 

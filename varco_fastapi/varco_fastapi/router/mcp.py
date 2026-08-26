@@ -674,7 +674,12 @@ class MCPAdapter:
         Thread safety:  ✅ Creates a new FastMCP instance — no shared state.
         """
         try:
-            from mcp import FastMCP  # noqa: PLC0415
+            # `mcp.server.fastmcp`, NOT `mcp` — FastMCP has never been exported
+            # from the package root.  Importing it from `mcp` raises ImportError
+            # even when the package IS installed, which this except-clause then
+            # reports as "the 'mcp' package is required", sending the caller off
+            # to reinstall a package they already have.
+            from mcp.server.fastmcp import FastMCP  # noqa: PLC0415
         except ImportError as exc:
             raise ImportError(
                 "The 'mcp' package is required to run MCPAdapter as an MCP server. "
@@ -696,7 +701,13 @@ class MCPAdapter:
                 name=_tool.name,
                 description=_tool.description,
                 fn=_handler,
-                input_schema=_tool.input_schema,
+                # BUG (BACKLOG KI-11): FastMCP.add_tool() has no input_schema
+                # parameter — it derives the schema from the handler's type
+                # hints. Mapping varco's JSON input_schema onto a
+                # signature-derived one is a design change, not a typo, so it is
+                # deferred rather than patched here. Guarded by an
+                # xfail(strict=True) regression test.
+                input_schema=_tool.input_schema,  # type: ignore[call-arg]
             )
 
         return server
