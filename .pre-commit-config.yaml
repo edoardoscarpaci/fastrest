@@ -45,74 +45,31 @@ repos:
         pass_filenames: false
         always_run: true
 
-  # ── Per-package test suites ─────────────────────────────────────────────────
-  # Each hook runs uv run --package <name> pytest from the repo root so all
-  # packages share the single workspace .venv.
+  # ── Unit tests ──────────────────────────────────────────────────────────────
+  # ONE hook delegating to `make test` (→ scripts/unit_tests.sh), replacing the
+  # seven hand-listed per-package pytest hooks that used to live here.
   #
-  # Integration tests (real Kafka / Redis / MongoDB via testcontainers) are
-  # excluded here — they require Docker and are slow.  Run them explicitly:
-  #   uv run pytest -m integration
-
+  # Those seven covered varco_core/beanie/sa/kafka/redis/fastapi/memcached and
+  # silently omitted varco_nats, varco_ws, varco_casbin and the examples suite
+  # — a fourth copy of the package list, drifting exactly the way Makefile's
+  # PACKAGES drifted before plan 017 added varco_casbin to it.
+  #
+  #   ✅ One source of truth: scripts/unit_tests.sh is what `make test` and
+  #      CI's `unit` job both run, so a green commit means a green CI leg.
+  #   ✅ A new workspace member is picked up by the script, not by remembering
+  #      to add an eighth hook here.
+  #   ✅ The script accumulates failures and prints a per-package summary, so a
+  #      red commit names every broken package, not just the first.
+  #   ❌ Four more suites run per commit than before. Accepted — the omitted
+  #      four were a coverage gap, not a speed optimisation.
+  #
+  # Integration tests are excluded: they need Docker and are slow. Run them
+  # explicitly with `make integration-test-clean`.
   - repo: local
     hooks:
-      - id: pytest-core
-        name: pytest (varco_core)
-        entry: uv run --package varco-core pytest varco_core/tests --tb=short -q
+      - id: unit-tests
+        name: pytest (all packages)
+        entry: make test
         language: system
         pass_filenames: false
         always_run: true
-
-  - repo: local
-    hooks:
-      - id: pytest-beanie
-        name: pytest (varco_beanie)
-        entry: uv run --package varco-beanie pytest varco_beanie/tests --tb=short -q
-        language: system
-        pass_filenames: false
-        always_run: true
-
-  - repo: local
-    hooks:
-      - id: pytest-sa
-        name: pytest (varco_sa)
-        entry: uv run --package varco-sa pytest varco_sa/tests --tb=short -q
-        language: system
-        pass_filenames: false
-        always_run: true
-
-  - repo: local
-    hooks:
-      - id: pytest-kafka
-        name: pytest (varco_kafka)
-        entry: uv run --package varco-kafka pytest varco_kafka/tests --tb=short -q
-        language: system
-        pass_filenames: false
-        always_run: true
-
-  - repo: local
-    hooks:
-      - id: pytest-redis
-        name: pytest (varco_redis)
-        entry: uv run --package varco-redis pytest varco_redis/tests --tb=short -q
-        language: system
-        pass_filenames: false
-        always_run: true
-
-  - repo: local
-    hooks:
-      - id: pytest-fastapi
-        name: pytest (varco_fastapi)
-        entry: uv run --package varco-fastapi pytest varco_fastapi/tests --tb=short -q
-        language: system
-        pass_filenames: false
-        always_run: true
-  
-  - repo: local
-    hooks:
-      - id: pytest-memcached
-        name: pytest (varco_memcached)
-        entry: uv run --package varco-memcached pytest varco_memcached/tests --tb=short -q
-        language: system
-        pass_filenames: false
-        always_run: true
-
