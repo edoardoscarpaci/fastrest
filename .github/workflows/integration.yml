@@ -26,6 +26,37 @@
 # Not a required check for branch protection — `all-green` in test.yml is
 # the only one. A nightly integration failure is a BACKLOG/Phase-3 signal,
 # not a merge blocker (§RL-5-triggers).
+#
+# ── `chaos` job (Plan 018 / RT7-ci) ────────────────────────────────────────────
+# A second, independent job in this same file — kills/pauses/restarts real
+# containers mid-test (§RT7-shape), so it is strictly noisier and slower than
+# the `integration` job above and must never share its blast radius.
+#   ✅ `if: github.event_name != 'push'` — chaos never runs on `push: main`,
+#      only nightly `schedule` and `workflow_dispatch`. A chaos scenario is
+#      inherently more failure-prone than a plain broker round-trip (it is
+#      *designed* to break something mid-flight); gating it off the push
+#      trigger means a chaos flake can never block or even appear on the one
+#      trigger a human is watching land on `main`.
+#   ✅ Not listed in any `needs:` — `all-green` (test.yml) does not depend on
+#      it, and this job does not depend on `integration` either (they are
+#      fully independent; a chaos failure must never mask a routine
+#      integration regression by cascading `needs:` skips).
+#   ✅ Its own `timeout-minutes`, separate from `integration`'s 45 — chaos
+#      tests pay real wall-clock cost for `restart()`/`paused()` waits and a
+#      slower budget must never silently eat into the integration job's own
+#      time-box if they ever shared one.
+#   ❌ A second job means the same checkout/setup/`uv sync` preamble is
+#      duplicated rather than shared via a reusable workflow/composite
+#      action. Accepted — this file has exactly two jobs and reusable
+#      workflows are unwarranted machinery for that (§RT7-ci).
+#   ❌ **Never promote `chaos` to a required check.** Unlike `integration`
+#      (whose promotion is deferred to §RT7-ci's own "after a measured flake
+#      rate" gate, tracked in BACKLOG.md's RL-16 row), `chaos` must **never**
+#      become one, full stop — it exists to find real bugs under container
+#      failure, not to gate merges, and its own tests intentionally exercise
+#      genuine race conditions (port remap on restart, black-holed sockets)
+#      that are expected to occasionally need operator triage rather than a
+#      blocked PR.
 
 name: Integration Tests
 
@@ -57,3 +88,22 @@ jobs:
         run: uv sync --locked --all-packages --all-extras
       - name: Run integration suite (clean-room)
         run: make integration-test-clean
+
+  chaos:
+    name: Chaos tests (container restart/pause)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'push'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install workspace (locked)
+        run: uv sync --locked --all-packages --all-extras
+      - name: Run chaos suite (clean-room)
+        run: make chaos-test-clean

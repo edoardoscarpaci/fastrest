@@ -50,5 +50,19 @@ def kafka_bootstrap(request: pytest.FixtureRequest) -> str:
 
     from testcontainers.kafka import KafkaContainer  # noqa: PLC0415
 
-    with KafkaContainer() as container:
+    # Plan 018 / RT5, Finding A: a default single-broker KafkaContainer
+    # cannot create the internal `__transaction_state` topic at the
+    # default replication factor of 3 — `AIOKafkaProducer(transactional_id=...)
+    # .start()` (via `init_transactions`) then hangs forever, timing out
+    # every EOS test in test_kafka_eos_integration.py. Forcing both knobs to
+    # 1 (correct for a single-broker test container; never appropriate for a
+    # real multi-broker cluster) lets transaction-state topic creation
+    # succeed. Proven with a standalone probe: without these two env vars,
+    # `producer.start()` never returns; with them, `init_transactions` and
+    # `commit_transaction()` both complete immediately.
+    with (
+        KafkaContainer()
+        .with_env("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1")
+        .with_env("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1") as container
+    ):
         yield container.get_bootstrap_server()

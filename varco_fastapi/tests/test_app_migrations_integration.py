@@ -351,3 +351,82 @@ async def test_two_concurrent_lifespans_exactly_one_migrates_schema_not_corrupte
     await migrator_a.close()
     await migrator_b.close()
     await engine.dispose()
+
+
+# ── (vi) app-layer MigrationLockTimeout, deterministically (Plan 018 / RT9,
+#         Step 25 — §RT9-scope's residual) ─────────────────────────────────────
+
+
+async def test_lifecycle_raises_migration_lock_timeout_when_holder_never_releases(
+    isolated_db_url: str,
+) -> None:
+    """
+    A lifespan that cannot acquire the migration lock must raise
+    ``MigrationLockTimeout`` and serve **no** request.
+
+    Why this exists alongside
+    ``test_two_concurrent_lifespans_exactly_one_migrates_schema_not_corrupted``
+    above: that test races two lifespans and therefore legitimately accepts
+    ``outcome in ("served", "lock_timeout")`` — either branch is correct
+    behaviour for a race. The consequence is that the ``MigrationLockTimeout``
+    branch is never actually *asserted* at the app layer (it is asserted at
+    the migrator layer, ``varco_sa/tests/test_migration_lock.py:114``).
+
+    Here the **test itself** holds the advisory lock from a separate
+    connection for the whole duration, so there is no race at all: the
+    lifespan cannot possibly win, and the assertion is a single branch.
+
+    Args (fixtures):
+        isolated_db_url: A freshly created, empty Postgres database, so the
+                         framework branch genuinely has pending revisions —
+                         ``AlembicMigrator.upgrade()`` short-circuits on an
+                         empty plan *before* taking the lock, which would
+                         make this test pass for the wrong reason.
+
+    Edge cases:
+        - ``lock_timeout=1.0`` keeps the deliberate wait short; ``timeout``
+          is left generous so a slow container cannot be mistaken for a
+          lock timeout.
+    """
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from varco_sa.migration.lock import migration_lock
+    from varco_sa.migration.migrator import AlembicMigrator
+
+    engine = create_async_engine(isolated_db_url, echo=False)
+    migrator = AlembicMigrator(engine, include_framework_branch=True)
+
+    settings = MigrationSettings(mode="upgrade", lock_timeout=1.0, timeout=120.0)
+    app = create_varco_app(
+        None,
+        routers=[_PingRouter],
+        migrations=migrator,
+        migration_settings=settings,
+        validate=False,
+    )
+
+    # Precondition: there IS pending work, so the lock is genuinely reached.
+    assert not (await migrator.plan()).is_empty, (
+        "no pending revisions — upgrade() would short-circuit before the lock "
+        "and this test would assert nothing"
+    )
+
+    served: list[int] = []
+
+    # The test holds the lock itself, from its own dedicated connection.
+    async with migration_lock(engine, settings.lock_key, timeout=60.0):
+        with pytest.raises(MigrationLockTimeout):
+            async with app.router.lifespan_context(app):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app), base_url="http://test"
+                ) as client:
+                    served.append((await client.get("/ping")).status_code)
+
+    assert served == [], (
+        "a request was served despite the migration lock never being acquired — "
+        f"startup did not fail closed (statuses seen: {served})"
+    )
+    # The blocked lifespan wrote no DDL of its own.
+    assert not await _outbox_table_exists(engine)
+
+    await migrator.close()
+    await engine.dispose()

@@ -46,6 +46,17 @@ set -euo pipefail
 # ── Resolve workspace root regardless of where the script is called from ──────
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# ── Marker expression (Plan 018 / RT7 — chaos scaffolding) ────────────────────
+# Chaos tests (`@pytest.mark.chaos`, always also carrying `integration`) kill,
+# pause, or restart a real container mid-test. They are additive to the
+# `integration` marker, not a replacement for it, and are excluded from the
+# default developer/CI `integration` run so `make integration-test` never
+# becomes flaky just because a chaos scenario is red. `make chaos-test` /
+# `make chaos-test-clean` (Makefile) override this to
+# "integration and chaos" — the only other value this script is exercised
+# with.
+MARKER_EXPR="${MARKER_EXPR:-integration and not chaos}"
+
 # ── Colour helpers (fall back gracefully when stdout is not a tty) ────────────
 if [[ -t 1 ]]; then
   RED="\033[0;31m"; GREEN="\033[0;32m"; YELLOW="\033[1;33m"
@@ -83,6 +94,11 @@ if [[ ${#OVERRIDES_FOUND[@]} -gt 0 ]]; then
   for override in "${OVERRIDES_FOUND[@]}"; do
     echo -e "  ${YELLOW}⚠ Override active: ${override}${RESET}"
   done
+fi
+
+echo -e "\n${BOLD}Marker expression:${RESET} ${MARKER_EXPR}"
+if [[ "$MARKER_EXPR" == "integration and not chaos" ]]; then
+  echo -e "  ${YELLOW}chaos tests excluded — run 'make chaos-test'${RESET}"
 fi
 
 # ── Known integration-test packages ───────────────────────────────────────────
@@ -146,7 +162,7 @@ done
 # ── Run pytest for each suite ───────────────────────────────────────────────────
 # VARCO_RUN_INTEGRATION=1 activates the integration suite inside each test
 # module (they check this env var and skip when absent).  We also pass
-# -m integration so pytest's marker filter applies — belt-and-suspenders.
+# -m "$MARKER_EXPR" so pytest's marker filter applies — belt-and-suspenders.
 FAILED_SUITES=()
 PASSED_SUITES=()
 SKIPPED_SUITES=()
@@ -181,13 +197,13 @@ for suite in "${SUITES[@]}"; do
   if [[ "$suite_run_from" == "root" ]]; then
     (cd "$ROOT" && VARCO_RUN_INTEGRATION=1 uv run pytest \
         "$suite_dir/$suite_testpath/" \
-        -m integration \
+        -m "$MARKER_EXPR" \
         -v \
         ${PYTEST_EXTRA_ARGS:-}) || status=$?
   else
     (cd "$ROOT/$suite_dir" && VARCO_RUN_INTEGRATION=1 uv run pytest \
         "$suite_testpath/" \
-        -m integration \
+        -m "$MARKER_EXPR" \
         -v \
         ${PYTEST_EXTRA_ARGS:-}) || status=$?
   fi
@@ -215,6 +231,10 @@ done
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo -e "${BOLD}── Summary ────────────────────────────────────────────────────────────────${RESET}"
+echo -e "${BOLD}Marker expression:${RESET} ${MARKER_EXPR}"
+if [[ "$MARKER_EXPR" == "integration and not chaos" ]]; then
+  echo -e "  ${YELLOW}chaos tests excluded — run 'make chaos-test'${RESET}"
+fi
 for suite_label in "${PASSED_SUITES[@]+"${PASSED_SUITES[@]}"}"; do
   echo -e "  ${GREEN}✔  $suite_label${RESET}"
 done

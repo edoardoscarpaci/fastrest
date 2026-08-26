@@ -152,3 +152,100 @@ async def test_redelivery_after_failed_handler_does_not_silently_advance_offset(
             await asyncio.sleep(0.2)
 
     assert second_seen == ["0"]
+
+
+# ── Plan 018 / RT5, Step 22 — commit durability across a consumer restart ─────
+
+
+async def test_committed_offset_survives_consumer_restart(kafka_bootstrap: str) -> None:
+    """
+    An explicitly committed offset must be readable by a *new* consumer
+    instance in the same group, and that consumer must resume from it.
+
+    Research 003 §Offset Management: "if the offset persists across consumer
+    restart, the broker durably committed it". The three tests above assert
+    *delivery* behaviour around offsets; this one asserts the offset itself
+    is broker-side durable, which is the property they all silently rely on.
+
+    Driven through raw ``aiokafka`` rather than ``KafkaEventBus`` because
+    ``committed(tp)`` and an explicit ``commit()`` are not part of varco's
+    bus surface — the contract under test is the broker's, not varco's.
+
+    Edge cases:
+        - The topic is pre-created with an explicit ``num_partitions=1`` so
+          ``TopicPartition(topic, 0)`` is the whole topic; the testcontainers
+          auto-creation partition count is undocumented.
+    """
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition  # noqa: PLC0415
+    from aiokafka.admin import AIOKafkaAdminClient, NewTopic  # noqa: PLC0415
+
+    run_id = uuid.uuid4().hex[:8]
+    topic = f"offdur-{run_id}"
+    group_id = f"offdur-grp-{run_id}"
+
+    admin = AIOKafkaAdminClient(bootstrap_servers=kafka_bootstrap)
+    await admin.start()
+    try:
+        await admin.create_topics([NewTopic(name=topic, num_partitions=1, replication_factor=1)])
+    finally:
+        await admin.close()
+
+    total = 5
+    producer = AIOKafkaProducer(bootstrap_servers=kafka_bootstrap)
+    await producer.start()
+    try:
+        for i in range(total):
+            await producer.send_and_wait(topic, str(i).encode())
+    finally:
+        await producer.stop()
+
+    tp = TopicPartition(topic, 0)
+
+    def _consumer() -> AIOKafkaConsumer:
+        return AIOKafkaConsumer(
+            topic,
+            bootstrap_servers=kafka_bootstrap,
+            group_id=group_id,
+            auto_offset_reset="earliest",
+            enable_auto_commit=False,
+        )
+
+    # First instance: consume the first 3 records and commit exactly there.
+    first = _consumer()
+    await first.start()
+    try:
+        seen: list[bytes] = []
+        deadline = asyncio.get_event_loop().time() + _JOIN_TIMEOUT
+        while len(seen) < 3 and asyncio.get_event_loop().time() < deadline:
+            batch = await first.getmany(timeout_ms=1000, max_records=3 - len(seen))
+            for records in batch.values():
+                seen.extend(r.value for r in records)
+        assert len(seen) == 3, f"only consumed {len(seen)}/3 records before the deadline"
+
+        await first.commit({tp: 3})
+        assert await first.committed(tp) == 3
+    finally:
+        await first.stop()
+
+    # Second instance, same group: the offset survived, and consumption
+    # resumes from it rather than from `earliest`.
+    second = _consumer()
+    await second.start()
+    try:
+        assert await second.committed(tp) == 3, (
+            "the committed offset did not survive the consumer restart — it "
+            "was never durably committed on the broker"
+        )
+
+        resumed: list[bytes] = []
+        deadline = asyncio.get_event_loop().time() + _JOIN_TIMEOUT
+        while len(resumed) < total - 3 and asyncio.get_event_loop().time() < deadline:
+            batch = await second.getmany(timeout_ms=1000)
+            for records in batch.values():
+                resumed.extend(r.value for r in records)
+
+        assert resumed == [b"3", b"4"], (
+            f"the restarted consumer did not resume from the committed offset; got {resumed}"
+        )
+    finally:
+        await second.stop()

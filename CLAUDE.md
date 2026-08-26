@@ -53,6 +53,14 @@ test PKG=varco_redis` narrows to one), `make integration-test` / `make integrati
 `pytest-asyncio` is installed with `asyncio_mode = "auto"` in every package — all `async def
 test_*` functions run automatically without `@pytest.mark.asyncio`.
 
+`make integration-test` / `make integration-test-clean` now **exclude chaos tests by default**
+(Plan 018 / RT7) — `scripts/integration_tests.sh` defaults `MARKER_EXPR` to `"integration and not
+chaos"`. Chaos tests (`@pytest.mark.chaos`, always paired with `@pytest.mark.integration`)
+kill/pause/restart a real container mid-test and are strictly noisier and slower than a plain
+broker round-trip. Run them with `make chaos-test` / `make chaos-test PKG=varco_redis` /
+`make chaos-test-clean` — the same script with `MARKER_EXPR="integration and chaos"`, and the
+same six-`VARCO_TEST_*_URL`-unset clean-room contract `integration-test-clean` uses.
+
 `ruff` and `mypy` are **pinned dev dependencies**, declared in the root `pyproject.toml`'s
 `[dependency-groups] lint` group (`ruff==0.16.4`, `mypy==2.3.1`) and pulled in by the `dev` group
 via PEP 735 `{ include-group = "lint" }`. `make lint`/`make type-check` invoke them as `uv run
@@ -74,6 +82,13 @@ Two GitHub Actions workflows gate `main` (`.github/workflows/`):
 - **`integration.yml`** — `push: [main]` + nightly `schedule` + `workflow_dispatch` only (not on
   PRs). Runs `make integration-test-clean` via testcontainers, no `services:` blocks. Not a
   required check — a nightly failure is a BACKLOG/Phase-3 signal, not a merge blocker.
+  A second, independent `chaos` job in the same file (Plan 018 / RT7-ci) runs `make
+  chaos-test-clean`, gated `if: github.event_name != 'push'` — chaos never runs on the `push:
+  main` trigger, only nightly `schedule` and `workflow_dispatch`, so a chaos flake can never
+  appear on the one trigger a human is watching land on `main`. It is not in either job's
+  `needs:` and must **never** become a required check, on any schedule — unlike `integration`
+  (whose eventual promotion is a possibility after a measured flake rate), `chaos` exists to find
+  real bugs under deliberate container failure, not to gate merges.
 
 **Branch protection (repository setting, not in the repo tree — apply manually):** Settings →
 Branches → rule for `main` → Require status checks to pass → select **only** `Tests / All tests
@@ -584,6 +599,35 @@ never honored" invariant just to make CI convenient. Testcontainers-only keeps t
 clean-room run" signal meaningful on the one class of run — CI — where it matters most, and keeps
 local and CI runs on byte-identical code paths.
 
+**Chaos tests** (`testkit/varco_chaos`, Plan 018 / RT7) — the `chaos` marker is **additive** to
+`integration` (`pytestmark = [pytest.mark.integration, pytest.mark.chaos]`), never a replacement:
+a chaos test always also carries `integration`. `scripts/integration_tests.sh` defaults
+`MARKER_EXPR` to `"integration and not chaos"`, so `make integration-test` never runs one; `make
+chaos-test` / `make chaos-test-clean` flip it to `"integration and chaos"`.
+
+There are now **three** container-scope conventions, each solving a different isolation need:
+
+| Scope | Fixture name pattern | When |
+|---|---|---|
+| `session` (shared) | `redis_url`, `kafka_bootstrap`, `postgres_url`, … | The default — every non-chaos, non-pristine-requiring test |
+| `function` (fresh) | `*_container_fresh` | A test needs a pristine server (e.g. asserting the full topic/key list) but must not break it for anyone else |
+| `module` (chaos) | `*_container_chaos` | A test is **allowed to break** the container (restart/pause) — declared **inside the chaos test module itself, never in `conftest.py`**, so no non-chaos test can accidentally depend on a container that gets restarted under it |
+
+`ChaosContainer` (`testkit/varco_chaos/containers.py`) is the **only** sanctioned caller of
+`DockerContainer.get_wrapped_container()` in the repo — every chaos test goes through its
+three-method surface (`restart()`, `paused()`, `wait_ready()`) instead of reaching for the raw
+docker-py handle. `restart()` always uses docker-py's own `Container.restart()`, **never**
+`DockerContainer.stop()` + `.start()` — the latter deletes and recreates the container on
+testcontainers' side, which (research 002 §1) re-exposes it on a **new random host port**,
+silently invalidating every URL/DSN a test captured before the restart. ⚠️ Even `restart()` is
+not an unconditional guarantee in every Docker environment — see the Common Pitfalls table's
+"chaos `restart()` port instability" row.
+
+Chaos tests run nightly + `workflow_dispatch` only (`.github/workflows/integration.yml`'s
+`chaos` job, `if: github.event_name != 'push'`), never on `push: main`, and are never a required
+check — a chaos scenario is designed to provoke a real race under container failure, and an
+occasional red run is a BACKLOG/operator-triage signal, not a merge blocker.
+
 **Conformance suite opt-in** (`testkit/varco_conformance`, Plan 012 / RT6) — a shared,
 never-packaged suite of behavioral contract tests, one module per `varco_core` ABC
 (`event_bus.py`, `cache.py`, `job_store.py`, `dlq.py`). Reached via one `pythonpath =
@@ -670,6 +714,8 @@ guarantee with no conftest edits anywhere in the repo.
 | **Forgot `<pkg>.bootstrap(container)`** | App starts, `AbstractEventBus` silently absent | `_try_resolve_component()` used to swallow every skip (import error, missing binding, construction failure) into `except Exception: pass` with zero logging | Plan 014 / audit F2 — one WARNING now names the missing binding at startup (`_lifecycle_discovery_warns()`); silence it with `VARCO_LIFECYCLE_DISCOVERY_WARN=false` if the app genuinely has no bus/job runner. Control flow is unchanged — the component is still skipped, the app still starts |
 | **`varco_memcached.async_bootstrap()` opens a pool you didn't want** | An unwanted Memcached connection is opened just from calling `async_bootstrap()` | `setup_cache` defaults `True` — unconditional `ainstall(MemcachedCacheConfiguration)`, unlike `varco_redis.di.async_bootstrap()` which defaults `setup_cache=False` | Pass `setup_cache=False` for the sync-scan-only equivalent of `bootstrap()`. Note the defaults deliberately differ: `varco_redis`'s `async_bootstrap` also serves a streams/event-bus path where no cache is wanted; memcached's only reason to exist is the cache, so its default stays `True` for backward compatibility (Plan 014 / audit F7) |
 | **Linting with `uvx ruff`** | Local green, CI red (or vice versa) with no code change | `uvx` resolves the newest ruff release at invocation time; CI resolves the pin recorded in `uv.lock` | Always `uv run ruff`, never `uvx ruff` — the pin lives in the root `[dependency-groups] lint` group (Plan 017 / RL-6) |
+| **Restarting a session-scoped container** | Unrelated tests in the same package fail with connection errors after a chaos test runs | The session-scoped fixture (`redis_url`, `kafka_bootstrap`, …) is shared by the whole package suite — restarting/pausing it under one test breaks every other test mid-flight or afterward | Declare a **module-scoped `*_container_chaos` fixture inside the chaos module itself**, never in `conftest.py` (Plan 018 / RT7, §chaos-fixture) — see Test Conventions' "Chaos tests" paragraph |
+| **Chaos `restart()` port instability** | A restart-based chaos test (`ChaosContainer.restart()`) connects to a stale DSN/URL captured before the restart and gets `ConnectionRefusedError`, even though `wait_ready()` returned successfully | docker-py's `Container.restart()` is documented (research 002 §1) to preserve the host port mapping, but this was **not observed to hold** in at least one Docker environment (27.5.1 / WSL2, verified with a raw docker-py script independent of testcontainers) — the container came back on a *different* ephemeral host port | Not yet fixed (Plan 018, filed as BACKLOG's RT7b-port-remap finding) — if a restart-based chaos test (`test_kafka_chaos.py`, `test_sa_chaos.py`, `test_migration_chaos.py`) is flaky specifically on the environment you're running in, re-query the container's exposed port/connection URL **after** `restart()` rather than trusting a value captured earlier; do not assume the pause-based tests (`test_redis_chaos.py`, `test_nats_health_chaos.py`) share the bug — pausing never remaps a port |
 
 Feature-specific operational pitfalls (wrong env var → wrong runtime behaviour) live in each feature's own `technical_docs/features/*.md` **Pitfalls** section, not here.
 

@@ -9,6 +9,52 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added — real-broker reliability coverage + chaos test suite (Plan 018, RT2/RT3/RT4/RT5/RT7/RT9)
+
+**Test-only release — no runtime package changed.** Every change in this section lives under a
+`tests/` directory, `testkit/`, `scripts/`, the `Makefile`, or CI configuration.
+
+- **`testkit/varco_chaos` (new)** — shared, never-packaged chaos-test helpers, the same shape as
+  `testkit/varco_conformance`: `ChaosContainer` (`restart()`/`paused()`/`wait_ready()`, the only
+  sanctioned caller of `DockerContainer.get_wrapped_container()` in the repo) and
+  `abandon_lease()` (the shared worker-crash helper for the job-lease-fencing tests). Opted into
+  via each participating package's existing `pythonpath = ["../testkit"]`.
+- **New `chaos` pytest marker** — additive to `integration`, registered in
+  `varco_kafka`/`varco_redis`/`varco_sa`/`varco_fastapi`/`varco_nats`'s
+  `[tool.pytest.ini_options]`. `scripts/integration_tests.sh` now defaults
+  `MARKER_EXPR="integration and not chaos"`, so `make integration-test` excludes chaos tests by
+  default; `make chaos-test` / `make chaos-test-clean` (new `Makefile` targets, mirroring
+  `integration-test`/`integration-test-clean`) run them explicitly.
+- **`.github/workflows/integration.yml`'s new `chaos` job** — runs `make chaos-test-clean`,
+  gated `if: github.event_name != 'push'` (nightly `schedule` + `workflow_dispatch` only, never
+  on `push: main`). Independent of the existing `integration` job; never a required check.
+- **Real-broker coverage added across five packages**: `varco_nats` (delivery-semantics
+  round-trips, `NatsStreamManager` channel lifecycle, DLQ ack durability, a health-check chaos
+  test), `varco_casbin` (concurrent-writer correctness against real Postgres), `varco_ws`
+  (backpressure and the `DISCONNECT` ejection policy over a real ASGI socket), `varco_kafka`
+  (exactly-once/at-least-once/at-most-once observable semantics against a real broker, deepened
+  rebalance and offset-durability coverage), `varco_sa`/`varco_redis`/`varco_fastapi`
+  (job-lease fencing after a simulated worker crash; a deterministic app-layer migration-lock
+  timeout).
+- **New chaos tests** (nightly-only, `varco_kafka`/`varco_sa`/`varco_redis`/`varco_fastapi`) —
+  outbox durability across a real broker restart and a real database restart, a shared
+  `CircuitBreaker` opening/recovering around a black-holed Redis dependency, and a crashed
+  migration-lock holder correctly releasing so the next boot proceeds.
+- **`varco_kafka/tests/conftest.py`** — the shared `kafka_bootstrap` fixture now forces
+  `KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1` and `_MIN_ISR=1`. A single-broker
+  `KafkaContainer` cannot create Kafka's internal transaction-state topic at the default
+  replication factor of 3, which hung every exactly-once-semantics test indefinitely before this
+  fix — a test-fixture-only change, no production code affected.
+- **Findings from real-broker testing, recorded as `xfail(strict=True)` + a BACKLOG.md row each,
+  never a production-code fix** (per the repo's standing "a red integration test is a finding"
+  rule): NATS `AT_LEAST_ONCE` does not redeliver after a handler merely raises (only on a
+  process crash); NATS `ChannelManager.channel_exists()`/`list_channels()` implement a
+  "has messages" predicate rather than an "exists" predicate; `RedisJobStore.reap_expired_leases()`
+  does not release the claim-guard key `try_claim()` created, so a legitimate re-claim can be
+  refused for up to `claim_ttl` seconds after a correct reap (`SAJobStore` does not exhibit this
+  — a genuine cross-backend disagreement). See BACKLOG.md's Phase 3 table and its "Plan 018
+  findings" subsection for full detail and evidence.
+
 ### Added — live CI, workspace lint/type gates (Plan 017, RL-5 / RL-6)
 
 - **Two GitHub Actions workflows are now live** — `.github/workflows/test.yml` (lint + mypy +

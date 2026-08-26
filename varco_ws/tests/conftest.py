@@ -103,6 +103,60 @@ def _build_app() -> tuple[FastAPI, InMemoryEventBus, WebSocketEventBus, SSEEvent
                 # connect()'s context manager cleans up on exit.
                 return
 
+    @app.websocket("/ws/bp")
+    async def ws_backpressure_endpoint(websocket: WebSocket) -> None:
+        """
+        Backpressure-parameterised WS endpoint (Plan 018 / RT4, Step 16).
+
+        Additive, test-only: the plain ``/ws`` handler above hard-codes the
+        bus-level defaults, so there is no way to drive a specific
+        ``BackpressurePolicy`` / queue depth over a real socket from a
+        client. ``WebSocketEventBus.connect()`` already accepts
+        ``max_queue_size=`` / ``backpressure_policy=`` overrides
+        (``varco_ws/varco_ws/websocket.py:469-516``) — this endpoint only
+        threads two query parameters into them. No production code changes.
+
+        Query params:
+            policy: A ``BackpressurePolicy`` **value** ("drop_oldest",
+                    "drop_newest", "block", "disconnect"). Omitted → the
+                    bus default.
+            queue:  ``max_queue_size`` for this connection. Omitted → the
+                    bus default.
+
+        Edge cases:
+            - An unknown ``policy`` value raises ``ValueError`` before
+              ``connect()``, surfacing as a failed handshake rather than a
+              connection that silently used the default — a typo in a test
+              must never pass for the wrong reason.
+        """
+        from starlette.websockets import WebSocketDisconnect  # noqa: PLC0415
+        from varco_ws.websocket import BackpressurePolicy  # noqa: PLC0415
+
+        raw_policy = websocket.query_params.get("policy")
+        raw_queue = websocket.query_params.get("queue")
+        policy = BackpressurePolicy(raw_policy) if raw_policy is not None else None
+        queue_size = int(raw_queue) if raw_queue is not None else None
+
+        await websocket.accept()
+        async with ws_bus.connect(
+            websocket,
+            max_queue_size=queue_size,
+            backpressure_policy=policy,
+        ):
+            try:
+                while True:
+                    # Mirrors the /ws handler above verbatim — see its
+                    # comment: a bare asyncio.sleep() never observes the ASGI
+                    # "websocket.disconnect" message and wedges uvicorn's
+                    # graceful shutdown, because the client never sends
+                    # anything either.
+                    message = await websocket.receive()
+                    if message["type"] == "websocket.disconnect":
+                        return
+            except WebSocketDisconnect:
+                # connect()'s context manager cleans up on exit.
+                return
+
     @app.get("/sse")
     async def sse_endpoint() -> StreamingResponse:
         async def _gen() -> AsyncIterator[str]:

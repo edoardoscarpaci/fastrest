@@ -86,6 +86,7 @@ testpaths    = ["tests"]
 pythonpath   = ["../testkit"]
 markers      = [
     "integration: requires external services (Docker); skipped by default — use -m integration to run",
+    "chaos: kills/pauses/restarts a real container; excluded from -m integration by default — use make chaos-test",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:httpx",
