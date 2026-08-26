@@ -353,13 +353,17 @@ class SADeduplicator(AbstractDeduplicator):
                 if dialect_name == "sqlite":
                     from sqlalchemy.dialects.sqlite import insert as _insert
                 elif dialect_name == "postgresql":
-                    from sqlalchemy.dialects.postgresql import (
-                        insert as _insert,  # type: ignore[no-redef]
+                    # mypy attaches the cross-dialect "Incompatible import" error to
+                    # this opening line, not the `insert as _insert,` sub-line below
+                    # — keep the ignore here even if a future ruff import-sort pass
+                    # reflows this into a parenthesized multi-line import again.
+                    from sqlalchemy.dialects.postgresql import (  # type: ignore[assignment]
+                        insert as _insert,
                     )
                 else:
                     # Fallback for other dialects: plain INSERT, may raise IntegrityError
                     # on conflict.  Caught below and swallowed per the never-raise contract.
-                    from sqlalchemy import insert as _insert  # type: ignore[no-redef]
+                    from sqlalchemy import insert as _insert  # type: ignore[assignment]
 
                 stmt = _insert(_dedup_table).values(
                     event_id=event_id, expires_at=expires_at

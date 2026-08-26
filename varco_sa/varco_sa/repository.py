@@ -321,7 +321,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         # ✅ Constant memory regardless of result-set size.
         # ❌ The session cursor stays open until the async for loop completes
         #    or aclose() is called — callers must not abandon the iterator.
-        async with self._session.stream_scalars(stmt) as stream:
+        async with self._session.stream_scalars(stmt) as stream:  # type: ignore[attr-defined]
             async for row in stream:
                 yield self._mapper.from_orm(row)
 
@@ -499,7 +499,7 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         result = await self._session.execute(stmt)
         await self._session.flush()
         # rowcount is reliable for UPDATE/DELETE on all supported SA backends
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined]
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

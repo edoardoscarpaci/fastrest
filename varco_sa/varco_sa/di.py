@@ -140,7 +140,7 @@ class SAModule:
         """
         # Return the same singleton — RepositoryProvider.make_uow() satisfies
         # IUoWProvider without wrapping.
-        return repo_provider
+        return repo_provider  # type: ignore[return-value]
 
     @Provider(singleton=True)
     def sa_advisory_lock(self, config: Inject[SAConfig]) -> AbstractDistributedLock:
@@ -323,7 +323,7 @@ def _bind_repo_provider(container: DIContainer, entity_cls: type[DomainModel]) -
     _repo_factory.__name__ = f"_repo_factory_{entity_cls.__name__}"
     container.provide(
         Provider(singleton=False)(_repo_factory),
-        returns=AsyncRepository[entity_cls],  # type: ignore[valid-type]
+        returns=AsyncRepository[entity_cls],  # type: ignore[valid-type, misc]
     )
 
 

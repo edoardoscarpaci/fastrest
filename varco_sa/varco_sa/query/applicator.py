@@ -109,7 +109,7 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
         node: TransformerNode,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:  # type: ignore[override]
+    ) -> Select:
         """
         Apply an AST filter node as ``JOIN`` + ``WHERE`` clauses to ``query``.
 
@@ -185,7 +185,7 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
         sort_fields: list[SortField] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:  # type: ignore[override]
+    ) -> Select:
         """
         Apply ``ORDER BY`` clauses to ``query``, with relationship JOIN support.
 

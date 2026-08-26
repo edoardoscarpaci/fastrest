@@ -134,7 +134,7 @@ def get_target_metadata(
         # Copy the Table object into the combined MetaData.
         # tometadata() returns a Table bound to the target MetaData — safe
         # to call multiple times on the same Table (idempotent per MetaData).
-        orm_cls.__table__.to_metadata(combined)
+        orm_cls.__table__.to_metadata(combined)  # type: ignore[attr-defined]
 
     # Optionally include all tables from a hand-crafted DeclarativeBase
     if base is not None:
@@ -239,7 +239,7 @@ def print_create_ddl(
         # engine.execute() is what actually invokes the executor callback —
         # merely calling CreateTable(...).compile() never triggers _capture
         # (the second half of source correction 1's bug).
-        engine.execute(CreateTable(orm_cls.__table__))
+        engine.execute(CreateTable(orm_cls.__table__))  # type: ignore[attr-defined]
 
     return buf.getvalue().strip()
 

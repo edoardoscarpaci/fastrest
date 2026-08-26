@@ -25,7 +25,10 @@ from varco_core.tenancy.provisioner import AbstractTenantProvisioner
 from varco_sa.tenancy.router import SASchemaRouter
 
 if TYPE_CHECKING:
-    pass
+    # Only referenced via the `# type: AsyncConnection` type-comments below
+    # (the with-statement `as` clause has no inline-annotation syntax) —
+    # invisible to ruff's F401 usage analysis, hence the explicit noqa.
+    from sqlalchemy.ext.asyncio import AsyncConnection  # noqa: F401
 
 
 class SASchemaProvisioner(AbstractTenantProvisioner):

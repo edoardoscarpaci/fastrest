@@ -189,7 +189,12 @@ class SQLAlchemyRepositoryProvider(RepositoryProvider):
         from varco_sa.repository import AsyncSQLAlchemyRepository
         from varco_sa.uow import SQLAlchemyUnitOfWork
 
-        repo_factories = {
+        # `m=mapper` binds the loop variable eagerly (the classic Python
+        # late-binding-closure trap) — see varco_beanie.provider's identical
+        # pattern for the same reasoning. Explicit `dict[str, Any]` avoids
+        # mypy misreading the lambda's defaulted extra param as a second
+        # required positional.
+        repo_factories: dict[str, Any] = {
             _repo_attr(cls): (
                 lambda s, m=mapper: AsyncSQLAlchemyRepository(session=s, mapper=m)
             )

@@ -237,7 +237,7 @@ class SAModelFactory:
         tenant_id_field: str | None = None,
         *,
         isolation: TenantIsolation | str = TenantIsolation.SHARED,
-    ) -> tuple[type, _SAAutoMapper[D, Any]]:
+    ) -> tuple[type, _SAAutoMapper[D]]:
         """
         Generate (or return cached) SA ORM class and mapper for ``domain_cls``.
 
@@ -363,7 +363,7 @@ class SAModelFactory:
             return Column("id", PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
         if strategy is PKStrategy.STR_ASSIGNED:
             return Column("id", String(), primary_key=True)
-        col_type = _sa_type(meta.pk_type, "pk", None)
+        col_type = _sa_type(meta.pk_type, "pk", None)  # type: ignore[arg-type]
         return Column("id", col_type, primary_key=True)
 
     @staticmethod
@@ -586,7 +586,7 @@ class SAModelFactory:
                 lambda t=_target: t,
                 foreign_keys=fk_cols or None,  # None → SA auto-infers from declared FKs
                 back_populates=rel.back_populates,
-                lazy=rel.lazy,
+                lazy=rel.lazy,  # type: ignore[arg-type]
                 uselist=rel.uselist,
             )
             setattr(orm_cls, rel.attr_name, sa_rel)
@@ -641,8 +641,12 @@ class SAModelFactory:
                 # Determine the SA column type from the source / target PK columns.
                 # We look up the mapped table's PK to infer the correct type rather
                 # than hard-coding Integer — domain PKs can be UUID or String.
-                src_pk_col = list(sa.inspect(orm_cls).mapper.primary_key)[0]
-                tgt_pk_col = list(sa.inspect(target_orm_cls).mapper.primary_key)[0]
+                src_pk_col: sa.Column[Any] = list(
+                    sa.inspect(orm_cls).mapper.primary_key
+                )[0]
+                tgt_pk_col: sa.Column[Any] = list(
+                    sa.inspect(target_orm_cls).mapper.primary_key
+                )[0]
 
                 # DESIGN: assoc table FK column types mirror the actual PK types
                 #   ✅ Handles UUID, String, and Integer PKs without hard-coding

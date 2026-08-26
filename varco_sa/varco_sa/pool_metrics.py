@@ -260,10 +260,10 @@ def pool_metrics(engine: AsyncEngine) -> SAPoolMetrics:
     # Pool.status() returns a human-readable string — not useful for metrics.
     # The numeric attributes below are the actual counters.
     try:
-        size: int = pool.size()
-        checked_in: int = pool.checkedin()
-        checked_out: int = pool.checkedout()
-        overflow: int = pool.overflow()
+        size: int = pool.size()  # type: ignore[attr-defined]
+        checked_in: int = pool.checkedin()  # type: ignore[attr-defined]
+        checked_out: int = pool.checkedout()  # type: ignore[attr-defined]
+        overflow: int = pool.overflow()  # type: ignore[attr-defined]
         # max_overflow is a constructor argument stored on the pool instance.
         # Access via the private _max_overflow — it is the canonical source.
         max_overflow: int = getattr(pool, "_max_overflow", 0)

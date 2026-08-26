@@ -250,7 +250,7 @@ class SQLAlchemyQueryCompiler(BinaryWalkingVisitor):
         if op == Operation.LIKE:
             return col.like(val)
         if op == Operation.IN:
-            return col.in_(val)  # pyright: ignore[reportArgumentType]
+            return col.in_(val)  # type: ignore[arg-type]  # pyright: ignore[reportArgumentType]
         if op == Operation.IS_NULL:
             return col.is_(None)
         if op == Operation.IS_NOT_NULL:

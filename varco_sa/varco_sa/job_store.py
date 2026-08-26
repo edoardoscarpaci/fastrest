@@ -256,7 +256,7 @@ def _row_to_job(row: Any) -> Job:
     return Job(
         job_id=row.job_id,
         status=JobStatus(row.status),
-        created_at=_ensure_tz(row.created_at),
+        created_at=_ensure_tz(row.created_at),  # type: ignore[arg-type]
         started_at=_ensure_tz(row.started_at),
         completed_at=_ensure_tz(row.completed_at),
         result=row.result,
@@ -567,7 +567,7 @@ class SAJobStore(AbstractJobStore):
                 # target rows' physical identifier first, then delete by that
                 # identifier set. ctid is index-friendly given the predicate
                 # columns (status/expires_at) are already indexed.
-                row_id_col = (
+                row_id_col: sa.ColumnElement[Any] = (
                     sa.literal_column("ctid")
                     if self._engine.dialect.name == "postgresql"
                     else sa.literal_column("rowid")

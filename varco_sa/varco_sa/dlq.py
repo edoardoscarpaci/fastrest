@@ -201,7 +201,7 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
                 payload = self._serializer.serialize(entry.event)
                 event_type = type(entry.event).__name__
             else:
-                payload = entry.payload
+                payload = entry.payload  # type: ignore[assignment]
                 event_type = None
 
             row = {
@@ -430,8 +430,8 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
             error_type=row.error_type,
             error_message=row.error_message,
             attempts=row.attempts,
-            first_failed_at=_ensure_tz(row.first_failed_at),
-            last_failed_at=_ensure_tz(row.last_failed_at),
+            first_failed_at=_ensure_tz(row.first_failed_at),  # type: ignore[arg-type]
+            last_failed_at=_ensure_tz(row.last_failed_at),  # type: ignore[arg-type]
             source=DeadLetterSource(row.source),
             source_ref=row.source_ref,
             payload=payload,

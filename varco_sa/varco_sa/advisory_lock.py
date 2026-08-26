@@ -270,7 +270,7 @@ class SAAdvisoryLock(AbstractDistributedLock):
             result = await conn.execute(
                 sa.text("SELECT pg_try_advisory_lock(:key)").bindparams(key=key_int)
             )
-            acquired: bool = result.scalar()
+            acquired: bool = bool(result.scalar())
         except Exception as exc:
             _logger.warning(
                 "SAAdvisoryLock.try_acquire: connection error for key=%r: %s",
@@ -345,7 +345,7 @@ class SAAdvisoryLock(AbstractDistributedLock):
             result = await conn.execute(
                 sa.text("SELECT pg_advisory_unlock(:key)").bindparams(key=key_int)
             )
-            unlocked: bool = result.scalar()
+            unlocked: bool = bool(result.scalar())
             if not unlocked:
                 _logger.warning(
                     "SAAdvisoryLock.release: pg_advisory_unlock returned false "
@@ -672,7 +672,7 @@ class SAXactAdvisoryLock(AbstractDistributedLock):
         )
         return LockHandle(key=key, token=token, lock=self)
 
-    async def release(self, key: str, token: UUID) -> bool:
+    async def release(self, key: str, token: UUID) -> bool:  # type: ignore[override]
         """
         Release the ABC-shape lock identified by ``token`` by committing its
         pinned transaction — the transaction's commit IS the release for
