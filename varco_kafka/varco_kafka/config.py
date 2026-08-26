@@ -63,7 +63,8 @@ from varco_core.event.config import EventBusSettings
 # ── KafkaDeliverySemantics ────────────────────────────────────────────────────
 
 
-class KafkaDeliverySemantics(str, enum.Enum):
+# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
+class KafkaDeliverySemantics(str, enum.Enum):  # noqa: UP042
     """
     Delivery guarantee level for ``KafkaEventBus``.
 

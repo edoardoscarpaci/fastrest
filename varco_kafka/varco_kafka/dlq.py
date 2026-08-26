@@ -485,7 +485,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
 
         # Commit offset + 1 — Kafka convention: committed offset = next offset to fetch.
         # This marks the message at ``offset`` as fully processed.
-        await self._consumer.commit({tp: offset + 1})
+        await self._consumer.commit({tp: offset + 1})  # type: ignore[union-attr]
 
         _logger.debug(
             "KafkaDLQ.ack: committed offset=%d for partition=%d (entry_id=%s)",
@@ -633,7 +633,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
             - ``entry_id`` stored as UUID string for human readability and
               to serve as the Kafka message key.
         """
-        event_bytes = self._serializer.serialize(entry.event)
+        event_bytes = self._serializer.serialize(entry.event)  # type: ignore[arg-type]
 
         data = {
             "entry_id": str(entry.entry_id),
