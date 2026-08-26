@@ -1,21 +1,32 @@
-# Commits listed here are mechanical, non-semantic sweeps (ruff autofix
-# passes) — `git blame` skips them so authorship attribution for the
-# surrounding lines stays meaningful through the RL-8 API-surface audit.
+# Commits listed here are mechanical, non-semantic sweeps — `git blame` skips
+# them so authorship attribution for the surrounding lines stays meaningful
+# through the RL-8 API-surface audit.
 #
 # Configure locally with:
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
 #
-# (plans/017-ci-green-workflows-and-lint-type-gates.md, Step 9). The plan's
-# Step 5/6/7 called for one commit per rule family; this landed as a single
-# combined ruff-sweep + mypy-suppression commit instead (see that commit's
-# own message for why) — it is not purely mechanical (it also carries
-# hand-written `# type: ignore[...]`/`# noqa: ...` suppressions and a
-# handful of real bug fixes), so treat `git blame` output on lines it
-# touches with that caveat in mind.
-f03e6133b9bc62c77a2052e5ee0032952dd79e49
+# (plans/017-ci-green-workflows-and-lint-type-gates.md, Step 9.)
+#
+# Every entry below is genuinely mechanical. Plan 017's Steps 5/6/7 called for
+# one commit per rule family and Step 17 for one per package; the sweep first
+# landed as a single combined blob and was split afterwards, so the real bug
+# fixes and the hand-written `# type: ignore[...]` / `# noqa: ...`
+# suppressions live in their own commits and are deliberately NOT listed here
+# — blame should still attribute those.
 
-# chore(format): adopt ruff format, replacing black (618 files reformatted).
-# black formatted to its 88-column default while [tool.ruff] pins
-# line-length = 100. Purely mechanical apart from one relocated
-# `# type: ignore[safe-super]` comment in observability/repository_mixin.py.
-db35156ed88b92f8e17bea4b58359bc180cf260a
+# ruff I001 — import sorting (plan 017 Step 5)
+480d60e33768c4ea1084251e72861b911eb8187b
+
+# ruff UP — pyupgrade autofixes, incl. UP035 typing → collections.abc
+# (plan 017 Step 6)
+4e43a54a926938fa09e3ffc382a282491026560d
+
+# ruff E/F autofixes + the import re-sort the UP035 pass invalidated
+# (plan 017 Step 7)
+f1845e20d37b17e0b6c54cbc8ed7f2f9a0563594
+
+# ruff format adoption, replacing black (616 files). black formatted to its
+# 88-column default while [tool.ruff] pins line-length = 100. Mechanical apart
+# from one relocated `# type: ignore[safe-super]` in
+# observability/repository_mixin.py.
+618cdaf91c754e1bd607482b01dea695ea81b4d0
