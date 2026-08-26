@@ -23,14 +23,12 @@ import os
 import httpx
 import pytest
 from fastapi import FastAPI
-
 from varco_fastapi.composite import (
     CompositeLifespan,
     ServiceMount,
     build_service,
     create_composite_app,
 )
-
 
 # ── Fixtures / helpers ────────────────────────────────────────────────────────
 

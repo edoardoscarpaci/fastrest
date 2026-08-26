@@ -56,14 +56,13 @@ from __future__ import annotations
 
 # Ensure built-in backends are registered when the package is imported
 import varco_core.profiling.backends  # noqa: F401
-
 from varco_core.profiling.backend import (
     AllocationStat,
-    CpuProfileResult,
     CpuProfilerBackend,
+    CpuProfileResult,
     FunctionStat,
-    MemoryProfileResult,
     MemoryProfilerBackend,
+    MemoryProfileResult,
     ProfileArtifact,
     available_cpu_backends,
     available_memory_backends,

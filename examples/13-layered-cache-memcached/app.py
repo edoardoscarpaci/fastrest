@@ -37,9 +37,8 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-
 from cache_layer import ProductCacheLayer, make_layered_cache
+from fastapi import FastAPI
 from router import build_router
 from store import ProductStore
 

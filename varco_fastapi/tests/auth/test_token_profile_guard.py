@@ -19,9 +19,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from varco_core.auth.base import AuthContext
-
 from varco_fastapi.app import create_varco_app
 from varco_fastapi.auth import ApiKeyAuth
 from varco_fastapi.router.endpoint import route
@@ -96,8 +94,8 @@ def test_missing_token_profile_key_returns_403_with_actionable_message():
 
 
 async def test_guard_check_passes_for_matching_profile():
-    from varco_fastapi.auth.guard import require_token_profile
     from varco_core.exception.service import ServiceAuthorizationError  # noqa: F401
+    from varco_fastapi.auth.guard import require_token_profile
 
     guard = require_token_profile("internal")
     ctx = AuthContext(user_id="svc", metadata={"token_profile": "internal"})

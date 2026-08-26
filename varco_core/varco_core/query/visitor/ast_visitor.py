@@ -16,6 +16,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
+from varco_core.exception.query import WrongNodeVisited
 from varco_core.query.type import (
     AndNode,
     ComparisonNode,
@@ -23,7 +24,6 @@ from varco_core.query.type import (
     OrNode,
     TransformerNode,
 )
-from varco_core.exception.query import WrongNodeVisited
 
 
 class ASTVisitor(ABC):

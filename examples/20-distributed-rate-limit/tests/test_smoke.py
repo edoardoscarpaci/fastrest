@@ -39,8 +39,8 @@ Async safety:   ✅  All tests are ``async def``.
 
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
 
 pytestmark = pytest.mark.integration

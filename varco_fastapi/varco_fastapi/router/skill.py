@@ -61,6 +61,9 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
 from varco_fastapi.router.a2a.card import build_agent_card_v1
 from varco_fastapi.router.a2a.jsonrpc import JsonRpcDispatcher
 from varco_fastapi.router.a2a.router_source import (
@@ -69,14 +72,12 @@ from varco_fastapi.router.a2a.router_source import (
 from varco_fastapi.router.a2a.source import SkillDefinition, SkillSource
 from varco_fastapi.router.introspection import ResolvedRoute
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
 if TYPE_CHECKING:
     from fastapi import FastAPI
-    from varco_fastapi.client.base import AsyncVarcoClient
     from varco_core.job.base import AbstractJobRunner, AbstractJobStore
     from varco_core.service.conversation import AbstractConversationStore
+
+    from varco_fastapi.client.base import AsyncVarcoClient
 
 _logger = logging.getLogger(__name__)
 

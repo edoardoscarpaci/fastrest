@@ -31,12 +31,10 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.dlq import RedisDLQ, RedisDLQConfiguration
-
 
 # ── Minimal event for tests ────────────────────────────────────────────────────
 

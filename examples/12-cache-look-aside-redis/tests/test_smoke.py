@@ -43,7 +43,6 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-
 pytestmark = pytest.mark.integration
 
 

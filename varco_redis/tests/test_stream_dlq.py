@@ -34,12 +34,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.stream_dlq import RedisStreamDLQ, RedisStreamDLQConfiguration
-
 
 # ── Minimal event for tests ────────────────────────────────────────────────────
 
@@ -692,7 +690,6 @@ class TestRedisStreamDLQConfiguration:
     ) -> None:
         """RedisStreamDLQConfiguration wires a connected RedisStreamDLQ."""
         from providify import DIContainer  # noqa: PLC0415
-
         from varco_core.event.dlq import AbstractDeadLetterQueue  # noqa: PLC0415
 
         with patch("varco_redis.stream_dlq.aioredis") as mock_aioredis:

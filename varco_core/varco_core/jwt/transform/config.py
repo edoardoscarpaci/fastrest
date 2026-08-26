@@ -34,12 +34,11 @@ from pydantic_settings import SettingsConfigDict
 
 from varco_core.config import VarcoSettings
 from varco_core.jwt.exceptions import ClaimTransformError
+from varco_core.jwt.transform.mapper import MappingClaimTransformer
 from varco_core.jwt.transform.mapping import CanonicalClaim, ClaimMapping, ClaimRule
 from varco_core.jwt.transform.path import ClaimPath
 from varco_core.jwt.transform.registry import ClaimTransformerRegistry
-from varco_core.jwt.transform.mapper import MappingClaimTransformer
 from varco_core.jwt.transform.shape import ValueShape
-
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 

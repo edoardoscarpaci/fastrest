@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-
 from varco_core.auth.base import Action, AuthContext, ResourceGrant
 from varco_core.job.base import (
     Job,
@@ -16,7 +15,6 @@ from varco_core.job.base import (
     auth_context_from_snapshot,
     auth_context_to_snapshot,
 )
-
 
 # ── JobStatus ──────────────────────────────────────────────────────────────────
 
@@ -178,7 +176,6 @@ def test_auth_context_from_snapshot_handles_anonymous():
 async def test_varco_lifespan_starts_and_stops_components():
     """VarcoLifespan starts components in order and stops them in reverse."""
     from fastapi import FastAPI
-
     from varco_fastapi.lifespan import VarcoLifespan
 
     events: list[str] = []

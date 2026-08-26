@@ -91,8 +91,8 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy import Column, DateTime, MetaData, Table
 from sqlalchemy.ext.asyncio import AsyncEngine
-
 from varco_core.event.deduplication import AbstractDeduplicator
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)
@@ -353,7 +353,9 @@ class SADeduplicator(AbstractDeduplicator):
                 if dialect_name == "sqlite":
                     from sqlalchemy.dialects.sqlite import insert as _insert
                 elif dialect_name == "postgresql":
-                    from sqlalchemy.dialects.postgresql import insert as _insert  # type: ignore[no-redef]
+                    from sqlalchemy.dialects.postgresql import (
+                        insert as _insert,  # type: ignore[no-redef]
+                    )
                 else:
                     # Fallback for other dialects: plain INSERT, may raise IntegrityError
                     # on conflict.  Caught below and swallowed per the never-raise contract.

@@ -35,9 +35,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from varco_beanie.deduplication import BeanieDeduplicator, DeduplicationDocument
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

@@ -18,11 +18,9 @@ import base64
 
 import pytest
 from cryptography.fernet import Fernet
-
 from varco_core.encryption import FernetFieldEncryptor, JwkEncryptorBridge
 from varco_core.jwk.builder import JwkBuilder
 from varco_core.jwk.model import JsonWebKey
-
 
 # ════════════════════════════════════════════════════════════════════════════════
 # JwkBuilder.generate_oct_enc_key

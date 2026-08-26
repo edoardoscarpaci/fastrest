@@ -20,13 +20,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-
 from varco_core.service.conversation import (
     AbstractConversationStore,
     ConversationTurn,
     InMemoryConversationStore,
 )
-
 
 # ── ConversationTurn ──────────────────────────────────────────────────────────
 

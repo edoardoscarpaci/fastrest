@@ -15,12 +15,10 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-
 from varco_core.event.base import Event
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.event.deduplication import InMemoryDeduplicator
 from varco_core.event.memory import InMemoryEventBus
-
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 

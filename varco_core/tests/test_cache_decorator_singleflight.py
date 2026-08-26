@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from varco_core.cache.decorator import cached
 from varco_core.cache.memory import InMemoryCache
 

@@ -49,12 +49,10 @@ _EXAMPLE_ROOT = str(Path(__file__).parent.parent.resolve())
 if _EXAMPLE_ROOT not in sys.path:
     sys.path.insert(0, _EXAMPLE_ROOT)
 
-from varco_core.cache import NoOpCache  # noqa: E402
-
 from app import create_app  # noqa: E402
 from cache_layer import ProductCacheLayer  # noqa: E402
 from store import ProductStore  # noqa: E402
-
+from varco_core.cache import NoOpCache  # noqa: E402
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 

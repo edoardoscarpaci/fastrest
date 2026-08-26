@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 
-
 from varco_core.model import DomainModel
 from varco_core.service.tenant import tenant_context
 from varco_core.tenancy.cache_key import tenancy_cache_key

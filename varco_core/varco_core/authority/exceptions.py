@@ -14,7 +14,6 @@ Async safety:   ✅ Pure value objects — no I/O.
 
 from __future__ import annotations
 
-
 # ── Base exception ─────────────────────────────────────────────────────────────
 
 

@@ -21,7 +21,6 @@ from datetime import date, datetime, timezone
 from typing import Any, Optional
 
 import pytest
-
 from varco_core.job.serializer import (
     DEFAULT_SERIALIZER,
     DefaultTaskSerializer,

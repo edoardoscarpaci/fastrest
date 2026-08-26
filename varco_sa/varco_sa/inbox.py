@@ -89,11 +89,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import DateTime, LargeBinary, String, update as sa_update, select
+from sqlalchemy import DateTime, LargeBinary, String, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
 from varco_core.service.inbox import InboxEntry, InboxRepository
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:

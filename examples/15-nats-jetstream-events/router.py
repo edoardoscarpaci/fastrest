@@ -22,14 +22,11 @@ DESIGN: closure-based dependency injection over global state
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-
-from varco_core.event import AbstractEventProducer
-
 from consumer import OrderConsumer
 from events import OrderPlacedEvent
-
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from varco_core.event import AbstractEventProducer
 
 # ── Request / response models ─────────────────────────────────────────────────
 

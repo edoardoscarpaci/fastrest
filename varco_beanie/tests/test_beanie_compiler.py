@@ -8,7 +8,7 @@ No MongoDB connection required — the output is a plain Python dict.
 from __future__ import annotations
 
 import pytest
-
+from varco_beanie.query.compiler import BeanieQueryCompiler, _sql_like_to_regex
 from varco_core.exception.query import OperationNotSupported
 from varco_core.query.type import (
     AndNode,
@@ -17,8 +17,6 @@ from varco_core.query.type import (
     Operation,
     OrNode,
 )
-from varco_beanie.query.compiler import BeanieQueryCompiler, _sql_like_to_regex
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

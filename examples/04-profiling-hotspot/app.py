@@ -37,13 +37,11 @@ Async safety:   ✅ Synchronous factory; no event loop required at call time.
 from __future__ import annotations
 
 from fastapi import FastAPI
-
+from router import ProfilingRouter
 from varco_core.profiling import set_profiling_enabled
 from varco_fastapi.exceptions import add_exception_handlers
 from varco_fastapi.middleware import ErrorMiddleware, install_middleware_stack
 from varco_fastapi.middleware.profiling import ProfilingMiddleware, ProfilingSettings
-
-from router import ProfilingRouter
 
 
 def create_app() -> FastAPI:

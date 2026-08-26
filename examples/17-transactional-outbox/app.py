@@ -53,11 +53,14 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from assembler import OrderAssembler  # noqa: F401 — stamps @Singleton metadata
+from consumer import OrderConsumer
 from fastapi import FastAPI
+from models import Order
 from providify import DIContainer, Provider
+from service import OrderService  # noqa: F401 — stamps @Singleton metadata
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.event import InMemoryEventBus
 from varco_core.service.base import IUoWProvider
 from varco_core.service.outbox import OutboxRelay
@@ -65,12 +68,6 @@ from varco_fastapi.di import VarcoFastAPIModule
 from varco_sa.deduplication import SADeduplicator, dedup_metadata
 from varco_sa.outbox import SARelayOutboxRepository, outbox_metadata
 from varco_sa.provider import SQLAlchemyRepositoryProvider
-
-from assembler import OrderAssembler  # noqa: F401 — stamps @Singleton metadata
-from consumer import OrderConsumer
-from models import Order
-from service import OrderService  # noqa: F401 — stamps @Singleton metadata
-
 
 # ── Shared SA declarative base ─────────────────────────────────────────────────
 

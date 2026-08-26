@@ -25,11 +25,10 @@ from datetime import UTC, datetime
 from typing import Any, AsyncIterator, Sequence
 from uuid import UUID, uuid4
 
+from models import Document
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import IUoWProvider
 from varco_core.uow import AsyncUnitOfWork
-
-from models import Document
 
 if False:  # TYPE_CHECKING — avoids import at runtime to keep repo framework-free
     from varco_core.query.params import QueryParams

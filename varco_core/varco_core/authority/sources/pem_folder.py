@@ -34,11 +34,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from varco_core.authority.exceptions import KeyLoadError
 from varco_core.jwk.builder import JwkBuilder
 from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
-
-from varco_core.authority.exceptions import KeyLoadError
-
 
 # ── PemFolderSource ───────────────────────────────────────────────────────────
 

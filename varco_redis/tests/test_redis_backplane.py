@@ -67,8 +67,8 @@ class FakePubSubRedis:
 
 class TestRedisPubSubBackplaneUnit:
     async def test_publish_encodes_expected_json(self) -> None:
-        from varco_redis.backplane import RedisPubSubBackplane
         from varco_core.cache.backplane import InvalidationMessage
+        from varco_redis.backplane import RedisPubSubBackplane
 
         client = FakePubSubRedis()
         backplane = RedisPubSubBackplane(
@@ -89,8 +89,8 @@ class TestRedisPubSubBackplaneUnit:
         assert decoded["origin"] == backplane.origin
 
     async def test_publish_never_raises_when_client_errors(self) -> None:
-        from varco_redis.backplane import RedisPubSubBackplane
         from varco_core.cache.backplane import InvalidationMessage
+        from varco_redis.backplane import RedisPubSubBackplane
 
         client = FakePubSubRedis(fail_publish=True)
         backplane = RedisPubSubBackplane(
@@ -130,8 +130,8 @@ class TestRedisPubSubBackplaneUnit:
     async def test_hash_keys_true_publishes_hash_and_degrades_prefix_to_clear(
         self,
     ) -> None:
-        from varco_redis.backplane import RedisPubSubBackplane
         from varco_core.cache.backplane import InvalidationMessage
+        from varco_redis.backplane import RedisPubSubBackplane
 
         client = FakePubSubRedis()
         backplane = RedisPubSubBackplane(

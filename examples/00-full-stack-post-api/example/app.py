@@ -67,9 +67,9 @@ from __future__ import annotations
 from fastapi import FastAPI
 from providify import DIContainer
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.event import AbstractEventBus
 from varco_core.job.base import AbstractJobRunner
+from varco_fastapi.di import bootstrap as fastapi_bootstrap
 from varco_fastapi.lifespan import VarcoLifespan
 from varco_fastapi.middleware import (
     ErrorMiddleware,
@@ -77,8 +77,16 @@ from varco_fastapi.middleware import (
     install_cors,
     install_middleware_stack,
 )
+from varco_redis.di import (
+    async_bootstrap as redis_async_bootstrap,
+)
+from varco_redis.di import (
+    bootstrap as redis_bootstrap,
+)
 from varco_sa.bootstrap import make_sa_provider
 from varco_sa.di import bind_repositories, create_tables
+from varco_sa.di import bootstrap as sa_bootstrap
+from varco_ws.di import bootstrap as ws_bootstrap
 
 from example.auth import AuthRouter, build_jwt_authority
 from example.consumer import PostEventConsumer
@@ -86,14 +94,6 @@ from example.models import Post
 from example.router import PostRouter
 from example.service import PostService
 from example.streams import StreamsRouter
-
-from varco_sa.di import bootstrap as sa_bootstrap
-from varco_fastapi.di import bootstrap as fastapi_bootstrap
-from varco_redis.di import (
-    bootstrap as redis_bootstrap,
-    async_bootstrap as redis_async_bootstrap,
-)
-from varco_ws.di import bootstrap as ws_bootstrap
 
 
 # ── SQLAlchemy declarative base ───────────────────────────────────────────────
@@ -326,8 +326,8 @@ def create_app() -> FastAPI:
         await registry.load_all()
         # Resolve lifecycle singletons and register with lifespan so they are
         # started (and stopped) in the correct order by VarcoLifespan.
-        from varco_ws.websocket import WebSocketEventBus  # noqa: PLC0415
         from varco_ws.sse import SSEEventBus  # noqa: PLC0415
+        from varco_ws.websocket import WebSocketEventBus  # noqa: PLC0415
 
         bus: AbstractEventBus = await container.aget(AbstractEventBus)
         consumer: PostEventConsumer = await container.aget(PostEventConsumer)

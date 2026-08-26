@@ -53,6 +53,7 @@ Async safety:   ✅ All providers are synchronous — SQLAlchemy has no async
 """
 
 from __future__ import annotations
+
 import sys
 from typing import TYPE_CHECKING, Any
 
@@ -62,6 +63,7 @@ from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import IUoWProvider
+
 from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
 from varco_sa.config import SAConfig
 
@@ -469,10 +471,11 @@ async def create_tables(container: Any = None) -> None:
     if container is None:
         container = DIContainer.current()
 
-    from varco_sa.bootstrap import SAConfig as _SAConfig  # noqa: PLC0415
     from varco_core.providers import (
         RepositoryProvider as _RepoProvider,
     )  # noqa: PLC0415
+
+    from varco_sa.bootstrap import SAConfig as _SAConfig  # noqa: PLC0415
 
     # Resolve RepositoryProvider first — its __init__ calls
     # provider.register(*entity_classes) which populates base.metadata with

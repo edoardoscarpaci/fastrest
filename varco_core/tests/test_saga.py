@@ -20,7 +20,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from varco_core.service.saga import (
     InMemorySagaRepository,
     SagaOrchestrator,
@@ -28,7 +27,6 @@ from varco_core.service.saga import (
     SagaStatus,
     SagaStep,
 )
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

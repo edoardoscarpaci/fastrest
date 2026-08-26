@@ -16,14 +16,12 @@ Covers:
 
 from __future__ import annotations
 
-import pytest
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
-
 from varco_core.auth.base import Action, AuthContext, ResourceGrant
 from varco_core.exception.service import ServiceAuthorizationError
-
 from varco_fastapi.app import create_varco_app
 from varco_fastapi.auth import ApiKeyAuth
 from varco_fastapi.auth.guard import (
@@ -37,7 +35,6 @@ from varco_fastapi.auth.guard import (
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.introspection import introspect_routes
 from varco_fastapi.router.presets import GenericRouter
-
 
 # ── AuthContext fixtures ──────────────────────────────────────────────────────
 

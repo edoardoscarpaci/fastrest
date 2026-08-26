@@ -40,7 +40,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from cryptography.fernet import Fernet
-
 from varco_core.encryption import FernetFieldEncryptor, FieldEncryptor
 from varco_core.encryption_store import EncryptionKeyManager
 

@@ -20,10 +20,9 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import pytest
-
 from varco_core.event import Event, InMemoryEventBus
 from varco_core.event.base import CHANNEL_DEFAULT
-from varco_core.service.outbox import OutboxEntry, OutboxRepository, OutboxRelay
+from varco_core.service.outbox import OutboxEntry, OutboxRelay, OutboxRepository
 
 if TYPE_CHECKING:
     pass

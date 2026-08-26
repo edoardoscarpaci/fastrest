@@ -37,7 +37,6 @@ if str(_EXAMPLE_DIR) not in sys.path:
 from app import create_app  # noqa: E402 — after sys.path setup
 from data import PRODUCTS  # noqa: E402
 from query_visitor import InMemoryFilterVisitor, apply_filter  # noqa: E402
-
 from varco_core.query.parser import QueryParser  # noqa: E402
 from varco_core.query.type import (  # noqa: E402
     AndNode,
@@ -53,7 +52,6 @@ from varco_core.query.visitor.type_coercion import (  # noqa: E402
     coerce_boolean,
     coerce_float,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

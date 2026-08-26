@@ -11,14 +11,12 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
-
 from varco_core.dto import (
     CreateDTO,
     ReadDTO,
     UpdateDTO,
     UpdateOperation,
 )
-
 
 # ── UpdateOperation ────────────────────────────────────────────────────────────
 

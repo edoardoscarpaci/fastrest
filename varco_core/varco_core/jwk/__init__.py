@@ -19,8 +19,8 @@ Sub-module layout
     └── builder.py  — JwkBuilder (RSA/EC/PEM factories + keyset constructor)
 """
 
-from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
 from varco_core.jwk.builder import JwkBuilder
+from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
 
 __all__ = [
     "JsonWebKey",

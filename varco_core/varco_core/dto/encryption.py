@@ -67,11 +67,11 @@ from __future__ import annotations
 import base64
 import dataclasses
 import json
-from typing import TYPE_CHECKING, Any, get_type_hints
 
 # WeakKeyDictionary — classes are GC'd when no longer referenced; no leak even
 # if many transient model classes are created dynamically (e.g. in tests).
 import weakref
+from typing import TYPE_CHECKING, Any, get_type_hints
 
 if TYPE_CHECKING:
     from pydantic import BaseModel

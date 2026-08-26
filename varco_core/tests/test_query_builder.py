@@ -8,7 +8,6 @@ static factory methods, and the terminal build() method.
 from __future__ import annotations
 
 import pytest
-
 from varco_core.query.builder import QueryBuilder
 from varco_core.query.type import (
     AndNode,
@@ -18,7 +17,6 @@ from varco_core.query.type import (
     Operation,
     OrNode,
 )
-
 
 # ── Empty builder ─────────────────────────────────────────────────────────────
 

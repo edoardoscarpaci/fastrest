@@ -15,7 +15,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.event.dlq import InMemoryDeadLetterQueue

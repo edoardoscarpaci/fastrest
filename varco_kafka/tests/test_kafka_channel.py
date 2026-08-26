@@ -23,10 +23,8 @@ from unittest.mock import patch
 
 import pytest
 from aiokafka.errors import TopicAlreadyExistsError
-
 from varco_core.event.base import ChannelConfig
 from varco_kafka.channel import KafkaChannelManager, KafkaChannelManagerSettings
-
 
 # ── FakeAdminClient ───────────────────────────────────────────────────────────
 

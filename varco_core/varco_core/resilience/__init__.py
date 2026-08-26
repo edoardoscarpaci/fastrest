@@ -104,11 +104,6 @@ from varco_core.resilience.circuit_breaker import (
     CircuitState,
     circuit_breaker,
 )
-from varco_core.resilience.retry import (
-    RetryExhaustedError,
-    RetryPolicy,
-    retry,
-)
 from varco_core.resilience.hedge import (
     HedgeConfig,
     hedge,
@@ -116,9 +111,14 @@ from varco_core.resilience.hedge import (
 from varco_core.resilience.rate_limit import (
     InMemoryRateLimiter,
     RateLimitConfig,
-    RateLimitExceededError,
     RateLimiter,
+    RateLimitExceededError,
     rate_limit,
+)
+from varco_core.resilience.retry import (
+    RetryExhaustedError,
+    RetryPolicy,
+    retry,
 )
 from varco_core.resilience.timeout import (
     CallTimeoutError,

@@ -26,21 +26,19 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
-from varco_fastapi.router.base import VarcoRouter
-from varco_fastapi.router.endpoint import route
-from varco_fastapi.router.mixins import CreateMixin, DeleteMixin, ListMixin, ReadMixin
-from varco_fastapi.router.skill import (
-    SkillAdapter,
-    SkillDefinition,
-)
 from varco_fastapi.router.a2a.router_source import (
     _auto_skill_id,
     _resolve_description,
     _title_case_id,
 )
+from varco_fastapi.router.base import VarcoRouter
+from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.introspection import ResolvedRoute
-
+from varco_fastapi.router.mixins import CreateMixin, DeleteMixin, ListMixin, ReadMixin
+from varco_fastapi.router.skill import (
+    SkillAdapter,
+    SkillDefinition,
+)
 
 # ── Test models ───────────────────────────────────────────────────────────────
 

@@ -55,19 +55,15 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
-from providify import Inject, Singleton
-
-from typing import Annotated
-
+from providify import Inject, InjectMeta, Singleton
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth.base import AbstractAuthorizer
 from varco_core.cache.mixin import CacheServiceMixin
 from varco_core.event import AbstractEventProducer
 from varco_core.service.base import AsyncService, IUoWProvider
-from providify import InjectMeta
 
 from example.dtos import PostCreate, PostRead, PostUpdate
 from example.events import PostCreatedEvent, PostDeletedEvent

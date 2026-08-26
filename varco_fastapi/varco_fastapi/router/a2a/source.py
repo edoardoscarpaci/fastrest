@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext
+
     from varco_fastapi.router.introspection import ResolvedRoute
 
 _DEFAULT_INPUT_MODES: tuple[str, ...] = ("application/json",)

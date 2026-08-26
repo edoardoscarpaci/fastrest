@@ -23,10 +23,8 @@ from uuid import uuid4
 import pytest
 from beanie import init_beanie
 from motor.motor_asyncio import AsyncIOMotorClient
-
 from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 from varco_beanie.job_store import BeanieJobStore, JobDocument
-
 from varco_conformance.dlq import DeadLetterQueueConformance
 from varco_conformance.job_store import JobStoreConformance
 

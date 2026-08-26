@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any, Self
 import jwt as _jwt
 
 from varco_core.auth import AuthContext
-from varco_core.jwt.model import JsonWebToken, _RESERVED_CLAIM_KEYS
+from varco_core.jwt.model import _RESERVED_CLAIM_KEYS, JsonWebToken
 
 if TYPE_CHECKING:
     from varco_core.jwt.profile import TokenProfile

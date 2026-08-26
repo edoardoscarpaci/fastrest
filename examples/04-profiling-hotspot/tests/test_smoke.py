@@ -31,12 +31,10 @@ Async safety:   ✅ All tests are ``async def``.
 
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 from httpx import ASGITransport
-
 from varco_core.profiling import set_profiling_enabled
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

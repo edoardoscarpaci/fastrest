@@ -68,26 +68,24 @@ Async safety:   ✅ ``build_router()`` is synchronous; closures are async-safe.
 from __future__ import annotations
 
 import logging
-from typing import Any, Generic
+from typing import TYPE_CHECKING, Any, Generic
 
+from providify import Inject, Instance
 from typing_extensions import TypeVar
-
 from varco_core.job import AbstractJobRunner
 from varco_core.job.serializer import DEFAULT_SERIALIZER, TaskSerializer
-from varco_core.service.base import D, PK, C, R, U
-from providify import Inject, Instance
+from varco_core.service.base import PK, C, D, R, U
 
 from varco_fastapi.router.base import (
-    VarcoRouter,
     _CRUD_HANDLER_FACTORIES,
+    VarcoRouter,
     _make_noop_handler,
 )
-
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from varco_core.job.task import TaskRegistry
     from varco_core.service import AsyncService
+
     from varco_fastapi import AbstractServerAuth
 
 # 6th type parameter (Plan 001) — the concrete AsyncService subclass, e.g.
@@ -463,6 +461,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
         async def _task_create(body_dict: dict, auth_snapshot: dict | None) -> Any:
             # Re-hydrate auth context from snapshot so the service has correct identity
             from varco_core.job.base import auth_context_from_snapshot
+
             from varco_fastapi.context import auth_context as _auth_ctx
 
             if auth_snapshot is not None:
@@ -486,6 +485,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
         # ── read task ─────────────────────────────────────────────────────────
         async def _task_read(pk_str: str, auth_snapshot: dict | None) -> Any:
             from varco_core.job.base import auth_context_from_snapshot
+
             from varco_fastapi.context import auth_context as _auth_ctx
 
             pk = _coerce_pk(_pk_type, pk_str)
@@ -504,6 +504,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             pk_str: str, body_dict: dict, auth_snapshot: dict | None
         ) -> Any:
             from varco_core.job.base import auth_context_from_snapshot
+
             from varco_fastapi.context import auth_context as _auth_ctx
 
             pk = _coerce_pk(_pk_type, pk_str)
@@ -526,6 +527,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
             pk_str: str, body_dict: dict, auth_snapshot: dict | None
         ) -> Any:
             from varco_core.job.base import auth_context_from_snapshot
+
             from varco_fastapi.context import auth_context as _auth_ctx
 
             pk = _coerce_pk(_pk_type, pk_str)
@@ -544,6 +546,7 @@ class VarcoCRUDRouter(VarcoRouter[D, PK, C, R, U], Generic[D, PK, C, R, U, S]):
         # ── delete task ───────────────────────────────────────────────────────
         async def _task_delete(pk_str: str, auth_snapshot: dict | None) -> None:
             from varco_core.job.base import auth_context_from_snapshot
+
             from varco_fastapi.context import auth_context as _auth_ctx
 
             pk = _coerce_pk(_pk_type, pk_str)

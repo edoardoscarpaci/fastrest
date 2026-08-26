@@ -14,12 +14,10 @@ Async safety:   N/A (all synchronous)
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import fields as dc_fields
 from unittest.mock import MagicMock
 
 import pytest
-
-from dataclasses import fields as dc_fields
-
 from varco_core.model import (
     AuditedDomainModel,
     DomainModel,
@@ -30,7 +28,6 @@ from varco_core.model import (
     VersionedDomainModel,
     cast_raw,
 )
-
 
 # ── Minimal concrete subclasses for testing ───────────────────────────────────
 

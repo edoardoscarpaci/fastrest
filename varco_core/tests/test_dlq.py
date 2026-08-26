@@ -18,14 +18,12 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     InMemoryDeadLetterQueue,
 )
-
 
 # ── Minimal event fixture ─────────────────────────────────────────────────────
 

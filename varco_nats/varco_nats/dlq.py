@@ -91,15 +91,14 @@ from nats import connect
 from nats.errors import TimeoutError as NatsTimeoutError
 from nats.js.api import RetentionPolicy
 from nats.js.errors import NotFoundError
-
 from providify import Configuration, Inject, Provider
-
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+
 from varco_nats.config import NatsEventBusSettings
 
 _logger = logging.getLogger(__name__)

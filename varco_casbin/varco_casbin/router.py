@@ -33,7 +33,6 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-
 from varco_core.auth import AuthContext, PolicyEngine, PolicyManagement
 from varco_core.auth.policy import EnforcementRequest
 from varco_fastapi.auth import require_roles

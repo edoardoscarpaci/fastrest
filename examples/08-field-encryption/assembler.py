@@ -30,13 +30,11 @@ Async safety:   ✅ All methods are synchronous — no I/O.
 
 from __future__ import annotations
 
-from providify import Singleton
-
-from varco_core.assembler import AbstractDTOAssembler
-from varco_core.model import domain_replace
-
 from dtos import PatientCreate, PatientRead, PatientUpdate
 from models import Patient
+from providify import Singleton
+from varco_core.assembler import AbstractDTOAssembler
+from varco_core.model import domain_replace
 
 
 @Singleton

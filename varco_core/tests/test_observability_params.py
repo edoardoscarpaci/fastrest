@@ -26,7 +26,6 @@ from uuid import UUID
 
 import pytest
 
-
 # ── Global-state hygiene (mandatory per plan's Risks section) ──────────────
 
 

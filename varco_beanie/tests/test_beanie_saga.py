@@ -34,9 +34,8 @@ from typing import Any, Generator
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
-from varco_core.service.saga import SagaState, SagaStatus
 from varco_beanie.saga import BeanieSagaRepository, SagaDocument
-
+from varco_core.service.saga import SagaState, SagaStatus
 
 # ── Mock helpers ──────────────────────────────────────────────────────────────
 

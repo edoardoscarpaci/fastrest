@@ -200,12 +200,13 @@ class ClientProfile:
             - Unknown env var values → logged and defaults used.
             - ``VARCO_CLIENT_RETRY_MAX=0`` → no retry middleware added.
         """
+        from varco_core.resilience import RetryPolicy  # noqa: PLC0415
+
         from varco_fastapi.client.middleware import (  # noqa: PLC0415
             CorrelationIdMiddleware,
             OTelClientMiddleware,
             RetryMiddleware,
         )
-        from varco_core.resilience import RetryPolicy  # noqa: PLC0415
 
         timeout = float(os.environ.get("VARCO_CLIENT_TIMEOUT", "30"))
         retry_max = int(os.environ.get("VARCO_CLIENT_RETRY_MAX", "0"))

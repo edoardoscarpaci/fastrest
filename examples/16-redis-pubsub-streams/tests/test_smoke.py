@@ -83,8 +83,9 @@ async def bus_and_consumer(redis_url):
         - ``stop()`` is called in the ``finally`` block — guaranteed even
           on test failure.
     """
-    from varco_redis import RedisEventBus, RedisEventBusSettings  # noqa: PLC0415
     from consumer import OrderConsumer  # noqa: PLC0415
+
+    from varco_redis import RedisEventBus, RedisEventBusSettings  # noqa: PLC0415
 
     config = RedisEventBusSettings(url=redis_url)
     _bus = RedisEventBus(config=config)

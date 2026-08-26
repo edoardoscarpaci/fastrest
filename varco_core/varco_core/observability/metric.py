@@ -93,8 +93,7 @@ Async safety:   ✅ add/sub/record are synchronous calls — safe from any
 
 from __future__ import annotations
 
-from typing import Any, Literal
-from typing import TypeAlias
+from typing import Any, Literal, TypeAlias
 
 from opentelemetry import metrics as otel_metrics
 

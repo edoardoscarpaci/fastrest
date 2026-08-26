@@ -10,12 +10,12 @@ import sys
 from typing import Any, TypeVar
 
 from providify import Inject, PostConstruct, Singleton
-
-from varco_beanie.config import BeanieSettings
-from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
 from varco_core.repository import AsyncRepository
+
+from varco_beanie.config import BeanieSettings
+from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
 
 D = TypeVar("D", bound=DomainModel)
 

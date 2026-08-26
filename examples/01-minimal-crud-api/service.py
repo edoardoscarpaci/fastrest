@@ -28,18 +28,15 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from providify import Inject, Singleton
-
+from dtos import ProductCreate, ProductRead, ProductUpdate
+from models import Product
+from providify import Inject, InjectMeta, Singleton
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth.base import AbstractAuthorizer
 from varco_core.event import AbstractEventProducer
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import AsyncService, IUoWProvider
 from varco_core.uow import AsyncUnitOfWork
-from providify import InjectMeta
-
-from dtos import ProductCreate, ProductRead, ProductUpdate
-from models import Product
 
 
 @Singleton

@@ -64,11 +64,10 @@ import dataclasses
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Any, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Sequence
 from uuid import UUID
 
 from redis.exceptions import WatchError
-
 from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
 

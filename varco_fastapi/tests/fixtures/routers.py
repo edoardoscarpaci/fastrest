@@ -16,7 +16,6 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import CRUDRouter, GenericRouter
 

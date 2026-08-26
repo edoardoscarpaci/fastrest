@@ -38,7 +38,6 @@ from typing import Any
 import httpx
 import pytest
 import pytest_asyncio
-
 from varco_core.migration.errors import MigrationLockTimeout, PendingMigrationsError
 from varco_core.migration.settings import MigrationSettings
 from varco_fastapi.app import create_varco_app
@@ -149,7 +148,6 @@ async def test_mode_check_on_behind_schema_fails_closed_no_ddl(
     isolated_db_url: str,
 ) -> None:
     from sqlalchemy.ext.asyncio import create_async_engine
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     engine = create_async_engine(isolated_db_url, echo=False)
@@ -180,7 +178,6 @@ async def test_mode_upgrade_applies_before_first_request_and_is_idempotent(
     isolated_db_url: str,
 ) -> None:
     from sqlalchemy.ext.asyncio import create_async_engine
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     engine = create_async_engine(isolated_db_url, echo=False)
@@ -223,7 +220,6 @@ def _broken_migrator():
     """An AlembicMigrator pointed at an unreachable database — a real
     failure (connection refused), not a fabricated in-memory one."""
     from sqlalchemy.ext.asyncio import create_async_engine
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     broken_engine = create_async_engine(
@@ -278,7 +274,6 @@ async def test_mode_off_default_registers_nothing_touches_nothing(
     isolated_db_url: str,
 ) -> None:
     from sqlalchemy.ext.asyncio import create_async_engine
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     engine = create_async_engine(isolated_db_url, echo=False)
@@ -308,7 +303,6 @@ async def test_two_concurrent_lifespans_exactly_one_migrates_schema_not_corrupte
     isolated_db_url: str,
 ) -> None:
     from sqlalchemy.ext.asyncio import create_async_engine
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     engine = create_async_engine(isolated_db_url, echo=False)

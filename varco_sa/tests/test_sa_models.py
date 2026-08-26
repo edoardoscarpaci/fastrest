@@ -16,11 +16,10 @@ DESIGN: testing abstract models
 
 from __future__ import annotations
 
-from sqlalchemy import Column, Integer as SAInt
+from sqlalchemy import Column
+from sqlalchemy import Integer as SAInt
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_sa.models import BaseDatabaseModel
-
 
 # ── Concrete subclass for BaseDatabaseModel ───────────────────────────────────
 # BaseDatabaseModel has no PK column — we must add one to map it.

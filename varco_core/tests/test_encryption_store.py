@@ -22,7 +22,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from cryptography.fernet import Fernet
-
 from varco_core.encryption import FernetFieldEncryptor
 from varco_core.encryption_store import (
     EncryptionKeyEntry,
@@ -30,7 +29,6 @@ from varco_core.encryption_store import (
     EncryptionKeyStore,
     InMemoryEncryptionKeyStore,
 )
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

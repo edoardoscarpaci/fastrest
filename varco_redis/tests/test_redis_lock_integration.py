@@ -24,7 +24,6 @@ import os
 import uuid
 
 import pytest
-
 from varco_core.lock import LockNotAcquiredError
 
 pytestmark = pytest.mark.integration

@@ -16,7 +16,6 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-
 from varco_core.event import Event, EventConsumer, listen
 from varco_core.event.dlq import DeadLetterEntry
 from varco_core.event.memory import InMemoryEventBus

@@ -17,10 +17,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
-from varco_memcached.cache import MemcachedCache, MemcachedCacheSettings
-
 from varco_conformance.cache import CacheBackendConformance
+from varco_memcached.cache import MemcachedCache, MemcachedCacheSettings
 
 pytestmark = pytest.mark.integration
 

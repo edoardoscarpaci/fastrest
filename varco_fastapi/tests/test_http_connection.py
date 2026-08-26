@@ -9,11 +9,9 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
 from varco_core.connection.ssl import SSLConfig
 from varco_fastapi.auth.trust_store import TrustStore
 from varco_fastapi.connection import HttpConnectionSettings
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HttpConnectionSettings

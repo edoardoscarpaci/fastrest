@@ -27,19 +27,17 @@ Sections
 """
 
 from __future__ import annotations
-import os
 
 import base64
+import os
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
-
 from varco_core.encryption_store import EncryptionKeyEntry, EncryptionKeyStore
 from varco_redis.encryption_store import RedisEncryptionKeyStore
-
 
 # ── FakeRedis ─────────────────────────────────────────────────────────────────
 

@@ -12,10 +12,9 @@ bare env-var name.
 from __future__ import annotations
 
 import httpx
+from composite import build_scoped_composite, composite
 
 from varco_fastapi import create_composite_app
-
-from composite import build_scoped_composite, composite
 
 
 def _client(app) -> httpx.AsyncClient:

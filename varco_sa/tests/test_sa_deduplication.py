@@ -30,9 +30,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_sa.deduplication import SADedupConfig, SADeduplicator, dedup_metadata
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

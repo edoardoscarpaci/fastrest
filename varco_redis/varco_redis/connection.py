@@ -60,9 +60,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 from pydantic_settings import SettingsConfigDict
-
 from varco_core.connection.base import ConnectionSettings
-
 
 # ── RedisConnectionSettings ───────────────────────────────────────────────────
 

@@ -35,22 +35,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-import sys
 import os
+import sys
 
 # Add the example directory to sys.path so ``from events import ...`` works.
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import pytest
+from app import create_app
+from events import ScoreUpdatedEvent
 from starlette.testclient import TestClient
-
 from varco_core.event import InMemoryEventBus
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
-
-from app import create_app
-from events import ScoreUpdatedEvent
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

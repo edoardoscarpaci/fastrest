@@ -16,9 +16,8 @@ import logging
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-
-from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 from varco_core.event import Event
+from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 
 
 class SampleEvent(Event):

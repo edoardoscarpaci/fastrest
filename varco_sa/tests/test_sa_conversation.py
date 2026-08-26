@@ -22,10 +22,8 @@ from typing import Any
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.service.conversation import ConversationTurn
 from varco_sa.conversation import SAConversationStore, conversation_metadata
-
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 

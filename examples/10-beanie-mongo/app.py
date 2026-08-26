@@ -69,23 +69,21 @@ from __future__ import annotations
 import os
 from uuid import UUID
 
-from fastapi import FastAPI
-from providify import DIContainer, Provider
-from pymongo import AsyncMongoClient
-
-from varco_beanie.config import BeanieSettings
-from varco_beanie.provider import BeanieRepositoryProvider
-from varco_core.service.base import IUoWProvider
-from varco_fastapi import create_varco_app
-from varco_fastapi.di import VarcoFastAPIModule
-
 # Import @Singleton-decorated classes so DI metadata is stamped before the
 # container tries to resolve them.
 from assembler import PostAssembler  # noqa: F401 — registers PostAssembler
 from dtos import PostCreate, PostRead, PostUpdate
+from fastapi import FastAPI
 from models import Post
+from providify import DIContainer, Provider
+from pymongo import AsyncMongoClient
 from service import PostService  # noqa: F401 — registers PostService
+from varco_beanie.config import BeanieSettings
+from varco_beanie.provider import BeanieRepositoryProvider
+from varco_core.service.base import IUoWProvider
+from varco_fastapi.di import VarcoFastAPIModule
 
+from varco_fastapi import create_varco_app
 
 # ── FastAPI router ─────────────────────────────────────────────────────────────
 

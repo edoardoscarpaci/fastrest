@@ -49,6 +49,7 @@ Async safety:   ✅  All primitives use lazy asyncio.Lock / asyncio.Semaphore.
 
 from __future__ import annotations
 
+from stub import FlakeyPaymentStub  # noqa: PLC0415 — resolved by pytest sys.path
 from varco_core.resilience import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -58,9 +59,6 @@ from varco_core.resilience import (
     retry,
     timeout,
 )
-
-from stub import FlakeyPaymentStub  # noqa: PLC0415 — resolved by pytest sys.path
-
 
 # ── Shared resilience configuration ──────────────────────────────────────────
 

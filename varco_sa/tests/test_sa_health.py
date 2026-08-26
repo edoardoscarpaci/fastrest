@@ -36,12 +36,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from tests.conftest import asyncpg_url
 from varco_core.health import HealthStatus
 from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
 from varco_sa.pool_metrics import SAPoolMetrics
 
+from tests.conftest import asyncpg_url
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

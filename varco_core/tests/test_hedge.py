@@ -16,9 +16,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from varco_core.resilience.hedge import HedgeConfig, _hedged_call, hedge
-
 
 # ── HedgeConfig ───────────────────────────────────────────────────────────────
 

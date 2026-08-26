@@ -26,7 +26,6 @@ import asyncio
 import os
 
 import pytest
-
 from varco_core.event import Event
 
 pytestmark = pytest.mark.integration

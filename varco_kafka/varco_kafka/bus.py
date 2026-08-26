@@ -73,9 +73,7 @@ from typing import Annotated, Any
 # to reach into the aiokafka namespace directly.
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
 from aiokafka.structs import OffsetAndMetadata
-
-from providify import Inject, Instance, InjectMeta, PostConstruct, PreDestroy, Singleton
-
+from providify import Inject, InjectMeta, Instance, PostConstruct, PreDestroy, Singleton
 from varco_core.event.base import (
     CHANNEL_ALL,
     CHANNEL_DEFAULT,

@@ -43,13 +43,11 @@ import threading
 
 import jwt as _jwt
 
+from varco_core.authority.exceptions import UnknownKidError
+from varco_core.authority.jwt_authority import JwtAuthority
 from varco_core.jwk.model import JsonWebKeySet
 from varco_core.jwt.builder import JwtBuilder
 from varco_core.jwt.model import JsonWebToken
-
-from varco_core.authority.exceptions import UnknownKidError
-from varco_core.authority.jwt_authority import JwtAuthority
-
 
 # ── MultiKeyAuthority ─────────────────────────────────────────────────────────
 

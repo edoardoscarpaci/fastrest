@@ -37,13 +37,12 @@ from typing import TYPE_CHECKING, Any
 # PyJWT — aliased to avoid shadowing the local jwt package
 import jwt as _jwt
 
+from varco_core.authority.exceptions import KeyLoadError, UnknownKidError
 from varco_core.jwk.builder import JwkBuilder
 from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
 from varco_core.jwt.builder import JwtBuilder
 from varco_core.jwt.model import JsonWebToken
 from varco_core.jwt.parser import JwtParser
-
-from varco_core.authority.exceptions import KeyLoadError, UnknownKidError
 
 if TYPE_CHECKING:
     # Heavy crypto imports only for type checking — at runtime the key objects

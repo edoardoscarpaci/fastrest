@@ -9,9 +9,9 @@ import pytest
 
 
 async def test_round_trip_every_tenant_descriptor_field() -> None:
+    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
     from varco_core.tenancy.catalog import TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
-    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
 
     catalog = BeanieTenantCatalog()
     descriptor = TenantDescriptor(
@@ -28,9 +28,9 @@ async def test_round_trip_every_tenant_descriptor_field() -> None:
 
 
 async def test_list_tenants_filters_active_by_default() -> None:
+    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
     from varco_core.tenancy.catalog import TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
-    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
 
     catalog = BeanieTenantCatalog()
     await catalog.add(TenantDescriptor(tenant_id="acme", status=TenantStatus.ACTIVE))
@@ -44,9 +44,9 @@ async def test_list_tenants_filters_active_by_default() -> None:
 
 
 async def test_update_status_rejects_illegal_transition() -> None:
+    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
     from varco_core.tenancy.catalog import TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
-    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
 
     catalog = BeanieTenantCatalog()
     await catalog.add(TenantDescriptor(tenant_id="acme", status=TenantStatus.DELETED))
@@ -56,9 +56,9 @@ async def test_update_status_rejects_illegal_transition() -> None:
 
 
 async def test_add_twice_is_idempotent() -> None:
+    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
     from varco_core.tenancy.catalog import TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
-    from varco_beanie.tenancy.catalog import BeanieTenantCatalog
 
     catalog = BeanieTenantCatalog()
     descriptor = TenantDescriptor(tenant_id="acme", status=TenantStatus.ACTIVE)

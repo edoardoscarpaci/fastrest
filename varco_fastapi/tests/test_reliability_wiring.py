@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import pytest
 from providify import Provider
-
 from varco_core.event.base import AbstractEventBus
 from varco_core.event.dlq import InMemoryDeadLetterQueue
 from varco_core.event.memory import InMemoryEventBus

@@ -34,17 +34,15 @@ Async safety:   ✅ All tests are ``async def``.
 
 from __future__ import annotations
 
+import httpx
+
 # sys.path setup is handled in conftest.py — sibling modules (app, gateway,
 # etc.) are importable because conftest.py adds the example root before any
 # test module is imported, avoiding E402 ruff violations.
-
 import pytest
-import httpx
-from httpx import ASGITransport
-
 from app import create_app  # noqa: PLC0415
 from gateway import PaymentGateway  # noqa: PLC0415
-
+from httpx import ASGITransport
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

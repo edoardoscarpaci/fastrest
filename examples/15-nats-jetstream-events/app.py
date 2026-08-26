@@ -42,15 +42,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+from consumer import OrderConsumer
 from fastapi import FastAPI
-
+from router import build_router
 from varco_core.event import BusEventProducer
-
-from varco_nats import NatsEventBus
 from varco_nats.config import NatsEventBusSettings
 
-from consumer import OrderConsumer
-from router import build_router
+from varco_nats import NatsEventBus
 
 if TYPE_CHECKING:
     from varco_core.event import AbstractEventBus

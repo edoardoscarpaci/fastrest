@@ -27,8 +27,8 @@ def test_status_maps_to_documented_http_code(status: str, expected_code: int) ->
 
 
 async def test_non_active_tenant_never_causes_pool_ensure_to_run() -> None:
-    from varco_core.tenancy.routing import route_request
     from varco_core.tenancy.catalog import TenantDescriptor
+    from varco_core.tenancy.routing import route_request
     from varco_core.tenancy.settings import TenantStatus
 
     class _CountingPool:

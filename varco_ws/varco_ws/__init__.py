@@ -43,11 +43,11 @@ Quick start::
 """
 
 from varco_ws.di import bind_sse_adapter, bind_websocket_adapter
-from varco_ws.sse import SSEEventBus, SSEConnection
+from varco_ws.sse import SSEConnection, SSEEventBus
 from varco_ws.websocket import (
     BackpressurePolicy,
-    WebSocketEventBus,
     WebSocketConnection,
+    WebSocketEventBus,
 )
 
 __all__ = [

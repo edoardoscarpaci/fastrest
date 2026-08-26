@@ -26,11 +26,9 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
+from varco_beanie.provider import BeanieRepositoryProvider
 from varco_core.providers import RepositoryProvider
 from varco_core.service.tenant import TenantUoWProvider, tenant_context
-from varco_beanie.provider import BeanieRepositoryProvider
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

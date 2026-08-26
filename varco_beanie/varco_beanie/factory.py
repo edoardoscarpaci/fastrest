@@ -30,13 +30,16 @@ from typing import Any, ClassVar, Optional, TypeVar
 
 from beanie import Document, Indexed
 from pydantic import Field as PydanticField
-
 from varco_core.mapper import AbstractMapper
 from varco_core.meta import (
     CheckConstraint as DomainCheckConstraint,
+)
+from varco_core.meta import (
     MetaReader,
     ParsedMeta,
     PKStrategy,
+)
+from varco_core.meta import (
     UniqueConstraint as DomainUniqueConstraint,
 )
 from varco_core.model import DomainModel

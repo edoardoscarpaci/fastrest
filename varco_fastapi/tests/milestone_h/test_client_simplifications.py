@@ -16,12 +16,10 @@ from uuid import UUID
 
 import pytest
 from pydantic import BaseModel
-
 from varco_fastapi.client.base import AsyncVarcoClient, make_client
 from varco_fastapi.client.config import ClientConfig
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.presets import AllRouteMixin
-
 
 # ── Test router/DTOs ──────────────────────────────────────────────────────────
 

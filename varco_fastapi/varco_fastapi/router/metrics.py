@@ -206,6 +206,8 @@ class MetricsRouter:
                 from prometheus_client import REGISTRY
                 from prometheus_client.openmetrics.exposition import (
                     CONTENT_TYPE_LATEST as OPENMETRICS_CONTENT_TYPE,
+                )
+                from prometheus_client.openmetrics.exposition import (
                     generate_latest as openmetrics_generate,
                 )
 

@@ -27,39 +27,41 @@ from __future__ import annotations
 import typing
 from datetime import date, datetime
 from functools import cached_property
-from typing import Any, TypeVar
+
+# TYPE_CHECKING import only — cryptography is optional; FieldEncryptor is
+# imported for annotation purposes only, never at runtime in this module.
+from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
     Date,
     DateTime,
     Float,
     Integer,
-    JSON,
     LargeBinary,
     String,
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.mapper import AbstractMapper
 from varco_core.meta import (
     CheckConstraint as DomainCheckConstraint,
+)
+from varco_core.meta import (
     MetaReader,
     ParsedMeta,
     PKStrategy,
+)
+from varco_core.meta import (
     UniqueConstraint as DomainUniqueConstraint,
 )
 from varco_core.model import DomainModel
 from varco_core.tenancy.settings import TenantIsolation, TenantScope
-
-# TYPE_CHECKING import only — cryptography is optional; FieldEncryptor is
-# imported for annotation purposes only, never at runtime in this module.
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from varco_core.encryption import FieldEncryptor

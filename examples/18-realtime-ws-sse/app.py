@@ -40,12 +40,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
-
+from router import build_router
 from varco_core.event import InMemoryEventBus
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
-
-from router import build_router
 
 
 def create_app() -> FastAPI:

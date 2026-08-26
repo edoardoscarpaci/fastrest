@@ -14,13 +14,11 @@ For SQLAlchemyAggregationApplicator tests see varco_sa/tests/test_sa_aggregation
 from __future__ import annotations
 
 import pytest
-
 from varco_core.query.aggregation import (
     AggregationExpression,
     AggregationFunc,
     AggregationQuery,
 )
-
 
 # ── AggregationFunc ────────────────────────────────────────────────────────────
 

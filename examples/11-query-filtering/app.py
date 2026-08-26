@@ -45,11 +45,9 @@ Async safety:   ✅ Synchronous factory — no event loop required at call time.
 from __future__ import annotations
 
 from fastapi import FastAPI
-
+from router import router
 from varco_fastapi.exceptions import add_exception_handlers
 from varco_fastapi.middleware import ErrorMiddleware, install_middleware_stack
-
-from router import router
 
 
 def create_app() -> FastAPI:

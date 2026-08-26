@@ -53,8 +53,8 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy import Column, DateTime, MetaData, String, Table, Text
 from sqlalchemy.ext.asyncio import AsyncEngine
-
 from varco_core.service.conversation import AbstractConversationStore, ConversationTurn
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)

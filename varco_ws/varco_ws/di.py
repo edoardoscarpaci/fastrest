@@ -75,7 +75,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 # ── bootstrap ─────────────────────────────────────────────────────────────────
 
 
@@ -232,6 +231,7 @@ def bind_websocket_adapter(
     # pattern used throughout the package.
     from providify import Provider  # noqa: PLC0415
     from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
+
     from varco_ws.websocket import (  # noqa: PLC0415
         BackpressurePolicy,
         WebSocketEventBus,
@@ -357,6 +357,7 @@ def bind_sse_adapter(
     # Resolve defaults imported lazily to keep module-level import list minimal.
     from providify import Provider  # noqa: PLC0415
     from varco_core.event.base import AbstractEventBus, Event  # noqa: PLC0415
+
     from varco_ws.sse import SSEEventBus  # noqa: PLC0415
 
     # Capture every arg at binding time — same closure-capture pattern as

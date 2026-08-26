@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import pytest
-
 from varco_core.auth import (
     AbstractAuthorizer,
     Action,
@@ -24,7 +23,6 @@ from varco_core.auth import (
 )
 from varco_core.meta import PKStrategy, PrimaryKey, pk_field
 from varco_core.model import DomainModel
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

@@ -19,27 +19,25 @@ hand-rolled fake so there is no I/O and no DI.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated
 from enum import StrEnum
+from typing import Annotated
 
 import pytest
-
 from varco_core.auth import (
     Action,
     AuthContext,
-    Resource,
     EnforcementRequest,
     PolicyEngine,
+    PolicyEngineAuthorizer,
     PolicyManagement,
     RequestMapper,
-    PolicyEngineAuthorizer,
+    Resource,
     attributes_of,
     attributes_of_context,
 )
 from varco_core.exception.service import ServiceAuthorizationError
 from varco_core.meta import PKStrategy, PrimaryKey, pk_field
 from varco_core.model import DomainModel
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

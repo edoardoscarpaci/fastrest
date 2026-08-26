@@ -24,7 +24,6 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from varco_casbin.adapter import build_adapter
 from varco_casbin.config import CasbinSettings
 

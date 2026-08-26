@@ -19,13 +19,11 @@ import asyncio
 from uuid import uuid4
 
 import pytest
-
 from varco_core.lock import (
     InMemoryLock,
     LockHandle,
     LockNotAcquiredError,
 )
-
 
 # ── LockHandle tests ───────────────────────────────────────────────────────────
 

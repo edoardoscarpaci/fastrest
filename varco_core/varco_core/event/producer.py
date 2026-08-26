@@ -58,6 +58,7 @@ Async safety:   ✅ Both ``produce`` and ``produce_many`` are ``async def``.
 """
 
 from __future__ import annotations
+
 import sys
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING

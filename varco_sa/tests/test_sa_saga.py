@@ -20,10 +20,8 @@ from uuid import uuid4
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.service.saga import SagaState, SagaStatus
 from varco_sa.saga import SASagaRepository, sagas_metadata
-
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 

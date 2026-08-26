@@ -55,11 +55,10 @@ import sys
 from typing import Any
 
 from providify import Singleton
-
 from varco_core.query.applicator.applicator import QueryApplicator
 from varco_core.query.type import SortField, SortOrder, TransformerNode
-from varco_beanie.query.compiler import BeanieQueryCompiler
 
+from varco_beanie.query.compiler import BeanieQueryCompiler
 
 # MongoDB sort direction constants
 _ASC = 1

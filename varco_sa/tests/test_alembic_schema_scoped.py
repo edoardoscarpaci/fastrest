@@ -8,7 +8,6 @@ from __future__ import annotations
 import inspect
 
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.migration.settings import MigrationSettings
 from varco_sa.migration.migrator import AlembicMigrator
 

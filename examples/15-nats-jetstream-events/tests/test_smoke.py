@@ -113,10 +113,10 @@ async def bus_and_consumer(nats_url):
     """
     import uuid  # noqa: PLC0415
 
-    from varco_nats import NatsEventBus  # noqa: PLC0415
+    from consumer import OrderConsumer  # noqa: PLC0415
     from varco_nats.config import NatsEventBusSettings  # noqa: PLC0415
 
-    from consumer import OrderConsumer  # noqa: PLC0415
+    from varco_nats import NatsEventBus  # noqa: PLC0415
 
     # Unique durable name per fixture invocation — prevents JetStream consumer
     # conflicts between tests sharing the same NATS server and stream.

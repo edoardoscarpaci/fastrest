@@ -14,7 +14,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.exception.repository import StaleEntityError
 from varco_core.meta import FieldHint
 from varco_core.migrator import DomainMigrator
@@ -23,7 +22,6 @@ from varco_core.query.builder import QueryBuilder
 from varco_core.query.params import QueryParams
 from varco_sa.factory import SAModelFactory
 from varco_sa.repository import AsyncSQLAlchemyRepository
-
 
 # ── Domain models ─────────────────────────────────────────────────────────────
 

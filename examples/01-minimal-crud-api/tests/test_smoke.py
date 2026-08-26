@@ -16,11 +16,11 @@ Async safety:   ✅ All tests are ``async def`` (asyncio auto mode via pytest.in
 
 from __future__ import annotations
 
+import os
+import sys
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-
-import sys
-import os
 
 # Add the example root to the path so relative imports (``from app import ...``)
 # resolve correctly when pytest is invoked from the workspace root.

@@ -452,7 +452,6 @@ class TestWrapInstrument:
 class TestWrapGaugeCallback:
     def test_merges_global_attrs_into_observations(self) -> None:
         from opentelemetry.metrics import Observation
-
         from varco_core.observability.attributes import (
             set_global_attributes,
             wrap_gauge_callback,

@@ -54,9 +54,6 @@ if TYPE_CHECKING:
     # Imported only under TYPE_CHECKING — these classes don't import registry.py
     # so there is no circular dependency, but the guard keeps the runtime import
     # graph clean and makes the optional nature of the dependency explicit.
-    from varco_core.authority.jwt_authority import JwtAuthority
-    from varco_core.authority.multi_key_authority import MultiKeyAuthority
-
     # Instance is a Providify injection annotation — only needed for type hints
     # in from_container().  Not needed at runtime because InstanceProxy.aget_all()
     # carries the type internally; from_container() never references the class
@@ -65,9 +62,8 @@ if TYPE_CHECKING:
     # imported under TYPE_CHECKING.
     from providify import Instance
 
-from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
-from varco_core.jwt.model import JsonWebToken
-from varco_core.jwt.parser import JwtParser
+    from varco_core.authority.jwt_authority import JwtAuthority
+    from varco_core.authority.multi_key_authority import MultiKeyAuthority
 
 from varco_core.authority.exceptions import (
     IssuerNotFoundError,
@@ -75,7 +71,9 @@ from varco_core.authority.exceptions import (
     UnknownKidError,
 )
 from varco_core.authority.sources.protocol import IssuerSource
-
+from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
+from varco_core.jwt.model import JsonWebToken
+from varco_core.jwt.parser import JwtParser
 
 # ── TrustedIssuerEntry ────────────────────────────────────────────────────────
 

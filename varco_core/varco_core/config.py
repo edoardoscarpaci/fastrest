@@ -57,7 +57,6 @@ from typing import Any, Self
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # ── VarcoSettings ─────────────────────────────────────────────────────────────
 
 

@@ -34,15 +34,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any
-
-from varco_core.jwk.model import JsonWebKeySet
 
 from varco_core.authority.exceptions import KeyLoadError
 from varco_core.authority.sources.jwks_url import JwksUrlSource
-
+from varco_core.jwk.model import JsonWebKeySet
 
 # ── OidcDiscoverySource ───────────────────────────────────────────────────────
 

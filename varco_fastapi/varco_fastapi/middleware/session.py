@@ -34,13 +34,14 @@ Async safety:   ✅ All generators and context managers are ``async``.
 from __future__ import annotations
 
 import logging
-from typing import Any, TypeVar, Optional, Final
+from typing import Any, Final, Optional, TypeVar
 from uuid import uuid4
+
+from providify import DIContainer
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
-from providify import DIContainer
 
 _logger = logging.getLogger(__name__)
 

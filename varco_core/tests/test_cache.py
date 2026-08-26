@@ -24,7 +24,6 @@ import asyncio
 import time
 
 import pytest
-
 from varco_core.cache import (
     CacheInvalidationConsumer,
     CacheSettings,
@@ -39,7 +38,6 @@ from varco_core.cache import (
 )
 from varco_core.cache.service import CacheInvalidated
 from varco_core.event import InMemoryEventBus
-
 
 # ── CacheSettings ───────────────────────────────────────────────────────────────
 

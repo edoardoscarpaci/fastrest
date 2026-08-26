@@ -108,8 +108,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             # Read from ContextVars (set by RequestContextMiddleware)
             try:
                 from varco_fastapi.context import (
-                    get_request_id,
                     get_auth_context_or_none,
+                    get_request_id,
                 )
 
                 request_id = get_request_id()

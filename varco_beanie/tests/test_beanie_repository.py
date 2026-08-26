@@ -24,13 +24,11 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
+from varco_beanie.repository import AsyncBeanieRepository
 from varco_core.model import DomainModel
 from varco_core.query.builder import QueryBuilder
 from varco_core.query.params import QueryParams
 from varco_core.query.type import SortField, SortOrder
-from varco_beanie.repository import AsyncBeanieRepository
-
 
 # ── Test domain model ─────────────────────────────────────────────────────────
 

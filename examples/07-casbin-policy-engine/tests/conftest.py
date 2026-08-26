@@ -162,9 +162,8 @@ async def client(db_url: str):
           policies persist in the shared Postgres DB.
     """
     import httpx
-    from httpx import ASGITransport
-
     from app import create_app  # imported here so sys.path fix above takes effect
+    from httpx import ASGITransport
 
     # Create a fresh app instance with the test Postgres policy store.
     app = create_app(db_url=db_url, model_preset="rbac")

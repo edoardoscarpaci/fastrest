@@ -35,8 +35,8 @@ from typing import TYPE_CHECKING, Any
 
 import casbin
 from providify import Inject, PostConstruct, PreDestroy, Singleton
-
 from varco_core.auth.policy import EnforcementRequest, PolicyEngine, PolicyManagement
+
 from varco_casbin.adapter import build_adapter
 from varco_casbin.config import CasbinSettings
 

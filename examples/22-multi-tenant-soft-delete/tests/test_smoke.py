@@ -33,7 +33,6 @@ from typing import Any
 
 import pytest
 
-
 # All tests in this module require Docker — skip without the marker.
 pytestmark = pytest.mark.integration
 

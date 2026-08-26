@@ -18,7 +18,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.mixins import CreateMixin, ReadMixin
@@ -28,7 +27,6 @@ from varco_fastapi.validation import (
     validate_container_bindings,
     validate_router_class,
 )
-
 
 # ── Test routers ──────────────────────────────────────────────────────────────
 

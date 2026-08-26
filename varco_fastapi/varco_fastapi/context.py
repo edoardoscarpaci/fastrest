@@ -68,10 +68,10 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-from varco_core.tracing import correlation_context
 from providify import Provider
 from varco_core.auth.base import AuthContext
 from varco_core.jwt import JsonWebToken, JwtParser
+from varco_core.tracing import correlation_context
 
 # ── Typed DI context tokens ────────────────────────────────────────────────────
 #

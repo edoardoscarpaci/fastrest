@@ -55,9 +55,10 @@ Async safety:   ✅  asyncio.Lock protects state transitions in HALF_OPEN;
 """
 
 from __future__ import annotations
-import inspect
+
 import asyncio
 import functools
+import inspect
 import logging
 import time
 from collections.abc import Awaitable, Callable

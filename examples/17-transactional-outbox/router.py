@@ -35,10 +35,9 @@ Async safety:   ✅ All route handlers are ``async def``.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
-
 from consumer import OrderConsumer
 from dtos import OrderCreate, OrderRead
+from fastapi import APIRouter
 from service import OrderService
 
 

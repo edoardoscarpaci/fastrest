@@ -50,12 +50,18 @@ from __future__ import annotations
 import os
 from uuid import UUID
 
+# Import @Singleton classes so DI metadata is stamped before the container
+# resolves them.  The noqa comments suppress "unused import" warnings —
+# the side-effects of importing are the point.
+from assembler import NoteAssembler  # noqa: F401
+from dtos import NoteCreate, NoteRead
 from fastapi import APIRouter, FastAPI, Header, Response
 from fastapi.responses import JSONResponse
+from models import Note
 from providify import DIContainer, Provider
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from service import NoteService  # noqa: F401
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.auth import AuthContext
 from varco_core.auth.authorizer import BaseAuthorizer
 from varco_core.auth.base import AbstractAuthorizer
@@ -63,15 +69,6 @@ from varco_core.query.params import QueryParams
 from varco_core.service.base import IUoWProvider
 from varco_fastapi.di import VarcoFastAPIModule
 from varco_sa.provider import SQLAlchemyRepositoryProvider
-
-# Import @Singleton classes so DI metadata is stamped before the container
-# resolves them.  The noqa comments suppress "unused import" warnings —
-# the side-effects of importing are the point.
-from assembler import NoteAssembler  # noqa: F401
-from dtos import NoteCreate, NoteRead
-from models import Note
-from service import NoteService  # noqa: F401
-
 
 # ── Shared SQLAlchemy declarative base ────────────────────────────────────────
 

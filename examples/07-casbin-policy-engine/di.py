@@ -36,10 +36,9 @@ from __future__ import annotations
 
 from providify import Configuration, Provider
 
-from varco_core.service.base import IUoWProvider
-
 # Import as private alias — callers should inject IUoWProvider, not _Impl.
 from repo import InMemoryUoWProvider as _Impl
+from varco_core.service.base import IUoWProvider
 
 
 @Configuration

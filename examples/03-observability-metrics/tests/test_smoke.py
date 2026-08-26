@@ -64,9 +64,9 @@ from unittest import mock
 import httpx
 import pytest
 from httpx import ASGITransport
+from opentelemetry import metrics as otel_metrics
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-from opentelemetry import metrics as otel_metrics
 
 # Guard for prometheus_client-dependent tests.
 # ``prometheus_client`` is optional — skip rather than fail when absent.

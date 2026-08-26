@@ -50,7 +50,6 @@ from varco_core.auth.base import (
 )
 from varco_core.exception.service import ServiceAuthorizationError
 
-
 # ── Shared key derivation helper ──────────────────────────────────────────────
 
 

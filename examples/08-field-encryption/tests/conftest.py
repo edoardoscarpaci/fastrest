@@ -53,12 +53,11 @@ _EXAMPLE_ROOT = str(Path(__file__).parent.parent.resolve())
 if _EXAMPLE_ROOT not in sys.path:
     sys.path.insert(0, _EXAMPLE_ROOT)
 
-import pytest  # noqa: E402
 import httpx  # noqa: E402
+import pytest  # noqa: E402
 from httpx import ASGITransport  # noqa: E402
 from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
 from testcontainers.postgres import PostgresContainer  # noqa: E402
-
 
 # ── 2. Session-scoped encryptor ────────────────────────────────────────────────
 
@@ -178,7 +177,7 @@ async def app_client(db_url: str, encryptor):
           client constructor does not trigger any app code.
     """
     # Import after sys.path is set — these are the example's local modules.
-    from app import create_app, Base  # noqa: E402
+    from app import Base, create_app  # noqa: E402
 
     # Build the FastAPI app.  Passing the session-scoped encryptor ensures the
     # same key is used for all data written during this test session — data

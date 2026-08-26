@@ -52,13 +52,13 @@ from varco_fastapi.middleware.cors import CORSConfig, install_cors
 from varco_fastapi.middleware.error import ErrorMiddleware
 from varco_fastapi.middleware.logging import RequestLoggingMiddleware
 from varco_fastapi.middleware.metrics import MetricsMiddleware
+from varco_fastapi.middleware.profiling import ProfilingMiddleware, ProfilingSettings
 from varco_fastapi.middleware.request_context import RequestContextMiddleware
 from varco_fastapi.middleware.session import (
     SessionMiddleware,
     get_container,
     get_session_dependency,
 )
-from varco_fastapi.middleware.profiling import ProfilingMiddleware, ProfilingSettings
 from varco_fastapi.middleware.tracing import TracingMiddleware
 
 # ── MiddlewareEntry type ──────────────────────────────────────────────────────

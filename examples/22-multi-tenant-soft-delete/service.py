@@ -66,8 +66,9 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
+from dtos import NoteCreate, NoteRead, NoteUpdate
+from models import Note
 from providify import Inject, InjectMeta, Singleton
-
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AuthContext
 from varco_core.auth.base import AbstractAuthorizer
@@ -81,9 +82,6 @@ from varco_core.service.soft_delete import SoftDeleteService
 from varco_core.service.tenant import TenantAwareService
 from varco_core.service.validation import ValidatorServiceMixin
 from varco_core.uow import AsyncUnitOfWork
-
-from dtos import NoteCreate, NoteRead, NoteUpdate
-from models import Note
 
 
 @Singleton

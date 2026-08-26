@@ -32,7 +32,6 @@ import math
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-
 from varco_core.resilience.rate_limit import InMemoryRateLimiter
 from varco_redis.rate_limit import RedisRateLimiter
 

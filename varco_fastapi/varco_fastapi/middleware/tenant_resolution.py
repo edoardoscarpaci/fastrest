@@ -22,7 +22,6 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
-
 from varco_core.tenancy.catalog import TenantNotFoundError
 from varco_core.tenancy.routing import routing_decision_for_status
 from varco_core.tenancy.settings import TenantStatus

@@ -20,10 +20,9 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from varco_core.health import HealthStatus
 from varco_beanie.config import BeanieSettings
 from varco_beanie.health import BeanieHealthCheck
+from varco_core.health import HealthStatus
 
 
 def _make_check(client, *, timeout: float = 5.0) -> BeanieHealthCheck:

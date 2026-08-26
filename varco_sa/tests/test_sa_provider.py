@@ -23,12 +23,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.model import DomainModel
 from varco_sa.provider import SQLAlchemyRepositoryProvider
 from varco_sa.repository import AsyncSQLAlchemyRepository
 from varco_sa.uow import SQLAlchemyUnitOfWork
-
 
 # ── Test domain models ────────────────────────────────────────────────────────
 

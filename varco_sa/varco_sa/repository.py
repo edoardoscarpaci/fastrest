@@ -15,19 +15,17 @@ from __future__ import annotations
 
 from typing import Any, AsyncIterator, Generic, Sequence, TypeVar
 
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from varco_core.mapper import AbstractMapper
 from varco_core.model import DomainModel
 from varco_core.query.params import QueryParams
 from varco_core.query.type import SortOrder
-from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 from varco_core.repository import AsyncRepository
 
-from sqlalchemy import asc, desc
+from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 
 D = TypeVar("D", bound=DomainModel)
 PK = TypeVar("PK")

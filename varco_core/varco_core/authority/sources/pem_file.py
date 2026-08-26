@@ -26,11 +26,9 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
+from varco_core.authority.exceptions import KeyLoadError
 from varco_core.jwk.builder import JwkBuilder
 from varco_core.jwk.model import JsonWebKeySet
-
-from varco_core.authority.exceptions import KeyLoadError
-
 
 # ── PemFileSource ─────────────────────────────────────────────────────────────
 

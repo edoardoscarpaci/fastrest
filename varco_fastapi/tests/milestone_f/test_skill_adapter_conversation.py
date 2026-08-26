@@ -26,7 +26,6 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
 from varco_core.service.conversation import (
     AbstractConversationStore,
     ConversationTurn,
@@ -35,7 +34,6 @@ from varco_core.service.conversation import (
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.mixins import CreateMixin, ReadMixin
 from varco_fastapi.router.skill import SkillAdapter
-
 
 # ── Test models ───────────────────────────────────────────────────────────────
 

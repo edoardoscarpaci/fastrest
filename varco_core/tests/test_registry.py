@@ -10,10 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
 from varco_core.model import DomainModel
 from varco_core.registry import DomainModelRegistry, register
-
 
 # ── Fixture: ensure clean registry for each test ──────────────────────────────
 

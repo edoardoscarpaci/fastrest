@@ -11,7 +11,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from varco_core.exception.query import WrongNodeVisited
 from varco_core.query.type import (
     AndNode,
@@ -21,7 +20,6 @@ from varco_core.query.type import (
     OrNode,
 )
 from varco_core.query.visitor.ast_visitor import ASTVisitor
-
 
 # ── Minimal concrete visitor ───────────────────────────────────────────────────
 

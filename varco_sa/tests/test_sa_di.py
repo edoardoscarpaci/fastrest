@@ -30,7 +30,6 @@ from providify import DIContainer, Provider
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from varco_conformance.providify_health import assert_no_structural_di_issues
-
 from varco_core.model import DomainModel
 from varco_core.repository import AsyncRepository
 from varco_sa.config import SAConfig

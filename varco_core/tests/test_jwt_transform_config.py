@@ -29,9 +29,7 @@ from __future__ import annotations
 
 import jwt as _pyjwt
 import pytest
-
 from varco_core.jwt import JwtParser
-
 
 _SECRET = "test-secret-do-not-use-in-production"
 
@@ -285,11 +283,11 @@ class TestConfigureAndResetOverride:
         assert token.auth_ctx.roles == frozenset({"from-override"})
 
     def test_reset_claim_transforms_restores_lazy_env_resolution(self, monkeypatch):
+        from varco_core.jwt.transform.registry import ClaimTransformerRegistry
         from varco_core.jwt.transform.runtime import (
             configure_claim_transforms,
             reset_claim_transforms,
         )
-        from varco_core.jwt.transform.registry import ClaimTransformerRegistry
 
         configure_claim_transforms(ClaimTransformerRegistry())
         reset_claim_transforms()

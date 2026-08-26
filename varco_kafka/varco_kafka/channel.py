@@ -57,11 +57,9 @@ from typing import Any
 
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 from aiokafka.errors import TopicAlreadyExistsError
+from providify import Inject, PostConstruct, PreDestroy, Provider, Singleton
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-
-from providify import Inject, PostConstruct, PreDestroy, Provider, Singleton
-
 from varco_core.config import VarcoSettings
 from varco_core.event.base import ChannelConfig
 from varco_core.event.channel import ChannelManager

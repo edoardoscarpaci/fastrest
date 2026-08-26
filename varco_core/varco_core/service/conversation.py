@@ -58,7 +58,6 @@ from typing import Any
 
 from providify import Singleton
 
-
 # ── ConversationTurn ──────────────────────────────────────────────────────────
 
 

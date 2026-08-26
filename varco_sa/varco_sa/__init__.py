@@ -39,11 +39,17 @@ Sub-package layout
 
 from __future__ import annotations
 
+from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
 from varco_sa.alembic_helpers import get_target_metadata, print_create_ddl
+from varco_sa.audit import audit_metadata
 from varco_sa.bootstrap import SAConfig, SAFastrestApp
+from varco_sa.conversation import SAConversationStore, conversation_metadata
+from varco_sa.deduplication import SADedupConfig, SADeduplicator, dedup_metadata
 from varco_sa.di import SAModule, bind_repositories
+from varco_sa.dlq import dead_letters_metadata
+from varco_sa.encryption_store import encryption_metadata
 from varco_sa.factory import SAModelFactory, SAModelRegistry
-from varco_sa.models import BaseDatabaseModel
+from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
 from varco_sa.inbox import (
     InboxEntryModel,
     SAInboxRepository,
@@ -51,9 +57,12 @@ from varco_sa.inbox import (
     inbox_metadata,
 )
 from varco_sa.job_store import SAJobStore, jobs_metadata
-from varco_sa.advisory_lock import SAAdvisoryLock, SAXactAdvisoryLock
-from varco_sa.conversation import SAConversationStore, conversation_metadata
-from varco_sa.saga import SASagaRepository, sagas_metadata
+from varco_sa.metadata import (
+    framework_metadata,
+    framework_table_names,
+    register_framework_metadata,
+)
+from varco_sa.models import BaseDatabaseModel
 from varco_sa.outbox import (
     OutboxEntryModel,
     SAOutboxRepository,
@@ -61,23 +70,14 @@ from varco_sa.outbox import (
     outbox_metadata,
 )
 from varco_sa.provider import SQLAlchemyRepositoryProvider
-from varco_sa.repository import AsyncSQLAlchemyRepository
-from varco_sa.schema_guard import SchemaGuard, SchemaDrift, SchemaDriftReport
-from varco_sa.uow import SQLAlchemyUnitOfWork
 
 # SA-specific applicator is in varco_core (no session; pure SA expressions)
 from varco_sa.query.applicator import SQLAlchemyQueryApplicator
+from varco_sa.repository import AsyncSQLAlchemyRepository
+from varco_sa.saga import SASagaRepository, sagas_metadata
+from varco_sa.schema_guard import SchemaDrift, SchemaDriftReport, SchemaGuard
 from varco_sa.type_coercion import registry_from_sa_model
-from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
-from varco_sa.deduplication import SADeduplicator, SADedupConfig, dedup_metadata
-from varco_sa.audit import audit_metadata
-from varco_sa.dlq import dead_letters_metadata
-from varco_sa.encryption_store import encryption_metadata
-from varco_sa.metadata import (
-    framework_metadata,
-    framework_table_names,
-    register_framework_metadata,
-)
+from varco_sa.uow import SQLAlchemyUnitOfWork
 
 __all__ = [
     # ── DI integration ────────────────────────────────────────────────────────

@@ -55,12 +55,10 @@ import enum
 import sys
 from typing import Any
 
+from providify import Provider
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-from providify import Provider
-
 from varco_core.event.config import EventBusSettings
-
 
 # ── KafkaDeliverySemantics ────────────────────────────────────────────────────
 

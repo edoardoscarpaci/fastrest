@@ -51,8 +51,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from varco_core.model import DomainModel
-from varco_beanie.provider import BeanieRepositoryProvider
 
+from varco_beanie.provider import BeanieRepositoryProvider
 
 # ── BeanieConfig ──────────────────────────────────────────────────────────────
 

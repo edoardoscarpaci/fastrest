@@ -8,7 +8,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import HTTPException
-
 from varco_core.auth.base import AuthContext
 from varco_fastapi.auth.server_auth import (
     AnonymousAuth,
@@ -287,7 +286,6 @@ def _build_rsa_registry_and_authority():
     """Generate a throwaway RSA key, wrap it in a JwtAuthority + registry."""
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
-
     from varco_core.authority import JwtAuthority
     from varco_core.authority.registry import TrustedIssuerRegistry
 

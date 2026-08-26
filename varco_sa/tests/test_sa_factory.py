@@ -12,19 +12,17 @@ from typing import Annotated
 from uuid import UUID
 
 import sqlalchemy as sa
-
 from varco_core.meta import (
     FieldHint,
     ForeignKey,
-    PrimaryKey,
     PKStrategy,
-    pk_field,
+    PrimaryKey,
     UniqueConstraint,
+    pk_field,
 )
-from varco_core.model import DomainModel, VersionedDomainModel
 from varco_core.migrator import DomainMigrator
+from varco_core.model import DomainModel, VersionedDomainModel
 from varco_sa.factory import SAModelRegistry
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

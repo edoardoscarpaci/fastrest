@@ -65,18 +65,15 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
-
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
-
 from typing import Annotated
 
 from providify import InjectMeta, Singleton
-
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
 from varco_core.health import HealthCheck, HealthResult, HealthStatus
+
 from varco_sa.config import SAConfig
 from varco_sa.pool_metrics import pool_metrics
-
 
 # ── SAHealthCheck ─────────────────────────────────────────────────────────────
 

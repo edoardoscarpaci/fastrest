@@ -11,9 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 import pytest
-
 from varco_core.job.task import TaskPayload, TaskRegistry, VarcoTask, varco_task
-
 
 # ── TaskPayload ────────────────────────────────────────────────────────────────
 

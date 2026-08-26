@@ -19,9 +19,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
-import pytest
 import httpx
-
+import pytest
+from pydantic import BaseModel
 from varco_fastapi.client.base import AsyncVarcoClient, ClientProfile, VarcoClient
 from varco_fastapi.client.configurator import ClientConfigurator
 from varco_fastapi.client.handle import JobFailedError, JobHandle
@@ -36,8 +36,6 @@ from varco_fastapi.client.protocol import ClientProtocol
 from varco_fastapi.client.sync import SyncClientAsyncError, SyncVarcoClient
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.presets import AllRouteMixin
-from pydantic import BaseModel
-
 
 # ── Test models and routers ────────────────────────────────────────────────────
 

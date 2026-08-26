@@ -38,13 +38,11 @@ from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel
-
 from varco_core.meta import PKStrategy, PrimaryKey, pk_field
 from varco_core.model import DomainModel
 from varco_core.repository import AsyncRepository
 from varco_core.service import AsyncService
 from varco_core.uow import AsyncUnitOfWork
-
 from varco_fastapi.router.presets import CRUDRouter
 
 

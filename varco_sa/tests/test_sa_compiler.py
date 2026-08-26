@@ -15,7 +15,6 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Column, ForeignKey, Integer, String
 from sqlalchemy.orm import DeclarativeBase, relationship
-
 from varco_core.exception.query import OperationNotSupported
 from varco_core.exception.repository import FieldNotFound
 from varco_core.query.type import (
@@ -26,7 +25,6 @@ from varco_core.query.type import (
     OrNode,
 )
 from varco_sa.query.compiler import SQLAlchemyQueryCompiler
-
 
 # ── Minimal SA models — flat ───────────────────────────────────────────────────
 

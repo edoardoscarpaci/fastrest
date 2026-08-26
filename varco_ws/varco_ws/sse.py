@@ -77,7 +77,6 @@ from typing import Any, AsyncIterator
 from uuid import UUID
 
 from providify import Inject, Singleton
-
 from varco_core.event.base import AbstractEventBus, Event, Subscription
 
 _logger = logging.getLogger(__name__)

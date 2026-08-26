@@ -18,13 +18,13 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import ColumnElement, Select, func
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.exception.repository import FieldNotFound
 from varco_core.query.aggregation import (
     AggregationExpression,
     AggregationFunc,
     AggregationQuery,
 )
+
 from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 
 if TYPE_CHECKING:

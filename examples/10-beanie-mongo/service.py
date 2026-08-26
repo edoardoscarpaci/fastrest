@@ -37,14 +37,12 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from dtos import PostCreate, PostRead, PostUpdate
+from models import Post
 from providify import Inject, Singleton
-
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth.base import AbstractAuthorizer
 from varco_core.service.base import AsyncService, IUoWProvider
-
-from dtos import PostCreate, PostRead, PostUpdate
-from models import Post
 
 if TYPE_CHECKING:
     from varco_core.auth import AuthContext

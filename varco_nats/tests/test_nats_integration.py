@@ -24,7 +24,6 @@ import os
 import uuid
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
 

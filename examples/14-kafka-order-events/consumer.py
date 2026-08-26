@@ -39,12 +39,10 @@ Async safety:   ✅  ``on_order`` is ``async def``; list.append() is GIL-safe.
 
 from __future__ import annotations
 
+from events import OrderPlacedEvent
 from providify import PostConstruct
-
 from varco_core.event import AbstractEventBus, EventConsumer, listen
 from varco_core.resilience.retry import RetryPolicy
-
-from events import OrderPlacedEvent
 
 
 class OrderConsumer(EventConsumer):

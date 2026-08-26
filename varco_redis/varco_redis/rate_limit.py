@@ -92,8 +92,8 @@ import time
 import uuid
 
 import redis.asyncio as aioredis
-
 from varco_core.resilience.rate_limit import RateLimitConfig, RateLimiter
+
 from varco_redis.config import RedisEventBusSettings
 
 _logger = logging.getLogger(__name__)

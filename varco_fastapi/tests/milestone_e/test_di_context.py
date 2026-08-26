@@ -11,7 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 import pytest
-
+from varco_core.auth.base import AuthContext
 from varco_fastapi.context import (
     JwtContext,
     RequestContext,
@@ -20,7 +20,6 @@ from varco_fastapi.context import (
     get_request_context,
     request_scope,
 )
-from varco_core.auth.base import AuthContext
 
 
 class TestRequestContext:

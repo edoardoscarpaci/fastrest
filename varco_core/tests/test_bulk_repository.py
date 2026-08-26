@@ -29,15 +29,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Sequence
-from uuid import uuid4, UUID
+from uuid import UUID, uuid4
 
 import pytest
-
 from varco_core.model import DomainModel
 from varco_core.query.params import QueryParams
 from varco_core.repository import AsyncRepository
 from varco_core.service.outbox import OutboxEntry, OutboxRepository
-
 
 # ── Test-double domain entity ──────────────────────────────────────────────────
 

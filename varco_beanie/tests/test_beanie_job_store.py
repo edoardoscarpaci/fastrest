@@ -41,9 +41,6 @@ from typing import Any, Generator
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-
-from varco_core.job.base import Job, JobStatus
-from varco_core.job.task import TaskPayload
 from varco_beanie.job_store import (
     BeanieJobStore,
     JobDocument,
@@ -51,7 +48,8 @@ from varco_beanie.job_store import (
     _ensure_tz,
     _job_to_doc,
 )
-
+from varco_core.job.base import Job, JobStatus
+from varco_core.job.task import TaskPayload
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

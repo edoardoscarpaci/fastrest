@@ -14,7 +14,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
 from varco_sa.dlq import SADeadLetterQueue

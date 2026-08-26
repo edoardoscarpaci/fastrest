@@ -52,7 +52,6 @@ from __future__ import annotations
 import httpx
 import pytest
 
-
 # ── Login tests ────────────────────────────────────────────────────────────────
 
 

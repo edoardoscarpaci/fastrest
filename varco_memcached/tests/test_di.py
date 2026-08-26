@@ -19,9 +19,7 @@ from __future__ import annotations
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
 from varco_memcached.di import async_bootstrap, bootstrap
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 

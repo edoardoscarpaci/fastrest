@@ -48,12 +48,10 @@ from __future__ import annotations
 import sys
 from typing import Any
 
+from providify import Provider
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-from providify import Provider
-
 from varco_core.event.config import EventBusSettings
-
 
 # ── RedisEventBusSettings ─────────────────────────────────────────────────────
 

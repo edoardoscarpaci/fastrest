@@ -12,14 +12,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from varco_core.resilience.bulkhead import (
     Bulkhead,
     BulkheadConfig,
     BulkheadFullError,
     bulkhead,
 )
-
 
 # ── BulkheadConfig ────────────────────────────────────────────────────────────
 

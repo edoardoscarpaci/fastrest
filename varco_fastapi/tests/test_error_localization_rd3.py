@@ -99,7 +99,6 @@ async def test_regression_error_middleware_reads_request_state_mirror_directly()
     # ordering hazard end-to-end without reaching into internal wiring).
 
     from starlette.requests import Request
-
     from varco_core.context.request import RequestContext
     from varco_fastapi.middleware.error import ErrorMiddleware
 

@@ -94,7 +94,6 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import redis.asyncio as aioredis
-
 from varco_core.lock import AbstractDistributedLock, LockHandle
 
 from varco_redis.config import RedisEventBusSettings

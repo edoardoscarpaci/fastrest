@@ -34,7 +34,6 @@ import sys
 from typing import Annotated, Any, get_type_hints
 
 from providify import DIContainer, Provider
-
 from varco_core.event.base import Event
 from varco_core.event.serializer import JsonEventSerializer
 from varco_core.serialization import Serializer

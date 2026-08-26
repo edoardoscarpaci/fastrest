@@ -85,9 +85,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from beanie import Document
-from pymongo import IndexModel, ASCENDING
 from pydantic import Field
-
+from pymongo import ASCENDING, IndexModel
 from varco_core.event.deduplication import AbstractDeduplicator
 
 if TYPE_CHECKING:

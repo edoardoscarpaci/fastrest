@@ -14,11 +14,9 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from varco_casbin.config import CasbinSettings
 from varco_casbin.engine import CasbinPolicyEngine, _AttrStr
 from varco_core.auth.policy import EnforcementRequest as ER
-
 
 # ── _AttrStr behaves as both string and attribute holder ──────────────────────
 

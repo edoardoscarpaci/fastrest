@@ -58,7 +58,6 @@ from abc import ABC, abstractmethod
 
 from varco_core.event.base import ChannelConfig
 
-
 # ── ChannelManager ────────────────────────────────────────────────────────────
 
 

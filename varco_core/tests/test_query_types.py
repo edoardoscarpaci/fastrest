@@ -8,7 +8,6 @@ and the auto-set ``type`` discriminant field.
 from __future__ import annotations
 
 import pytest
-
 from varco_core.query.type import (
     AndNode,
     ComparisonNode,
@@ -19,7 +18,6 @@ from varco_core.query.type import (
     SortField,
     SortOrder,
 )
-
 
 # ── Enum sanity ────────────────────────────────────────────────────────────────
 

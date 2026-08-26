@@ -35,8 +35,8 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
+from providify import Inject, Singleton
 from varco_core.job.base import AbstractJobStore, JobStatus
-from providify import Singleton, Inject
 
 logger = logging.getLogger(__name__)
 

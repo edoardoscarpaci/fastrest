@@ -23,9 +23,7 @@ fail with ImportError / AttributeError until Phase 3 lands.
 from __future__ import annotations
 
 import pytest
-
-from varco_core.jwt import JwtBuilder, JwtParser, JwtUtil, SYSTEM_ISSUER
-
+from varco_core.jwt import SYSTEM_ISSUER, JwtBuilder, JwtParser, JwtUtil
 
 _SECRET = "test-secret-do-not-use-in-production"
 
@@ -258,8 +256,8 @@ class TestJwtUtilProfileHelpers:
         assert non_matching.profile_name(registry=profiles) is None
 
     def test_assert_profile_raises_when_no_match(self):
-        from varco_core.jwt.profile import TokenProfile, TokenProfileRegistry
         from varco_core.jwt.exceptions import TokenProfileError
+        from varco_core.jwt.profile import TokenProfile, TokenProfileRegistry
 
         profiles = TokenProfileRegistry()
         profiles.register(TokenProfile(name="internal", issuers=frozenset({"x"})))

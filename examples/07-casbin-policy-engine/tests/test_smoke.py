@@ -436,10 +436,10 @@ class TestHttpEndpointWithCasbin:
         running engine that belongs to a different fixture.
         """
         import httpx
+        from app import create_app
         from httpx import ASGITransport
         from varco_casbin.config import CasbinSettings
         from varco_casbin.engine import CasbinPolicyEngine
-        from app import create_app
 
         user = "http-writer-allow-test"
 

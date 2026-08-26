@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 import varco_core.profiling.backends  # noqa: F401 — registers built-ins
 from varco_core.profiling import (
     AllocationStat,
@@ -41,7 +40,6 @@ from varco_core.profiling import (
     set_profiling_enabled,
 )
 from varco_core.profiling.report import _empty_report
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

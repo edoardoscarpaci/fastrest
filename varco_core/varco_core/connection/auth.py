@@ -38,9 +38,7 @@ from __future__ import annotations
 import base64
 from typing import Literal, Self
 
-from pydantic import ConfigDict, model_validator
-from pydantic import BaseModel
-
+from pydantic import BaseModel, ConfigDict, model_validator
 
 # ── BasicAuthConfig ───────────────────────────────────────────────────────────
 

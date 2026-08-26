@@ -11,7 +11,8 @@ interpretation* context only.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from typing import TYPE_CHECKING
 
 from varco_core.context.precedence import Resolved, resolve_precedence

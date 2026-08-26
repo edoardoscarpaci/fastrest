@@ -20,11 +20,9 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from varco_core.health import HealthStatus
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.health import RedisHealthCheck
-
 
 # ── Healthy probe ─────────────────────────────────────────────────────────────
 

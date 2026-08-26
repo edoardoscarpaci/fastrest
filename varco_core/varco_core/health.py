@@ -59,7 +59,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import ClassVar
 
-
 # ── HealthStatus ──────────────────────────────────────────────────────────────
 
 # Module-level severity map.  Defined OUTSIDE the Enum class because Python's

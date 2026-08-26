@@ -39,8 +39,7 @@ import importlib
 import json
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
-from pydantic import TypeAdapter
-from pydantic import PydanticSchemaGenerationError
+from pydantic import PydanticSchemaGenerationError, TypeAdapter
 
 # T is the Python type this serializer handles.
 # Covariant would be ideal but Protocols with covariant type vars and

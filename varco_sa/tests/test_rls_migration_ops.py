@@ -14,7 +14,6 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
-
 from varco_sa.rls import enable_rls_ddl
 
 

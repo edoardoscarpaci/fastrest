@@ -5,7 +5,6 @@ Tests for varco_fastapi.context — ContextVars and context managers.
 from __future__ import annotations
 
 import pytest
-
 from varco_core.auth.base import AuthContext
 from varco_fastapi.context import (
     auth_context,
@@ -14,8 +13,8 @@ from varco_fastapi.context import (
     get_auth_context_or_none,
     get_request_id,
     get_request_token,
-    request_scope,
     request_id_var,
+    request_scope,
 )
 
 

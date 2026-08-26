@@ -26,11 +26,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
-
 from varco_core.authority.registry import TrustedIssuerRegistry
 from varco_core.jwk.model import JsonWebKeySet
-
 
 # ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -675,10 +672,9 @@ class _TestTrustedIssuerRegistryVerifyIssuerEnforcement:
     """
 
     def _make_authority(self, *, issuer: str, kid: str):
-        from cryptography.hazmat.primitives.asymmetric import rsa
-
-        from varco_core.authority.jwt_authority import JwtAuthority
         from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from varco_core.authority.jwt_authority import JwtAuthority
 
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         pem = key.private_bytes(

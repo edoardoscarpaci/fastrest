@@ -20,6 +20,7 @@ from typing import Any, Callable
 
 from varco_core.tenancy.pool import TenantResourcePool
 from varco_core.tenancy.settings import TenantIsolation
+
 from varco_beanie.tenancy.binding import BeanieTenantBinding, build_tenant_binding
 
 

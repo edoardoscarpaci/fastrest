@@ -102,9 +102,7 @@ from typing import Annotated, Any
 # namespace directly.
 from nats import connect
 from nats.js.errors import NotFoundError
-
-from providify import Inject, Instance, InjectMeta, PostConstruct, PreDestroy, Singleton
-
+from providify import Inject, InjectMeta, Instance, PostConstruct, PreDestroy, Singleton
 from varco_core.event.base import (
     CHANNEL_ALL,
     CHANNEL_DEFAULT,

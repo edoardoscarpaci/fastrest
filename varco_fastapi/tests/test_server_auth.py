@@ -17,7 +17,6 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
-
 from varco_fastapi.auth.server_auth import JwtBearerAuth
 
 

@@ -32,7 +32,6 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from varco_core.resilience import (
     CallTimeoutError,
     CircuitBreaker,
@@ -45,7 +44,6 @@ from varco_core.resilience import (
     retry,
     timeout,
 )
-
 
 # ── RetryPolicy ────────────────────────────────────────────────────────────────
 

@@ -54,23 +54,21 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
-from providify import DIContainer, Provider
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
-
-from varco_core.service.base import IUoWProvider
-from varco_fastapi import create_varco_app
-from varco_fastapi.di import VarcoFastAPIModule
-from varco_sa.provider import SQLAlchemyRepositoryProvider
-
 # Import the @Singleton-decorated classes so their DI metadata is stamped
 # before the container tries to resolve them.
 from assembler import PostAssembler  # noqa: F401 — registers PostAssembler
 from dtos import PostCreate, PostRead, PostUpdate
+from fastapi import FastAPI
 from models import Post
+from providify import DIContainer, Provider
 from service import PostService  # noqa: F401 — registers PostService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+from varco_core.service.base import IUoWProvider
+from varco_fastapi.di import VarcoFastAPIModule
+from varco_sa.provider import SQLAlchemyRepositoryProvider
 
+from varco_fastapi import create_varco_app
 
 # ── Shared SQLAlchemy DeclarativeBase ──────────────────────────────────────────
 
@@ -103,8 +101,9 @@ def _make_router(container: DIContainer) -> type:
     Returns:
         A ``CRUDRouter`` subclass for the Post entity, with ``_service`` set.
     """
-    from varco_fastapi.router.presets import CRUDRouter
     from uuid import UUID
+
+    from varco_fastapi.router.presets import CRUDRouter
 
     svc = container.get(PostService)
 

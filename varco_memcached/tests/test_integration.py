@@ -26,9 +26,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-
 from varco_memcached.cache import MemcachedCache, MemcachedCacheSettings
-
 
 # ── Fixture: real Memcached via Docker ──────────────────────────────────────────
 

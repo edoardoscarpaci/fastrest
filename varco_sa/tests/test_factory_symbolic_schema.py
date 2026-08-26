@@ -8,7 +8,6 @@ from __future__ import annotations
 import dataclasses
 
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.meta import MetaReader
 from varco_core.model import DomainModel
 from varco_core.tenancy.settings import TenantScope

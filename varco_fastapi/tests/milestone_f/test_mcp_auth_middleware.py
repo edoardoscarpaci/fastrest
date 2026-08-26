@@ -27,11 +27,9 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from varco_core.auth.base import AuthContext
 from varco_fastapi.auth.server_auth import AbstractServerAuth, AnonymousAuth, ApiKeyAuth
 from varco_fastapi.router.mcp import MCPAuthMiddleware
-
 
 # ── Minimal ASGI app stubs ────────────────────────────────────────────────────
 
@@ -300,8 +298,8 @@ def test_mcp_adapter_mount_without_auth_does_not_add_middleware():
     # is accessible without auth — if middleware were added with a strict auth,
     # it would block.  Since we're not passing server_auth, no middleware is added.
     from varco_fastapi.router.base import VarcoRouter
-    from varco_fastapi.router.mixins import CreateMixin
     from varco_fastapi.router.mcp import MCPAdapter
+    from varco_fastapi.router.mixins import CreateMixin
 
     class StubRouter(CreateMixin, VarcoRouter):
         _prefix = "/stubs"
@@ -336,8 +334,8 @@ def test_mcp_adapter_mount_with_auth_adds_middleware():
     MCPAdapter.mount(app, server_auth=...) must add MCPAuthMiddleware.
     """
     from varco_fastapi.router.base import VarcoRouter
-    from varco_fastapi.router.mixins import CreateMixin
     from varco_fastapi.router.mcp import MCPAdapter
+    from varco_fastapi.router.mixins import CreateMixin
 
     class StubRouter2(CreateMixin, VarcoRouter):
         _prefix = "/stubs2"

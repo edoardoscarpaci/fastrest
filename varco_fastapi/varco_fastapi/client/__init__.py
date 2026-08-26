@@ -29,7 +29,6 @@ from varco_fastapi.client.base import AsyncVarcoClient, ClientProfile, VarcoClie
 from varco_fastapi.client.config import ClientConfig
 from varco_fastapi.client.front_door import client_class_for, client_for
 from varco_fastapi.client.handle import JobFailedError, JobHandle
-from varco_fastapi.client.peer import PeerConfig, PeerRegistry, bind_peers
 from varco_fastapi.client.middleware import (
     AbstractClientMiddleware,
     AuthForwardMiddleware,
@@ -42,6 +41,7 @@ from varco_fastapi.client.middleware import (
     RetryMiddleware,
     TimeoutMiddleware,
 )
+from varco_fastapi.client.peer import PeerConfig, PeerRegistry, bind_peers
 from varco_fastapi.client.protocol import ClientProtocol
 from varco_fastapi.client.sync import SyncClientAsyncError, SyncVarcoClient
 

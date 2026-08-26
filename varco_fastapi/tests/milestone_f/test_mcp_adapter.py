@@ -26,14 +26,9 @@ from uuid import UUID
 
 import pytest
 from pydantic import BaseModel
-
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.endpoint import route
-from varco_fastapi.router.mixins import (
-    CreateMixin,
-    ListMixin,
-    ReadMixin,
-)
+from varco_fastapi.router.introspection import introspect_routes
 from varco_fastapi.router.mcp import (
     MCPAdapter,
     MCPToolDefinition,
@@ -41,8 +36,11 @@ from varco_fastapi.router.mcp import (
     _resolve_description,
     _resource_name,
 )
-from varco_fastapi.router.introspection import introspect_routes
-
+from varco_fastapi.router.mixins import (
+    CreateMixin,
+    ListMixin,
+    ReadMixin,
+)
 
 # ── Test models ───────────────────────────────────────────────────────────────
 
@@ -474,7 +472,6 @@ def test_bind_mcp_adapter_resolves_through_a_real_container():
     ``MCPAdapter`` from a real container.
     """
     from providify import DIContainer  # noqa: PLC0415
-
     from varco_fastapi.router.mcp import bind_mcp_adapter  # noqa: PLC0415
 
     container = DIContainer()
@@ -488,7 +485,6 @@ def test_bind_mcp_adapter_resolves_through_a_real_container():
 
 def test_bind_mcp_adapter_registers_a_singleton():
     from providify import DIContainer  # noqa: PLC0415
-
     from varco_fastapi.router.mcp import bind_mcp_adapter  # noqa: PLC0415
 
     container = DIContainer()

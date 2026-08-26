@@ -39,12 +39,10 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import FastAPI
-
+from router import build_router
 from varco_fastapi.exceptions import add_exception_handlers
 from varco_fastapi.job import InMemoryJobStore, JobRunner
 from varco_fastapi.middleware import ErrorMiddleware, install_middleware_stack
-
-from router import build_router
 
 
 def create_app() -> FastAPI:

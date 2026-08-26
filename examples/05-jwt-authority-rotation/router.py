@@ -32,9 +32,7 @@ from __future__ import annotations
 
 import jwt as _jwt
 from fastapi import APIRouter, Depends, Request
-
 from varco_core.auth.base import AuthContext
-
 from varco_fastapi.auth import JwtBearerAuth
 
 

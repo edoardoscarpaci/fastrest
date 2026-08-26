@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 
-
 REVISION_TEMPLATE = '''
 """{message}"""
 from alembic import op
@@ -173,7 +172,6 @@ async def test_stamp_marks_without_executing_ddl(
     versions_dir: Path, sqlite_url: str
 ) -> None:
     from sqlalchemy import inspect as sa_inspect
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     _write_two_revisions(versions_dir)
@@ -200,7 +198,6 @@ async def test_upgrade_dry_run_emits_sql_and_touches_no_table(
     versions_dir: Path, sqlite_url: str
 ) -> None:
     from sqlalchemy import inspect as sa_inspect
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     _write_two_revisions(versions_dir)

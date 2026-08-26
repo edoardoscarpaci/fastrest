@@ -31,14 +31,10 @@ Async safety:   ✅ Synchronous factory; no event loop required at call time.
 from __future__ import annotations
 
 from fastapi import FastAPI
-
+from router import CatalogRouter
 from varco_core.auth.base import AuthContext
-
 from varco_fastapi.app import create_varco_app
 from varco_fastapi.auth import ApiKeyAuth
-
-from router import CatalogRouter
-
 
 # API keys → AuthContext.  The reader holds the "catalog:read" scope required by
 # the guarded /reports/summary route; the guest does not.

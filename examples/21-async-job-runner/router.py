@@ -33,13 +33,10 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Request
+from jobs import generate_report
 from pydantic import BaseModel, Field
-
 from varco_core.job.base import AbstractJobRunner, AbstractJobStore, Job
 from varco_fastapi.job.response import JobStatusResponse
-
-from jobs import generate_report
-
 
 # ── Request / response models ─────────────────────────────────────────────────
 

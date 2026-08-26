@@ -34,10 +34,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from varco_beanie.conversation import BeanieConversationStore, ConversationTurnDocument
 from varco_core.service.conversation import ConversationTurn
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

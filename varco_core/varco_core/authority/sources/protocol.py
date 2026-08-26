@@ -24,7 +24,6 @@ from typing import Protocol, runtime_checkable
 
 from varco_core.jwk.model import JsonWebKeySet
 
-
 # ── IssuerSource Protocol ─────────────────────────────────────────────────────
 
 

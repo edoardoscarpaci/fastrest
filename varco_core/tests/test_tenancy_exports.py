@@ -32,8 +32,9 @@ _EXPECTED_EXPORTS = [
 
 @pytest.mark.parametrize("name", _EXPECTED_EXPORTS)
 def test_top_level_export_matches_tenancy_module_class(name: str) -> None:
-    import varco_core
     import varco_core.tenancy as tenancy_pkg
+
+    import varco_core
 
     assert hasattr(varco_core, name), f"varco_core is missing top-level export {name!r}"
     assert getattr(varco_core, name) is getattr(tenancy_pkg, name)

@@ -18,7 +18,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
 
@@ -108,7 +107,6 @@ class TestBeanieDeadLetterQueueIntegration:
 
         from beanie import init_beanie
         from pymongo import AsyncMongoClient
-
         from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 
         db_name = f"test_beanie_dlq_{uuid.uuid4().hex[:8]}"

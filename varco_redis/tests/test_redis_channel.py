@@ -19,11 +19,9 @@ Sections
 from __future__ import annotations
 
 import pytest
-
+from varco_core.event.base import ChannelConfig
 from varco_redis.channel import RedisChannelManager, RedisChannelManagerSettings
 from varco_redis.config import RedisEventBusSettings
-from varco_core.event.base import ChannelConfig
-
 
 # ── Settings alias ─────────────────────────────────────────────────────────────
 

@@ -40,10 +40,8 @@ from dataclasses import dataclass
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-
 from gateway import PaymentGateway  # noqa: PLC0415
 from stub import FailMode, FlakeyPaymentStub  # noqa: PLC0415
-
 
 # ── AppState ──────────────────────────────────────────────────────────────────
 

@@ -26,8 +26,8 @@ def _reset_jwt_globals():
 
 
 def _reset_all() -> None:
-    from varco_core.jwt.transform.runtime import reset_claim_transforms
     from varco_core.jwt.profile import reset_token_profiles
+    from varco_core.jwt.transform.runtime import reset_claim_transforms
 
     reset_claim_transforms()
     reset_token_profiles()

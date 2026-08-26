@@ -24,7 +24,6 @@ from unittest.mock import MagicMock
 import pytest
 from cryptography.fernet import Fernet
 from pydantic import BaseModel
-
 from varco_core.dto.encryption import (
     EncryptedDTOField,
     _find_encrypted_dto_fields,
@@ -32,7 +31,6 @@ from varco_core.dto.encryption import (
     encrypt_dto_response,
 )
 from varco_core.encryption import FernetFieldEncryptor
-
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 

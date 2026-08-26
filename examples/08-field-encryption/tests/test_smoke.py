@@ -163,8 +163,8 @@ class TestDbStoresCiphertext:
         pk = created["pk"]
 
         # Open a raw SA connection bypassing the mapper — reads raw bytes from DB
-        from sqlalchemy.ext.asyncio import create_async_engine
         import sqlalchemy as sa
+        from sqlalchemy.ext.asyncio import create_async_engine
 
         engine = create_async_engine(db_url, echo=False)
         try:

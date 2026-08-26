@@ -18,14 +18,12 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.cache import CacheBackend, InMemoryCache
 from varco_redis.cache import (
     LayeredCacheSettings,
     RedisCache,
     RedisLayeredCacheConfiguration,
 )
-
 
 # ── FakeRedis (reused from test_redis_cache.py conventions) ──────────────────
 

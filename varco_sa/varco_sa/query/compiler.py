@@ -29,10 +29,9 @@ from __future__ import annotations
 import re
 from typing import Any, Union
 
-from sqlalchemy import BinaryExpression, ColumnElement, and_, inspect as sa_inspect
-from sqlalchemy import not_, or_
+from sqlalchemy import BinaryExpression, ColumnElement, and_, not_, or_
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import DeclarativeBase, MappedColumn
-
 from varco_core.exception.query import OperationNotSupported
 from varco_core.exception.repository import FieldNotFound
 from varco_core.query.type import (

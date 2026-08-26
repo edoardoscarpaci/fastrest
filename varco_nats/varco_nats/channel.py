@@ -61,11 +61,9 @@ from typing import Any
 
 from nats import connect
 from nats.js.errors import NotFoundError
+from providify import Inject, PostConstruct, PreDestroy, Provider, Singleton
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
-
-from providify import Inject, PostConstruct, PreDestroy, Provider, Singleton
-
 from varco_core.config import VarcoSettings
 from varco_core.event.base import ChannelConfig
 from varco_core.event.channel import ChannelManager

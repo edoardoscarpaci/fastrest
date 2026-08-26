@@ -55,7 +55,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from providify import Singleton
-
 from varco_core.auth.base import AbstractAuthorizer, Action, AuthContext, Resource
 from varco_core.exception.service import ServiceAuthorizationError
 

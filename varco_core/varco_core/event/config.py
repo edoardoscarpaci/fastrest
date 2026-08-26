@@ -25,7 +25,6 @@ from pydantic_settings import SettingsConfigDict
 
 from varco_core.config import VarcoSettings
 
-
 # ── EventBusSettings ──────────────────────────────────────────────────────────
 
 

@@ -21,11 +21,9 @@ import uuid
 
 import pytest
 import pytest_asyncio
-
 from varco_sa.rls import enable_rls_ddl, set_tenant_local
 
 from tests.conftest import provision_rls_app_url
-
 
 # ════════════════════════════════════════════════════════════════════════════════
 # Unit tests — enable_rls_ddl() output shape (no DB required)

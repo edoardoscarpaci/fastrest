@@ -13,12 +13,10 @@ from __future__ import annotations
 import asyncio
 from uuid import uuid4
 
-
 from varco_core.job.base import Job, JobStatus
 from varco_core.job.task import TaskPayload, TaskRegistry, VarcoTask
 from varco_fastapi.job.runner import JobRunner
 from varco_fastapi.job.store import InMemoryJobStore
-
 
 # ── try_claim ──────────────────────────────────────────────────────────────────
 

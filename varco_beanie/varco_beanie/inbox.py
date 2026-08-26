@@ -88,7 +88,6 @@ from uuid import UUID, uuid4
 from beanie import Document
 from beanie.operators import Set
 from pydantic import Field
-
 from varco_core.service.inbox import InboxEntry, InboxRepository
 
 if TYPE_CHECKING:

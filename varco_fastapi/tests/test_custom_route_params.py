@@ -21,20 +21,16 @@ Covers:
 
 from __future__ import annotations
 
-
 from fastapi import Body, Depends, Query, Request
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
 from varco_core.auth.base import AuthContext
-
 from varco_fastapi.app import create_varco_app
 from varco_fastapi.auth import AnonymousAuth, ApiKeyAuth
 from varco_fastapi.auth.guard import require_scopes
 from varco_fastapi.router.base import _synthesize_custom_signature
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import GenericRouter
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -369,7 +365,6 @@ async def test_async_offload_still_offloads_with_new_signature():
     return the computed result — the new synthesized signature preserves offload.
     """
     from fastapi import FastAPI
-
     from varco_fastapi.job.runner import JobRunner
     from varco_fastapi.job.store import InMemoryJobStore
 

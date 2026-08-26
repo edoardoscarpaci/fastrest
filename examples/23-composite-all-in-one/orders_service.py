@@ -19,10 +19,10 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
-
-from varco_fastapi import create_varco_app
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import GenericRouter
+
+from varco_fastapi import create_varco_app
 
 
 def create_orders_app() -> FastAPI:

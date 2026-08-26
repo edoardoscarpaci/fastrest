@@ -88,8 +88,6 @@ from typing import Any
 
 from providify.decorator import Singleton
 
-from varco_core.serialization import Serializer
-
 # DESIGN: ``Event`` is imported at RUNTIME, not under ``TYPE_CHECKING``.
 #
 # ``Serializer[Event]`` is used as a DI binding interface and appears in bus
@@ -104,6 +102,7 @@ from varco_core.serialization import Serializer
 #   ❌ Importing this module now also loads ``base.py`` — acceptable, since all
 #      three bus backends already import ``base.py`` at module scope anyway.
 from varco_core.event.base import Event
+from varco_core.serialization import Serializer
 
 # ── JsonEventSerializer ────────────────────────────────────────────────────────
 

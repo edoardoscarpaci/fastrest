@@ -110,8 +110,8 @@ def _setup_prometheus_meter_provider() -> bool:
         )
         return False
 
-    from opentelemetry.sdk.metrics import MeterProvider  # noqa: PLC0415
     from opentelemetry import metrics as otel_metrics  # noqa: PLC0415
+    from opentelemetry.sdk.metrics import MeterProvider  # noqa: PLC0415
 
     # PrometheusMetricReader registers itself with prometheus_client.REGISTRY
     # at construction time — no explicit registration call needed.

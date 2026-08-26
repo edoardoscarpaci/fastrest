@@ -27,14 +27,13 @@ from collections.abc import AsyncIterator
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.event import (
     Event,
     Subscription,
 )
 from varco_core.event.serializer import JsonEventSerializer
-from varco_redis import RedisEventBus, RedisEventBusSettings
 
+from varco_redis import RedisEventBus, RedisEventBusSettings
 
 # ── Test event types ────────────────────────────────────────────────────────────
 

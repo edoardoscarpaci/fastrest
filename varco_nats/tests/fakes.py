@@ -25,9 +25,7 @@ from typing import Any
 
 from nats.errors import TimeoutError as NatsTimeoutError
 from nats.js.errors import NotFoundError
-
 from varco_core.event.base import Event
-
 
 # ── Test event types ──────────────────────────────────────────────────────────
 

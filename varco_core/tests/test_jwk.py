@@ -29,9 +29,7 @@ from cryptography.hazmat.primitives.serialization import (
     PrivateFormat,
     PublicFormat,
 )
-
 from varco_core.jwk import JsonWebKey, JsonWebKeySet, JwkBuilder
-
 
 # ── Key generation helpers ─────────────────────────────────────────────────────
 

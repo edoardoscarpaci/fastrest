@@ -29,8 +29,8 @@ def test_provisioner_refuses_admin_dsn_equal_to_app_dsn() -> None:
 
 
 async def test_maintenance_engine_is_nullpool_and_disposed_in_finally() -> None:
-    from varco_sa.tenancy.admin.engine import SAAdminEngine
     from sqlalchemy.pool import NullPool
+    from varco_sa.tenancy.admin.engine import SAAdminEngine
 
     admin_engine = SAAdminEngine(admin_dsn="sqlite+aiosqlite://")
 

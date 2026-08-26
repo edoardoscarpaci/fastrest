@@ -265,6 +265,7 @@ def validate_container_bindings(container: Any) -> None:
             AbstractJobRunner,
             AbstractJobStore,
         )  # noqa: PLC0415
+
         from varco_fastapi.auth.server_auth import AbstractServerAuth  # noqa: PLC0415
     except ImportError:
         # If we can't import the ABCs we can't check for them — skip silently

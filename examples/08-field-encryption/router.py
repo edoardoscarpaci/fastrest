@@ -36,12 +36,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import FastAPI
-
-from varco_fastapi.router.presets import CRUDRouter
-
 from dtos import PatientCreate, PatientRead, PatientUpdate
+from fastapi import FastAPI
 from models import Patient
+from varco_fastapi.router.presets import CRUDRouter
 
 
 def make_patient_router(container) -> type[CRUDRouter]:

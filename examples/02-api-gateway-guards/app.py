@@ -41,11 +41,12 @@ Async safety:   ✅ Synchronous factory; async init runs inside lifespan.
 
 from __future__ import annotations
 
+from auth import registry
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
+from router import GatewayRouter
 from starlette.requests import Request
-
 from varco_fastapi.auth import JwtBearerAuth
 from varco_fastapi.exceptions import add_exception_handlers
 from varco_fastapi.lifespan import VarcoLifespan
@@ -54,9 +55,6 @@ from varco_fastapi.middleware import (
     RequestContextMiddleware,
     install_middleware_stack,
 )
-
-from auth import registry
-from router import GatewayRouter
 
 
 def create_app() -> FastAPI:

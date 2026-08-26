@@ -19,9 +19,7 @@ from __future__ import annotations
 import logging
 
 import pytest
-
 from varco_core.jwt import JsonWebToken, JwtBuilder, JwtParser
-
 
 _SECRET = "test-secret-do-not-use-in-production"
 
@@ -230,13 +228,13 @@ class TestClaimMappingApply:
         assert sorted(out["roles"]) == ["editor", "viewer"]
 
     def test_required_missing_raises_naming_target_and_paths(self):
+        from varco_core.jwt.exceptions import ClaimTransformError
         from varco_core.jwt.transform.mapping import (
             CanonicalClaim,
             ClaimMapping,
             ClaimRule,
         )
         from varco_core.jwt.transform.path import ClaimPath
-        from varco_core.jwt.exceptions import ClaimTransformError
 
         mapping = ClaimMapping(
             rules=(
@@ -479,7 +477,6 @@ class TestParserIntegrationWithExplicitTransformer:
         # but this test needs a malformed *raw* grants claim to prove the
         # parser now raises ClaimTransformError instead of a bare KeyError.
         import jwt as _pyjwt
-
         from varco_core.jwt.exceptions import ClaimTransformError
 
         signed = _pyjwt.encode(

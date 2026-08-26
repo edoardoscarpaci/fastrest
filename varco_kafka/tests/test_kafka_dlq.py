@@ -28,12 +28,10 @@ from unittest.mock import patch
 
 import pytest
 from aiokafka.structs import TopicPartition
-
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
 from varco_kafka.config import KafkaEventBusSettings
 from varco_kafka.dlq import KafkaDLQ, KafkaDLQConfiguration
-
 
 # ── Minimal event for tests ────────────────────────────────────────────────────
 

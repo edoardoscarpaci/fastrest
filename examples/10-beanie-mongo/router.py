@@ -24,11 +24,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from varco_fastapi.router.presets import CRUDRouter
-
 from dtos import PostCreate, PostRead, PostUpdate
 from models import Post
 from service import PostService
+from varco_fastapi.router.presets import CRUDRouter
 
 
 def make_post_router(service: PostService) -> type:

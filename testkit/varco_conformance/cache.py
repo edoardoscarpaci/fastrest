@@ -26,7 +26,6 @@ import asyncio
 from uuid import uuid4
 
 import pytest
-
 from varco_core.cache.base import AsyncCache, CacheBackend
 
 

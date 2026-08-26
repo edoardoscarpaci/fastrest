@@ -159,7 +159,6 @@ class TestBeanieAuditChainIntegration:
 
         from beanie import init_beanie
         from pymongo import AsyncMongoClient
-
         from varco_beanie.audit import AuditDocument, BeanieAuditRepository
 
         db_name = f"test_beanie_audit_chain_{uuid.uuid4().hex[:8]}"

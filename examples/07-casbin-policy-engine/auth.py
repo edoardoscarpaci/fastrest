@@ -25,9 +25,8 @@ Async safety:   ✅ ``__call__`` is ``async def``.
 
 from __future__ import annotations
 
-from starlette.requests import Request
 from starlette.exceptions import HTTPException
-
+from starlette.requests import Request
 from varco_core.auth.base import AuthContext
 from varco_fastapi.auth import AbstractServerAuth
 

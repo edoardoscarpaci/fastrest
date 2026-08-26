@@ -24,13 +24,11 @@ from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.event import Event, Subscription
 from varco_core.event.serializer import JsonEventSerializer
-from varco_nats import NatsDeliverySemantics, NatsEventBus, NatsEventBusSettings
 
 from tests.fakes import FakeJetStream, FakeMsg, FakeNatsClient, OrderPlacedEvent
-
+from varco_nats import NatsDeliverySemantics, NatsEventBus, NatsEventBusSettings
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

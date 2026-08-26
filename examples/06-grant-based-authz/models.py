@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from typing import Annotated
 from uuid import UUID
 
-from varco_core.meta import FieldHint, PrimaryKey, PKStrategy, pk_field
+from varco_core.meta import FieldHint, PKStrategy, PrimaryKey, pk_field
 from varco_core.model import AuditedDomainModel
 
 

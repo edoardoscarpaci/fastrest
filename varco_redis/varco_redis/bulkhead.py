@@ -86,9 +86,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 import redis.asyncio as aioredis
-
 from providify import Configuration, Inject, Provider
 from varco_core.resilience.bulkhead import BulkheadConfig, BulkheadFullError
+
 from varco_redis.config import RedisEventBusSettings
 
 _logger = logging.getLogger(__name__)

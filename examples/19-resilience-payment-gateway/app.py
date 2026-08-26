@@ -31,7 +31,6 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-
 from router import AppState, build_router  # noqa: PLC0415
 
 
@@ -81,10 +80,10 @@ def create_app() -> FastAPI:
     #      per new exception type.
 
     from varco_core.resilience import (  # noqa: PLC0415
+        BulkheadFullError,
         CallTimeoutError,
         CircuitOpenError,
         RetryExhaustedError,
-        BulkheadFullError,
     )
 
     @app.exception_handler(CallTimeoutError)

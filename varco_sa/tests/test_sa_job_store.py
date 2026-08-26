@@ -32,11 +32,9 @@ import pytest
 import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.job.base import Job, JobStatus
 from varco_core.job.task import TaskPayload
 from varco_sa.job_store import SAJobStore, jobs_metadata
-
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
 

@@ -20,9 +20,9 @@ from typing import Any
 
 from sqlalchemy import Select, asc, desc
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.query.applicator.applicator import QueryApplicator
 from varco_core.query.type import SortField, SortOrder, TransformerNode
+
 from varco_sa.query.compiler import SQLAlchemyQueryCompiler
 
 

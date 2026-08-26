@@ -9,7 +9,6 @@ from typing import Annotated
 from uuid import UUID
 
 import pytest
-
 from varco_core.meta import (
     CheckConstraint,
     FieldHint,
@@ -22,7 +21,6 @@ from varco_core.meta import (
 )
 from varco_core.migrator import DomainMigrator
 from varco_core.model import DomainModel, VersionedDomainModel
-
 
 # ── FieldHint ─────────────────────────────────────────────────────────────────
 

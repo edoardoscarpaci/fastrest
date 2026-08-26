@@ -14,9 +14,9 @@ import pytest
 
 def test_tenant_aware_service_on_global_entity_raises() -> None:
     from varco_core.service.tenant import TenantAwareService
+    from varco_core.tenancy.catalog import TenantIsolationError
     from varco_core.tenancy.scope_guard import validate_service_scope
     from varco_core.tenancy.settings import TenantScope
-    from varco_core.tenancy.catalog import TenantIsolationError
 
     class GlobalEntity:
         pass

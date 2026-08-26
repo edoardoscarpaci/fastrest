@@ -7,10 +7,9 @@ Unit tests for varco_nats.connection
 from __future__ import annotations
 
 import pytest
-
 from varco_core.connection.auth import BasicAuthConfig
-from varco_nats import NatsConnectionSettings
 
+from varco_nats import NatsConnectionSettings
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 

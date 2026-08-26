@@ -28,7 +28,6 @@ import os
 from dataclasses import dataclass
 
 import pytest
-
 from varco_core.cache import (
     CachedService,
     CacheInvalidationConsumer,

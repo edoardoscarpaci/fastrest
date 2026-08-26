@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
-
 from varco_core.auth.base import AuthContext
 from varco_fastapi.auth.server_auth import AbstractServerAuth
 

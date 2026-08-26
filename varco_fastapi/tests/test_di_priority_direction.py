@@ -25,7 +25,6 @@ import sys
 
 import pytest
 from providify import DIContainer, Provider
-
 from varco_fastapi.auth.trust_store import TrustStore
 from varco_fastapi.client.base import ClientProfile
 from varco_fastapi.middleware.cors import CORSConfig

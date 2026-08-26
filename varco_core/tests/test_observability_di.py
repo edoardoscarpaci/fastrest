@@ -34,10 +34,8 @@ import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.trace import TracerProvider
 from providify import Configuration, DIContainer, Provider
-
 from varco_core.observability.config import OtelConfig
 from varco_core.observability.di import OtelConfiguration
-
 
 # ── Fixtures / helpers ────────────────────────────────────────────────────────
 

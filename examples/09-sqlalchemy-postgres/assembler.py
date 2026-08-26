@@ -26,13 +26,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from providify import Singleton
-
-from varco_core.assembler import AbstractDTOAssembler
-from varco_core.model import domain_replace
-
 from dtos import PostCreate, PostRead, PostUpdate
 from models import Post
+from providify import Singleton
+from varco_core.assembler import AbstractDTOAssembler
+from varco_core.model import domain_replace
 
 
 @Singleton

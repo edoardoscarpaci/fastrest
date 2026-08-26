@@ -95,12 +95,11 @@ from opentelemetry import trace
 from opentelemetry.trace import Span, StatusCode
 
 from varco_core.observability.attributes import wrap_instrument
-from varco_core.observability.params import render_captured_params
-from varco_core.observability.span import build_span_attributes
 
 # Reuse the lazy instrument cache from metrics.py — same key format.
 from varco_core.observability.metrics import _instrument_cache
-
+from varco_core.observability.params import render_captured_params
+from varco_core.observability.span import build_span_attributes
 
 # ── create_span ───────────────────────────────────────────────────────────────
 

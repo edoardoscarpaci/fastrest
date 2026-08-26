@@ -18,7 +18,6 @@ import asyncio
 import uuid
 
 import pytest
-
 from varco_core.event import ChannelConfig, Event
 from varco_kafka.bus import KafkaEventBus
 from varco_kafka.channel import KafkaChannelManager, KafkaChannelManagerSettings

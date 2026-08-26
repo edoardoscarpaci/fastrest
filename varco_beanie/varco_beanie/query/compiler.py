@@ -56,7 +56,6 @@ import sys
 from typing import Any
 
 from providify import Singleton
-
 from varco_core.exception.query import OperationNotSupported
 from varco_core.query.type import (
     ComparisonNode,

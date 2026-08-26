@@ -46,7 +46,6 @@ from uuid import UUID, uuid4
 
 from beanie import Document
 from pydantic import Field
-
 from varco_core.service.saga import AbstractSagaRepository, SagaState, SagaStatus
 
 if TYPE_CHECKING:

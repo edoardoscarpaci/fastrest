@@ -23,7 +23,6 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
-
 from varco_core.dto.base import UpdateOperation
 from varco_core.dto.factory import DTOSet, generate_dtos
 from varco_core.dto.pagination import (
@@ -41,7 +40,6 @@ from varco_core.model import (
 from varco_core.query.params import QueryParams
 from varco_core.query.type import SortField, SortOrder
 from varco_core.registry import DomainModelRegistry, register
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

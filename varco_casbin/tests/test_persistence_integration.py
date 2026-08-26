@@ -28,7 +28,6 @@ Broadened from the original single test (Plan 012 / RT3, Step 14) to cover:
 from __future__ import annotations
 
 import pytest
-
 from varco_casbin.config import CasbinSettings
 from varco_casbin.engine import CasbinPolicyEngine
 from varco_core.auth.policy import EnforcementRequest as ER

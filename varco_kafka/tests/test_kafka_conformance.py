@@ -14,13 +14,11 @@ Also depends on ``pythonpath = ["../testkit"]`` in
 from __future__ import annotations
 
 import pytest
-
+from varco_conformance.dlq import DeadLetterQueueConformance
+from varco_conformance.event_bus import EventBusConformance
 from varco_kafka.bus import KafkaEventBus
 from varco_kafka.config import KafkaEventBusSettings
 from varco_kafka.dlq import KafkaDLQ
-
-from varco_conformance.dlq import DeadLetterQueueConformance
-from varco_conformance.event_bus import EventBusConformance
 
 pytestmark = pytest.mark.integration
 

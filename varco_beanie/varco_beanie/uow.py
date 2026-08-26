@@ -19,7 +19,6 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from pymongo import AsyncMongoClient
-
 from varco_core.uow import AsyncUnitOfWork
 
 if TYPE_CHECKING:

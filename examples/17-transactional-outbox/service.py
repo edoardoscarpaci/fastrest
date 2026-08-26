@@ -41,16 +41,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from providify import Inject, Singleton
-
-from varco_core.assembler import AbstractDTOAssembler
-from varco_core.auth.base import AbstractAuthorizer
-from varco_core.service.base import AsyncService, IUoWProvider, _ANON_CTX
-from varco_core.service.outbox import OutboxEntry
-
 from dtos import OrderCreate, OrderRead, OrderUpdate
 from events import OrderCreatedEvent
 from models import Order
+from providify import Inject, Singleton
+from varco_core.assembler import AbstractDTOAssembler
+from varco_core.auth.base import AbstractAuthorizer
+from varco_core.service.base import _ANON_CTX, AsyncService, IUoWProvider
+from varco_core.service.outbox import OutboxEntry
 
 if TYPE_CHECKING:
     from varco_core.auth import AuthContext

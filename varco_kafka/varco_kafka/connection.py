@@ -62,10 +62,8 @@ from typing import Annotated, Any
 
 from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
-
 from varco_core.connection.auth import BasicAuthConfig, SaslConfig
 from varco_core.connection.base import ConnectionSettings
-
 
 # ── KafkaConnectionSettings ───────────────────────────────────────────────────
 

@@ -21,12 +21,10 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-
 from varco_core.job.base import Job, JobStatus
 from varco_fastapi.job.poller import JobPoller
 from varco_fastapi.job.runner import JobRunner
 from varco_fastapi.job.store import InMemoryJobStore
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -207,9 +205,8 @@ async def test_custom_handler_runs_inline_without_with_async():
     A custom @route handler executes inline (no job submission) when
     ?with_async is absent or false.
     """
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
-
+    from fastapi.testclient import TestClient
     from varco_fastapi.router.base import VarcoRouter
     from varco_fastapi.router.endpoint import route
 
@@ -239,9 +236,8 @@ async def test_custom_handler_offloads_with_with_async_true():
     A custom @route handler returns 202 JobAcceptedResponse when
     ?with_async=true is passed and a job_runner is configured.
     """
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
-
+    from fastapi.testclient import TestClient
     from varco_fastapi.router.base import VarcoRouter
     from varco_fastapi.router.endpoint import route
 
@@ -283,9 +279,8 @@ async def test_custom_handler_async_capable_false_ignores_with_async():
     When async_capable=False on @route, ?with_async=true is silently ignored
     and the handler executes inline.
     """
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
-
+    from fastapi.testclient import TestClient
     from varco_fastapi.router.base import VarcoRouter
     from varco_fastapi.router.endpoint import route
 
@@ -325,9 +320,8 @@ async def test_custom_handler_no_job_runner_ignores_with_async():
     When no _job_runner is configured, ?with_async=true is silently ignored
     even if async_capable=True — handler executes inline.
     """
-    from fastapi.testclient import TestClient
     from fastapi import FastAPI
-
+    from fastapi.testclient import TestClient
     from varco_fastapi.router.base import VarcoRouter
     from varco_fastapi.router.endpoint import route
 

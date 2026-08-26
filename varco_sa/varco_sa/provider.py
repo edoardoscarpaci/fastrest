@@ -7,17 +7,16 @@ Concrete ``RepositoryProvider`` for SQLAlchemy async.
 from __future__ import annotations
 
 import sys
-from typing import Any, TypeVar
+from typing import Annotated, Any, TypeVar
 
 from providify import InjectMeta, Singleton
-from typing import Annotated
 from sqlalchemy.ext.asyncio import async_sessionmaker
-
-from varco_sa.config import SAConfig
-from varco_sa.factory import SAModelFactory
 from varco_core.model import DomainModel
 from varco_core.providers import RepositoryProvider
 from varco_core.repository import AsyncRepository
+
+from varco_sa.config import SAConfig
+from varco_sa.factory import SAModelFactory
 
 D = TypeVar("D", bound=DomainModel)
 

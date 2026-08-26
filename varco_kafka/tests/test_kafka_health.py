@@ -21,11 +21,9 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from varco_core.health import HealthStatus
 from varco_kafka.config import KafkaEventBusSettings
 from varco_kafka.health import KafkaHealthCheck
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

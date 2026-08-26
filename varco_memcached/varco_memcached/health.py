@@ -52,10 +52,9 @@ import sys
 import time
 
 from providify import Inject, Singleton
-
 from varco_core.health import HealthCheck, HealthResult, HealthStatus
-from varco_memcached.cache import MemcachedCacheSettings
 
+from varco_memcached.cache import MemcachedCacheSettings
 
 # ── MemcachedHealthCheck ──────────────────────────────────────────────────────
 

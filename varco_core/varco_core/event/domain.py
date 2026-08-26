@@ -82,7 +82,6 @@ from typing import Any, ClassVar
 
 from varco_core.event.base import Event
 
-
 # ── EntityEvent ────────────────────────────────────────────────────────────────
 
 

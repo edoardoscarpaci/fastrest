@@ -59,10 +59,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from fastapi import HTTPException
+
 from varco_fastapi.router.introspection import ResolvedRoute, introspect_routes
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+
     from varco_fastapi.auth.server_auth import AbstractServerAuth
     from varco_fastapi.client.base import AsyncVarcoClient
 

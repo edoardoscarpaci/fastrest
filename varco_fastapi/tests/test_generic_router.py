@@ -18,14 +18,12 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
 from varco_fastapi.app import create_varco_app
 from varco_fastapi.auth import AnonymousAuth
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import GenericRouter
 from varco_fastapi.validation import ConfigurationError, validate_router_class
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

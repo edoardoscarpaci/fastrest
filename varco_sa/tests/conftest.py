@@ -25,7 +25,6 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_sa.factory import SAModelFactory
 
 # ── Session-scoped Postgres container (Plan 012 / RT1, Steps 7 & 9) ───────────

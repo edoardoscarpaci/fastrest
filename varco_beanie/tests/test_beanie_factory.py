@@ -15,19 +15,17 @@ from uuid import UUID, uuid4
 
 import pytest
 from beanie import Document
-
+from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
 from varco_core.exception.repository import StaleEntityError
 from varco_core.meta import (
     FieldHint,
-    PrimaryKey,
     PKStrategy,
+    PrimaryKey,
     UniqueConstraint,
     pk_field,
 )
 from varco_core.migrator import DomainMigrator
 from varco_core.model import DomainModel, VersionedDomainModel
-from varco_beanie.factory import BeanieModelFactory, BeanieDocRegistry
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

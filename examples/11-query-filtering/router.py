@@ -51,8 +51,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from data import PRODUCTS
 from fastapi import APIRouter, Query
-
+from models import Product
+from query_visitor import apply_filter
 from varco_core.query.parser import QueryParser
 from varco_core.query.type import SortField, SortOrder, TransformerNode
 from varco_core.query.visitor.query_optimizer import ASTQueryOptimizer
@@ -63,10 +65,6 @@ from varco_core.query.visitor.type_coercion import (
     coerce_float,
     coerce_int,
 )
-
-from data import PRODUCTS
-from models import Product
-from query_visitor import apply_filter
 
 logger = logging.getLogger(__name__)
 

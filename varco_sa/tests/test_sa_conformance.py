@@ -15,12 +15,10 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from varco_sa.dlq import SADeadLetterQueue
-from varco_sa.job_store import SAJobStore
-
 from varco_conformance.dlq import DeadLetterQueueConformance
 from varco_conformance.job_store import JobStoreConformance
+from varco_sa.dlq import SADeadLetterQueue
+from varco_sa.job_store import SAJobStore
 
 pytestmark = pytest.mark.integration
 

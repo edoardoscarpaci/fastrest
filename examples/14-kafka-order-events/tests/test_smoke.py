@@ -101,9 +101,10 @@ async def bus_and_consumer(kafka_servers):
           after ``start()``.  Use ``_wait_for_notifications()`` rather than
           fixed sleeps.
     """
-    from varco_kafka import KafkaEventBus  # noqa: PLC0415
-    from varco_kafka.config import KafkaEventBusSettings  # noqa: PLC0415
     from consumer import OrderConsumer  # noqa: PLC0415
+    from varco_kafka.config import KafkaEventBusSettings  # noqa: PLC0415
+
+    from varco_kafka import KafkaEventBus  # noqa: PLC0415
 
     # Unique group ID per test run — prevents offset interference between tests.
     group_id = f"test-smoke-{uuid.uuid4().hex[:8]}"

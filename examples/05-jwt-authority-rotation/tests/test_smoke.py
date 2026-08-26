@@ -31,20 +31,18 @@ from datetime import timedelta
 
 import httpx
 import pytest
-from httpx import ASGITransport
-
 from app import create_app  # noqa: E402
 from authority import (  # noqa: E402
+    _ISSUER,
     _KID_A,
     _KID_B,
-    _ISSUER,
     authority_a,
     build_authority,
     mint_token,
     multi_authority,
     registry,
 )
-
+from httpx import ASGITransport
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

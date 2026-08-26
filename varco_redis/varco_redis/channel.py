@@ -33,9 +33,9 @@ import logging
 import sys
 
 from providify import Inject, PostConstruct, PreDestroy, Singleton
-
 from varco_core.event.base import ChannelConfig
 from varco_core.event.channel import ChannelManager
+
 from varco_redis.config import RedisEventBusSettings
 
 _logger = logging.getLogger(__name__)

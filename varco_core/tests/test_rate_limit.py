@@ -14,15 +14,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.resilience.rate_limit import (
     InMemoryRateLimiter,
     RateLimitConfig,
-    RateLimitExceededError,
     RateLimiter,
+    RateLimitExceededError,
     rate_limit,
 )
-
 
 # ── RateLimitConfig ───────────────────────────────────────────────────────────
 

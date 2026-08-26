@@ -29,13 +29,11 @@ Then open:
 
 from __future__ import annotations
 
-from fastapi import FastAPI
-
-from varco_fastapi import ServiceMount, build_service, create_composite_app
-
 from billing_service import create_billing_app
+from fastapi import FastAPI
 from orders_service import create_orders_app
 
+from varco_fastapi import ServiceMount, build_service, create_composite_app
 
 # ── Path 1: plain composition of pre-built apps ───────────────────────────────
 

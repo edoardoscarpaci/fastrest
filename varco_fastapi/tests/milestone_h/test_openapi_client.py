@@ -18,9 +18,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-
 from varco_fastapi.client.openapi import OpenAPIClient, _resolve_refs, _to_snake
-
 
 # ── Minimal specs for testing ─────────────────────────────────────────────────
 

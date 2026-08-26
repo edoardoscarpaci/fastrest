@@ -38,13 +38,7 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from providify import DIContainer, Provider
-from varco_conformance.providify_health import assert_no_structural_di_issues
-
-from varco_core.model import DomainModel
-from varco_core.providers import RepositoryProvider
-from varco_core.repository import AsyncRepository
 from varco_beanie.config import BeanieSettings
 from varco_beanie.di import (
     _make_repo_provider,
@@ -52,7 +46,10 @@ from varco_beanie.di import (
 )
 from varco_beanie.provider import BeanieRepositoryProvider
 from varco_beanie.query.compiler import BeanieQueryCompiler
-
+from varco_conformance.providify_health import assert_no_structural_di_issues
+from varco_core.model import DomainModel
+from varco_core.providers import RepositoryProvider
+from varco_core.repository import AsyncRepository
 
 # ── Test domain models ────────────────────────────────────────────────────────
 

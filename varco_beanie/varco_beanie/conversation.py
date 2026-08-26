@@ -76,7 +76,6 @@ from uuid import UUID, uuid4
 
 from beanie import Document
 from pydantic import Field
-
 from varco_core.service.conversation import AbstractConversationStore, ConversationTurn
 
 if TYPE_CHECKING:

@@ -15,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from varco_core.service.audit import AuditEntry
 from varco_sa.audit import SAAuditRepository, audit_metadata
 

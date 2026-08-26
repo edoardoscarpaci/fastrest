@@ -20,7 +20,6 @@ from unittest.mock import MagicMock
 from varco_core.event.base import AbstractEventBus
 from varco_core.job.base import AbstractJobRunner
 
-
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 

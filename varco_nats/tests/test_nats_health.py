@@ -13,11 +13,10 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.health import HealthStatus
-from varco_nats import NatsEventBusSettings, NatsHealthCheck
 
 from tests.fakes import FakeJetStream, FakeNatsClient
+from varco_nats import NatsEventBusSettings, NatsHealthCheck
 
 
 @pytest.fixture

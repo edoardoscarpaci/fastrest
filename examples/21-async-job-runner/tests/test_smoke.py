@@ -38,7 +38,6 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 
@@ -60,8 +59,8 @@ async def client() -> httpx.AsyncClient:
     """
     # Import here (not at module top) so the app is only created once per
     # session, not once per import of this test module.
-    import sys
     import os
+    import sys
 
     # Add example root to sys.path so ``from app import create_app`` works
     example_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

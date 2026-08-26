@@ -27,7 +27,6 @@ from unittest import mock
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
 from varco_fastapi.router.metrics import MetricsRouter
 
 # Some tests require prometheus_client (the varco-fastapi[prometheus] extra).
@@ -229,6 +228,7 @@ async def test_create_varco_app_metrics_middleware_added():
     from opentelemetry.sdk.metrics import MeterProvider
     from opentelemetry.sdk.metrics.export import InMemoryMetricReader
     from varco_fastapi.middleware.metrics import _instruments
+
     from varco_fastapi import create_varco_app
 
     _instruments.clear()

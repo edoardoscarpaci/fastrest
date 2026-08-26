@@ -66,7 +66,6 @@ import asyncio
 import json
 
 import pytest
-
 from varco_core.event import (
     CHANNEL_ALL,
     AbstractEventProducer,
@@ -90,7 +89,6 @@ from varco_core.event import (
     Subscription,
     listen,
 )
-
 
 # ── Test event types ───────────────────────────────────────────────────────────
 

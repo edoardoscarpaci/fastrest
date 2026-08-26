@@ -46,9 +46,9 @@ Usage (Providify DI)::
 
 from __future__ import annotations
 
+from varco_casbin.adapter import build_adapter
 from varco_casbin.config import CasbinSettings
 from varco_casbin.engine import CasbinPolicyEngine
-from varco_casbin.adapter import build_adapter
 
 __all__ = [
     # ── Engine + configuration ─────────────────────────────────────────────────

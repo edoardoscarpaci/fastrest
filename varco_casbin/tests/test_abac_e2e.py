@@ -19,10 +19,9 @@ from dataclasses import dataclass
 from typing import Annotated
 
 import pytest
-
 from varco_casbin.config import CasbinSettings
 from varco_casbin.engine import CasbinPolicyEngine
-from varco_core.auth import Action, AuthContext, Resource, PolicyEngineAuthorizer
+from varco_core.auth import Action, AuthContext, PolicyEngineAuthorizer, Resource
 from varco_core.exception.service import ServiceAuthorizationError
 from varco_core.meta import PKStrategy, PrimaryKey, pk_field
 from varco_core.model import DomainModel

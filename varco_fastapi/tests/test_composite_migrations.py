@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-
 from varco_fastapi.app import create_varco_app
 from varco_fastapi.composite import ServiceMount, create_composite_app
-from varco_fastapi.router.presets import GenericRouter
 from varco_fastapi.router.endpoint import route
+from varco_fastapi.router.presets import GenericRouter
 
 
 class _PingRouter(GenericRouter):

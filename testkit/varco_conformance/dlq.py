@@ -21,7 +21,6 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
-
 from varco_core.event.base import Event
 from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
 

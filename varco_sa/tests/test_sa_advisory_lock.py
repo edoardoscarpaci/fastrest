@@ -27,10 +27,8 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-
 from varco_core.lock import LockHandle
 from varco_sa.advisory_lock import SAAdvisoryLock, _key_to_int64
-
 
 # ── _key_to_int64 ─────────────────────────────────────────────────────────────
 

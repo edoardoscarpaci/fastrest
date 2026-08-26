@@ -70,7 +70,6 @@ async def test_two_migrators_concurrent_upgrade_exactly_one_applies(
     """
     import sqlalchemy as sa
     from sqlalchemy.ext.asyncio import create_async_engine
-
     from varco_sa.migration.migrator import AlembicMigrator
 
     # Isolated database: this test actually applies revisions, and the
@@ -141,7 +140,6 @@ async def test_set_local_idle_in_transaction_timeout_overrides_role_setting(
 ) -> None:
     """D2's core invariant: SET LOCAL ... = 0 survives a role-level timeout."""
     from sqlalchemy import text
-
     from varco_sa.migration.lock import migration_lock
 
     async with engine.begin() as conn:

@@ -48,7 +48,6 @@ from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
-
 from varco_core.auth.base import AuthContext
 from varco_core.authority.jwt_authority import JwtAuthority
 
@@ -144,8 +143,8 @@ def build_jwt_authority() -> JwtAuthority:
         "Set VARCO_JWT_PRIVATE_KEY_PEM for persistent token verification."
     )
 
-    from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: PLC0415
     from cryptography.hazmat.primitives import serialization  # noqa: PLC0415
+    from cryptography.hazmat.primitives.asymmetric import rsa  # noqa: PLC0415
 
     private_key = rsa.generate_private_key(
         public_exponent=65537,

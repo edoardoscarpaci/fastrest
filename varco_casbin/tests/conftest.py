@@ -12,7 +12,6 @@ import pytest_asyncio
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from httpx import ASGITransport, AsyncClient
-
 from varco_casbin.config import CasbinSettings
 from varco_casbin.engine import CasbinPolicyEngine
 from varco_casbin.router import build_policy_router

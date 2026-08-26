@@ -48,7 +48,6 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import StatusCode
-
 from varco_core.observability import (
     CounterConfig,
     HistogramConfig,
@@ -67,7 +66,6 @@ from varco_core.observability import (
 )
 from varco_core.observability.metrics import _instrument_cache
 from varco_core.tracing import correlation_context
-
 
 # ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -1771,8 +1769,8 @@ class TestOtelConfigNewFields:
         assert cfg.promote_global_attrs_to_resource is False
 
     def test_capture_params_false_disables_process_wide(self) -> None:
-        from varco_core.observability.params import capture_enabled
         from varco_core.observability.di import _apply_observability_config
+        from varco_core.observability.params import capture_enabled
 
         cfg = OtelConfig(service_name="svc", capture_params=False)
         _apply_observability_config(cfg)
@@ -2030,7 +2028,6 @@ class TestTracingEventMiddleware:
         self, span_exporter: InMemorySpanExporter
     ) -> None:
         from opentelemetry.trace import StatusCode as OTelStatusCode
-
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware
@@ -2056,7 +2053,6 @@ class TestTracingEventMiddleware:
         self, span_exporter: InMemorySpanExporter
     ) -> None:
         from opentelemetry.trace import StatusCode as OTelStatusCode
-
         from varco_core.event import InMemoryEventBus
         from varco_core.event.base import Event
         from varco_core.event.middleware import TracingEventMiddleware

@@ -17,7 +17,6 @@ swallowed. ``None`` (the documented default sentinel) still resolves to
 from __future__ import annotations
 
 import pytest
-
 from varco_core.i18n.settings import I18nSettings
 from varco_core.tz.settings import TimezoneSettings
 from varco_fastapi.app import create_varco_app

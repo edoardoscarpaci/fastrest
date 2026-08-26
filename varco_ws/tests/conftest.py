@@ -35,7 +35,6 @@ import uvicorn
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-
 from varco_core.event.base import Event
 from varco_core.event.memory import InMemoryEventBus
 from varco_ws.sse import SSEEventBus

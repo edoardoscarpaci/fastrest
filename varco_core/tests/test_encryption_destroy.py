@@ -24,9 +24,7 @@ Phase 1 edge cases:
 
 from __future__ import annotations
 
-
 import pytest
-
 from varco_core.encryption_store import EncryptionKeyEntry, InMemoryEncryptionKeyStore
 
 
@@ -119,6 +117,7 @@ class TestKeyDestroyedErrorDecryptPath:
         assert issubclass(KeyDestroyedError, EncryptionError)
 
     async def test_decrypt_of_unknown_kid_still_raises_generic_error(self) -> None:
+        from cryptography.fernet import Fernet
         from varco_core.encryption import (
             EncryptionError,
             FernetFieldEncryptor,
@@ -126,7 +125,6 @@ class TestKeyDestroyedErrorDecryptPath:
             MultiKeyEncryptorRegistry,
             _pack_ciphertext,
         )
-        from cryptography.fernet import Fernet
 
         reg = MultiKeyEncryptorRegistry(
             primary_kid="v1",
@@ -141,11 +139,11 @@ class TestKeyDestroyedErrorDecryptPath:
 
     async def test_retired_not_destroyed_kid_still_decrypts(self) -> None:
         # Retire keeps decrypt working; only destroy makes it raise.
+        from cryptography.fernet import Fernet
         from varco_core.encryption import (
             FernetFieldEncryptor,
             MultiKeyEncryptorRegistry,
         )
-        from cryptography.fernet import Fernet
 
         reg = MultiKeyEncryptorRegistry(
             primary_kid="v1",

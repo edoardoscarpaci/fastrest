@@ -9,8 +9,8 @@ import pytest
 
 
 def test_schema_isolation_on_beanie_raises_value_error_naming_mongodb() -> None:
-    from varco_core.tenancy.settings import TenantIsolation
     from varco_beanie.tenancy.pool import BeanieTenantPool
+    from varco_core.tenancy.settings import TenantIsolation
 
     with pytest.raises(ValueError) as exc:
         BeanieTenantPool(client=object(), isolation=TenantIsolation.SCHEMA)

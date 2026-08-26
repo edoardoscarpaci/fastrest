@@ -115,11 +115,13 @@ async def test_anonymous_denied(engine) -> None:
 
 async def test_custom_admin_role(engine) -> None:
     """The required role is configurable via admin_role."""
-    from varco_casbin.router import build_policy_router
-    from tests.conftest import StaticAuth, client_for as _client
     from fastapi import FastAPI, Request
     from fastapi.responses import JSONResponse
+    from varco_casbin.router import build_policy_router
     from varco_core.exception.service import ServiceAuthorizationError
+
+    from tests.conftest import StaticAuth
+    from tests.conftest import client_for as _client
 
     superuser = AuthContext(user_id="root", roles=frozenset({"superuser"}))
     app = FastAPI()

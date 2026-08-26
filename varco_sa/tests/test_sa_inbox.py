@@ -30,7 +30,6 @@ from uuid import uuid4
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from varco_core.event import Event
 from varco_core.service.inbox import InboxEntry
 from varco_sa.inbox import (
@@ -39,7 +38,6 @@ from varco_sa.inbox import (
     SAPollerInboxRepository,
     inbox_metadata,
 )
-
 
 # ── Minimal event for tests ────────────────────────────────────────────────────
 

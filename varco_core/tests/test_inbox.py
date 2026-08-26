@@ -19,7 +19,6 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
-
 from varco_core.event.base import Event
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.event.memory import InMemoryEventBus
@@ -29,7 +28,6 @@ from varco_core.service.inbox import (
     InboxRepository,
     _make_inbox_wrapper,
 )
-
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 
@@ -94,11 +92,10 @@ class InMemoryInboxRepository(InboxRepository):
             return  # Unknown entry — idempotent no-op
 
         original = self._entries[entry_id]
-        from datetime import datetime, timezone
-
         # Replace with a new frozen instance with processed_at set.
         # dataclasses.replace() is used here because InboxEntry is frozen.
         from dataclasses import replace
+        from datetime import datetime, timezone
 
         self._entries[entry_id] = replace(
             original, processed_at=datetime.now(timezone.utc)

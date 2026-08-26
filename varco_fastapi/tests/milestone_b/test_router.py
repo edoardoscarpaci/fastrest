@@ -20,7 +20,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
+from varco_core.query import SortOrder
 from varco_fastapi.router.base import (
     AsyncModeParams,
     HttpQueryParams,
@@ -45,8 +45,6 @@ from varco_fastapi.router.presets import (
     ReadOnlyRouter,
     WriteRouter,
 )
-from varco_core.query import SortOrder
-
 
 # ── Test models ───────────────────────────────────────────────────────────────
 

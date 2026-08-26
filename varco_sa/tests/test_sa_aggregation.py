@@ -16,7 +16,6 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import Integer, String, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
 from varco_core.exception.repository import FieldNotFound
 from varco_core.query.aggregation import (
     AggregationExpression,
@@ -25,7 +24,6 @@ from varco_core.query.aggregation import (
 )
 from varco_core.query.type import ComparisonNode, Operation
 from varco_sa.query.aggregation import SQLAlchemyAggregationApplicator
-
 
 # ── Minimal ORM model for testing ─────────────────────────────────────────────
 

@@ -65,12 +65,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, JSON, String, select
+from sqlalchemy import JSON, DateTime, String, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
 from varco_core.service.audit import AuditEntry, AuditRepository
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:

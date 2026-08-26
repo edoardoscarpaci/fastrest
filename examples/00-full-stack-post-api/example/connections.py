@@ -89,9 +89,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import redis.asyncio
-
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_fastapi.connection import HttpConnectionSettings
 from varco_kafka.connection import KafkaConnectionSettings
 from varco_redis.connection import RedisConnectionSettings
@@ -206,9 +204,8 @@ def make_di_sa_provider(
     from providify import (
         Provider,
     )  # noqa: PLC0415 — deferred to avoid hard dep at import
-
-    from varco_sa.config import SAConfig  # noqa: PLC0415
     from sqlalchemy.ext.asyncio import async_sessionmaker  # noqa: PLC0415
+    from varco_sa.config import SAConfig  # noqa: PLC0415
 
     # Capture entity_classes and echo in the closure at call time.
     # If entity_classes were consumed lazily, late additions would be missed.

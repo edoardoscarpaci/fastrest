@@ -35,6 +35,7 @@ from varco_fastapi.router.introspection import ResolvedRoute, introspect_routes
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext
+
     from varco_fastapi.client.base import AsyncVarcoClient
 
 # ── Helpers (verbatim from pre-Phase-7 skill.py) ────────────────────────────────

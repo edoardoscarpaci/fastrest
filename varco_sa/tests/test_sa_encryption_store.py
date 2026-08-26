@@ -37,12 +37,10 @@ import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.encryption_store import EncryptionKeyEntry, EncryptionKeyStore
 from varco_sa.encryption_store import SAEncryptionKeyStore, _metadata
 
 from tests.conftest import asyncpg_url
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

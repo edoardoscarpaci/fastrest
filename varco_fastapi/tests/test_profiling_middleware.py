@@ -16,10 +16,8 @@ import asyncio
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
 from varco_core.profiling import set_profiling_enabled
 from varco_fastapi.middleware.profiling import ProfilingMiddleware, ProfilingSettings
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

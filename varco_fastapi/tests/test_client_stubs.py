@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import ast
 
-
 from tests.fixtures.routers import OrderRouter
 
 

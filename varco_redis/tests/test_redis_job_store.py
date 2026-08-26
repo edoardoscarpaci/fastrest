@@ -22,11 +22,9 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-
 from varco_core.job.base import Job, JobStatus
 from varco_core.job.task import TaskPayload
 from varco_redis.job_store import RedisJobStore
-
 
 # ── FakeRedis ─────────────────────────────────────────────────────────────────
 

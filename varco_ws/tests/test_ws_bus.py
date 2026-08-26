@@ -16,17 +16,14 @@ from __future__ import annotations
 
 import asyncio
 
-
 from varco_core.event.base import Event
 from varco_core.event.memory import InMemoryEventBus
-
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import (
     BackpressurePolicy,
-    WebSocketEventBus,
     WebSocketConnection,
+    WebSocketEventBus,
 )
-
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 
@@ -510,7 +507,7 @@ async def test_sse_connection_stream_terminates_on_sentinel() -> None:
     """
     stream() must stop yielding when the sentinel is received.
     """
-    from varco_ws.sse import SSEConnection, _STOP_SENTINEL
+    from varco_ws.sse import _STOP_SENTINEL, SSEConnection
 
     conn = SSEConnection()
 

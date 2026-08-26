@@ -39,12 +39,13 @@ import asyncio
 import logging
 from typing import Any
 
+from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
-from fastapi import HTTPException
-
+from varco_core.exception.http import error_message_for
+from varco_core.exception.query import QueryException
 from varco_core.exception.service import (
     ServiceAuthorizationError,
     ServiceConflictError,
@@ -52,8 +53,6 @@ from varco_core.exception.service import (
     ServiceNotFoundError,
     ServiceValidationError,
 )
-from varco_core.exception.query import QueryException
-from varco_core.exception.http import error_message_for
 from varco_core.i18n.catalog import MessageCatalog
 from varco_core.tracing import current_correlation_id
 

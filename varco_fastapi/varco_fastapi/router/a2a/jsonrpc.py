@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext
+
     from varco_fastapi.router.skill import SkillAdapter
 
 _logger = logging.getLogger(__name__)

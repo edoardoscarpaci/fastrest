@@ -9,15 +9,13 @@ import asyncio
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-
 from varco_core.auth.base import AuthContext
-from varco_core.exception.service import ServiceNotFoundError
 from varco_core.exception.query import OperationNotSupported
+from varco_core.exception.service import ServiceNotFoundError
 from varco_fastapi.auth.server_auth import AnonymousAuth, ApiKeyAuth
 from varco_fastapi.middleware.cors import CORSConfig, install_cors
 from varco_fastapi.middleware.error import ErrorMiddleware
 from varco_fastapi.middleware.request_context import RequestContextMiddleware
-
 
 # ── ErrorMiddleware ────────────────────────────────────────────────────────────
 

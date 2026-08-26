@@ -75,7 +75,6 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from providify import Inject, Singleton
-
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
 

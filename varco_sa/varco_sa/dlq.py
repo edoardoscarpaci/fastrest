@@ -77,13 +77,13 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
-
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 _logger = logging.getLogger(__name__)

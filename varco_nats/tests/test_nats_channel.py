@@ -12,10 +12,8 @@ from unittest.mock import patch
 
 import pytest
 
-from varco_nats import NatsChannelManagerSettings, NatsStreamManager
-
 from tests.fakes import FakeJetStream, FakeNatsClient
-
+from varco_nats import NatsChannelManagerSettings, NatsStreamManager
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

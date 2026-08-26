@@ -23,23 +23,23 @@ Sub-module layout
 
 from __future__ import annotations
 
-from varco_core.jwt.transform.path import MISSING, ClaimPath, read_claim
-from varco_core.jwt.transform.shape import ValueShape, normalize
+from varco_core.jwt.transform.config import JwtTransformConfig, JwtTransformSettings
+from varco_core.jwt.transform.mapper import MappingClaimTransformer
 from varco_core.jwt.transform.mapping import CanonicalClaim, ClaimMapping, ClaimRule
+from varco_core.jwt.transform.path import MISSING, ClaimPath, read_claim
 from varco_core.jwt.transform.protocol import (
     IDENTITY,
     ClaimTransformer,
     IdentityClaimTransformer,
 )
-from varco_core.jwt.transform.mapper import MappingClaimTransformer
 from varco_core.jwt.transform.registry import ClaimTransformerRegistry
-from varco_core.jwt.transform.config import JwtTransformConfig, JwtTransformSettings
 from varco_core.jwt.transform.runtime import (
     configure_claim_transforms,
     configure_jwt_from_env,
     reset_claim_transforms,
     resolve_claim_transformer,
 )
+from varco_core.jwt.transform.shape import ValueShape, normalize
 
 __all__ = [
     "MISSING",

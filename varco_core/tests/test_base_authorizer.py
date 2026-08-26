@@ -26,7 +26,6 @@ from typing import Annotated
 
 import pytest
 from providify import DIContainer, Singleton
-
 from varco_core.auth import (
     AbstractAuthorizer,
     Action,
@@ -34,10 +33,9 @@ from varco_core.auth import (
     Resource,
     ResourceGrant,
 )
-from varco_core.auth.authorizer import BaseAuthorizer, _FALLBACK_PRIORITY
+from varco_core.auth.authorizer import _FALLBACK_PRIORITY, BaseAuthorizer
 from varco_core.meta import PKStrategy, PrimaryKey, pk_field
 from varco_core.model import DomainModel
-
 
 # ── Test fixtures ─────────────────────────────────────────────────────────────
 

@@ -25,7 +25,6 @@ import pytest_asyncio
 
 from tests.conftest import asyncpg_url
 
-
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(

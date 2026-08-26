@@ -11,7 +11,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from varco_casbin.adapter import build_adapter
 from varco_casbin.config import CasbinSettings
 

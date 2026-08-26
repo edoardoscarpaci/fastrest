@@ -13,12 +13,10 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
+from pydantic_settings import SettingsConfigDict
 from varco_core.connection.auth import BasicAuthConfig, OAuth2Config, SaslConfig
 from varco_core.connection.base import ConnectionSettings
 from varco_core.connection.ssl import SSLConfig
-from pydantic_settings import SettingsConfigDict
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # SSLConfig

@@ -13,9 +13,7 @@ All tests are pure unit tests — no I/O, no external dependencies.
 from __future__ import annotations
 
 import pytest
-
 from varco_core.migrator import DomainMigrator, MigrationError, MigrationPlan, StepSpec
-
 
 # ── Shared step functions ──────────────────────────────────────────────────────
 

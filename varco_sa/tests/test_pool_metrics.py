@@ -18,9 +18,7 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_sa.pool_metrics import SAPoolMetrics, pool_metrics
-
 
 # ── SAPoolMetrics ──────────────────────────────────────────────────────────────
 
@@ -180,7 +178,6 @@ def test_sa_fastrest_app_pool_metrics_delegate() -> None:
     an SAPoolMetrics snapshot.
     """
     from sqlalchemy.pool import StaticPool
-
     from varco_sa.bootstrap import SAConfig, SAFastrestApp
 
     class Base(DeclarativeBase):

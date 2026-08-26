@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-
 from varco_core.connection.ssl import SSLConfig
 from varco_sa.connection import PostgresConnectionSettings
 

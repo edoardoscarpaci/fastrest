@@ -21,7 +21,6 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-
 from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 
 

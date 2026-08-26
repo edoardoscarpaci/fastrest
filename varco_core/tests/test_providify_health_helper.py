@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import pytest
 from providify import DIContainer, Inject, Singleton
-
 from varco_conformance.providify_health import assert_no_structural_di_issues
 
 

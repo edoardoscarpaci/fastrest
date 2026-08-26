@@ -175,8 +175,8 @@ async def test_raising_migration_leaves_earlier_ones_recorded_and_itself_unrecor
 
 
 async def test_downgrade_of_migration_with_no_down_raises_irreversible() -> None:
-    from varco_core.migration.errors import IrreversibleMigrationError
     from varco_beanie.migration.base import Migration
+    from varco_core.migration.errors import IrreversibleMigrationError
 
     class _NoDown(Migration):
         version = "0001"

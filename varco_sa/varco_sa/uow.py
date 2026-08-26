@@ -10,7 +10,6 @@ from collections.abc import Callable
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from varco_core.uow import AsyncUnitOfWork
 
 

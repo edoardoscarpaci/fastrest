@@ -38,14 +38,13 @@ from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-
+from providify import Instance, InstanceProxy
 from varco_core.health import (
     CompositeHealthCheck,
     HealthCheck,
     HealthResult,
     HealthStatus,
 )
-from providify import Instance, InstanceProxy
 
 
 class HealthRouter:

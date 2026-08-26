@@ -45,16 +45,15 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import FastAPI
-from providify import DIContainer
-
-from varco_core.service.base import AsyncService
-from varco_fastapi import create_varco_app
-
 from di import ProductModule
 from dtos import ProductCreate, ProductRead, ProductUpdate
+from fastapi import FastAPI
 from models import Product
+from providify import DIContainer
 from router import ProductRouter
+from varco_core.service.base import AsyncService
+
+from varco_fastapi import create_varco_app
 
 
 def create_app() -> FastAPI:

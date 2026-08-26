@@ -63,7 +63,6 @@ from pydantic_settings import SettingsConfigDict
 from varco_core.config import VarcoSettings
 from varco_core.connection.ssl import SSLConfig
 
-
 # ── ConnectionSettings ────────────────────────────────────────────────────────
 
 

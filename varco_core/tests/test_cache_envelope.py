@@ -55,7 +55,6 @@ class TestEnvelopeRoundTrip:
 
     async def test_coerce_with_pydantic_model_type_hint(self) -> None:
         from pydantic import BaseModel
-
         from varco_core.cache.envelope import coerce
 
         class UserModel(BaseModel):

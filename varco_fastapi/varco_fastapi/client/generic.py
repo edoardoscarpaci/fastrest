@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypeVar
 
-
 from varco_fastapi.client.base import AsyncVarcoClient, ClientProfile
 
 if TYPE_CHECKING:

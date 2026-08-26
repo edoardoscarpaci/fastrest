@@ -41,15 +41,6 @@ from varco_fastapi.auth.client_auth import (
     ForwardingClientAuth,
     JwtClientAuth,
 )
-from varco_fastapi.auth.server_auth import (
-    AbstractServerAuth,
-    AnonymousAuth,
-    ApiKeyAuth,
-    CompositeServerAuth,
-    JwtBearerAuth,
-    PassthroughAuth,
-    WebSocketAuth,
-)
 from varco_fastapi.auth.guard import (
     RouteGuard,
     allow_anonymous,
@@ -58,6 +49,15 @@ from varco_fastapi.auth.guard import (
     require_roles,
     require_scopes,
     require_token_profile,
+)
+from varco_fastapi.auth.server_auth import (
+    AbstractServerAuth,
+    AnonymousAuth,
+    ApiKeyAuth,
+    CompositeServerAuth,
+    JwtBearerAuth,
+    PassthroughAuth,
+    WebSocketAuth,
 )
 from varco_fastapi.auth.trust_store import TrustStore
 

@@ -5,6 +5,7 @@ Authorization primitives, default permissive authorizer, and the pluggable
 policy-engine seam (ACL / RBAC / ABAC via ``varco_casbin``, ``varco_opa``).
 """
 
+from varco_core.auth.authorizer import BaseAuthorizer
 from varco_core.auth.base import (
     AbstractAuthorizer,
     Action,
@@ -12,7 +13,6 @@ from varco_core.auth.base import (
     Resource,
     ResourceGrant,
 )
-from varco_core.auth.authorizer import BaseAuthorizer
 from varco_core.auth.policy import (
     EnforcementRequest,
     PolicyEngine,

@@ -30,13 +30,10 @@ from __future__ import annotations
 
 from fastapi import Body, Depends, Query, Request
 from pydantic import BaseModel, Field
-
 from varco_core.auth.base import AuthContext
-
 from varco_fastapi.auth.guard import allow_anonymous, require_scopes
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import GenericRouter
-
 
 # ── DTOs ──────────────────────────────────────────────────────────────────────
 

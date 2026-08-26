@@ -5,7 +5,6 @@ Unit tests for varco_core.migrator
 import pytest
 from varco_core.migrator import DomainMigrator, MigrationError
 
-
 # ── Fixtures / helpers ────────────────────────────────────────────────────────
 
 

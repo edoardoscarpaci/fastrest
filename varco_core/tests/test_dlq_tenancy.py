@@ -10,7 +10,6 @@ RED until ``DeadLetterEntry.tenant_id`` lands and the consumer's
 
 from __future__ import annotations
 
-
 from varco_core.event import Event
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue

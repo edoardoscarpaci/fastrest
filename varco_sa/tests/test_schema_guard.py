@@ -14,11 +14,9 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.model import DomainModel
 from varco_sa.factory import SAModelFactory
-from varco_sa.schema_guard import SchemaGuard, SchemaDrift, SchemaDriftReport
-
+from varco_sa.schema_guard import SchemaDrift, SchemaDriftReport, SchemaGuard
 
 # ── Domain models used across tests ───────────────────────────────────────────
 

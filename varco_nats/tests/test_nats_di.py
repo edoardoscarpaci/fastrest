@@ -24,7 +24,6 @@ import pydantic
 import pytest
 from providify import DIContainer, Provider, Singleton
 from varco_conformance.providify_health import assert_no_structural_di_issues
-
 from varco_core.event import AbstractEventBus
 from varco_core.event.channel import ChannelManager
 from varco_core.event.config import EventBusSettings

@@ -30,7 +30,6 @@ Async safety:   ✅ No blocking I/O; handlers are async for consistency with the
 from __future__ import annotations
 
 from varco_core.auth.base import AuthContext
-
 from varco_fastapi.auth.guard import (
     RouteGuard,
     allow_anonymous,

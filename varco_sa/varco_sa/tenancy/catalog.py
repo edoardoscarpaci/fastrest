@@ -26,13 +26,13 @@ from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from varco_core.tenancy.catalog import (
     AbstractTenantCatalog,
     TenantDescriptor,
     TenantNotFoundError,
 )
 from varco_core.tenancy.settings import TenantStatus
+
 from varco_sa.tenancy.models import tenants_metadata, tenants_table
 
 # Legal status transitions — mirrors the Phase-4 status lifecycle table.

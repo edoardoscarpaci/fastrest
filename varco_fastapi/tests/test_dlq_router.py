@@ -17,9 +17,8 @@ import uuid
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 from varco_core.event import Event
+from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 
 
 class SampleEvent(Event):

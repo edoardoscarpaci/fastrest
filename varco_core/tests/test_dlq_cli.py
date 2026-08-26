@@ -9,9 +9,9 @@ directly. Module-level factories for ``-t module:callable`` resolution.
 
 from __future__ import annotations
 
+from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 from varco_core.event.memory import InMemoryEventBus
-from varco_core.event import Event
 
 
 class SampleEvent(Event):

@@ -65,8 +65,8 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
-
 from varco_core.encryption_store import EncryptionKeyEntry
+
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
 if TYPE_CHECKING:

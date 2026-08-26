@@ -7,11 +7,11 @@ DTO layer — base classes, factory, and pagination envelope.
 from varco_core.dto.base import (
     CreateDTO,
     ReadDTO,
-    UpdateDTO,
-    UpdateOperation,
     TCreateDTO,
     TReadDTO,
     TUpdateDTO,
+    UpdateDTO,
+    UpdateOperation,
 )
 from varco_core.dto.factory import DTOSet, generate_dtos
 from varco_core.dto.pagination import (

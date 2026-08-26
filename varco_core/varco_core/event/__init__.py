@@ -80,6 +80,11 @@ from varco_core.event.base import (
 from varco_core.event.channel import ChannelManager
 from varco_core.event.config import EventBusSettings
 from varco_core.event.consumer import EventConsumer, listen
+from varco_core.event.dlq import (
+    AbstractDeadLetterQueue,
+    DeadLetterEntry,
+    InMemoryDeadLetterQueue,
+)
 from varco_core.event.domain import (
     EntityCreatedEvent,
     EntityDeletedEvent,
@@ -87,23 +92,18 @@ from varco_core.event.domain import (
     EntityUpdatedEvent,
 )
 from varco_core.event.memory import InMemoryEventBus, NoopEventBus
-from varco_core.event.serializer import JsonEventSerializer
-from varco_core.event.producer import (
-    AbstractEventProducer,
-    BusEventProducer,
-    NoopEventProducer,
-)
-from varco_core.event.dlq import (
-    AbstractDeadLetterQueue,
-    DeadLetterEntry,
-    InMemoryDeadLetterQueue,
-)
 from varco_core.event.middleware import (
     CorrelationMiddleware,
     LoggingMiddleware,
     RetryMiddleware,
     TracingEventMiddleware,
 )
+from varco_core.event.producer import (
+    AbstractEventProducer,
+    BusEventProducer,
+    NoopEventProducer,
+)
+from varco_core.event.serializer import JsonEventSerializer
 
 # Alias for DDD practitioners; Event is the canonical name
 DomainEvent = Event

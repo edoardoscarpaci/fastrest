@@ -21,7 +21,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 import pytest
-
 from varco_core.auth import Action, AuthContext, ResourceGrant
 from varco_core.jwt import (
     SYSTEM_ISSUER,

@@ -97,10 +97,10 @@ async def app_client(mongo_url):
           calls with the same Document classes are safe (idempotent).
         - The Motor client is shared across the fixture and the provider.
     """
-    from varco_beanie.config import BeanieSettings  # noqa: PLC0415
-    from varco_beanie.provider import BeanieRepositoryProvider  # noqa: PLC0415
     from app import create_app  # noqa: PLC0415
     from models import Post  # noqa: PLC0415
+    from varco_beanie.config import BeanieSettings  # noqa: PLC0415
+    from varco_beanie.provider import BeanieRepositoryProvider  # noqa: PLC0415
 
     # Build and initialize the provider explicitly — ASGITransport doesn't fire startup.
     client = AsyncMongoClient(mongo_url)

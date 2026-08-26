@@ -25,7 +25,6 @@ Async safety:   ✅ Pure value objects.
 
 from __future__ import annotations
 
-
 from varco_core.dto.base import CreateDTO, ReadDTO, UpdateDTO
 
 

@@ -16,11 +16,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
+from pydantic import BaseModel
 from varco_fastapi.client.generic import GenericClient
 from varco_fastapi.client.middleware import AbstractClientMiddleware, PreparedRequest
-from pydantic import BaseModel
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

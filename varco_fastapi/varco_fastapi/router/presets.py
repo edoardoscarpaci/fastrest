@@ -58,7 +58,8 @@ Async safety:   ✅ No I/O at class-definition time.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, TypeVar as _TypingTypeVar
+from typing import TYPE_CHECKING, Generic
+from typing import TypeVar as _TypingTypeVar
 
 from typing_extensions import TypeVar
 

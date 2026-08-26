@@ -44,27 +44,27 @@ providify DI integration::
 """
 
 from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
-from varco_beanie.deduplication import BeanieDeduplicator, DeduplicationDocument
 from varco_beanie.conversation import BeanieConversationStore, ConversationTurnDocument
-from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
-from varco_beanie.query.aggregation import BeanieAggregationApplicator
+from varco_beanie.deduplication import BeanieDeduplicator, DeduplicationDocument
 from varco_beanie.di import BeanieModule, BeanieSettings, bind_repositories
+from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
 from varco_beanie.health import BeanieHealthCheck
 from varco_beanie.inbox import BeanieInboxRepository, InboxDocument
 from varco_beanie.index_guard import BeanieIndexGuard, IndexDrift, IndexDriftReport
 from varco_beanie.job_store import BeanieJobStore, JobDocument
-from varco_beanie.outbox import BeanieOutboxRepository, OutboxDocument
-from varco_beanie.saga import BeanieSagaRepository, SagaDocument
-from varco_beanie.provider import BeanieRepositoryProvider
-from varco_beanie.repository import AsyncBeanieRepository
-from varco_beanie.uow import BeanieUnitOfWork
 from varco_beanie.migration import (
     BeanieMigrator,
     IndexReconciler,
     Migration,
     MigrationRegistry,
 )
+from varco_beanie.outbox import BeanieOutboxRepository, OutboxDocument
+from varco_beanie.provider import BeanieRepositoryProvider
+from varco_beanie.query.aggregation import BeanieAggregationApplicator
+from varco_beanie.repository import AsyncBeanieRepository
+from varco_beanie.saga import BeanieSagaRepository, SagaDocument
+from varco_beanie.uow import BeanieUnitOfWork
 
 __all__ = [
     # Core backend classes

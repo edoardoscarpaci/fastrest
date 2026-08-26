@@ -80,7 +80,6 @@ from uuid import UUID, uuid4
 
 from beanie import Document
 from pydantic import Field
-
 from varco_core.service.audit import AuditEntry, AuditRepository
 
 if TYPE_CHECKING:

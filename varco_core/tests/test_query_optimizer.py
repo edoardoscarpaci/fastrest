@@ -16,7 +16,6 @@ from varco_core.query.type import (
 )
 from varco_core.query.visitor.query_optimizer import ASTQueryOptimizer
 
-
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 

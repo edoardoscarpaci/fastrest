@@ -21,11 +21,10 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.serializer import JsonEventSerializer
-from varco_kafka import KafkaDeliverySemantics, KafkaEventBus, KafkaEventBusSettings
 
+from varco_kafka import KafkaDeliverySemantics, KafkaEventBus, KafkaEventBusSettings
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 

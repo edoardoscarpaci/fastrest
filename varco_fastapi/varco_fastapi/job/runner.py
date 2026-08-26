@@ -36,11 +36,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextvars import ContextVar
+from datetime import datetime, timedelta, timezone
 from typing import Any, Coroutine
 from uuid import UUID, uuid4
 
-from datetime import datetime, timedelta, timezone
-
+from providify import Inject, Instance, Singleton
+from varco_core.event import AbstractEventBus
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
@@ -49,9 +50,8 @@ from varco_core.event.dlq import (
 from varco_core.job.base import AbstractJobRunner, AbstractJobStore, Job, JobStatus
 from varco_core.resilience.retry import RetryPolicy
 from varco_core.tz.schedule import GapPolicy, OverlapPolicy
+
 from varco_fastapi.job.response import JobProgressEvent
-from varco_core.event import AbstractEventBus
-from providify import Inject, Instance, Singleton
 
 logger = logging.getLogger(__name__)
 
@@ -932,6 +932,7 @@ class JobRunner(AbstractJobRunner):
 
         try:
             import httpx
+
             from varco_fastapi.job.response import JobStatusResponse
 
             headers: dict[str, str] = {"Content-Type": "application/json"}

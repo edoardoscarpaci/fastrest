@@ -36,12 +36,11 @@ Async safety:   ✅  Lifespan context manages cache start/stop.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
-
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
 
 from cache_layer import ProductCacheLayer
+from fastapi import FastAPI
 from router import build_router
 from store import ProductStore
 

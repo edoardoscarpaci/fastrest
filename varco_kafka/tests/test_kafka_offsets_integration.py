@@ -22,7 +22,6 @@ import asyncio
 import uuid
 
 import pytest
-
 from varco_core.event import Event
 from varco_kafka.bus import KafkaEventBus
 from varco_kafka.config import KafkaEventBusSettings

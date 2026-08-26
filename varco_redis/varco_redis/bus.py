@@ -61,18 +61,16 @@ from typing import Annotated, Any
 # unit tests can patch varco_redis.bus.aioredis without reaching into the
 # redis package namespace directly.
 import redis.asyncio as aioredis
-
 from providify import (
     Configuration,
     Inject,
-    Instance,
     InjectMeta,
+    Instance,
     PostConstruct,
     PreDestroy,
     Provider,
     Singleton,
 )
-
 from varco_core.event.base import (
     CHANNEL_ALL,
     CHANNEL_DEFAULT,

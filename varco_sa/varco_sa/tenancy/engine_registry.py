@@ -19,7 +19,6 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from varco_core.tenancy.pool import TenantResourcePool
 
 if TYPE_CHECKING:

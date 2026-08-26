@@ -28,8 +28,8 @@ def test_schema_name_for_rejects_invalid_identifier() -> None:
 
 
 def test_session_factory_binds_schema_translate_map() -> None:
-    from varco_sa.tenancy.router import SASchemaRouter
     from sqlalchemy.ext.asyncio import create_async_engine
+    from varco_sa.tenancy.router import SASchemaRouter
 
     engine = create_async_engine("sqlite+aiosqlite://")
     router = SASchemaRouter(schema_template="t_{tenant_id}")

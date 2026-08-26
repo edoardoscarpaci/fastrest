@@ -48,9 +48,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from varco_core.authority.sources.factory import IssuerSourceFactory
-
 from typing import TYPE_CHECKING
+
+from varco_core.authority.sources.factory import IssuerSourceFactory
 
 if TYPE_CHECKING:
     from varco_core.authority.registry import TrustedIssuerRegistry

@@ -21,12 +21,10 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-
 from varco_core.event.base import Event
 from varco_core.event.dlq import InMemoryDeadLetterQueue
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.streams import RedisStreamEventBus
-
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 

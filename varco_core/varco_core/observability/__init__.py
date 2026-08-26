@@ -83,13 +83,13 @@ from varco_core.observability.helpers import (
     create_histogram,
     create_span,
 )
+from varco_core.observability.metric import Metric, MetricKind, register_gauge
 from varco_core.observability.metrics import (
     CounterConfig,
     HistogramConfig,
     counter,
     histogram,
 )
-from varco_core.observability.metric import Metric, MetricKind, register_gauge
 from varco_core.observability.mixin import TracingServiceMixin
 from varco_core.observability.params import (
     ParamCaptureConfig,

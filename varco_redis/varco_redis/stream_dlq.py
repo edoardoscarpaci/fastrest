@@ -127,11 +127,10 @@ from typing import Any
 from uuid import UUID
 
 import redis.asyncio as aioredis
-
 from providify import Configuration, Inject, Provider
-
 from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
 from varco_core.event.serializer import JsonEventSerializer
+
 from varco_redis.config import RedisEventBusSettings
 
 _logger = logging.getLogger(__name__)

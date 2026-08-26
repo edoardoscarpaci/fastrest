@@ -61,13 +61,17 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from uuid import UUID
 
+from auth import HeaderAuth
+from di import DocumentModule
+from dtos import DocumentCreate, DocumentRead, DocumentUpdate
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
-from starlette.requests import Request
-
+from models import Document
 from providify import DIContainer, Provider
-from varco_core.auth import PolicyEngine, PolicyManagement, AbstractAuthorizer
+from router import DocumentRouter
+from starlette.requests import Request
+from varco_core.auth import AbstractAuthorizer, PolicyEngine, PolicyManagement
 from varco_core.auth.policy import PolicyEngineAuthorizer, RequestMapper
 from varco_core.service.base import AsyncService
 from varco_fastapi.exceptions import add_exception_handlers
@@ -76,12 +80,6 @@ from varco_fastapi.middleware import (
     RequestContextMiddleware,
     install_middleware_stack,
 )
-
-from auth import HeaderAuth
-from di import DocumentModule
-from dtos import DocumentCreate, DocumentRead, DocumentUpdate
-from models import Document
-from router import DocumentRouter
 
 
 def create_app(

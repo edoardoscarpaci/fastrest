@@ -42,7 +42,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from varco_core.auth import AuthContext
 from varco_core.auth.authorizer import BaseAuthorizer
 from varco_core.event import BusEventProducer, InMemoryEventBus
@@ -66,7 +65,6 @@ from tests.test_service import (
     PostReadDTO,
     UpdatePostDTO,
 )
-
 
 # ── Concrete BulkServiceMixin subclass ─────────────────────────────────────────
 

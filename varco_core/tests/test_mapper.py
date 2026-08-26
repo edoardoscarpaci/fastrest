@@ -16,12 +16,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
-
 from varco_core.exception.repository import StaleEntityError
 from varco_core.mapper import AbstractMapper
 from varco_core.migrator import DomainMigrator
 from varco_core.model import AuditedDomainModel, DomainModel, VersionedDomainModel
-
 
 # ── Stub ORM ──────────────────────────────────────────────────────────────────
 

@@ -61,10 +61,10 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
 from varco_core.event.audit_event import AuditEvent

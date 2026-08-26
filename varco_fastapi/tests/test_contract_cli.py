@@ -63,6 +63,7 @@ class TestGenClientCli:
     def test_gen_client_writes_module(self, tmp_path) -> None:
         from varco_core.cli.main import main
         from varco_fastapi.contract.build import build_contract
+
         from tests.fixtures.routers import OrderRouter
 
         contract_path = tmp_path / "order.contract.json"

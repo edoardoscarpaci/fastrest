@@ -38,13 +38,13 @@ from __future__ import annotations
 from typing import Any
 
 from providify import Inject, Provider
-
 from varco_core.auth import (
     AbstractAuthorizer,
     PolicyEngine,
     PolicyEngineAuthorizer,
     RequestMapper,
 )
+
 from varco_casbin.config import CasbinSettings
 
 

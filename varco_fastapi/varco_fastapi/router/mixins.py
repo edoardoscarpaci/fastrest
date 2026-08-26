@@ -32,7 +32,6 @@ from typing import Any, Callable, ClassVar
 
 from varco_fastapi.router.base import RouterMixin
 
-
 # ── CreateMixin ────────────────────────────────────────────────────────────────
 
 

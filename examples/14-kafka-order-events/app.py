@@ -49,15 +49,13 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+from consumer import OrderConsumer
 from fastapi import FastAPI
-
+from router import build_router
 from varco_core.event import BusEventProducer
-
-from varco_kafka import KafkaEventBus
 from varco_kafka.config import KafkaEventBusSettings
 
-from consumer import OrderConsumer
-from router import build_router
+from varco_kafka import KafkaEventBus
 
 if TYPE_CHECKING:
     from varco_core.event import AbstractEventBus

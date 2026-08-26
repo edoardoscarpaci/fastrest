@@ -41,13 +41,18 @@ Async safety:   ✅ ``create_app()`` is synchronous; async init deferred to life
 
 from __future__ import annotations
 
+from uuid import UUID
+
+from auth import registry
+from di import DocumentModule
+from dtos import DocumentCreate, DocumentRead, DocumentUpdate
 from fastapi import FastAPI
 from fastapi.exceptions import HTTPException
 from fastapi.responses import JSONResponse
-from starlette.requests import Request
-from uuid import UUID
-
+from models import Document
 from providify import DIContainer
+from router import DocumentRouter
+from starlette.requests import Request
 from varco_core.service.base import AsyncService
 from varco_fastapi.auth import JwtBearerAuth
 from varco_fastapi.exceptions import add_exception_handlers
@@ -57,12 +62,6 @@ from varco_fastapi.middleware import (
     RequestContextMiddleware,
     install_middleware_stack,
 )
-
-from auth import registry
-from di import DocumentModule
-from dtos import DocumentCreate, DocumentRead, DocumentUpdate
-from models import Document
-from router import DocumentRouter
 
 
 def create_app() -> FastAPI:

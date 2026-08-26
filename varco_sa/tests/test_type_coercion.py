@@ -12,7 +12,6 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.exception.query import CoercionError
 from varco_core.query.type import (
     AndNode,
@@ -30,8 +29,8 @@ from varco_core.query.visitor.type_coercion import (
     coerce_int,
     coerce_list,
 )
-from varco_sa import registry_from_sa_model
 
+from varco_sa import registry_from_sa_model
 
 # ── coerce_boolean ─────────────────────────────────────────────────────────────
 

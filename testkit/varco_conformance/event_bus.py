@@ -22,7 +22,6 @@ from typing import ClassVar
 from uuid import uuid4
 
 import pytest
-
 from varco_core.event.base import AbstractEventBus, Event
 
 # Some brokers (Kafka in particular) make subscribe() -> publish() delivery

@@ -17,31 +17,27 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-
-from varco_core.resilience.retry import RetryPolicy
+from varco_core.assembler import AbstractDTOAssembler
+from varco_core.auth import AbstractAuthorizer, AuthContext
+from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
 from varco_core.event.audit_event import AuditEvent
 from varco_core.event.memory import InMemoryEventBus
+from varco_core.model import DomainModel
+from varco_core.query.params import QueryParams
+from varco_core.repository import AsyncRepository
+from varco_core.resilience.retry import RetryPolicy
 from varco_core.service.audit import (
     AuditConsumer,
     AuditEntry,
     AuditLogMixin,
     AuditRepository,
 )
-
-
-from dataclasses import dataclass
-
-from varco_core.assembler import AbstractDTOAssembler
-from varco_core.auth import AbstractAuthorizer, AuthContext
-from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
-from varco_core.model import DomainModel
 from varco_core.service.base import AsyncService, IUoWProvider
-from varco_core.query.params import QueryParams
-from varco_core.repository import AsyncRepository
 from varco_core.uow import AsyncUnitOfWork
 
 # ── Shared helpers ─────────────────────────────────────────────────────────────

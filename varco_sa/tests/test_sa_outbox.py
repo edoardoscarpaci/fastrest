@@ -25,10 +25,8 @@ Sections
 
 from __future__ import annotations
 
-
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from varco_core.event import Event
 from varco_core.service.outbox import OutboxEntry
 from varco_sa.outbox import (
@@ -37,7 +35,6 @@ from varco_sa.outbox import (
     SARelayOutboxRepository,
     outbox_metadata,
 )
-
 
 # ── Minimal event for tests ────────────────────────────────────────────────────
 

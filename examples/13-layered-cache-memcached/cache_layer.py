@@ -38,11 +38,10 @@ import collections.abc
 import dataclasses
 import logging
 
+from models import Product
 from varco_core.cache import InMemoryCache, LayeredCache, TTLStrategy
 from varco_core.cache.base import AsyncCache
 from varco_memcached.cache import MemcachedCache, MemcachedCacheSettings
-
-from models import Product
 
 _logger = logging.getLogger(__name__)
 

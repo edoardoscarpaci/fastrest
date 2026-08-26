@@ -15,14 +15,12 @@ Sections
 from __future__ import annotations
 
 import pytest
-
 from varco_core.health import (
     CompositeHealthCheck,
     HealthCheck,
     HealthResult,
     HealthStatus,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

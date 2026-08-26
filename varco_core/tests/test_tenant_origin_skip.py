@@ -51,9 +51,8 @@ async def test_consumer_skips_event_with_own_origin() -> None:
     await bus.drain()
 
     assert provisioner.provision_calls == 0
-    from varco_core.tenancy.catalog import TenantNotFoundError
-
     import pytest
+    from varco_core.tenancy.catalog import TenantNotFoundError
 
     with pytest.raises(TenantNotFoundError):
         await catalog.get("acme")

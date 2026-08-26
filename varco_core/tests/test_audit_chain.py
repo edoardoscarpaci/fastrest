@@ -11,7 +11,6 @@ Pure unit tests — no DB required.
 
 from __future__ import annotations
 
-
 from varco_core.service.audit import AuditEntry, AuditRepository
 
 

@@ -81,10 +81,9 @@ from dataclasses import field as dfield
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-
 if TYPE_CHECKING:
     # FilterNode is the Union type from query.type — only needed for type hints.
-    from varco_core.query.type import ComparisonNode, AndNode, OrNode, NotNode
+    from varco_core.query.type import AndNode, ComparisonNode, NotNode, OrNode
 
     FilterNode = ComparisonNode | AndNode | OrNode | NotNode
 

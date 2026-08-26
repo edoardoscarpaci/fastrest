@@ -48,11 +48,10 @@ from datetime import UTC, datetime
 from typing import Any, AsyncIterator, Sequence
 from uuid import UUID, uuid4
 
+from models import Product
 from varco_core.repository import AsyncRepository
 from varco_core.service.base import IUoWProvider
 from varco_core.uow import AsyncUnitOfWork
-
-from models import Product
 
 if False:  # TYPE_CHECKING
     from varco_core.query.params import QueryParams

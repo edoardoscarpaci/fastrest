@@ -10,7 +10,6 @@ import pytest
 
 from varco_nats import NatsDeliverySemantics, NatsEventBusSettings
 
-
 # ── NatsDeliverySemantics ─────────────────────────────────────────────────────
 
 

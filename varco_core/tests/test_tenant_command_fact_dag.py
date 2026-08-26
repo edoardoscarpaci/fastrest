@@ -43,7 +43,6 @@ async def test_provision_and_deprovision_never_emit_command_events() -> None:
     from varco_core.event.memory import InMemoryEventBus
     from varco_core.event.producer import BusEventProducer
     from varco_core.tenancy.catalog import StaticTenantCatalog
-
     from varco_core.tenancy.control.service import TenantControlService
 
     bus = InMemoryEventBus()

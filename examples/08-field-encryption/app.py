@@ -50,27 +50,26 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI
-from providify import DIContainer, Provider
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
-
-from varco_core.encryption import FieldEncryptor
-from varco_core.service.base import IUoWProvider
-from varco_fastapi import create_varco_app
-from varco_fastapi.di import VarcoFastAPIModule
-from varco_sa.config import SAConfig
-from varco_sa.di import bootstrap as sa_bootstrap, create_tables
-from varco_sa.provider import SQLAlchemyRepositoryProvider
-
 # Import @Singleton-decorated classes so their DI metadata is stamped
 # before the container tries to resolve them.
 from assembler import PatientAssembler  # noqa: F401 — registers PatientAssembler
+from fastapi import FastAPI
 from keys import generate_ephemeral_encryptor
 from models import Patient
+from providify import DIContainer, Provider
 from router import add_health_route, make_patient_router
 from service import PatientService  # noqa: F401 — registers PatientService
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase
+from varco_core.encryption import FieldEncryptor
+from varco_core.service.base import IUoWProvider
+from varco_fastapi.di import VarcoFastAPIModule
+from varco_sa.config import SAConfig
+from varco_sa.di import bootstrap as sa_bootstrap
+from varco_sa.di import create_tables
+from varco_sa.provider import SQLAlchemyRepositoryProvider
 
+from varco_fastapi import create_varco_app
 
 # ── Shared SQLAlchemy DeclarativeBase ──────────────────────────────────────────
 

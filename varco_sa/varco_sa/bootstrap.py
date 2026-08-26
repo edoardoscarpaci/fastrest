@@ -58,9 +58,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 # provider.py → Inject[SAConfig] must not import bootstrap.py
 # (which imports provider.py).  Both now import from config.py.
 from varco_sa.config import SAConfig  # noqa: F401 — re-exported for backward compat
-from varco_sa.pool_metrics import SAPoolMetrics, pool_metrics as _pool_metrics
+from varco_sa.pool_metrics import SAPoolMetrics
+from varco_sa.pool_metrics import pool_metrics as _pool_metrics
 from varco_sa.provider import SQLAlchemyRepositoryProvider
-from varco_sa.schema_guard import SchemaGuard, SchemaDriftReport
+from varco_sa.schema_guard import SchemaDriftReport, SchemaGuard
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import DeclarativeBase

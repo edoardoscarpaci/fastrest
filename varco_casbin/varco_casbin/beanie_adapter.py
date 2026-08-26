@@ -56,11 +56,10 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from beanie import Document, init_beanie
-from pymongo import ASCENDING, IndexModel
-from pydantic import Field
-
 from casbin import persist
 from casbin.persist.adapters.asyncio import AsyncAdapter
+from pydantic import Field
+from pymongo import ASCENDING, IndexModel
 
 _logger = logging.getLogger(__name__)
 

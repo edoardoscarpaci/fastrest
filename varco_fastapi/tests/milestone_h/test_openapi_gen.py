@@ -21,9 +21,7 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
-from varco_fastapi.client.openapi_gen import generate_client, _to_snake, _to_pascal
-
+from varco_fastapi.client.openapi_gen import _to_pascal, _to_snake, generate_client
 
 # ── Minimal spec ─────────────────────────────────────────────────────────────
 

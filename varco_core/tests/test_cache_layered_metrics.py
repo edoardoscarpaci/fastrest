@@ -26,7 +26,6 @@ import unittest.mock as mock
 import pytest
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-
 from varco_core.cache.memory import InMemoryCache
 
 

@@ -129,7 +129,6 @@ class TestFrameworkRlsPostgresIntegration:
         import uuid
 
         import sqlalchemy as sa
-
         from varco_core.event.dlq import DeadLetterEntry
         from varco_sa.dlq import SADeadLetterQueue, dead_letters_metadata
         from varco_sa.rls import set_tenant_local
@@ -187,7 +186,6 @@ class TestFrameworkRlsPostgresIntegration:
         form -- re-asserts the non-negotiable regression with a live
         EXPLAIN-able policy, not just string inspection."""
         import sqlalchemy as sa
-
         from varco_sa.dlq import dead_letters_metadata
         from varco_sa.rls_framework import framework_rls_upgrade
 

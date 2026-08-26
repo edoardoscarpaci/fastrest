@@ -62,8 +62,8 @@ async def test_stop_stops_supervisor_before_pool_aclose() -> None:
 
 
 def test_create_varco_app_with_tenancy_none_registers_nothing() -> None:
-    from varco_fastapi.app import create_varco_app
     from providify import DIContainer
+    from varco_fastapi.app import create_varco_app
 
     # validate=False — an empty DIContainer() has no AbstractServerAuth
     # binding, so default validate=True would fail on unrelated DI
@@ -79,8 +79,8 @@ def test_isolation_env_var_without_tenancy_kwarg_logs_one_warning(
     monkeypatch, caplog: "logging.LogCaptureFixture"
 ) -> None:
     monkeypatch.setenv("VARCO_TENANCY_ISOLATION", "schema")
-    from varco_fastapi.app import create_varco_app
     from providify import DIContainer
+    from varco_fastapi.app import create_varco_app
 
     with caplog.at_level(logging.WARNING):
         create_varco_app(DIContainer(), tenancy=None, validate=False)

@@ -39,10 +39,9 @@ import sys
 import time
 
 from providify import Inject, Singleton
-
-from varco_beanie.config import BeanieSettings
 from varco_core.health import HealthCheck, HealthResult, HealthStatus
 
+from varco_beanie.config import BeanieSettings
 
 # ── BeanieHealthCheck ─────────────────────────────────────────────────────────
 

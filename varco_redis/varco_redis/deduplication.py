@@ -78,8 +78,8 @@ from typing import Any
 from uuid import UUID
 
 import redis.asyncio as aioredis
-
 from varco_core.event.deduplication import AbstractDeduplicator
+
 from varco_redis.config import RedisEventBusSettings
 
 _logger = logging.getLogger(__name__)

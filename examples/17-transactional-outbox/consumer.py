@@ -32,11 +32,9 @@ Async safety:   ✅ Handler is ``async def``; list.append() is GIL-safe.
 
 from __future__ import annotations
 
-from providify import PostConstruct
-
-from varco_core.event import AbstractEventBus, EventConsumer, listen
-
 from events import OrderCreatedEvent
+from providify import PostConstruct
+from varco_core.event import AbstractEventBus, EventConsumer, listen
 
 
 class OrderConsumer(EventConsumer):

@@ -409,10 +409,14 @@ class JwkBuilder:
         """
         from cryptography.hazmat.primitives.asymmetric.ec import (
             EllipticCurvePrivateKey as _ECPrivKey,
+        )
+        from cryptography.hazmat.primitives.asymmetric.ec import (
             EllipticCurvePublicKey as _ECPubKey,
         )
         from cryptography.hazmat.primitives.asymmetric.rsa import (
             RSAPrivateKey as _RSAPrivKey,
+        )
+        from cryptography.hazmat.primitives.asymmetric.rsa import (
             RSAPublicKey as _RSAPubKey,
         )
         from cryptography.hazmat.primitives.serialization import (

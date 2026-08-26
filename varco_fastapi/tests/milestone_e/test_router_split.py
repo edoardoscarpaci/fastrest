@@ -15,7 +15,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel
-
+from varco_core.job.task import TaskRegistry
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.crud import VarcoCRUDRouter
 from varco_fastapi.router.mixins import CreateMixin, ListMixin, ReadMixin
@@ -25,7 +25,6 @@ from varco_fastapi.router.presets import (
     ReadOnlyRouter,
     WriteRouter,
 )
-from varco_core.job.task import TaskRegistry
 
 
 class ItemCreate(BaseModel):
@@ -82,8 +81,8 @@ class TestVarcoRouterBase:
         ):
             _prefix = "/pure"
 
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
 
         router_obj = PureRouter()
         api_router = router_obj.build_router()
@@ -106,8 +105,8 @@ class TestVarcoRouterBase:
             _prefix = "/compat"
             _service = _MockService()
 
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
 
         app = FastAPI()
         app.include_router(CompatRouter().build_router())
@@ -145,8 +144,8 @@ class TestVarcoCRUDRouter:
             _prefix = "/items"
             _service = _MockService()
 
-        from fastapi.testclient import TestClient
         from fastapi import FastAPI
+        from fastapi.testclient import TestClient
 
         app = FastAPI()
         app.include_router(MyRouter().build_router())

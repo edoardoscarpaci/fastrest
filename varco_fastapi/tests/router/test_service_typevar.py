@@ -40,12 +40,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
 from varco_fastapi.router.base import _resolve_type_args
 from varco_fastapi.router.crud import VarcoCRUDRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import CRUDRouter
-
 
 # ── Fixtures (naming mirrors the plan: _Rule / _RC / _RR / _RU / _RuleService) ─
 

@@ -72,9 +72,7 @@ from datetime import UTC, datetime
 
 from beanie import Document
 from pydantic import Field
-
 from varco_core.encryption_store import EncryptionKeyEntry
-
 
 # ── EncryptionKeyDocument — Beanie Document ───────────────────────────────────
 

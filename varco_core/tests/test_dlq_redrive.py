@@ -12,7 +12,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from varco_core.event import Event
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,

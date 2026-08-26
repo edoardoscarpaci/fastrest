@@ -38,7 +38,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from beanie import init_beanie
-
 from varco_core.tenancy.global_scope import is_global_entity
 
 logger = logging.getLogger(__name__)

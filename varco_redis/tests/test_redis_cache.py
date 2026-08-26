@@ -25,10 +25,8 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.cache import ExplicitStrategy
 from varco_redis.cache import RedisCache, RedisCacheConfiguration, RedisCacheSettings
-
 
 # ── FakeRedis ───────────────────────────────────────────────────────────────────
 

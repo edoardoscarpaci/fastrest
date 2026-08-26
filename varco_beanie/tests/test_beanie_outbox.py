@@ -23,11 +23,9 @@ from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-
+from varco_beanie.outbox import BeanieOutboxRepository, OutboxDocument
 from varco_core.event import Event
 from varco_core.service.outbox import OutboxEntry
-from varco_beanie.outbox import BeanieOutboxRepository, OutboxDocument
-
 
 # ── Minimal event fixture ──────────────────────────────────────────────────────
 

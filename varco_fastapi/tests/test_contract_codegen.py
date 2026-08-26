@@ -14,7 +14,6 @@ from __future__ import annotations
 import ast
 import inspect
 
-
 from tests.fixtures.routers import OrderRouter
 
 
@@ -29,8 +28,8 @@ class TestRenderClientModule:
         ast.parse(source)  # must not raise SyntaxError
 
     def test_unsupported_schema_degrades_to_dict_any_with_todo_comment(self) -> None:
-        from varco_fastapi.contract.model import CONTRACT_VERSION, ServiceContract
         from varco_fastapi.contract.codegen import render_client_module
+        from varco_fastapi.contract.model import CONTRACT_VERSION, ServiceContract
 
         contract = ServiceContract(
             contract_version=CONTRACT_VERSION,

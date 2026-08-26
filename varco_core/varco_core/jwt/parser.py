@@ -27,8 +27,8 @@ import jwt as _jwt
 
 from varco_core.auth import Action, AuthContext, ResourceGrant
 from varco_core.jwt.model import (
-    JsonWebToken,
     _RESERVED_CLAIM_KEYS,
+    JsonWebToken,
     _from_utc_timestamp,
 )
 from varco_core.jwt.transform.protocol import ClaimTransformer

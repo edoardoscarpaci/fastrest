@@ -35,10 +35,8 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import RelationshipProperty
-
-from varco_core.meta import ForeignKey, Relationship, ManyToMany
+from varco_core.meta import ForeignKey, ManyToMany, Relationship
 from varco_core.model import DomainModel
-
 
 # ── Domain model helpers ──────────────────────────────────────────────────────
 

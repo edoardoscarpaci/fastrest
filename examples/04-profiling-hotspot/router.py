@@ -27,7 +27,6 @@ from __future__ import annotations
 
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.presets import GenericRouter
-
 from work import cpu_heavy_work, custom_backend_work, memory_work
 
 

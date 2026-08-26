@@ -33,10 +33,9 @@ from __future__ import annotations
 import collections.abc
 import logging
 
+from models import Product
 from varco_core.cache import CompositeStrategy, TaggedStrategy, TTLStrategy
 from varco_redis.cache import RedisCache, RedisCacheSettings
-
-from models import Product
 
 _logger = logging.getLogger(__name__)
 

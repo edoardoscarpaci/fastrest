@@ -83,7 +83,6 @@ from uuid import UUID, uuid4
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
-
 from varco_core.lock import AbstractDistributedLock, LockHandle
 
 _logger = logging.getLogger(__name__)

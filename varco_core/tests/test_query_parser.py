@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import pytest
 from lark import UnexpectedEOF, UnexpectedToken
-
 from varco_core.query.parser import QueryParser
 from varco_core.query.type import (
     AndNode,
@@ -18,7 +17,6 @@ from varco_core.query.type import (
     Operation,
     OrNode,
 )
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

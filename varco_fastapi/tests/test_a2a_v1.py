@@ -30,7 +30,6 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.mixins import CreateMixin, ReadMixin

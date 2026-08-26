@@ -62,10 +62,8 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic_settings import SettingsConfigDict
-
 from varco_core.connection.auth import BasicAuthConfig
 from varco_core.connection.base import ConnectionSettings
-
 
 # ── NatsConnectionSettings ────────────────────────────────────────────────────
 

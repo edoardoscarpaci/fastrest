@@ -287,7 +287,6 @@ async def test_readiness_raises_for_a_tenant_never_observed() -> None:
     lost to a restart (RD-18) — raises ``TenantNotFoundError``, which the
     admin route renders as 404 rather than a misleading "0 of N ready"."""
     import pytest
-
     from varco_core.tenancy.catalog import StaticTenantCatalog, TenantNotFoundError
     from varco_core.tenancy.control.readiness import TenantReadinessCoordinator
 

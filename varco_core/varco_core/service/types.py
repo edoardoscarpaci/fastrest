@@ -37,14 +37,13 @@ from typing import AsyncIterator, TypeAlias, TypeVar
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AuthContext
 from varco_core.dto import CreateDTO, PagedReadDTO, ReadDTO, UpdateDTO
-from varco_core.service.base import _ANON_CTX
-from varco_core.query.params import QueryParams
 
 # ── TypeVars ──────────────────────────────────────────────────────────────────
-
 # Re-exported so consumers can use them when annotating generic services.
 # Bound to the same base classes as AsyncService to maintain consistency.
 from varco_core.model import DomainModel
+from varco_core.query.params import QueryParams
+from varco_core.service.base import _ANON_CTX
 
 D = TypeVar("D", bound=DomainModel)
 PK = TypeVar("PK")

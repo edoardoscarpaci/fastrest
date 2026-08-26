@@ -27,15 +27,13 @@ from typing import Annotated, Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
-from varco_core.meta import FieldHint, PrimaryKey, UniqueConstraint
-from varco_core.model import DomainModel
 from varco_beanie.index_guard import (
     BeanieIndexGuard,
     IndexDrift,
     IndexDriftReport,
 )
-
+from varco_core.meta import FieldHint, PrimaryKey, UniqueConstraint
+from varco_core.model import DomainModel
 
 # ── Domain model fixtures ─────────────────────────────────────────────────────
 

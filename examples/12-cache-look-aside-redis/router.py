@@ -21,13 +21,11 @@ Async safety:   ✅  All route handlers are ``async def``.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-
 from cache_layer import ProductCacheLayer
+from fastapi import APIRouter, HTTPException
 from models import Product
+from pydantic import BaseModel
 from store import ProductStore
-
 
 # ── Request/Response bodies ─────────────────────────────────────────────────
 

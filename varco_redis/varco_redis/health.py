@@ -36,10 +36,9 @@ import sys
 import time
 
 from providify import Inject, Singleton
-
 from varco_core.health import HealthCheck, HealthResult, HealthStatus
-from varco_redis.config import RedisEventBusSettings
 
+from varco_redis.config import RedisEventBusSettings
 
 # ── RedisHealthCheck ──────────────────────────────────────────────────────────
 

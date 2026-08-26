@@ -28,17 +28,14 @@ mistake for a layer-rule violation.
 from __future__ import annotations
 
 import pytest
-
-from varco_core.cache.invalidation import TTLStrategy
-from varco_core.cache.memory import InMemoryCache, NoOpCache
-from varco_core.event.dlq import InMemoryDeadLetterQueue
-from varco_core.event.memory import InMemoryEventBus
-
 from varco_conformance.cache import CacheBackendConformance
 from varco_conformance.dlq import DeadLetterQueueConformance
 from varco_conformance.event_bus import EventBusConformance
 from varco_conformance.job_store import JobStoreConformance
-
+from varco_core.cache.invalidation import TTLStrategy
+from varco_core.cache.memory import InMemoryCache, NoOpCache
+from varco_core.event.dlq import InMemoryDeadLetterQueue
+from varco_core.event.memory import InMemoryEventBus
 
 # ── Event bus ────────────────────────────────────────────────────────────────
 

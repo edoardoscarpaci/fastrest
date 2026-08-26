@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from dtos import DocumentCreate, DocumentRead, DocumentUpdate
+from models import Document
 from varco_fastapi.router.crud import VarcoCRUDRouter
 from varco_fastapi.router.mixins import (
     CreateMixin,
@@ -31,9 +33,6 @@ from varco_fastapi.router.mixins import (
     ReadMixin,
     UpdateMixin,
 )
-
-from dtos import DocumentCreate, DocumentRead, DocumentUpdate
-from models import Document
 
 
 class DocumentRouter(

@@ -8,13 +8,12 @@ Failing tests for varco_sa.alembic_helpers (Plan 006, Phase 0, step 1).
 
 from __future__ import annotations
 
-import pytest
-from sqlalchemy import Integer, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-
 from dataclasses import dataclass
 from typing import Annotated
 
+import pytest
+from sqlalchemy import Integer, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from varco_core.meta import PrimaryKey
 from varco_core.model import DomainModel
 from varco_sa.alembic_helpers import get_target_metadata, print_create_ddl

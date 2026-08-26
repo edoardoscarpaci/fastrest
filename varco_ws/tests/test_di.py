@@ -15,17 +15,12 @@ All tests use InMemoryEventBus — no real broker required.
 from __future__ import annotations
 
 import pytest
-
 from providify import Provider
-
-from varco_core.event.base import AbstractEventBus
+from varco_core.event.base import AbstractEventBus, Event
 from varco_core.event.memory import InMemoryEventBus
-
-from varco_core.event.base import Event
 from varco_ws.di import bind_sse_adapter, bind_websocket_adapter
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import BackpressurePolicy, WebSocketEventBus
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

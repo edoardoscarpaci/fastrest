@@ -133,9 +133,9 @@ async def test_empty_catalog_is_successful_noop_with_warning() -> None:
 
 
 async def test_only_active_and_suspended_tenants_are_targeted() -> None:
+    from varco_core.migration.fanout import TenantFanoutMigrator
     from varco_core.tenancy.catalog import StaticTenantCatalog, TenantDescriptor
     from varco_core.tenancy.settings import TenantStatus
-    from varco_core.migration.fanout import TenantFanoutMigrator
 
     catalog = StaticTenantCatalog(
         [

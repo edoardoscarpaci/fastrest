@@ -49,7 +49,6 @@ from __future__ import annotations
 import logging
 
 from providify import Inject, Singleton
-
 from varco_core.event import (
     AbstractEventBus,
     EventConsumer,

@@ -10,7 +10,6 @@ unchanged with tz present only as an optional extra."
 from __future__ import annotations
 
 import pathlib
-
 import tomllib
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]

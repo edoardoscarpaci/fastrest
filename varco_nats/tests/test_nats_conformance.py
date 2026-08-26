@@ -15,13 +15,11 @@ Also depends on ``pythonpath = ["../testkit"]`` in
 from __future__ import annotations
 
 import pytest
-
+from varco_conformance.dlq import DeadLetterQueueConformance
+from varco_conformance.event_bus import EventBusConformance
 from varco_nats.bus import NatsEventBus
 from varco_nats.config import NatsEventBusSettings
 from varco_nats.dlq import NatsDLQ
-
-from varco_conformance.dlq import DeadLetterQueueConformance
-from varco_conformance.event_bus import EventBusConformance
 
 pytestmark = pytest.mark.integration
 

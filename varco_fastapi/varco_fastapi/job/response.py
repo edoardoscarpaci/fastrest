@@ -28,9 +28,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
-
 from varco_core.job.base import JobStatus
-
 
 # ── JobAcceptedResponse ────────────────────────────────────────────────────────
 

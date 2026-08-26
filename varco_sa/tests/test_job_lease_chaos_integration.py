@@ -20,7 +20,6 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from varco_core.job.base import Job, JobStatus, StaleLeaseError
 from varco_sa.job_store import SAJobStore
 

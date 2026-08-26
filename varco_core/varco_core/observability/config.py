@@ -52,7 +52,6 @@ from dataclasses import dataclass, field
 
 from varco_core.observability.params import ParamCaptureConfig
 
-
 # ── OtelConfig ────────────────────────────────────────────────────────────────
 
 

@@ -37,16 +37,13 @@ from __future__ import annotations
 
 import asyncio
 
+from events import ScoreUpdatedEvent
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-
 from varco_core.event import AbstractEventBus
 from varco_ws.sse import SSEEventBus
 from varco_ws.websocket import WebSocketEventBus
-
-from events import ScoreUpdatedEvent
-
 
 # ── Request / response models ─────────────────────────────────────────────────
 

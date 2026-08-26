@@ -13,13 +13,11 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-
 from varco_core.event.dlq import DeadLetterEntry
-from varco_nats import NatsDLQ, NatsEventBusSettings
 from varco_nats.dlq import NatsDLQConfiguration
 
 from tests.fakes import FakeJetStream, FakeNatsClient, OrderPlacedEvent
-
+from varco_nats import NatsDLQ, NatsEventBusSettings
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

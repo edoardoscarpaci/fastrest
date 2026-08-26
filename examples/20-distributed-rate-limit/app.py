@@ -40,7 +40,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-
 from limiters import build_in_memory_limiter, build_redis_limiter
 from router import build_router
 from varco_core.resilience.rate_limit import InMemoryRateLimiter, RateLimitExceededError

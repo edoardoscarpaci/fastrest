@@ -56,8 +56,8 @@ def test_jwt_transform_core_symbols_importable_from_root() -> None:
     from varco_core.jwt import (  # noqa: F401
         CanonicalClaim,
         ClaimMapping,
-        ClaimRule,
         ClaimPath,
+        ClaimRule,
         ClaimTransformer,
         ClaimTransformError,
         IdentityClaimTransformer,

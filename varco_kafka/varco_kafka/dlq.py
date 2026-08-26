@@ -100,9 +100,10 @@ Async safety:   ✅ All methods are ``async def``.
 """
 
 from __future__ import annotations
-import sys
+
 import json
 import logging
+import sys
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -110,15 +111,14 @@ from uuid import UUID
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.structs import TopicPartition
-
 from providify import Configuration, Inject, Provider
-
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+
 from varco_kafka.config import KafkaEventBusSettings
 
 _logger = logging.getLogger(__name__)

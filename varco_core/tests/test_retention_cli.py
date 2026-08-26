@@ -13,9 +13,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-
-from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 from varco_core.event import Event
+from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
 
 
 class SampleEvent(Event):

@@ -44,7 +44,6 @@ async def test_rls_upgrade_hides_cross_tenant_rows_then_downgrade_restores(
     engine,
 ) -> None:
     import sqlalchemy as sa
-
     from varco_sa.migration.ops import rls_downgrade, rls_upgrade
     from varco_sa.rls import set_tenant_local
 

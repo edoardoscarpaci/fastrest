@@ -49,6 +49,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from providify import Singleton
 from varco_fastapi.router.crud import VarcoCRUDRouter
 from varco_fastapi.router.endpoint import route
 from varco_fastapi.router.mixins import (
@@ -59,8 +60,6 @@ from varco_fastapi.router.mixins import (
     ReadMixin,
     UpdateMixin,
 )
-
-from providify import Singleton
 
 from example.dtos import PostCreate, PostRead, PostUpdate
 from example.models import Post

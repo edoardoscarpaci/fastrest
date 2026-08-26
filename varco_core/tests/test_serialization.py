@@ -17,20 +17,17 @@ from __future__ import annotations
 
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import pytest
 from pydantic import BaseModel
-
-from dataclasses import dataclass
-
 from varco_core.serialization import (
     JsonSerializer,
     NoOpSerializer,
     Serializer,
     TypedJsonSerializer,
 )
-
 
 # ── Serializer protocol ───────────────────────────────────────────────────────
 

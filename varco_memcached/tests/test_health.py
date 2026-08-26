@@ -23,11 +23,9 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from varco_core.health import HealthStatus
 from varco_memcached.cache import MemcachedCacheSettings
 from varco_memcached.health import MemcachedHealthCheck
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

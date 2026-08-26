@@ -24,7 +24,6 @@ import time
 
 import pytest
 import redis.asyncio as aioredis
-
 from varco_core.resilience import CircuitBreaker, CircuitBreakerConfig
 from varco_core.resilience.circuit_breaker import CircuitOpenError, CircuitState
 

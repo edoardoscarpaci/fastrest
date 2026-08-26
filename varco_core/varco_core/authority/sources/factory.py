@@ -42,7 +42,6 @@ from varco_core.authority.sources.pem_file import PemFileSource
 from varco_core.authority.sources.pem_folder import PemFolderSource
 from varco_core.authority.sources.protocol import IssuerSource
 
-
 # ── IssuerSourceFactory ───────────────────────────────────────────────────────
 
 

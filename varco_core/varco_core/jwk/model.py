@@ -27,7 +27,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-
 # ── Base64url helpers ──────────────────────────────────────────────────────────
 
 # RFC 7515 §2: base64url encoding with no padding characters ("=").

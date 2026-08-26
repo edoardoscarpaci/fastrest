@@ -9,7 +9,6 @@ RED until ``varco_core/cache/readthrough.py`` lands.
 from __future__ import annotations
 
 import pytest
-
 from varco_core.cache.memory import InMemoryCache
 
 

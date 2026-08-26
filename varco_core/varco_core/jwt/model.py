@@ -19,7 +19,6 @@ from typing import Any, Final
 
 from varco_core.auth import AuthContext
 
-
 # ── Reserved claim keys ───────────────────────────────────────────────────────
 
 # The full set of claim names that varco manages explicitly.

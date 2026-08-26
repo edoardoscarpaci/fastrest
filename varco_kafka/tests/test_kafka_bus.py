@@ -30,14 +30,13 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from varco_core.event import (
     Event,
     Subscription,
 )
 from varco_core.event.serializer import JsonEventSerializer
-from varco_kafka import KafkaEventBus, KafkaEventBusSettings
 
+from varco_kafka import KafkaEventBus, KafkaEventBusSettings
 
 # ── Test event types ────────────────────────────────────────────────────────────
 

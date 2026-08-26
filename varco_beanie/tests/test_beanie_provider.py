@@ -21,13 +21,11 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from varco_core.model import DomainModel
 from varco_beanie.config import BeanieSettings
 from varco_beanie.provider import BeanieRepositoryProvider
 from varco_beanie.repository import AsyncBeanieRepository
 from varco_beanie.uow import BeanieUnitOfWork
-
+from varco_core.model import DomainModel
 
 # ── Test domain models ────────────────────────────────────────────────────────
 

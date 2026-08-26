@@ -33,16 +33,15 @@ Sub-module layout
     └── transform/     — claim-transformation sub-package (see its own __init__.py)
 """
 
-from varco_core.jwt.model import JsonWebToken
 from varco_core.jwt.builder import JwtBuilder
-from varco_core.jwt.parser import JwtParser
-from varco_core.jwt.util import SYSTEM_ISSUER, JwtUtil
+from varco_core.jwt.config import JwtVerificationSettings
 from varco_core.jwt.exceptions import (
     ClaimTransformError,
     JwtException,
     TokenProfileError,
 )
-from varco_core.jwt.config import JwtVerificationSettings
+from varco_core.jwt.model import JsonWebToken
+from varco_core.jwt.parser import JwtParser
 from varco_core.jwt.profile import (
     PROFILE_METADATA_KEY,
     TokenProfile,
@@ -51,20 +50,21 @@ from varco_core.jwt.profile import (
     reset_token_profiles,
     resolve_token_profile,
 )
-from varco_core.jwt.transform.path import ClaimPath, read_claim
-from varco_core.jwt.transform.shape import ValueShape
+from varco_core.jwt.transform.mapper import MappingClaimTransformer
 from varco_core.jwt.transform.mapping import CanonicalClaim, ClaimMapping, ClaimRule
+from varco_core.jwt.transform.path import ClaimPath, read_claim
 from varco_core.jwt.transform.protocol import (
     IDENTITY,
     ClaimTransformer,
     IdentityClaimTransformer,
 )
-from varco_core.jwt.transform.mapper import MappingClaimTransformer
 from varco_core.jwt.transform.runtime import (
     configure_claim_transforms,
     reset_claim_transforms,
     resolve_claim_transformer,
 )
+from varco_core.jwt.transform.shape import ValueShape
+from varco_core.jwt.util import SYSTEM_ISSUER, JwtUtil
 
 __all__ = [
     "SYSTEM_ISSUER",

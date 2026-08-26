@@ -29,9 +29,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import InMemoryMetricReader
-
 from varco_fastapi.middleware.metrics import MetricsMiddleware, _instruments
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 

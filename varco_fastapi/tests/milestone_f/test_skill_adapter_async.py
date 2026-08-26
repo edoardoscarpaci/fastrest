@@ -26,7 +26,6 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-
 from varco_core.job.base import AbstractJobRunner, AbstractJobStore, Job, JobStatus
 from varco_fastapi.router.base import VarcoRouter
 from varco_fastapi.router.mixins import CreateMixin, ReadMixin
@@ -35,7 +34,6 @@ from varco_fastapi.router.skill import (
     _job_to_task_response,
     _working_response,
 )
-
 
 # ── Stub models ───────────────────────────────────────────────────────────────
 
@@ -418,7 +416,6 @@ def test_bind_skill_adapter_resolves_through_a_real_container():
     ``SkillAdapter`` from a real container.
     """
     from providify import DIContainer  # noqa: PLC0415
-
     from varco_fastapi.router.skill import (
         SkillAdapter,
         bind_skill_adapter,
@@ -440,7 +437,6 @@ def test_bind_skill_adapter_resolves_through_a_real_container():
 
 def test_bind_skill_adapter_registers_a_singleton():
     from providify import DIContainer  # noqa: PLC0415
-
     from varco_fastapi.router.skill import (
         SkillAdapter,
         bind_skill_adapter,

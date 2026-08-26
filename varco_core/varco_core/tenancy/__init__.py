@@ -14,6 +14,7 @@ See ``plans/007-multitenancy-isolation-strategies.md`` for the full design.
 
 from __future__ import annotations
 
+from varco_core.tenancy.cache_key import tenancy_cache_key
 from varco_core.tenancy.catalog import (
     AbstractTenantCatalog,
     StaticTenantCatalog,
@@ -21,7 +22,6 @@ from varco_core.tenancy.catalog import (
     TenantIsolationError,
     TenantNotFoundError,
 )
-from varco_core.tenancy.cache_key import tenancy_cache_key
 from varco_core.tenancy.global_scope import (
     GlobalScopeReadOnlyError,
     GlobalUoWProvider,

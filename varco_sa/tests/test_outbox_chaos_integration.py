@@ -39,7 +39,6 @@ import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from varco_core.event.base import Event
 from varco_core.event.dlq import DeadLetterEntry
 from varco_core.resilience import RetryPolicy

@@ -79,7 +79,7 @@ from opentelemetry.trace import StatusCode
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
 from varco_core.model import DomainModel
 from varco_core.observability.span import SpanConfig, build_span_attributes
-from varco_core.service.base import AsyncService, _ANON_CTX
+from varco_core.service.base import _ANON_CTX, AsyncService
 
 if TYPE_CHECKING:
     from varco_core.auth import AuthContext

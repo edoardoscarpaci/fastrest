@@ -9,9 +9,8 @@ settings resolve via the provider, and the authorizer is truly opt-in
 from __future__ import annotations
 
 from providify import DIContainer
-
-from varco_casbin.di import bootstrap, enable_policy_authorizer
 from varco_casbin.config import CasbinSettings
+from varco_casbin.di import bootstrap, enable_policy_authorizer
 from varco_casbin.engine import CasbinPolicyEngine
 from varco_core.auth import AbstractAuthorizer, PolicyEngine, PolicyManagement
 from varco_core.auth.authorizer import BaseAuthorizer

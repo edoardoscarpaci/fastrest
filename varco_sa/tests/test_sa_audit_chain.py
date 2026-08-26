@@ -15,7 +15,6 @@ import asyncio
 import pytest_asyncio
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from varco_core.service.audit import AuditEntry, AuditRepository
 from varco_sa.audit import SAAuditRepository, audit_metadata
 

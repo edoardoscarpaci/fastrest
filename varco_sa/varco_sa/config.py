@@ -33,7 +33,6 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import DeclarativeBase
-
 from varco_core.model import DomainModel
 
 

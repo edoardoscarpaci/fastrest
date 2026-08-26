@@ -19,11 +19,9 @@ Sections
 from __future__ import annotations
 
 import pytest
-
+from varco_beanie.query.aggregation import BeanieAggregationApplicator, Pipeline
 from varco_core.query.builder import QueryBuilder
 from varco_core.query.type import SortField, SortOrder
-from varco_beanie.query.aggregation import BeanieAggregationApplicator, Pipeline
-
 
 # ── Construction ──────────────────────────────────────────────────────────────
 

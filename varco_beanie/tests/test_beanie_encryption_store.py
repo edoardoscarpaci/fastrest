@@ -32,8 +32,9 @@ Sections
 """
 
 from __future__ import annotations
-import os as _os
+
 import base64
+import os as _os
 import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,14 +42,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
-
 from varco_beanie.encryption_store import (
     BeanieEncryptionKeyStore,
     EncryptionKeyDocument,
     _doc_to_entry,
 )
 from varco_core.encryption_store import EncryptionKeyEntry, EncryptionKeyStore
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

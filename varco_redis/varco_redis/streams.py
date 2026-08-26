@@ -82,9 +82,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any
 
 import redis.asyncio as aioredis
-
-from providify import Inject, Instance, InjectMeta, PostConstruct, PreDestroy
-
+from providify import Inject, InjectMeta, Instance, PostConstruct, PreDestroy
 from varco_core.event.base import (
     CHANNEL_ALL,
     CHANNEL_DEFAULT,

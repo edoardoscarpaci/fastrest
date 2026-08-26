@@ -44,7 +44,6 @@ from typing import Annotated, Any
 from unittest.mock import MagicMock
 
 import pytest
-
 from varco_core.assembler import AbstractDTOAssembler
 from varco_core.auth import AbstractAuthorizer, Action, AuthContext, Resource
 from varco_core.auth.authorizer import BaseAuthorizer

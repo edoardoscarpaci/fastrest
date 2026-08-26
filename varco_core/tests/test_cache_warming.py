@@ -16,14 +16,12 @@ All tests use InMemoryCache — no external dependencies required.
 from __future__ import annotations
 
 import pytest
-
 from varco_core.cache.warming import (
     CacheWarmer,
     CompositeWarmer,
     QueryCacheWarmer,
     SnapshotCacheWarmer,
 )
-
 
 # ── Minimal in-process cache stub ─────────────────────────────────────────────
 
