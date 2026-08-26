@@ -105,7 +105,14 @@ class BeanieRepositoryProvider(RepositoryProvider):
         from varco_beanie.repository import AsyncBeanieRepository
         from varco_beanie.uow import BeanieUnitOfWork
 
-        repo_factories = {
+        # `m=mapper` binds the loop variable eagerly (the classic Python
+        # late-binding-closure trap) — the resulting callable is invoked
+        # with exactly one positional arg (the session); `m`'s default
+        # never changes at call time. An explicit `dict[str, Any]`
+        # annotation is enough for mypy to accept this against
+        # BeanieUnitOfWork's Callable[[AsyncClientSession | None], Any]
+        # parameter type — no per-line ignore needed.
+        repo_factories: dict[str, Any] = {
             _repo_attr(cls): (lambda _s, m=mapper: AsyncBeanieRepository(mapper=m))
             for cls, (_, mapper) in self._built.items()
         }

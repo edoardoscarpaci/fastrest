@@ -198,7 +198,7 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
     # Stamp @Provider metadata with the explicit returns= override — DEPENDENT
     # scope (default) so a fresh repo wrapper is returned each time;
     # repositories carry no state between calls.
-    return Provider(returns=AsyncRepository[entity_cls])(_repo_factory)  # type: ignore[valid-type]
+    return Provider(returns=AsyncRepository[entity_cls])(_repo_factory)  # type: ignore[valid-type, misc]
 
 
 # ── bootstrap ─────────────────────────────────────────────────────────────────

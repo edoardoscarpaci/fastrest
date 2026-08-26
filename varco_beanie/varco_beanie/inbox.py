@@ -141,7 +141,7 @@ class InboxDocument(Document):
     """
 
     # Override Beanie's ObjectId pk with UUID so it matches InboxEntry.entry_id.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     event_type: str
     """Human-readable event class name — stored for monitoring, not routing."""
@@ -386,7 +386,7 @@ class BeanieInboxRepository(InboxRepository):
                 InboxDocument.processed_at == None,  # noqa: E711
                 **find_kwargs,
             )
-            .sort(+InboxDocument.received_at)
+            .sort(+InboxDocument.received_at)  # type: ignore[operator]
             .limit(limit)
             .to_list()
         )

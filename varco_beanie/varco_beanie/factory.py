@@ -133,7 +133,7 @@ class BeanieModelFactory:
     def __init__(self) -> None:
         self._cache: dict[type, tuple[type, AbstractMapper]] = {}
 
-    def build(self, domain_cls: type[D]) -> tuple[type, _BeanieAutoMapper[D, Any]]:
+    def build(self, domain_cls: type[D]) -> tuple[type, _BeanieAutoMapper[D]]:
         if domain_cls in self._cache:
             return self._cache[domain_cls]  # type: ignore[return-value]
 
@@ -268,7 +268,9 @@ class BeanieModelFactory:
 
         strategy = meta.pk_strategy
         if strategy is PKStrategy.INT_AUTO:
-            return Optional[int], PydanticField(default=None)
+            # Optional[int], not int | None: returned as a runtime typing
+            # object for pydantic field construction, not a static annotation.
+            return Optional[int], PydanticField(default=None)  # noqa: UP045
         if strategy is PKStrategy.UUID_AUTO:
             return UUID, PydanticField(default_factory=uuid4)
         if strategy is PKStrategy.STR_ASSIGNED:

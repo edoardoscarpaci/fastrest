@@ -152,7 +152,7 @@ class DeduplicationDocument(Document):
     """
 
     # Surrogate PK — separate from event_id to avoid Beanie PK complications.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     # The actual deduplication key — unique-indexed at DB level.
     event_id: UUID

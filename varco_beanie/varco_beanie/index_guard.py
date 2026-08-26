@@ -51,6 +51,7 @@ Async safety:   ✅ check() and report() are async def; index_information() is a
 from __future__ import annotations
 
 import logging
+from collections.abc import MutableMapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -422,7 +423,9 @@ class BeanieIndexGuard:
 
         for collection_name, expected_for_coll in by_collection.items():
             # Fetch all actual indexes from the live collection.
-            actual_raw: dict[str, Any] = await db[collection_name].index_information()
+            actual_raw: MutableMapping[str, Any] = await db[
+                collection_name
+            ].index_information()
 
             # Build a set of (key_fields_tuple, unique) from actual indexes for
             # O(1) lookup.  Skip the _id_ index — it is always present and never

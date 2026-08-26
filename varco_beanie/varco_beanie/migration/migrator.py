@@ -219,7 +219,7 @@ class BeanieMigrator(AbstractMigrator):
             )
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-        applied: list[Revision] = []
+        applied_revisions: list[Revision] = []
         try:
             for migration_cls in pending_migrations:
                 migration = migration_cls()
@@ -233,7 +233,7 @@ class BeanieMigrator(AbstractMigrator):
                     duration_ms=duration_ms,
                     applied_by=self._owner_id,
                 )
-                applied.append(
+                applied_revisions.append(
                     Revision(id=migration_cls.version, label=migration_cls.name)
                 )
 
@@ -250,7 +250,7 @@ class BeanieMigrator(AbstractMigrator):
             await self._store.release(self._owner_id)
 
         return MigrationReport(
-            applied=tuple(applied), duration_s=time.monotonic() - start
+            applied=tuple(applied_revisions), duration_s=time.monotonic() - start
         )
 
     async def _heartbeat_loop(self) -> None:

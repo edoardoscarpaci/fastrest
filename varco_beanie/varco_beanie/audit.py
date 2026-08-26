@@ -135,7 +135,7 @@ class AuditDocument(Document):
     """
 
     # Override Beanie's ObjectId pk with a UUID — matches AuditEntry.entry_id.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     entity_type: str
     """Entity class name — e.g. ``"Order"``."""
@@ -215,7 +215,7 @@ class AuditSeqDocument(Document):
                         an additional in-process ``asyncio.Lock``).
     """
 
-    id: str = Field(default="varco_audit_seq")
+    id: str = Field(default="varco_audit_seq")  # type: ignore[assignment]
     value: int = 0
 
     class Settings:
@@ -492,12 +492,21 @@ class BeanieAuditRepository(AuditRepository):
             next_seq,
         )
 
-    async def list_for_entity(
+    async def list_for_entity(  # type: ignore[override]
         self,
         entity_type: str,
         entity_id: str,
         *,
         limit: int = 100,
+        # BUG (surfaced by RL-6's mypy gate, plans/017): missing the
+        # `tenant_id: str | None = None` keyword-only param the base class
+        # (varco_core.service.audit.AuditRepository, Plan 009 / R4) declares.
+        # Adding the parameter without also implementing the tenant filter in
+        # the Beanie query below would be worse than the current signature
+        # mismatch — it would silently accept a `tenant_id` and ignore it.
+        # Tracked as a BACKLOG row rather than patched here (Non-goal: no
+        # behaviour changes in a CI-green pass). Do not remove this ignore
+        # without implementing the filter.
     ) -> list[AuditEntry]:
         """
         Return audit entries for a specific entity, newest-first.
@@ -535,7 +544,7 @@ class BeanieAuditRepository(AuditRepository):
                 **find_kwargs,
             )
             # -occurred_at = descending order (newest first).
-            .sort(-AuditDocument.occurred_at)
+            .sort(-AuditDocument.occurred_at)  # type: ignore[operator]
             .limit(limit)
             .to_list()
         )

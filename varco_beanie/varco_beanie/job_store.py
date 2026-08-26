@@ -140,7 +140,7 @@ class JobDocument(Document):
     """
 
     # UUID primary key — overrides Beanie's default ObjectId pk.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     status: str
     """String value of JobStatus (e.g. "pending", "running", "completed")."""
@@ -349,7 +349,7 @@ def _doc_to_job(doc: JobDocument) -> Job:
     return Job(
         job_id=doc.id,
         status=JobStatus(doc.status),
-        created_at=_ensure_tz(doc.created_at),
+        created_at=_ensure_tz(doc.created_at),  # type: ignore[arg-type]
         started_at=_ensure_tz(doc.started_at),
         completed_at=_ensure_tz(doc.completed_at),
         result=doc.result,
@@ -558,7 +558,7 @@ class BeanieJobStore(AbstractJobStore):
         """
         docs = (
             await JobDocument.find(JobDocument.status == status.value)
-            .sort(+JobDocument.created_at)
+            .sort(+JobDocument.created_at)  # type: ignore[operator]
             .limit(limit)
             .to_list()
         )
@@ -770,7 +770,7 @@ class BeanieJobStore(AbstractJobStore):
         # run_at, AND update it to RUNNING in one MongoDB findAndModify
         # round-trip. UpdateResponse.NEW_DOCUMENT → returns the AFTER document.
         # If no document matches, Beanie returns None.
-        updated_doc: JobDocument | None = await JobDocument.find_one(
+        updated_doc: JobDocument | None = await JobDocument.find_one(  # type: ignore[assignment]
             JobDocument.id == job_id,
             JobDocument.status == JobStatus.PENDING.value,
             {"$or": [{"run_at": None}, {"run_at": {"$lte": now}}]},
@@ -854,7 +854,7 @@ class BeanieJobStore(AbstractJobStore):
         Async safety: ✅ Single ``findAndModify`` call — atomic.
         """
         new_expires_at = datetime.now(UTC) + timedelta(seconds=lease_ttl)
-        updated_doc: JobDocument | None = await JobDocument.find_one(
+        updated_doc: JobDocument | None = await JobDocument.find_one(  # type: ignore[assignment]
             JobDocument.id == job_id,
             {"owner_id": owner_id},
             {"lease_epoch": epoch},

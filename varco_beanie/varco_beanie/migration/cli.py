@@ -88,7 +88,7 @@ def _run_index(args: argparse.Namespace) -> int:
 
         from varco_beanie.migration.indexes import IndexReconciler
 
-        reconciler = IndexReconciler(index_guard, migrator._db)
+        reconciler = IndexReconciler(index_guard, migrator._db)  # type: ignore[attr-defined]
         if args.create:
             drift = await reconciler.apply()
         else:

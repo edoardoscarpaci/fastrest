@@ -78,7 +78,7 @@ class DeadLetterDocument(Document):
     DESIGN block above for why.
     """
 
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     source: str = DeadLetterSource.CONSUMER.value
     source_ref: str | None = None
@@ -89,12 +89,8 @@ class DeadLetterDocument(Document):
     error_type: str
     error_message: str
     attempts: int
-    first_failed_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=UTC)
-    )
-    last_failed_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=UTC)
-    )
+    first_failed_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
+    last_failed_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     tenant_id: str | None = None
 
     class Settings:
@@ -166,7 +162,7 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
                 payload = self._serializer.serialize(entry.event)
                 event_type = type(entry.event).__name__
             else:
-                payload = entry.payload
+                payload = entry.payload  # type: ignore[assignment]
                 event_type = None
 
             doc = DeadLetterDocument(
@@ -299,7 +295,7 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
             query["tenant_id"] = tenant_id
         if source is not None:
             sources = source if isinstance(source, (list, tuple, set)) else [source]
-            query["source"] = {"$in": [s.value for s in sources]}
+            query["source"] = {"$in": [s.value for s in sources]}  # type: ignore[union-attr]
 
         find = DeadLetterDocument.find(query)
         if limit is not None:
@@ -330,8 +326,8 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
         collection = DeadLetterDocument.get_pymongo_collection()
         cursor = collection.aggregate(pipeline)
         if inspect.isawaitable(cursor):
-            cursor = await cursor
-        results = [doc async for doc in cursor]
+            cursor = await cursor  # type: ignore[assignment]
+        results = [doc async for doc in cursor]  # type: ignore[attr-defined]
         return {r["_id"]: r["count"] for r in results}
 
     def _doc_to_entry(self, doc: DeadLetterDocument) -> DeadLetterEntry:

@@ -150,7 +150,7 @@ class OutboxDocument(Document):
     """
 
     # Override Beanie's ObjectId pk with a UUID so it matches OutboxEntry.entry_id.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     event_type: str
     """Human-readable event class name — stored for monitoring, not routing."""
@@ -320,7 +320,7 @@ class BeanieOutboxRepository(OutboxRepository):
             await OutboxDocument.find(
                 **find_kwargs,
             )
-            .sort(+OutboxDocument.created_at)
+            .sort(+OutboxDocument.created_at)  # type: ignore[operator]
             .limit(limit)
             .to_list()
         )

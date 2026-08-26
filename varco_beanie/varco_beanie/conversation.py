@@ -131,7 +131,7 @@ class ConversationTurnDocument(Document):
     """
 
     # UUIDv4 primary key — one UUID per turn, independent of task_id.
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     # Indexed — all turn queries filter and delete by task_id.
     task_id: str
@@ -317,7 +317,7 @@ class BeanieConversationStore(AbstractConversationStore):
                 ConversationTurnDocument.task_id == task_id,
                 **find_kwargs,
             )
-            .sort(+ConversationTurnDocument.turn_ts)
+            .sort(+ConversationTurnDocument.turn_ts)  # type: ignore[operator]
             .to_list()
         )
 

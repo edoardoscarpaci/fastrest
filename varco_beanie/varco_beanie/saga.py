@@ -92,7 +92,7 @@ class SagaDocument(Document):
           view of the update time, not network latency.
     """
 
-    id: UUID = Field(default_factory=uuid4)
+    id: UUID = Field(default_factory=uuid4)  # type: ignore[assignment]
 
     status: str
     """String value of ``SagaStatus`` — e.g. ``"PENDING"``, ``"RUNNING"``."""
