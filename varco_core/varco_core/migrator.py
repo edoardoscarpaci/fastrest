@@ -82,7 +82,8 @@ or when ``rollback()`` is called on a step that has no ``down`` function.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, ClassVar
+from typing import Any, ClassVar
+from collections.abc import Callable
 
 
 class MigrationError(Exception):

@@ -19,7 +19,7 @@ Async safety:   ✅ No async operations; safe to call inside async contexts.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import TYPE_CHECKING, Any, Self
 
 # PyJWT — the only external dependency for this module.
@@ -159,7 +159,7 @@ class JwtBuilder:
             This builder for chaining.
         """
         # Compute from "now" at call time — deterministic for the current call
-        self._exp = datetime.now(timezone.utc) + delta
+        self._exp = datetime.now(UTC) + delta
         return self
 
     def issued_at(self, iat: datetime) -> Self:
@@ -182,7 +182,7 @@ class JwtBuilder:
         Returns:
             This builder for chaining.
         """
-        self._iat = datetime.now(timezone.utc)
+        self._iat = datetime.now(UTC)
         return self
 
     def not_before(self, nbf: datetime) -> Self:
@@ -228,7 +228,7 @@ class JwtBuilder:
 
     # ── Token profile setter (Plan 002 §B) ────────────────────────────────────
 
-    def as_profile(self, profile: "TokenProfile") -> Self:
+    def as_profile(self, profile: TokenProfile) -> Self:
         """
         Configure this token to match ``profile``: sets ``iss`` (the first
         of ``profile.issuers``, alphabetically, for determinism),

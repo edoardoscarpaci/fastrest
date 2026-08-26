@@ -85,7 +85,7 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -205,11 +205,11 @@ def _model_to_entry(row: InboxEntryModel) -> InboxEntry:
     # Coerce naive datetimes to UTC — SQLite returns naive datetimes.
     received_at = row.received_at
     if received_at is not None and received_at.tzinfo is None:
-        received_at = received_at.replace(tzinfo=timezone.utc)
+        received_at = received_at.replace(tzinfo=UTC)
 
     processed_at = row.processed_at
     if processed_at is not None and processed_at.tzinfo is None:
-        processed_at = processed_at.replace(tzinfo=timezone.utc)
+        processed_at = processed_at.replace(tzinfo=UTC)
 
     return InboxEntry(
         entry_id=row.entry_id,
@@ -341,7 +341,7 @@ class SAInboxRepository(InboxRepository):
 
         Async safety: ✅ Awaits ``session.execute()``.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = (
             sa_update(InboxEntryModel)
             # Optimistic locking: only update rows that are still unprocessed.
@@ -546,7 +546,7 @@ class SAPollerInboxRepository(InboxRepository):
 
         Async safety: ✅ Each call creates, commits, and closes its own session.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with self._session_factory() as session:
             stmt = (
                 sa_update(InboxEntryModel)

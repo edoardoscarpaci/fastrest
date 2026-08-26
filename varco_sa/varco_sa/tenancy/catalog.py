@@ -22,7 +22,7 @@ DESIGN: lazy ``ensure_table()`` on first use, not a required explicit call
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -158,7 +158,7 @@ class SATenantCatalog(AbstractTenantCatalog):
             )
 
         await self._ensure_table()
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
 
         existing = await self._session.execute(
             sa.select(tenants_table.c.tenant_id).where(
@@ -203,7 +203,7 @@ class SATenantCatalog(AbstractTenantCatalog):
         await self._session.execute(
             sa.update(tenants_table)
             .where(tenants_table.c.tenant_id == tenant_id)
-            .values(status=status.value, updated_at=datetime.now(tz=timezone.utc))
+            .values(status=status.value, updated_at=datetime.now(tz=UTC))
         )
         await self._session.commit()
 

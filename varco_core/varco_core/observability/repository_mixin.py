@@ -82,12 +82,11 @@ from abc import ABC
 from typing import (
     TYPE_CHECKING,
     Any,
-    AsyncIterator,
     ClassVar,
     Generic,
-    Sequence,
     TypeVar,
 )
+from collections.abc import AsyncIterator, Sequence
 
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode

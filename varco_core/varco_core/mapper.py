@@ -35,7 +35,7 @@ import dataclasses
 import json
 import typing
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .model import DomainModel
@@ -372,7 +372,7 @@ class AbstractMapper(ABC, Generic[D, O]):
         Returns:
             A new ORM object with all fields set.
         """
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
 
         # Resolve context once for all fields — reads tenant_id (or other
         # configured field) from the domain object before the ORM copy begins.
@@ -513,7 +513,7 @@ class AbstractMapper(ABC, Generic[D, O]):
             )
 
         # ── System fields ─────────────────────────────────────────────────────
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         for name in self._post_init_fields:
             if name == "created_at":
                 pass  # immutable after INSERT

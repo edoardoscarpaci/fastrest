@@ -13,7 +13,7 @@ an unzoned job.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import uuid4
 
 from varco_core.job.base import AbstractJobStore, Job, JobStatus
@@ -53,7 +53,7 @@ class _ClaimPredicateStore(AbstractJobStore):
         job = self._jobs.get(job_id)
         if job is None or job.status != JobStatus.PENDING:
             return None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if job.run_at is not None and job.run_at > now:
             return None  # unchanged predicate — the claim path never looks at run_at_tz
         claimed = job.as_running()
@@ -65,7 +65,7 @@ async def test_claim_predicate_identical_for_zoned_and_unzoned_job_not_yet_due()
     None
 ):
     store = _ClaimPredicateStore()
-    future = datetime.now(timezone.utc) + timedelta(hours=1)
+    future = datetime.now(UTC) + timedelta(hours=1)
 
     unzoned = Job(job_id=uuid4(), run_at=future)
     zoned = Job(
@@ -84,7 +84,7 @@ async def test_claim_predicate_identical_for_zoned_and_unzoned_job_not_yet_due()
 
 async def test_claim_predicate_identical_for_zoned_and_unzoned_job_due_now() -> None:
     store = _ClaimPredicateStore()
-    past = datetime.now(timezone.utc) - timedelta(minutes=1)
+    past = datetime.now(UTC) - timedelta(minutes=1)
 
     unzoned = Job(job_id=uuid4(), run_at=past)
     zoned = Job(

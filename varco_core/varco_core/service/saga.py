@@ -110,7 +110,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from dataclasses import field as dfield
 from enum import StrEnum
-from typing import Any, Awaitable, Callable
+from typing import Any
+from collections.abc import Awaitable, Callable
 from uuid import UUID, uuid4
 
 _logger = logging.getLogger(__name__)

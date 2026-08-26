@@ -81,7 +81,8 @@ import os
 from collections.abc import Callable, Mapping
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, AsyncIterator, Final
+from typing import TYPE_CHECKING, Any, Final
+from collections.abc import AsyncIterator
 
 if TYPE_CHECKING:
     # Imported only for type hints — keeps import-time cost off the hot path and

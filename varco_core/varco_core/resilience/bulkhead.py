@@ -326,7 +326,7 @@ class Bulkhead:
                     semaphore.acquire(),
                     timeout=self.config.max_wait,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 _logger.warning(
                     "Bulkhead '%s' full after %.3f s wait.",
                     self.name,

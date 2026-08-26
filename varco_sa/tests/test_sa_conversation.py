@@ -17,7 +17,7 @@ Sections
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 
 import pytest_asyncio
@@ -95,17 +95,17 @@ class TestSAConversationStoreAppendGet:
             ConversationTurn(
                 role="user",
                 content="Hello",
-                timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+                timestamp=datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC),
             ),
             ConversationTurn(
                 role="agent",
                 content="Hi there",
-                timestamp=datetime(2024, 1, 1, 12, 0, 1, tzinfo=timezone.utc),
+                timestamp=datetime(2024, 1, 1, 12, 0, 1, tzinfo=UTC),
             ),
             ConversationTurn(
                 role="user",
                 content="How are you?",
-                timestamp=datetime(2024, 1, 1, 12, 0, 2, tzinfo=timezone.utc),
+                timestamp=datetime(2024, 1, 1, 12, 0, 2, tzinfo=UTC),
             ),
         ]
         for t in turns_in:

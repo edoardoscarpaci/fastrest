@@ -50,7 +50,7 @@ class FakeMessage:
 class FakeTransaction:
     """Context manager returned by FakeProducer.transaction()."""
 
-    def __init__(self, producer: "FakeProducer") -> None:
+    def __init__(self, producer: FakeProducer) -> None:
         self._producer = producer
 
     async def __aenter__(self) -> FakeTransaction:
@@ -247,7 +247,7 @@ async def test_at_least_once_commits_only_after_successful_dispatch(
 
     try:
         await asyncio.wait_for(asyncio.shield(bus._consumer_task), timeout=0.1)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
+    except (TimeoutError, asyncio.CancelledError):
         pass
 
     await bus.stop()
@@ -281,7 +281,7 @@ async def test_at_least_once_does_not_commit_when_handler_raises(
 
     try:
         await asyncio.wait_for(asyncio.shield(bus._consumer_task), timeout=0.1)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
+    except (TimeoutError, asyncio.CancelledError):
         pass
 
     await bus.stop()
@@ -365,7 +365,7 @@ async def test_at_most_once_commits_before_dispatch(
     # Cancel after one message is delivered.
     try:
         await asyncio.wait_for(asyncio.shield(bus._consumer_task), timeout=0.1)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
+    except (TimeoutError, asyncio.CancelledError):
         pass
 
     await bus.stop()
@@ -481,7 +481,7 @@ async def test_exactly_once_consume_commits_offset_in_transaction(
 
     try:
         await asyncio.wait_for(asyncio.shield(bus._consumer_task), timeout=0.1)
-    except (asyncio.TimeoutError, asyncio.CancelledError):
+    except (TimeoutError, asyncio.CancelledError):
         pass
 
     await bus.stop()

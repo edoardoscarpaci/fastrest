@@ -25,6 +25,7 @@ import uuid
 import pytest
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry
+from datetime import UTC
 
 pytestmark = pytest.mark.integration
 
@@ -158,7 +159,7 @@ class TestRedisDLQRetentionSweepIntegration:
         for _ in range(5):
             await dlq.push(_make_entry())
 
-        cutoff = datetime.now(timezone.utc) + timedelta(seconds=1)
+        cutoff = datetime.now(UTC) + timedelta(seconds=1)
         await asyncio.sleep(1.1)
 
         total_deleted = 0

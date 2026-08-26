@@ -57,7 +57,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -922,7 +922,7 @@ def _completed_response(task_id: str, data: Any) -> dict[str, Any]:
         "id": task_id,
         "status": {
             "state": _STATE_COMPLETED,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
         "artifacts": [
             {
@@ -948,7 +948,7 @@ def _failed_response(task_id: str, message: str) -> dict[str, Any]:
         "status": {
             "state": _STATE_FAILED,
             "message": message,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
         "artifacts": [],
     }
@@ -971,7 +971,7 @@ def _working_response(task_id: str) -> dict[str, Any]:
         "id": task_id,
         "status": {
             "state": _STATE_WORKING,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
         "artifacts": [],
     }

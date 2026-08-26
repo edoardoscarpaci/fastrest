@@ -30,7 +30,7 @@ async def resolve_locale(
     query_param: str | None,
     user_profile_locale: str | None,
     tenant_id: str | None,
-    tenant_defaults_provider: "TenantDefaultsProvider",
+    tenant_defaults_provider: TenantDefaultsProvider,
     accept_language_header: str | None,
     supported_locales: tuple[str, ...],
     default_locale: str,

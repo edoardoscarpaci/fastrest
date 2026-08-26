@@ -119,9 +119,9 @@ class TenantControlService:
     def __init__(
         self,
         *,
-        catalog: "AbstractTenantCatalog",
-        provisioner: "AbstractTenantProvisioner",
-        producer: "AbstractEventProducer | None",
+        catalog: AbstractTenantCatalog,
+        provisioner: AbstractTenantProvisioner,
+        producer: AbstractEventProducer | None,
         supervisor: Any | None = None,
         pool: Any | None = None,
         node_id: str | None = None,
@@ -158,7 +158,7 @@ class TenantControlService:
                 self.node_id,
             )
 
-    async def provision(self, tenant_id: str, **kwargs: object) -> "TenantDescriptor":
+    async def provision(self, tenant_id: str, **kwargs: object) -> TenantDescriptor:
         """
         Provision ``tenant_id``.
 
@@ -224,7 +224,7 @@ class TenantControlService:
 
     async def _provision_worker(
         self, tenant_id: str, **kwargs: object
-    ) -> "TenantDescriptor":
+    ) -> TenantDescriptor:
         from varco_core.tenancy.catalog import TenantDescriptor
 
         try:
@@ -305,7 +305,7 @@ class TenantControlService:
 
     async def list_tenants(
         self, *, status: TenantStatus | None = TenantStatus.ACTIVE
-    ) -> list["TenantDescriptor"]:
+    ) -> list[TenantDescriptor]:
         """
         Read-through to ``AbstractTenantCatalog.list_tenants``.
 
@@ -330,7 +330,7 @@ class TenantControlService:
         """
         return await self._catalog.list_tenants(status=status)
 
-    async def mark_active(self, tenant_id: str) -> "TenantDescriptor":
+    async def mark_active(self, tenant_id: str) -> TenantDescriptor:
         """
         Authority-only terminator: flip ``tenant_id`` to ``ACTIVE`` and emit
         ``TenantCatalogChanged``. Used by ``TenantReadinessCoordinator``

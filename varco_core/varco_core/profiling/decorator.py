@@ -44,7 +44,8 @@ from __future__ import annotations
 
 import asyncio
 import functools
-from typing import Any, Callable, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
+from collections.abc import Callable
 
 from varco_core.profiling.config import ProfileConfig, is_profiling_enabled
 from varco_core.profiling.engine import ProfileSession

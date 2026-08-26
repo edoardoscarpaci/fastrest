@@ -61,7 +61,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -183,7 +183,7 @@ def _model_to_entry(row: AuditEntryModel) -> AuditEntry:
     occurred_at = row.occurred_at
     if occurred_at is not None and occurred_at.tzinfo is None:
         # Treat naive datetime as UTC — matches how AuditEntry stores it.
-        occurred_at = occurred_at.replace(tzinfo=timezone.utc)
+        occurred_at = occurred_at.replace(tzinfo=UTC)
 
     return AuditEntry(
         entry_id=row.entry_id,

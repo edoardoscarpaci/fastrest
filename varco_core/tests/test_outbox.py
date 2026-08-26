@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -114,9 +114,9 @@ class TestOutboxEntry:
             entry.channel = "other"  # type: ignore[misc]
 
     def test_created_at_is_utc(self) -> None:
-        before = datetime.now(tz=timezone.utc)
+        before = datetime.now(tz=UTC)
         entry = OutboxEntry.from_event(OrderPlacedEvent(), channel="orders")
-        after = datetime.now(tz=timezone.utc)
+        after = datetime.now(tz=UTC)
         assert before <= entry.created_at <= after
 
 
@@ -435,6 +435,6 @@ def dataclasses_replace_future_entry() -> OutboxEntry:
     entry = OutboxEntry.from_event(OrderPlacedEvent(), channel="orders")
     return _dc.replace(
         entry,
-        next_attempt_at=datetime.now(tz=timezone.utc)
+        next_attempt_at=datetime.now(tz=UTC)
         + __import__("datetime").timedelta(hours=1),
     )

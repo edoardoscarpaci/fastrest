@@ -18,7 +18,7 @@ All tests are pure unit tests — no real Redis required.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from unittest.mock import AsyncMock, MagicMock
 
 from varco_core.event.base import Event
@@ -164,7 +164,7 @@ async def test_first_failure_time_is_recorded() -> None:
     bus = _make_bus(max_delivery_count=2, dlq=dlq)
 
     msg_id = b"4-0"
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
 
     await bus._handle_dispatch_failure(
         "stream:orders", msg_id, OrderEvent(), "orders", RuntimeError("e1")

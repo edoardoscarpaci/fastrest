@@ -82,7 +82,7 @@ def routing_decision_for_status(status: str) -> RoutingDecision:
 
 
 async def route_request(
-    *, catalog: "AbstractTenantCatalog", pool: Any, tenant_id: str
+    *, catalog: AbstractTenantCatalog, pool: Any, tenant_id: str
 ) -> Any:
     """
     Resolve a tenant's pool-backed resource for an incoming request.
@@ -95,7 +95,7 @@ async def route_request(
             documented status table).
     """
     try:
-        descriptor: "TenantDescriptor" = await catalog.get(tenant_id)
+        descriptor: TenantDescriptor = await catalog.get(tenant_id)
     except TenantNotFoundError:
         decision = routing_decision_for_status(TenantStatus.DELETED.value)
         raise TenantRoutingRejected(

@@ -151,7 +151,7 @@ def timeout(seconds: float) -> Callable:
         async def wrapper(*args: Any, **kwargs: Any) -> _R:
             try:
                 return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
-            except asyncio.TimeoutError as exc:
+            except TimeoutError as exc:
                 raise CallTimeoutError(func.__qualname__, seconds) from exc
 
         return wrapper

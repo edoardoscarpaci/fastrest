@@ -81,7 +81,7 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
@@ -154,7 +154,7 @@ class InboxDocument(Document):
 
     received_at: datetime = Field(
         # Always UTC — avoids naive datetime ambiguity.
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     """UTC timestamp of when this entry was first received."""
 
@@ -342,7 +342,7 @@ class BeanieInboxRepository(InboxRepository):
             return
 
         # Document exists and is unprocessed — apply the update.
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         update_kwargs: dict = {}
         if self._session is not None:
             update_kwargs["session"] = self._session
@@ -402,7 +402,7 @@ class BeanieInboxRepository(InboxRepository):
                     if doc.received_at.tzinfo is not None
                     # Coerce naive datetimes to UTC — MongoDB can return naive
                     # datetimes depending on codec configuration.
-                    else doc.received_at.replace(tzinfo=timezone.utc)
+                    else doc.received_at.replace(tzinfo=UTC)
                 ),
                 processed_at=doc.processed_at,
             )

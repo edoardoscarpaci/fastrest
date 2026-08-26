@@ -86,8 +86,8 @@ class SASchemaRouter:
         return name
 
     def session_factory_for(
-        self, engine: "AsyncEngine", tenant_id: str
-    ) -> "async_sessionmaker[AsyncSession]":
+        self, engine: AsyncEngine, tenant_id: str
+    ) -> async_sessionmaker[AsyncSession]:
         """
         Build an ``async_sessionmaker`` bound to ``engine`` with
         ``schema_translate_map={"tenant": "<real schema>"}`` execution

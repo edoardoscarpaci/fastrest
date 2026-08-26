@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import gettext as gettext_module
 import logging
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 
 from varco_core.i18n.catalog import MessageCatalog, _MissingTolerantDict
 

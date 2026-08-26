@@ -116,7 +116,8 @@ import dataclasses
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
-from typing import Any, ClassVar, Generator, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TypeVar
+from collections.abc import Generator
 
 from varco_core.auth import AuthContext
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO

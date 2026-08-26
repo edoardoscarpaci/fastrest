@@ -51,6 +51,7 @@ from opentelemetry.metrics import Observation
 
 from varco_core.observability.attributes import wrap_gauge_callback
 from varco_core.observability.metric import Metric
+from datetime import UTC
 
 if TYPE_CHECKING:
     from varco_core.event.dlq import AbstractDeadLetterQueue
@@ -364,7 +365,7 @@ def _outbox_lag_callback(_options: Any) -> list[Observation]:
         return []
     from datetime import datetime, timezone
 
-    lag = (datetime.now(tz=timezone.utc) - oldest).total_seconds()
+    lag = (datetime.now(tz=UTC) - oldest).total_seconds()
     return [Observation(max(lag, 0.0))]
 
 

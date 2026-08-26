@@ -64,9 +64,10 @@ import asyncio
 import logging
 import warnings
 from collections import OrderedDict
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.resilience import RetryPolicy
@@ -103,7 +104,7 @@ class _NullProducer:
     transition"), not a generic construction-time notice.
     """
 
-    async def _produce(self, event: "Event", *, channel: str = CHANNEL_TENANCY) -> None:
+    async def _produce(self, event: Event, *, channel: str = CHANNEL_TENANCY) -> None:
         logger.warning(
             "TenantProvisionConsumer shim has no producer= configured — "
             "TenantCatalogChanged was NOT emitted for this transition; "
@@ -111,7 +112,7 @@ class _NullProducer:
             "catalog_ttl_s elapses (see CachedTenantCatalog)."
         )
 
-    async def _produce_many(self, events: "list[tuple[Event, str]]") -> None:
+    async def _produce_many(self, events: list[tuple[Event, str]]) -> None:
         for event, channel in events:
             await self._produce(event, channel=channel)
 
@@ -150,12 +151,12 @@ class TenantProvisionConsumer(EventConsumer):
     def __init__(
         self,
         *,
-        control_service: "TenantControlService | None" = None,
-        dlq: "AbstractDeadLetterQueue | None" = None,
+        control_service: TenantControlService | None = None,
+        dlq: AbstractDeadLetterQueue | None = None,
         # deprecated shim (RD-12) — removed one minor release after this lands
-        provisioner: "AbstractTenantProvisioner | None" = None,
-        catalog: "AbstractTenantCatalog | None" = None,
-        producer: "AbstractEventProducer | None" = None,
+        provisioner: AbstractTenantProvisioner | None = None,
+        catalog: AbstractTenantCatalog | None = None,
+        producer: AbstractEventProducer | None = None,
         max_tracked_event_ids: int = 4096,
     ) -> None:
         if control_service is not None:
@@ -177,7 +178,7 @@ class TenantProvisionConsumer(EventConsumer):
                 DeprecationWarning,
                 stacklevel=2,
             )
-            effective_producer: "AbstractEventProducer" = (
+            effective_producer: AbstractEventProducer = (
                 producer if producer is not None else _NullProducer()  # type: ignore[assignment]
             )
             self._control = TenantControlService(
@@ -195,7 +196,7 @@ class TenantProvisionConsumer(EventConsumer):
         self._dlq = dlq
         self._max_tracked_event_ids = max_tracked_event_ids
         # In-process dedup only, bounded LRU — see module DESIGN note.
-        self._processed_event_ids: "OrderedDict[Any, None]" = OrderedDict()
+        self._processed_event_ids: OrderedDict[Any, None] = OrderedDict()
 
     def _is_processed(self, event_id: Any) -> bool:
         return event_id in self._processed_event_ids
@@ -211,11 +212,11 @@ class TenantProvisionConsumer(EventConsumer):
 
     def register_to(
         self,
-        bus: "AbstractEventBus",
+        bus: AbstractEventBus,
         *,
-        retry_policy: "RetryPolicy | None" = _UNSET,  # type: ignore[assignment]
-        dlq: "AbstractDeadLetterQueue | None" = _UNSET,  # type: ignore[assignment]
-    ) -> list["Subscription"]:
+        retry_policy: RetryPolicy | None = _UNSET,  # type: ignore[assignment]
+        dlq: AbstractDeadLetterQueue | None = _UNSET,  # type: ignore[assignment]
+    ) -> list[Subscription]:
         effective_dlq = self._dlq if dlq is _UNSET else dlq
         effective_retry_policy = (
             self._default_retry_policy if retry_policy is _UNSET else retry_policy
@@ -243,12 +244,12 @@ class TenantProvisionConsumer(EventConsumer):
         )
         subscriptions = [provision_sub, deprovision_sub]
         if not hasattr(self, "_subscriptions"):
-            self._subscriptions: list["Subscription"] = []
+            self._subscriptions: list[Subscription] = []
         self._subscriptions.extend(subscriptions)
         return subscriptions
 
     @listen(TenantProvisionRequested, channel=CHANNEL_TENANCY)
-    async def on_provision_requested(self, event: "Event") -> None:
+    async def on_provision_requested(self, event: Event) -> None:
         """Provision the tenant named in ``event``. Idempotent on redelivery."""
         assert isinstance(event, TenantProvisionRequested)
         if self._is_own_broadcast(event.origin):
@@ -265,7 +266,7 @@ class TenantProvisionConsumer(EventConsumer):
         self._mark_processed(event.event_id)
 
     @listen(TenantDeprovisionRequested, channel=CHANNEL_TENANCY)
-    async def on_deprovision_requested(self, event: "Event") -> None:
+    async def on_deprovision_requested(self, event: Event) -> None:
         """
         Deprovision the tenant named in ``event``.
 
@@ -300,11 +301,11 @@ class TenantProvisionConsumer(EventConsumer):
 
 
 def _make_tenant_retry_wrapper(
-    handler: Callable[["Event"], Any],
-    policy: "RetryPolicy | None",
-    dlq: "AbstractDeadLetterQueue | None",
+    handler: Callable[[Event], Any],
+    policy: RetryPolicy | None,
+    dlq: AbstractDeadLetterQueue | None,
     channel: str,
-) -> Callable[["Event"], Any]:
+) -> Callable[[Event], Any]:
     """
     Retry + DLQ wrapper mirroring ``varco_core.event.consumer._make_retry_
     wrapper``'s attempt/back-off loop, but stamping ``source_ref=tenant_id``
@@ -313,7 +314,7 @@ def _make_tenant_retry_wrapper(
     max_attempts = policy.max_attempts if policy is not None else 1
     handler_name = getattr(handler, "__qualname__", repr(handler))
 
-    async def wrapper(event: "Event") -> None:
+    async def wrapper(event: Event) -> None:
         from varco_core.event.dlq import DeadLetterEntry
 
         last_exc: BaseException | None = None
@@ -327,7 +328,7 @@ def _make_tenant_retry_wrapper(
                 if policy is not None and not policy.is_retryable(exc):
                     raise
 
-                now = datetime.now(tz=timezone.utc)
+                now = datetime.now(tz=UTC)
                 if first_failed_at is None:
                     first_failed_at = now
                 last_exc = exc

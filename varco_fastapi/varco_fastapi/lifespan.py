@@ -59,7 +59,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
+from collections.abc import AsyncIterator
 
 _logger = logging.getLogger(__name__)
 

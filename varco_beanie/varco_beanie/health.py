@@ -116,7 +116,7 @@ class BeanieHealthCheck(HealthCheck):
                 component=self.name,
                 latency_ms=latency_ms,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return HealthResult(
                 status=HealthStatus.UNHEALTHY,
                 component=self.name,

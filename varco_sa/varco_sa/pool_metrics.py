@@ -60,7 +60,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.pool import NullPool, StaticPool
@@ -251,7 +251,7 @@ def pool_metrics(engine: AsyncEngine) -> SAPoolMetrics:
             overflow=0,
             max_overflow=0,
             invalid=0,
-            captured_at=datetime.now(timezone.utc),
+            captured_at=datetime.now(UTC),
             pool_type=pool_type,
         )
 
@@ -283,7 +283,7 @@ def pool_metrics(engine: AsyncEngine) -> SAPoolMetrics:
             overflow=0,
             max_overflow=0,
             invalid=0,
-            captured_at=datetime.now(timezone.utc),
+            captured_at=datetime.now(UTC),
             pool_type=pool_type,
         )
 
@@ -294,7 +294,7 @@ def pool_metrics(engine: AsyncEngine) -> SAPoolMetrics:
         overflow=overflow,
         max_overflow=max_overflow,
         invalid=invalid,
-        captured_at=datetime.now(timezone.utc),
+        captured_at=datetime.now(UTC),
         pool_type=pool_type,
     )
 

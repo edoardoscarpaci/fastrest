@@ -25,6 +25,7 @@ from uuid import uuid4
 from varco_core.job.base import Job, JobStatus
 from varco_core.job.task import TaskPayload
 from varco_redis.job_store import RedisJobStore
+from datetime import UTC
 
 # ── FakeRedis ─────────────────────────────────────────────────────────────────
 
@@ -445,7 +446,7 @@ class TestRedisJobStoreRunAtGating:
         from datetime import datetime, timedelta, timezone
 
         _, store = _make_store()
-        job = _pending_job(run_at=datetime.now(timezone.utc) + timedelta(seconds=60))
+        job = _pending_job(run_at=datetime.now(UTC) + timedelta(seconds=60))
         await store.save(job)
 
         claimed = await store.try_claim(job.job_id)
@@ -455,7 +456,7 @@ class TestRedisJobStoreRunAtGating:
         from datetime import datetime, timedelta, timezone
 
         _, store = _make_store()
-        job = _pending_job(run_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+        job = _pending_job(run_at=datetime.now(UTC) - timedelta(seconds=1))
         await store.save(job)
 
         claimed = await store.try_claim(job.job_id)

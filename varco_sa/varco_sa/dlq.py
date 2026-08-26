@@ -61,7 +61,7 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from uuid import UUID
 
@@ -132,7 +132,7 @@ def _ensure_tz(dt: datetime | None) -> datetime | None:
     """Coerce naive datetimes (SQLite) to UTC."""
     if dt is None:
         return None
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 # ── SADeadLetterQueue ────────────────────────────────────────────────────────

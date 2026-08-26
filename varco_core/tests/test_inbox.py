@@ -28,6 +28,7 @@ from varco_core.service.inbox import (
     InboxRepository,
     _make_inbox_wrapper,
 )
+from datetime import UTC
 
 # ── Test event ─────────────────────────────────────────────────────────────────
 
@@ -98,7 +99,7 @@ class InMemoryInboxRepository(InboxRepository):
         from datetime import datetime, timezone
 
         self._entries[entry_id] = replace(
-            original, processed_at=datetime.now(timezone.utc)
+            original, processed_at=datetime.now(UTC)
         )
 
     async def get_unprocessed(self, *, limit: int = 100) -> list[InboxEntry]:

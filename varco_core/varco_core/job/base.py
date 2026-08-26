@@ -67,7 +67,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar
 from uuid import UUID, uuid4
@@ -205,7 +205,7 @@ class Job:
     status: JobStatus = JobStatus.PENDING
 
     # UTC creation timestamp
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # UTC timestamp when execution began (None if not yet started)
     started_at: datetime | None = None
@@ -380,7 +380,7 @@ class Job:
         return dataclasses.replace(
             self,
             status=JobStatus.RUNNING,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
     def as_completed(self, result: bytes | None) -> Job:
@@ -411,7 +411,7 @@ class Job:
             self,
             status=JobStatus.COMPLETED,
             result=result,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def as_failed(self, error: str) -> Job:
@@ -441,7 +441,7 @@ class Job:
             self,
             status=JobStatus.FAILED,
             error=error,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def as_cancelled(self) -> Job:
@@ -467,7 +467,7 @@ class Job:
         return dataclasses.replace(
             self,
             status=JobStatus.CANCELLED,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def as_retry(self, next_run_at: datetime) -> Job:
@@ -538,7 +538,7 @@ class Job:
             self,
             status=JobStatus.DEAD,
             error=error,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
 
@@ -868,7 +868,7 @@ class AbstractJobStore(ABC):
         Async safety: ✅ All I/O is awaited.
         """
         candidates = await self.list_by_status(JobStatus.PENDING, limit=100)
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         for candidate in candidates:
             if candidate.run_at is not None and candidate.run_at > current:
                 continue
@@ -1262,7 +1262,7 @@ class AbstractJobRunner(ABC):
         zone = ZoneInfo(tz)
         materialized = resolve_zoned(
             run_at_wall, zone, fold=fold, gap=gap, overlap=overlap
-        ).astimezone(timezone.utc)
+        ).astimezone(UTC)
         return dataclasses.replace(
             job,
             run_at=materialized,

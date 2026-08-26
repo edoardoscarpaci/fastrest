@@ -30,7 +30,7 @@ class _CountingProvisioner:
         self.provision_calls += 1
 
 
-def _build_control_service(pool: "_CountingPool"):
+def _build_control_service(pool: _CountingPool):
     from varco_core.event.memory import InMemoryEventBus
     from varco_core.event.producer import BusEventProducer
     from varco_core.tenancy.catalog import StaticTenantCatalog

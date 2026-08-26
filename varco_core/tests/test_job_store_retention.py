@@ -11,7 +11,7 @@ limit=None) -> int`` with a portable default over ``list_by_status`` +
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -63,7 +63,7 @@ class TestDeleteWhereNoPredicateRaises:
 class TestDeleteWhereStatusAndCompletedBefore:
     async def test_removes_exactly_matching_rows_and_returns_count(self) -> None:
         store = _InMemoryStore()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         old_completed = _completed_job(completed_at=now - timedelta(days=10))
         recent_completed = _completed_job(completed_at=now - timedelta(minutes=1))
@@ -83,7 +83,7 @@ class TestDeleteWhereStatusAndCompletedBefore:
 class TestDeleteWhereLimit:
     async def test_limit_deletes_at_most_n_and_returns_n(self) -> None:
         store = _InMemoryStore()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         for _ in range(5):
             await store.save(_completed_job(completed_at=now - timedelta(days=10)))
 

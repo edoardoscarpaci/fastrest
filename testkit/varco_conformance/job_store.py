@@ -17,7 +17,7 @@ Not named ``Test*`` — never collected standalone (see package docstring).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -77,11 +77,11 @@ class JobStoreConformance:
     async def test_run_at_in_future_not_claimable(
         self, store: AbstractJobStore
     ) -> None:
-        future = datetime.now(timezone.utc) + timedelta(hours=1)
+        future = datetime.now(UTC) + timedelta(hours=1)
         job = self._job(status=JobStatus.PENDING, run_at=future)
         await store.save(job)
 
-        claimed = await store.claim_next(now=datetime.now(timezone.utc))
+        claimed = await store.claim_next(now=datetime.now(UTC))
 
         assert claimed is None or claimed.job_id != job.job_id
 
@@ -163,8 +163,8 @@ class JobStoreConformance:
 
         job = self._job(
             status=JobStatus.PENDING,
-            run_at=datetime.now(timezone.utc),
-            run_at_wall=datetime.now(timezone.utc).replace(tzinfo=None),
+            run_at=datetime.now(UTC),
+            run_at_wall=datetime.now(UTC).replace(tzinfo=None),
             run_at_tz="America/New_York",
             run_at_fold=0,
         )

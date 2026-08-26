@@ -251,7 +251,7 @@ class TestRetrySync:
     def test_exhaust_raises_retry_exhausted(self) -> None:
         @retry(RetryPolicy(max_attempts=2, base_delay=0, jitter=False))
         def fn() -> None:
-            raise IOError("fail")
+            raise OSError("fail")
 
         with pytest.raises(RetryExhaustedError) as exc_info:
             fn()

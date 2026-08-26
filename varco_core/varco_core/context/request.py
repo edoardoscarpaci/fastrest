@@ -33,7 +33,8 @@ from __future__ import annotations
 
 import dataclasses
 from contextlib import asynccontextmanager, contextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Mapping
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator, Iterator, Mapping
 
 from varco_core.context.ambient import AmbientVar
 
@@ -65,7 +66,7 @@ class RequestContext:
     """
 
     locale: str | None = None
-    timezone: "ZoneInfo | None" = None
+    timezone: ZoneInfo | None = None
     extras: Mapping[str, str] = dataclasses.field(default_factory=dict)
 
 
@@ -90,7 +91,7 @@ def current_locale() -> str | None:
     return current_request_context().locale
 
 
-def current_timezone() -> "ZoneInfo | None":
+def current_timezone() -> ZoneInfo | None:
     """Shortcut for ``current_request_context().timezone``."""
     return current_request_context().timezone
 
@@ -98,7 +99,7 @@ def current_timezone() -> "ZoneInfo | None":
 def _merged(
     *,
     locale: str | None,
-    timezone: "ZoneInfo | None",
+    timezone: ZoneInfo | None,
     extras: Mapping[str, str] | None,
 ) -> RequestContext:
     """Build the next ``RequestContext`` by merging overrides onto the
@@ -121,7 +122,7 @@ def _merged(
 def request_context(
     *,
     locale: str | None = None,
-    timezone: "ZoneInfo | None" = None,
+    timezone: ZoneInfo | None = None,
     extras: Mapping[str, str] | None = None,
 ) -> Iterator[RequestContext]:
     """
@@ -147,7 +148,7 @@ def request_context(
 async def arequest_context(
     *,
     locale: str | None = None,
-    timezone: "ZoneInfo | None" = None,
+    timezone: ZoneInfo | None = None,
     extras: Mapping[str, str] | None = None,
 ) -> AsyncIterator[RequestContext]:
     """Async counterpart of ``request_context()`` — same merge semantics."""

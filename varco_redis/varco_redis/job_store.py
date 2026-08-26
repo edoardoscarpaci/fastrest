@@ -63,8 +63,9 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Sequence
+from datetime import datetime, timedelta, timezone, UTC
+from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
 from uuid import UUID
 
 from redis.exceptions import WatchError
@@ -95,7 +96,7 @@ def _str_to_dt(s: str | None) -> datetime | None:
     if s is None:
         return None
     dt = datetime.fromisoformat(s)
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def _job_to_json(job: Job) -> str:
@@ -146,7 +147,7 @@ def _json_to_job(raw: str | bytes) -> Job:
     return Job(
         job_id=UUID(data["job_id"]),
         status=JobStatus(data["status"]),
-        created_at=_str_to_dt(data["created_at"]) or datetime.now(timezone.utc),
+        created_at=_str_to_dt(data["created_at"]) or datetime.now(UTC),
         started_at=_str_to_dt(data.get("started_at")),
         completed_at=_str_to_dt(data.get("completed_at")),
         result=result,
@@ -621,7 +622,7 @@ class RedisJobStore(AbstractJobStore):
                 # Already running or terminal — another path got here first.
                 return None
 
-            if job.run_at is not None and job.run_at > datetime.now(timezone.utc):
+            if job.run_at is not None and job.run_at > datetime.now(UTC):
                 # Scheduled for the future — not yet eligible. Release the
                 # claim key so another (later) attempt can succeed.
                 await self._client.delete(claim_key)
@@ -633,7 +634,7 @@ class RedisJobStore(AbstractJobStore):
                 running_job = dataclasses.replace(
                     running_job,
                     owner_id=owner_id,
-                    lease_expires_at=datetime.now(timezone.utc)
+                    lease_expires_at=datetime.now(UTC)
                     + timedelta(seconds=lease_ttl),
                     lease_epoch=job.lease_epoch + 1,
                 )
@@ -677,7 +678,7 @@ class RedisJobStore(AbstractJobStore):
 
         Async safety: ✅ All I/O is awaited.
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         candidates = await self.list_by_status(JobStatus.PENDING, limit=100)
         for candidate in candidates:
             if candidate.run_at is not None and candidate.run_at > current:
@@ -723,7 +724,7 @@ class RedisJobStore(AbstractJobStore):
 
         renewed = dataclasses.replace(
             job,
-            lease_expires_at=datetime.now(timezone.utc) + timedelta(seconds=lease_ttl),
+            lease_expires_at=datetime.now(UTC) + timedelta(seconds=lease_ttl),
         )
         await self.save(renewed)
         return renewed
@@ -748,7 +749,7 @@ class RedisJobStore(AbstractJobStore):
         Async safety: ✅ All I/O is awaited; each reaped job's save is
             independent (no cross-job atomicity needed).
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         running = await self.list_by_status(JobStatus.RUNNING, limit=limit)
         reaped: list[Job] = []
         for job in running:

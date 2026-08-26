@@ -17,7 +17,7 @@ Not named ``Test*`` — never collected standalone (see package docstring).
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -49,8 +49,8 @@ class DeadLetterQueueConformance:
             error_type="RuntimeError",
             error_message="boom",
             attempts=1,
-            first_failed_at=datetime.now(tz=timezone.utc),
-            last_failed_at=datetime.now(tz=timezone.utc),
+            first_failed_at=datetime.now(tz=UTC),
+            last_failed_at=datetime.now(tz=UTC),
         )
         defaults.update(kwargs)
         return DeadLetterEntry(**defaults)  # type: ignore[arg-type]

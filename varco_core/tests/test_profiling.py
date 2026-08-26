@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import FrozenInstanceError
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -81,7 +81,7 @@ class TestProfileReport:
             artifacts=(),
             cpu_backend="cprofile",
             memory_backend="tracemalloc",
-            captured_at=datetime.now(timezone.utc),
+            captured_at=datetime.now(UTC),
         )
         text = report.format()
         assert "myop" in text
@@ -117,7 +117,7 @@ class TestProfileReport:
             artifacts=(art,),
             cpu_backend="fake",
             memory_backend="tracemalloc",
-            captured_at=datetime.now(timezone.utc),
+            captured_at=datetime.now(UTC),
         )
         d = report.to_dict()
         assert d["artifacts"][0]["kind"] == "html"

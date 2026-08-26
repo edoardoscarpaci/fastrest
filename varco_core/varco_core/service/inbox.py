@@ -110,7 +110,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event
@@ -192,7 +192,7 @@ class InboxEntry:
     payload: bytes = b""
 
     # UTC time when the event first arrived at this consumer.
-    received_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    received_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # None until successfully processed — sentinel for InboxPoller queries.
     processed_at: datetime | None = None

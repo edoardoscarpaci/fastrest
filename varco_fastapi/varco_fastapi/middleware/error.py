@@ -222,7 +222,7 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         except asyncio.CancelledError:
             # Task cancellation — propagate immediately; ASGI server handles it.
             raise
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # asyncio.TimeoutError means a downstream await (e.g. a resilience
             # @timeout decorator, or asyncio.wait_for) exceeded its deadline.
             # Return 504 Gateway Timeout — not 500 — so upstream load-balancers

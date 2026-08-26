@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 
 from varco_core.service.conversation import AbstractConversationStore, ConversationTurn
@@ -72,9 +72,9 @@ def _json_to_turn(raw: str | bytes) -> ConversationTurn:
     try:
         ts = datetime.fromisoformat(ts_str)
         if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.replace(tzinfo=UTC)
     except (ValueError, TypeError):
-        ts = datetime.now(tz=timezone.utc)
+        ts = datetime.now(tz=UTC)
     return ConversationTurn(
         role=data["role"],
         content=data["content"],

@@ -97,7 +97,7 @@ import logging
 import warnings
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 
 from varco_core.event.base import CHANNEL_ALL, AbstractEventBus, Event, Subscription
@@ -580,7 +580,7 @@ def _make_retry_wrapper(
                 if policy is not None and not policy.is_retryable(exc):
                     raise
 
-                now = datetime.now(tz=timezone.utc)
+                now = datetime.now(tz=UTC)
                 if first_failed_at is None:
                     first_failed_at = now
 

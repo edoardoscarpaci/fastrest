@@ -78,7 +78,8 @@ import asyncio
 import hashlib
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import Any
+from collections.abc import AsyncIterator
 from uuid import UUID, uuid4
 
 import sqlalchemy as sa

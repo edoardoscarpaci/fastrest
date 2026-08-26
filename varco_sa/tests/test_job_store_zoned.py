@@ -9,7 +9,7 @@ the plan's explicit instruction (steps 55-57 are implementer-authored).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -56,7 +56,7 @@ def test_sa_job_store_declares_zoned_schedule_support() -> None:
 async def test_list_pending_zoned_returns_only_zoned_pending_jobs_before_cutoff(
     store: SAJobStore,
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     zoned_due_soon = Job(
         job_id=uuid4(),
@@ -88,7 +88,7 @@ async def test_list_pending_zoned_returns_only_zoned_pending_jobs_before_cutoff(
 async def test_zoned_job_round_trips_through_save_and_get(store: SAJobStore) -> None:
     job = Job(
         job_id=uuid4(),
-        run_at=datetime(2026, 6, 1, 13, 0, tzinfo=timezone.utc),
+        run_at=datetime(2026, 6, 1, 13, 0, tzinfo=UTC),
         run_at_wall=datetime(2026, 6, 1, 9, 0),
         run_at_tz="America/New_York",
         run_at_fold=0,

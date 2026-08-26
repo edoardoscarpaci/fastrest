@@ -131,7 +131,7 @@ class TrustStore:
             client_key=client_key,
         )
 
-    def to_ssl_config(self) -> "SSLConfig":
+    def to_ssl_config(self) -> SSLConfig:
         """
         Convert this ``TrustStore`` to a ``varco_core.connection.SSLConfig``.
 

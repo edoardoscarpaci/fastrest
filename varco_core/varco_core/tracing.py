@@ -76,7 +76,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 from uuid import uuid4
 
 # ── Internal context variable ─────────────────────────────────────────────────

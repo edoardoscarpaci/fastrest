@@ -76,7 +76,7 @@ def test_create_varco_app_with_tenancy_none_registers_nothing() -> None:
 
 
 def test_isolation_env_var_without_tenancy_kwarg_logs_one_warning(
-    monkeypatch, caplog: "logging.LogCaptureFixture"
+    monkeypatch, caplog: logging.LogCaptureFixture
 ) -> None:
     monkeypatch.setenv("VARCO_TENANCY_ISOLATION", "schema")
     from providify import DIContainer

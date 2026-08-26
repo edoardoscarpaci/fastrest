@@ -13,7 +13,7 @@ Async safety:   ✅ Pure — no I/O, no shared mutable state.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import TYPE_CHECKING, ClassVar, Final
 
 from varco_core.auth import AuthContext
@@ -176,7 +176,7 @@ class JwtUtil:
         if self._token.exp is None:
             # No expiry claim — treat as non-expiring; caller must decide policy
             return False
-        return datetime.now(timezone.utc) >= self._token.exp + timedelta(seconds=leeway)
+        return datetime.now(UTC) >= self._token.exp + timedelta(seconds=leeway)
 
     def is_valid_now(self) -> bool:
         """
@@ -195,7 +195,7 @@ class JwtUtil:
             - Signature validity is NOT checked here — use ``JwtParser.parse()``
               for cryptographic verification.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         if self._token.exp is not None and now >= self._token.exp:
             return False  # token has expired
@@ -323,7 +323,7 @@ class JwtUtil:
     # ── Token profile helpers (Plan 002 §B) ───────────────────────────────────
 
     def matches_profile(
-        self, name: str, *, registry: "TokenProfileRegistry | None" = None
+        self, name: str, *, registry: TokenProfileRegistry | None = None
     ) -> bool:
         """
         Return ``True`` iff the wrapped token matches the named profile.
@@ -344,7 +344,7 @@ class JwtUtil:
         return reg.matches(name, self._token)
 
     def profile_name(
-        self, *, registry: "TokenProfileRegistry | None" = None
+        self, *, registry: TokenProfileRegistry | None = None
     ) -> str | None:
         """
         Return the name of the first profile that matches the wrapped
@@ -362,7 +362,7 @@ class JwtUtil:
         return resolved.name if resolved is not None else None
 
     def assert_profile(
-        self, name: str, *, registry: "TokenProfileRegistry | None" = None
+        self, name: str, *, registry: TokenProfileRegistry | None = None
     ) -> None:
         """
         Assert that the wrapped token matches the named profile.
@@ -385,7 +385,7 @@ class JwtUtil:
             )
 
     @staticmethod
-    def _global_profile_registry() -> "TokenProfileRegistry":
+    def _global_profile_registry() -> TokenProfileRegistry:
         from varco_core.jwt.profile import _resolve_global_registry
 
         return _resolve_global_registry()

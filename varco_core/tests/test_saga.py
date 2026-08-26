@@ -285,7 +285,7 @@ async def test_orchestrator_compensation_failure_results_in_failed_status() -> N
         make_step(
             "pay",
             record_in=calls,
-            compensate_raises=IOError("refund API down"),
+            compensate_raises=OSError("refund API down"),
         ),
         make_step("reserve", execute_raises=RuntimeError("no stock"), record_in=calls),
     ]

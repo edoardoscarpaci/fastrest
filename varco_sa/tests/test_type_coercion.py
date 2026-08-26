@@ -7,7 +7,7 @@ SQLAlchemy model reflection), and the ASTTypeCoercion visitor.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from sqlalchemy import Boolean, Column, Integer, String
@@ -62,7 +62,7 @@ def test_coerce_boolean_int_truthy():
 
 
 def test_coerce_datetime_passthrough():
-    dt = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    dt = datetime(2024, 1, 1, tzinfo=UTC)
     assert coerce_datetime(dt) is dt
 
 

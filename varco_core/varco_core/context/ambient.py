@@ -45,7 +45,8 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar, Token
-from typing import AsyncIterator, Generic, Iterator, TypeVar
+from typing import Generic, TypeVar
+from collections.abc import AsyncIterator, Iterator
 
 T = TypeVar("T")
 

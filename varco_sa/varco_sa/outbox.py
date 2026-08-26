@@ -78,8 +78,9 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Sequence
+from datetime import datetime, timezone, UTC
+from typing import TYPE_CHECKING
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import (
@@ -205,11 +206,11 @@ def _model_to_entry(row: OutboxEntryModel) -> OutboxEntry:
     created_at = row.created_at
     if created_at is not None and created_at.tzinfo is None:
         # Assume UTC if no timezone info — matches how OutboxEntry stores it.
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
 
     next_attempt_at = row.next_attempt_at
     if next_attempt_at is not None and next_attempt_at.tzinfo is None:
-        next_attempt_at = next_attempt_at.replace(tzinfo=timezone.utc)
+        next_attempt_at = next_attempt_at.replace(tzinfo=UTC)
 
     return OutboxEntry(
         entry_id=row.entry_id,
@@ -771,7 +772,7 @@ class SARelayOutboxRepository(OutboxRepository):
             )
             value = result.scalar_one_or_none()
             if value is not None and value.tzinfo is None:
-                value = value.replace(tzinfo=timezone.utc)
+                value = value.replace(tzinfo=UTC)
             return value
 
     def __repr__(self) -> str:

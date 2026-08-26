@@ -15,6 +15,7 @@ import dataclasses
 
 import pytest
 from varco_core.service.audit import AuditEntry, AuditRepository
+from datetime import UTC
 
 
 def _entry(**kwargs) -> AuditEntry:
@@ -100,7 +101,7 @@ class TestBeanieAuditChainBsonPrecision:
 
         from varco_beanie.audit import _to_bson_precision
 
-        dt = datetime(2026, 8, 18, 21, 38, 35, 121255, tzinfo=timezone.utc)
+        dt = datetime(2026, 8, 18, 21, 38, 35, 121255, tzinfo=UTC)
         assert _to_bson_precision(dt).microsecond == 121000
         # Idempotent — an already-aligned value is untouched.
         assert _to_bson_precision(_to_bson_precision(dt)) == _to_bson_precision(dt)

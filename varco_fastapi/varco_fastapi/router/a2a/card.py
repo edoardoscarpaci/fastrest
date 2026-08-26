@@ -36,7 +36,7 @@ def build_agent_card_v1(
     description: str,
     version: str,
     base_url: str,
-    skills: list["SkillDefinition"],
+    skills: list[SkillDefinition],
     async_mode: bool = False,
     multi_turn: bool = False,
 ) -> dict[str, Any]:

@@ -29,7 +29,7 @@ import asyncio
 import dataclasses
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import UUID
 
 from providify import Singleton
@@ -290,7 +290,7 @@ class InMemoryJobStore(AbstractJobStore):
             if job is None or job.status != JobStatus.PENDING:
                 # Already claimed by another caller, or not found
                 return None
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if job.run_at is not None and job.run_at > now:
                 # Scheduled for the future — not yet eligible.
                 return None
@@ -327,7 +327,7 @@ class InMemoryJobStore(AbstractJobStore):
 
         Async safety: ✅ Runs under the store's lock — atomic within-process.
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         async with self._get_lock():
             for job in self._jobs.values():
                 if job.status != JobStatus.PENDING:
@@ -375,7 +375,7 @@ class InMemoryJobStore(AbstractJobStore):
                 return None
             renewed = dataclasses.replace(
                 job,
-                lease_expires_at=datetime.now(timezone.utc)
+                lease_expires_at=datetime.now(UTC)
                 + timedelta(seconds=lease_ttl),
             )
             self._jobs[job_id] = renewed
@@ -419,7 +419,7 @@ class InMemoryJobStore(AbstractJobStore):
 
         Async safety: ✅ Runs under the store's lock — atomic within-process.
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         async with self._get_lock():
             reaped: list[Job] = []
             for job in list(self._jobs.values()):

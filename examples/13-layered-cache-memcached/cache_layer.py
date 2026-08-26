@@ -151,7 +151,7 @@ class ProductCacheLayer:
         self,
         product_id: str,
         *,
-        fallback: "ProductFallback",
+        fallback: ProductFallback,
     ) -> Product | None:
         """
         Look-aside get: return cached product or call ``fallback`` on miss.

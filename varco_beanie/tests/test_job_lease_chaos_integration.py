@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -65,7 +65,7 @@ async def test_stalled_worker_fenced_after_reap_does_not_clobber_survivor(
         completed_by_b = dataclasses.replace(
             claimed_b,
             status=JobStatus.COMPLETED,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             result=b"worker-b-result",
         )
         await store.save(completed_by_b, expected_epoch=claimed_b.lease_epoch)
@@ -75,7 +75,7 @@ async def test_stalled_worker_fenced_after_reap_does_not_clobber_survivor(
         completed_by_stale_a = dataclasses.replace(
             claimed_a,
             status=JobStatus.COMPLETED,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
             result=b"worker-a-result-MUST-NOT-WIN",
         )
         with pytest.raises(StaleLeaseError):

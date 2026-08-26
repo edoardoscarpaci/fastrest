@@ -88,7 +88,8 @@ Async safety:   ✅ The context manager is a regular ``contextlib.contextmanager
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import Any, Generator, Mapping
+from typing import Any
+from collections.abc import Generator, Mapping
 
 from opentelemetry import metrics as otel_metrics
 from opentelemetry import trace

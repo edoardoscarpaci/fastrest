@@ -70,7 +70,7 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -146,7 +146,7 @@ class ConversationTurnDocument(Document):
     """Raw turn content.  BSON handles dict, str, and list natively."""
 
     # Always UTC — avoids naive datetime ambiguity across deployments.
-    turn_ts: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    turn_ts: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     """UTC datetime when this turn was recorded — used for oldest-first sort."""
 
     class Settings:
@@ -330,7 +330,7 @@ class BeanieConversationStore(AbstractConversationStore):
                     if doc.turn_ts.tzinfo is not None
                     # Coerce naive datetimes to UTC — MongoDB can return naive
                     # datetimes depending on codec configuration.
-                    else doc.turn_ts.replace(tzinfo=timezone.utc)
+                    else doc.turn_ts.replace(tzinfo=UTC)
                 ),
             )
             for doc in docs

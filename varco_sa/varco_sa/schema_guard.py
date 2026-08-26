@@ -220,7 +220,7 @@ class SchemaGuard:
         # class graphs alive longer than necessary.
         self._metadata = base.metadata
 
-    async def check(self, engine: "AsyncEngine") -> None:
+    async def check(self, engine: AsyncEngine) -> None:
         """
         Assert the live DB matches ``Base.metadata``.
 
@@ -243,7 +243,7 @@ class SchemaGuard:
         if drift.has_drift:
             raise SchemaDrift(drift)
 
-    async def report(self, engine: "AsyncEngine") -> SchemaDriftReport:
+    async def report(self, engine: AsyncEngine) -> SchemaDriftReport:
         """
         Return a ``SchemaDriftReport`` without raising.
 

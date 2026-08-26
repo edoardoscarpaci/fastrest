@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -63,7 +63,7 @@ def _make_doc(
         task_id=task_id,
         role=role,
         content=content,
-        turn_ts=ts or datetime.now(tz=timezone.utc),
+        turn_ts=ts or datetime.now(tz=UTC),
     )
 
 
@@ -136,9 +136,9 @@ class TestConversationTurnDocument:
         assert doc1.id != doc2.id
 
     def test_turn_ts_is_utc_by_default(self) -> None:
-        before = datetime.now(tz=timezone.utc)
+        before = datetime.now(tz=UTC)
         doc = _make_doc()
-        after = datetime.now(tz=timezone.utc)
+        after = datetime.now(tz=UTC)
         assert before <= doc.turn_ts <= after
         assert doc.turn_ts.tzinfo is not None
 
@@ -264,8 +264,8 @@ class TestBeanieConversationStoreGet:
         """get() must return ConversationTurn objects in ascending turn_ts order."""
         store = BeanieConversationStore()
 
-        ts1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        ts2 = datetime(2024, 1, 1, 12, 0, 1, tzinfo=timezone.utc)
+        ts1 = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
+        ts2 = datetime(2024, 1, 1, 12, 0, 1, tzinfo=UTC)
         doc1 = _make_doc(role="user", content="first", ts=ts1)
         doc2 = _make_doc(role="agent", content="second", ts=ts2)
 
@@ -558,9 +558,9 @@ async def test_integration_append_get_count_delete(
     task_id = f"task-{uuid.uuid4().hex[:8]}"
 
     # Append three turns with explicit timestamps for deterministic ordering.
-    ts1 = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
-    ts2 = datetime(2024, 1, 1, 10, 0, 1, tzinfo=timezone.utc)
-    ts3 = datetime(2024, 1, 1, 10, 0, 2, tzinfo=timezone.utc)
+    ts1 = datetime(2024, 1, 1, 10, 0, 0, tzinfo=UTC)
+    ts2 = datetime(2024, 1, 1, 10, 0, 1, tzinfo=UTC)
+    ts3 = datetime(2024, 1, 1, 10, 0, 2, tzinfo=UTC)
 
     turn1 = ConversationTurn(role="user", content="First", timestamp=ts1)
     turn2 = ConversationTurn(role="agent", content="Second", timestamp=ts2)

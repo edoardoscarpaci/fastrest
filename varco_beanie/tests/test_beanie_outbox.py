@@ -19,7 +19,7 @@ Sections
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -63,9 +63,9 @@ class TestOutboxDocument:
         assert doc1.id != doc2.id
 
     def test_created_at_is_utc(self) -> None:
-        before = datetime.now(tz=timezone.utc)
+        before = datetime.now(tz=UTC)
         doc = OutboxDocument(event_type="t", channel="c", payload=b"p")
-        after = datetime.now(tz=timezone.utc)
+        after = datetime.now(tz=UTC)
         assert before <= doc.created_at <= after
 
     def test_repr_contains_id_and_event_type(self) -> None:

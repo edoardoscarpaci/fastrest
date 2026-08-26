@@ -12,7 +12,7 @@ location; the primitive types (``FunctionStat``, ``AllocationStat``,
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING
 
 from varco_core.profiling.backend import (
@@ -193,5 +193,5 @@ def _empty_report(name: str) -> ProfileReport:
         artifacts=(),
         cpu_backend="none",
         memory_backend="none",
-        captured_at=datetime.now(timezone.utc),
+        captured_at=datetime.now(UTC),
     )

@@ -256,7 +256,7 @@ class RedisBulkhead:
         self._redis = None
         _logger.debug("RedisBulkhead '%s' disconnected.", self.name)
 
-    async def __aenter__(self) -> "RedisBulkhead":
+    async def __aenter__(self) -> RedisBulkhead:
         await self.connect()
         return self
 

@@ -92,8 +92,9 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Sequence
+from datetime import datetime, timezone, UTC
+from typing import TYPE_CHECKING
+from collections.abc import Sequence
 from uuid import UUID, uuid4
 
 from beanie import Document
@@ -162,7 +163,7 @@ class OutboxDocument(Document):
 
     created_at: datetime = Field(
         # Always UTC — avoids naive datetime ambiguity.
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     """UTC timestamp of when this entry was created."""
 
@@ -335,7 +336,7 @@ class BeanieOutboxRepository(OutboxRepository):
                     if doc.created_at.tzinfo is not None
                     # Coerce naive datetimes to UTC (MongoDB can return naive
                     # datetimes depending on codec configuration).
-                    else doc.created_at.replace(tzinfo=timezone.utc)
+                    else doc.created_at.replace(tzinfo=UTC)
                 ),
             )
             for doc in docs

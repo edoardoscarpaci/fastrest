@@ -9,7 +9,7 @@ datetime.now(timezone.utc) call site is untouched."
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from varco_core.context.request import current_timezone
 from varco_core.tz.settings import TimezoneSettings
@@ -28,5 +28,5 @@ def test_current_timezone_is_none_with_no_active_scope() -> None:
 async def test_to_user_tz_is_identity_with_no_ambient_zone() -> None:
     from varco_core.tz.resolve import to_user_tz
 
-    instant = datetime.now(timezone.utc)
+    instant = datetime.now(UTC)
     assert to_user_tz(instant) == instant

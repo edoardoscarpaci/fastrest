@@ -74,7 +74,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -154,7 +154,7 @@ class AuditDocument(Document):
 
     occurred_at: datetime = Field(
         # Always UTC — avoids naive datetime ambiguity on round-trip.
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     """UTC timestamp of when the service emitted the audit event."""
 
@@ -554,7 +554,7 @@ class BeanieAuditRepository(AuditRepository):
                     if doc.occurred_at.tzinfo is not None
                     # Coerce naive datetimes to UTC (MongoDB can return naive
                     # datetimes depending on codec configuration).
-                    else doc.occurred_at.replace(tzinfo=timezone.utc)
+                    else doc.occurred_at.replace(tzinfo=UTC)
                 ),
                 correlation_id=doc.correlation_id,
                 tenant_id=doc.tenant_id,

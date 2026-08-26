@@ -71,7 +71,7 @@ class SkillDefinition:
     description: str
     input_modes: tuple[str, ...] = _DEFAULT_INPUT_MODES
     output_modes: tuple[str, ...] = _DEFAULT_OUTPUT_MODES
-    route: "ResolvedRoute | None" = None
+    route: ResolvedRoute | None = None
 
 
 @dataclass(frozen=True)
@@ -146,7 +146,7 @@ class SkillSource(Protocol):
         skill_id: str,
         payload: dict[str, Any],
         *,
-        ctx: "AuthContext | None" = None,
+        ctx: AuthContext | None = None,
     ) -> Any:
         """
         Execute one skill and return its raw result.

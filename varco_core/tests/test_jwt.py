@@ -18,7 +18,7 @@ Testing strategy:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 import pytest
 from varco_core.auth import Action, AuthContext, ResourceGrant
@@ -36,7 +36,7 @@ from varco_core.jwt import (
 _SECRET = "test-secret-do-not-use-in-production"
 
 # A fixed UTC datetime used for deterministic timestamp comparisons.
-_NOW = datetime(2025, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
 _ONE_HOUR = timedelta(hours=1)
 
 # A minimal AuthContext used across multiple test classes.
@@ -112,7 +112,7 @@ class TestJsonWebToken:
 
     def test_to_claims_datetime_converted_to_int(self):
         # RFC 7519 requires exp/iat/nbf as integer Unix timestamps.
-        exp = datetime(2030, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        exp = datetime(2030, 1, 1, 0, 0, 0, tzinfo=UTC)
         tok = JsonWebToken(exp=exp, iat=exp, nbf=exp)
         claims = tok.to_claims()
         assert isinstance(claims["exp"], int)
@@ -205,16 +205,16 @@ class TestJwtBuilder:
 
     def test_expires_in_is_relative_to_now(self):
         # expires_in should produce an exp close to now + delta.
-        before = datetime.now(timezone.utc) + timedelta(hours=1) - timedelta(seconds=2)
+        before = datetime.now(UTC) + timedelta(hours=1) - timedelta(seconds=2)
         tok = JwtBuilder().expires_in(timedelta(hours=1)).build()
-        after = datetime.now(timezone.utc) + timedelta(hours=1) + timedelta(seconds=2)
+        after = datetime.now(UTC) + timedelta(hours=1) + timedelta(seconds=2)
         assert tok.exp is not None
         assert before <= tok.exp <= after
 
     def test_issued_now_is_close_to_now(self):
-        before = datetime.now(timezone.utc) - timedelta(seconds=2)
+        before = datetime.now(UTC) - timedelta(seconds=2)
         tok = JwtBuilder().issued_now().build()
-        after = datetime.now(timezone.utc) + timedelta(seconds=2)
+        after = datetime.now(UTC) + timedelta(seconds=2)
         assert tok.iat is not None
         assert before <= tok.iat <= after
 
@@ -347,7 +347,7 @@ class TestJwtParser:
         signed = (
             JwtBuilder()
             .subject("usr_1")
-            .expires_at(datetime(2000, 1, 1, tzinfo=timezone.utc))
+            .expires_at(datetime(2000, 1, 1, tzinfo=UTC))
             .encode(_SECRET)
         )
         with pytest.raises(_jwt_lib.ExpiredSignatureError):
@@ -358,7 +358,7 @@ class TestJwtParser:
         signed = (
             JwtBuilder()
             .subject("usr_1")
-            .expires_at(datetime(2000, 1, 1, tzinfo=timezone.utc))
+            .expires_at(datetime(2000, 1, 1, tzinfo=UTC))
             .encode(_SECRET)
         )
         tok = JwtParser.parse(signed, _SECRET, options={"verify_exp": False})
@@ -450,11 +450,11 @@ class TestJwtUtilTemporal:
     """is_expired() and is_valid_now() temporal predicate checks."""
 
     def test_is_expired_past_exp_returns_true(self):
-        tok = JsonWebToken(exp=datetime(2000, 1, 1, tzinfo=timezone.utc))
+        tok = JsonWebToken(exp=datetime(2000, 1, 1, tzinfo=UTC))
         assert JwtUtil(tok).is_expired() is True
 
     def test_is_expired_future_exp_returns_false(self):
-        tok = JsonWebToken(exp=datetime(2099, 1, 1, tzinfo=timezone.utc))
+        tok = JsonWebToken(exp=datetime(2099, 1, 1, tzinfo=UTC))
         assert JwtUtil(tok).is_expired() is False
 
     def test_is_expired_no_exp_returns_false(self):
@@ -463,19 +463,19 @@ class TestJwtUtilTemporal:
         assert JwtUtil(tok).is_expired() is False
 
     def test_is_valid_now_expired_returns_false(self):
-        tok = JsonWebToken(exp=datetime(2000, 1, 1, tzinfo=timezone.utc))
+        tok = JsonWebToken(exp=datetime(2000, 1, 1, tzinfo=UTC))
         assert JwtUtil(tok).is_valid_now() is False
 
     def test_is_valid_now_future_exp_returns_true(self):
-        tok = JsonWebToken(exp=datetime(2099, 1, 1, tzinfo=timezone.utc))
+        tok = JsonWebToken(exp=datetime(2099, 1, 1, tzinfo=UTC))
         assert JwtUtil(tok).is_valid_now() is True
 
     def test_is_valid_now_nbf_in_future_returns_false(self):
-        tok = JsonWebToken(nbf=datetime(2099, 1, 1, tzinfo=timezone.utc))
+        tok = JsonWebToken(nbf=datetime(2099, 1, 1, tzinfo=UTC))
         assert JwtUtil(tok).is_valid_now() is False
 
     def test_is_valid_now_nbf_in_past_returns_true(self):
-        tok = JsonWebToken(nbf=datetime(2000, 1, 1, tzinfo=timezone.utc))
+        tok = JsonWebToken(nbf=datetime(2000, 1, 1, tzinfo=UTC))
         assert JwtUtil(tok).is_valid_now() is True
 
     def test_is_valid_now_no_constraints_returns_true(self):
@@ -642,7 +642,7 @@ class TestJwtLeeway:
         signed = (
             JwtBuilder()
             .subject("usr_1")
-            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .expires_at(datetime.now(UTC) - timedelta(seconds=10))
             .encode(_SECRET)
         )
         # 30s leeway covers a token that expired only 10s ago.
@@ -655,7 +655,7 @@ class TestJwtLeeway:
         signed = (
             JwtBuilder()
             .subject("usr_1")
-            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .expires_at(datetime.now(UTC) - timedelta(seconds=10))
             .encode(_SECRET)
         )
         with pytest.raises(_pyjwt.ExpiredSignatureError):
@@ -666,7 +666,7 @@ class TestJwtLeeway:
         signed = (
             JwtBuilder()
             .subject("usr_1")
-            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .expires_at(datetime.now(UTC) - timedelta(seconds=10))
             .encode(_SECRET)
         )
         # No explicit leeway= kwarg — must read VARCO_JWT_LEEWAY_SECONDS.
@@ -677,7 +677,7 @@ class TestJwtLeeway:
         tok = (
             JwtBuilder()
             .subject("usr_1")
-            .expires_at(datetime.now(timezone.utc) - timedelta(seconds=10))
+            .expires_at(datetime.now(UTC) - timedelta(seconds=10))
             .build()
         )
         util = JwtUtil(tok)
@@ -688,7 +688,7 @@ class TestJwtLeeway:
         signed = (
             JwtBuilder()
             .subject("usr_1")
-            .not_before(datetime.now(timezone.utc) + timedelta(seconds=10))
+            .not_before(datetime.now(UTC) + timedelta(seconds=10))
             .encode(_SECRET)
         )
         token = JwtParser.parse(signed, _SECRET, leeway=30)

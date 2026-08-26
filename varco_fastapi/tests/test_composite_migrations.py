@@ -23,7 +23,7 @@ class _PingRouter(GenericRouter):
         return {"ok": True}
 
 
-def _build_service(events: list[str], name: str, migrator) -> "FastAPI":  # noqa: F821
+def _build_service(events: list[str], name: str, migrator) -> FastAPI:  # noqa: F821
     from varco_core.migration.settings import MigrationSettings
 
     return create_varco_app(

@@ -88,7 +88,7 @@ async def test_error_middleware_maps_timeout_error_to_504():
     @app.get("/timeout")
     async def timeout_route():
         # Simulates a downstream await that exceeded its deadline (e.g. @timeout decorator)
-        raise asyncio.TimeoutError
+        raise TimeoutError
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

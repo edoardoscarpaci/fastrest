@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     pass

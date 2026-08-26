@@ -10,7 +10,7 @@ RED until these methods land on ``SAAuditRepository``.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 import pytest
 import pytest_asyncio
@@ -52,7 +52,7 @@ class TestSAAuditRepositoryDeleteWhere:
         for i in range(5):
             await repo.save(_entry(entity_id=str(i)))
 
-        cutoff = datetime.now(timezone.utc) + timedelta(seconds=1)
+        cutoff = datetime.now(UTC) + timedelta(seconds=1)
         total = 0
         while True:
             deleted = await repo.delete_where(older_than=cutoff, limit=2)

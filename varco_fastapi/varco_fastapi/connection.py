@@ -158,7 +158,7 @@ class HttpConnectionSettings(ConnectionSettings):
     # ── from_env override ─────────────────────────────────────────────────────
 
     @classmethod
-    def from_env(cls, prefix: str) -> "HttpConnectionSettings":  # type: ignore[override]
+    def from_env(cls, prefix: str) -> HttpConnectionSettings:  # type: ignore[override]
         """
         Load HTTP connection settings from environment variables.
 

@@ -23,7 +23,8 @@ the assertion would be unusable in any deployment with global tables.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
+from collections.abc import Iterable
 
 from varco_core.tenancy.catalog import TenantIsolationError
 
@@ -48,7 +49,7 @@ WHERE c.relrowsecurity = true
 
 
 async def assert_rls_enabled(
-    conn: "AsyncConnection",
+    conn: AsyncConnection,
     *,
     tables: Iterable[str],
     global_tables: set[str],

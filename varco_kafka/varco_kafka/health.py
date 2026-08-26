@@ -132,7 +132,7 @@ class KafkaHealthCheck(HealthCheck):
                 component=self.name,
                 latency_ms=latency_ms,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # The probe exceeded its budget — broker may be alive but slow.
             # Report UNHEALTHY; latency_ms is omitted because the round-trip
             # never completed.

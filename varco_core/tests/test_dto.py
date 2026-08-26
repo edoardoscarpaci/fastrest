@@ -7,7 +7,7 @@ validation, and the UpdateOperation enum.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from pydantic import ValidationError
@@ -64,7 +64,7 @@ def test_create_dto_validation_error_on_wrong_type():
 # ── ReadDTO ───────────────────────────────────────────────────────────────────
 
 
-_NOW = datetime.now(tz=timezone.utc)
+_NOW = datetime.now(tz=UTC)
 
 
 def test_read_dto_requires_id_and_timestamps():

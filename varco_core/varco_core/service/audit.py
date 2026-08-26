@@ -63,7 +63,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID, uuid4
 
@@ -134,7 +134,7 @@ class AuditEntry:
     action: str = ""  # "create" | "update" | "delete"
     actor_id: str | None = None
     diff: dict[str, Any] = field(default_factory=dict)
-    occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     correlation_id: str | None = None
     tenant_id: str | None = None
 
@@ -169,7 +169,7 @@ class AuditEntry:
         payload = {
             "entry_id": str(self.entry_id),
             "occurred_at": (
-                self.occurred_at.astimezone(timezone.utc).isoformat()
+                self.occurred_at.astimezone(UTC).isoformat()
                 if self.occurred_at
                 else None
             ),

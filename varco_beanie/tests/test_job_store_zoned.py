@@ -10,7 +10,7 @@ Relies on the same ``bypass_beanie_collection_check`` conftest fixture as
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from uuid import uuid4
 
 from varco_beanie.job_store import BeanieJobStore, JobDocument, _doc_to_job, _job_to_doc
@@ -29,7 +29,7 @@ def test_job_document_zoned_fields_default_to_none_and_zero() -> None:
     doc = JobDocument(
         id=uuid4(),
         status=JobStatus.PENDING.value,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     assert doc.run_at_wall is None
     assert doc.run_at_tz is None
@@ -38,7 +38,7 @@ def test_job_document_zoned_fields_default_to_none_and_zero() -> None:
 
 def test_job_to_doc_to_job_round_trips_a_zoned_job() -> None:
     job = _pending_job(
-        run_at=datetime(2026, 6, 1, 13, 0, tzinfo=timezone.utc),
+        run_at=datetime(2026, 6, 1, 13, 0, tzinfo=UTC),
         run_at_wall=datetime(2026, 6, 1, 9, 0),
         run_at_tz="America/New_York",
         run_at_fold=0,
@@ -63,7 +63,7 @@ def test_doc_to_job_implicit_null_deserialization_for_pre_plan_document() -> Non
     class _PreExistingDoc:
         id = uuid4()
         status = JobStatus.PENDING.value
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
         started_at = None
         completed_at = None
         result = None

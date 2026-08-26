@@ -20,7 +20,7 @@ import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import timezone as dt_timezone, UTC
 from typing import Any
 
 from varco_core.exception.query import CoercionError
@@ -156,7 +156,7 @@ def _apply_datetime_policy(
                     "resolved for %r; falling back to UTC",
                     parsed,
                 )
-            return parsed.replace(tzinfo=dt_timezone.utc)
+            return parsed.replace(tzinfo=UTC)
         if policy.log_naive:
             logger.debug(
                 "coerce_datetime: interpreting naive %r under ambient timezone %s",
@@ -168,7 +168,7 @@ def _apply_datetime_policy(
     # assume == "utc"
     if policy.log_naive:
         logger.debug("coerce_datetime: interpreting naive %r as UTC", parsed)
-    return parsed.replace(tzinfo=dt_timezone.utc)
+    return parsed.replace(tzinfo=UTC)
 
 
 def coerce_float(value: Any) -> float:

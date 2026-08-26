@@ -119,10 +119,10 @@ class TenantReadinessCoordinator(EventConsumer):
     def __init__(
         self,
         *,
-        control_service: "TenantControlService",
+        control_service: TenantControlService,
         expected_stores: frozenset[str],
         timeout_s: float | None = 900.0,
-        dlq: "AbstractDeadLetterQueue | None" = None,
+        dlq: AbstractDeadLetterQueue | None = None,
     ) -> None:
         if not expected_stores:
             raise ValueError(
@@ -153,11 +153,11 @@ class TenantReadinessCoordinator(EventConsumer):
 
     def register_to(
         self,
-        bus: "AbstractEventBus",
+        bus: AbstractEventBus,
         *,
-        retry_policy: "RetryPolicy | None" = _UNSET,  # type: ignore[assignment]
-        dlq: "AbstractDeadLetterQueue | None" = _UNSET,  # type: ignore[assignment]
-    ) -> list["Subscription"]:
+        retry_policy: RetryPolicy | None = _UNSET,  # type: ignore[assignment]
+        dlq: AbstractDeadLetterQueue | None = _UNSET,  # type: ignore[assignment]
+    ) -> list[Subscription]:
         """Wire this coordinator to ``bus``. Call from the host's
         ``@PostConstruct`` — never ``__init__``."""
         effective_dlq = self._dlq if dlq is _UNSET else dlq
@@ -169,7 +169,7 @@ class TenantReadinessCoordinator(EventConsumer):
         )
 
     @listen(TenantNodeReady, channel=CHANNEL_TENANCY)
-    async def on_node_ready(self, event: "Event") -> None:
+    async def on_node_ready(self, event: Event) -> None:
         """
         Record one store's readiness for one tenant. Calls
         ``control_service.mark_active()`` exactly once, on the delivery

@@ -91,7 +91,7 @@ class TokenProfile:
     implied_roles: frozenset[str] = frozenset()
     implied_scopes: frozenset[str] = frozenset()
 
-    def matches(self, token: "JsonWebToken") -> bool:
+    def matches(self, token: JsonWebToken) -> bool:
         """
         Return ``True`` iff every declared condition on this profile holds
         for ``token``.
@@ -106,7 +106,7 @@ class TokenProfile:
         """
         return self.explain(token) is None
 
-    def explain(self, token: "JsonWebToken") -> str | None:
+    def explain(self, token: JsonWebToken) -> str | None:
         """
         Return a human-readable description of the FIRST failing condition,
         or ``None`` if ``token`` matches every declared condition.
@@ -155,7 +155,7 @@ class TokenProfile:
         return None
 
 
-def _has_claim(token: "JsonWebToken", claim: str) -> bool:
+def _has_claim(token: JsonWebToken, claim: str) -> bool:
     """
     Return ``True`` if ``claim`` is present (and non-empty, for
     collections) on ``token`` — checked across ``extra_claims``,
@@ -241,7 +241,7 @@ class TokenProfileRegistry:
         """Return every registered profile name, in registration order."""
         return tuple(self._profiles.keys())
 
-    def resolve(self, token: "JsonWebToken") -> TokenProfile | None:
+    def resolve(self, token: JsonWebToken) -> TokenProfile | None:
         """
         Return the first registered profile that matches ``token``.
 
@@ -257,7 +257,7 @@ class TokenProfileRegistry:
                 return profile
         return None
 
-    def matches(self, name: str, token: "JsonWebToken") -> bool:
+    def matches(self, name: str, token: JsonWebToken) -> bool:
         """
         Return ``True`` iff the named profile matches ``token``.
 
@@ -347,8 +347,8 @@ _registry: TokenProfileRegistry | None = None
 
 
 def resolve_token_profile(
-    token: "JsonWebToken", *, registry: TokenProfileRegistry | None = None
-) -> "JsonWebToken":
+    token: JsonWebToken, *, registry: TokenProfileRegistry | None = None
+) -> JsonWebToken:
     """
     Resolve the matching profile for ``token`` and augment/materialise its
     ``auth_ctx`` accordingly.

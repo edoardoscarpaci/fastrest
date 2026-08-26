@@ -78,7 +78,7 @@ import asyncio
 import logging
 import socket
 from collections.abc import Awaitable, Callable, Coroutine
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Annotated, Any
 
 import redis.asyncio as aioredis
@@ -703,7 +703,7 @@ class RedisStreamEventBus(AbstractEventBus):
         count = self._delivery_counts.get(msg_id, 0) + 1
         self._delivery_counts[msg_id] = count
         if msg_id not in self._first_failure_times:
-            self._first_failure_times[msg_id] = datetime.now(tz=timezone.utc)
+            self._first_failure_times[msg_id] = datetime.now(tz=UTC)
 
         if count < self._max_delivery_count:
             # Still under the limit — leave in PEL for retry.

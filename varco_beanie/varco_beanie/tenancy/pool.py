@@ -16,7 +16,8 @@ construction rather than silently behaving as ``SHARED``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from varco_core.tenancy.pool import TenantResourcePool
 from varco_core.tenancy.settings import TenantIsolation
@@ -147,7 +148,7 @@ class BeanieTenantPool:
         await self._pool.aclose()
         self._resident.clear()
 
-    async def __aenter__(self) -> "BeanieTenantPool":
+    async def __aenter__(self) -> BeanieTenantPool:
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:

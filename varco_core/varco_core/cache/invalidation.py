@@ -523,7 +523,7 @@ class EventDrivenStrategy(InvalidationStrategy):
         )
 
     @property
-    def consumer(self) -> "CacheInvalidationConsumer":
+    def consumer(self) -> CacheInvalidationConsumer:
         """
         The ``CacheInvalidationConsumer`` that drives this strategy.
 

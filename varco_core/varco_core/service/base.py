@@ -181,7 +181,7 @@ from varco_core.uow import AsyncUnitOfWork
 if TYPE_CHECKING:
     # Imported only for type hints — avoids pulling in query machinery at
     # runtime for services that never use the query system.
-    from typing import AsyncIterator
+    from collections.abc import AsyncIterator
 
     from varco_core.query.params import QueryParams
     from varco_core.repository import AsyncRepository

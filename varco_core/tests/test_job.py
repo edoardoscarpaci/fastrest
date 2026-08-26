@@ -19,7 +19,7 @@ the rest of the suite and so future awaiting code doesn't need retrofitting).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -37,7 +37,7 @@ class TestJobAsRetry:
         self,
     ) -> None:
         job = Job(job_id=uuid4(), status=JobStatus.PENDING).as_running()
-        next_run_at = datetime.now(timezone.utc) + timedelta(seconds=30)
+        next_run_at = datetime.now(UTC) + timedelta(seconds=30)
 
         retried = job.as_retry(next_run_at)
 
@@ -59,7 +59,7 @@ class TestJobBackCompatConstruction:
         self,
     ) -> None:
         job_id = uuid4()
-        created_at = datetime.now(timezone.utc)
+        created_at = datetime.now(UTC)
         job = Job(job_id=job_id, created_at=created_at)
 
         # New fields must all default such that an unchanged caller sees
@@ -234,7 +234,7 @@ class TestAbstractJobRunnerEnqueueRunAtDelay:
         with pytest.raises(ValueError):
             await runner.enqueue(
                 _coro(),
-                run_at=datetime.now(timezone.utc),
+                run_at=datetime.now(UTC),
                 delay=timedelta(seconds=5),
             )
 

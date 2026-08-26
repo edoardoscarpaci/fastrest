@@ -36,8 +36,9 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextvars import ContextVar
-from datetime import datetime, timedelta, timezone
-from typing import Any, Coroutine
+from datetime import datetime, timedelta, timezone, UTC
+from typing import Any
+from collections.abc import Coroutine
 from uuid import UUID, uuid4
 
 from providify import Inject, Instance, Singleton
@@ -354,7 +355,7 @@ class JobRunner(AbstractJobRunner):
             coro.close()
             raise ValueError("enqueue() received both run_at= and delay=")
         if delay is not None:
-            run_at = datetime.now(timezone.utc) + delay
+            run_at = datetime.now(UTC) + delay
 
         try:
             job = self._prepare_zoned_job(
@@ -701,7 +702,7 @@ class JobRunner(AbstractJobRunner):
 
         if self._retry_policy is not None and job.attempt + 1 < job.max_attempts:
             delay_seconds = self._retry_policy.compute_delay(job.attempt)
-            next_run_at = datetime.now(timezone.utc) + timedelta(seconds=delay_seconds)
+            next_run_at = datetime.now(UTC) + timedelta(seconds=delay_seconds)
             retried = job.as_retry(next_run_at)
             await self._store.save(retried)
             await self._publish_progress(job.job_id, JobStatus.PENDING, error=error_msg)

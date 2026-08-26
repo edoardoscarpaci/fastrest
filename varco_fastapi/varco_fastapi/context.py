@@ -66,7 +66,7 @@ import uuid
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from providify import Provider
 from varco_core.auth.base import AuthContext

@@ -26,7 +26,8 @@ Three independent barriers against accidental bundling:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
+from collections.abc import Sequence
 
 from varco_fastapi.tenancy.router import build_tenant_router
 
@@ -44,14 +45,14 @@ _MOUNTED_APPS: set[int] = set()
 
 
 def mount_tenant_admin(
-    app: "FastAPI",
+    app: FastAPI,
     control_service: Any,
     *,
     acknowledge_bundled_admin: bool = False,
-    server_auth: "AbstractServerAuth | None" = None,
+    server_auth: AbstractServerAuth | None = None,
     admin_role: str = "tenant-admin",
     prefix: str = "/tenancy",
-    dependencies: Sequence["DependsType"] = (),
+    dependencies: Sequence[DependsType] = (),
 ) -> None:
     """
     Mount the tenant provisioning admin router into ``app`` — the

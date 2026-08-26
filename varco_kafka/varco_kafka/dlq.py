@@ -105,7 +105,7 @@ import json
 import logging
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from uuid import UUID
 
@@ -674,7 +674,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
             """Parse ISO-8601 string, defaulting to UTC if tz info is absent."""
             dt = datetime.fromisoformat(value)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt
 
         return DeadLetterEntry(

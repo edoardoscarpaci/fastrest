@@ -39,7 +39,8 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncIterator, Awaitable, Callable, Generic, TypeVar
+from typing import Generic, TypeVar
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +284,7 @@ class TenantResourcePool(Generic[T]):
         for entry in entries:
             await self._safe_close(entry.resource)
 
-    async def __aenter__(self) -> "TenantResourcePool[T]":
+    async def __aenter__(self) -> TenantResourcePool[T]:
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:

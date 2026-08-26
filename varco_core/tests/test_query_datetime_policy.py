@@ -15,7 +15,7 @@ in this plan generates an AT TIME ZONE expression."
 
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import timezone, UTC
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -33,7 +33,7 @@ def test_datetime_coercion_policy_default_is_naive() -> None:
 def test_utc_policy_attaches_utc_tzinfo_to_naive_input() -> None:
     policy = DatetimeCoercionPolicy(assume="utc")
     result = coerce_datetime("2026-01-01T00:00:00", policy=policy)
-    assert result.tzinfo == timezone.utc
+    assert result.tzinfo == UTC
 
 
 def test_context_policy_uses_ambient_timezone() -> None:
@@ -46,7 +46,7 @@ def test_context_policy_uses_ambient_timezone() -> None:
 def test_context_policy_falls_back_to_utc_with_no_ambient_zone(caplog) -> None:
     policy = DatetimeCoercionPolicy(assume="context")
     result = coerce_datetime("2026-01-01T00:00:00", policy=policy)
-    assert result.tzinfo == timezone.utc
+    assert result.tzinfo == UTC
 
 
 def test_already_aware_input_used_verbatim_under_every_policy() -> None:

@@ -29,8 +29,9 @@ Sections
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Generator
+from datetime import datetime, timezone, UTC
+from typing import Any
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -109,9 +110,9 @@ class TestSagaDocument:
         assert doc.error is None
 
     def test_updated_at_is_recent_utc(self) -> None:
-        before = datetime.now(tz=timezone.utc)
+        before = datetime.now(tz=UTC)
         doc = SagaDocument(status="RUNNING")
-        after = datetime.now(tz=timezone.utc)
+        after = datetime.now(tz=UTC)
         assert before <= doc.updated_at <= after
 
     def test_repr_contains_id_and_status(self) -> None:

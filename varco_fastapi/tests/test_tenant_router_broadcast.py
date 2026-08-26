@@ -74,7 +74,7 @@ class _FakeControlService:
             raise DestructiveOperationRefused(tenant_id)
 
 
-def _build_app(role: str | None, control_service: "_FakeControlService | None" = None):
+def _build_app(role: str | None, control_service: _FakeControlService | None = None):
     from varco_fastapi.tenancy.router import build_tenant_router
 
     ctx = AuthContext(user_id="u1", roles=frozenset({role}) if role else frozenset())

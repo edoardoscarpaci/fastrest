@@ -36,7 +36,8 @@ Async safety:   ✅ All methods are ``async def``.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any, AsyncIterator, Sequence
+from typing import Any
+from collections.abc import AsyncIterator, Sequence
 from uuid import UUID, uuid4
 
 from models import Document

@@ -133,7 +133,7 @@ class NatsHealthCheck(HealthCheck):
                 component=self.name,
                 latency_ms=latency_ms,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # The probe exceeded its budget — server may be alive but slow.
             return HealthResult(
                 status=HealthStatus.UNHEALTHY,

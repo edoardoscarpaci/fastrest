@@ -17,7 +17,7 @@ Tests cover:
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, UTC
 from typing import Any, Optional
 
 import pytest
@@ -89,7 +89,7 @@ class TestSerialize:
         assert isinstance(result, str)
 
     def test_datetime_to_isoformat(self):
-        dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 1, 15, 10, 30, 0, tzinfo=UTC)
         result = self.s.serialize(dt)
         assert result == "2024-01-15T10:30:00+00:00"
         assert isinstance(result, str)
@@ -240,7 +240,7 @@ class TestRoundTrip:
         assert self.s.deserialize(self.s.serialize(uid), uuid.UUID) == uid
 
     def test_datetime_round_trip(self):
-        dt = datetime(2024, 5, 20, 14, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 5, 20, 14, 0, 0, tzinfo=UTC)
         assert self.s.deserialize(self.s.serialize(dt), datetime) == dt
 
     def test_date_round_trip(self):
@@ -341,7 +341,7 @@ class TestVarcoTaskWithSerializer:
             seen.append(ts)
 
         task = VarcoTask(name="t", fn=fn)
-        dt = datetime(2024, 3, 15, 9, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 3, 15, 9, 0, 0, tzinfo=UTC)
         p = task.payload(dt)
         await task.invoke(p)
         assert seen == [dt]

@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from pydantic import BaseModel
@@ -103,7 +103,7 @@ class TestJsonSerializer:
         assert parsed == str(uid)
 
     def test_serialize_datetime_to_iso(self, s: JsonSerializer) -> None:
-        dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         data = s.serialize(dt)
         assert isinstance(json.loads(data), str)
 

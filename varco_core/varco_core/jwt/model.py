@@ -14,7 +14,7 @@ Async safety:   ✅ Pure value object — no I/O.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any, Final
 
 from varco_core.auth import AuthContext
@@ -84,7 +84,7 @@ def _to_utc_timestamp(dt: datetime) -> int:
     """
     if dt.tzinfo is None:
         # Treat naive as UTC — caller footgun, but mirrors PyJWT's convention
-        return int(dt.replace(tzinfo=timezone.utc).timestamp())
+        return int(dt.replace(tzinfo=UTC).timestamp())
     return int(dt.timestamp())
 
 
@@ -98,7 +98,7 @@ def _from_utc_timestamp(ts: int | float) -> datetime:
     Returns:
         UTC-aware ``datetime`` with ``tzinfo=timezone.utc``.
     """
-    return datetime.fromtimestamp(ts, tz=timezone.utc)
+    return datetime.fromtimestamp(ts, tz=UTC)
 
 
 # ── JsonWebToken ──────────────────────────────────────────────────────────────

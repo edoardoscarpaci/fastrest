@@ -177,7 +177,7 @@ def _make_metrics(*, checked_out: int, size: int, max_overflow: int) -> SAPoolMe
     # checked_in is the remainder of the base pool; clamp to 0 when overflowed.
     checked_in = max(0, size - checked_out)
     return SAPoolMetrics(
-        captured_at=datetime.datetime.now(datetime.timezone.utc),
+        captured_at=datetime.datetime.now(datetime.UTC),
         size=size,
         checked_in=checked_in,
         checked_out=checked_out,

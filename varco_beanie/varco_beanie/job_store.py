@@ -71,7 +71,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -268,7 +268,7 @@ def _ensure_tz(dt: datetime | None) -> datetime | None:
     """
     if dt is None:
         return None
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
 def _job_to_doc(job: Job) -> JobDocument:
@@ -756,7 +756,7 @@ class BeanieJobStore(AbstractJobStore):
             the typed expressions for consistency with the untouched parts
             of this method.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         update_values: dict[str, Any] = {
             "status": JobStatus.RUNNING.value,
@@ -818,7 +818,7 @@ class BeanieJobStore(AbstractJobStore):
 
         Async safety: ✅ All I/O is awaited.
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         candidates = await self.list_by_status(JobStatus.PENDING, limit=100)
         for candidate in candidates:
             if candidate.run_at is not None and candidate.run_at > current:
@@ -853,7 +853,7 @@ class BeanieJobStore(AbstractJobStore):
 
         Async safety: ✅ Single ``findAndModify`` call — atomic.
         """
-        new_expires_at = datetime.now(timezone.utc) + timedelta(seconds=lease_ttl)
+        new_expires_at = datetime.now(UTC) + timedelta(seconds=lease_ttl)
         updated_doc: JobDocument | None = await JobDocument.find_one(
             JobDocument.id == job_id,
             {"owner_id": owner_id},
@@ -885,7 +885,7 @@ class BeanieJobStore(AbstractJobStore):
 
         Async safety: ✅ All I/O is awaited.
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         docs = (
             await JobDocument.find(
                 JobDocument.status == JobStatus.RUNNING.value,

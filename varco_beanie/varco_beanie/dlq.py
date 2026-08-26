@@ -49,7 +49,7 @@ import inspect
 import logging
 import sys
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
@@ -90,10 +90,10 @@ class DeadLetterDocument(Document):
     error_message: str
     attempts: int
     first_failed_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     last_failed_at: datetime = Field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     tenant_id: str | None = None
 

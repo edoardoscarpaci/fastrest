@@ -17,7 +17,7 @@ Covers:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from varco_core.service.conversation import (
@@ -38,16 +38,16 @@ def test_turn_is_frozen():
 
 def test_turn_auto_timestamp():
     """Timestamp defaults to a UTC datetime when not provided."""
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
     turn = ConversationTurn(role="user", content="hi")
-    after = datetime.now(tz=timezone.utc)
+    after = datetime.now(tz=UTC)
     assert before <= turn.timestamp <= after
     assert turn.timestamp.tzinfo is not None
 
 
 def test_turn_explicit_timestamp_preserved():
     """Explicit timestamp is stored unchanged."""
-    ts = datetime(2025, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    ts = datetime(2025, 1, 1, 12, 0, 0, tzinfo=UTC)
     turn = ConversationTurn(role="user", content="ping", timestamp=ts)
     assert turn.timestamp == ts
 

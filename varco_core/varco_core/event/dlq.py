@@ -61,7 +61,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from enum import StrEnum
 from typing import ClassVar, Final
 from uuid import UUID, uuid4
@@ -176,12 +176,12 @@ class DeadLetterEntry:
 
     first_failed_at: datetime = field(
         # Timezone-aware UTC — avoids datetime.utcnow() deprecation
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     """UTC datetime of the first failed attempt."""
 
     last_failed_at: datetime = field(
-        default_factory=lambda: datetime.now(tz=timezone.utc)
+        default_factory=lambda: datetime.now(tz=UTC)
     )
     """UTC datetime of the most recent (final) failed attempt."""
 
@@ -242,7 +242,7 @@ class DeadLetterEntry:
             )
             await dlq.push(entry)
         """
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         return cls(
             event=event,
             channel=channel,

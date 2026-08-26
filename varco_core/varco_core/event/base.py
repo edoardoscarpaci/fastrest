@@ -67,7 +67,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from enum import Enum
 from typing import TYPE_CHECKING, Any, ClassVar, Final
 from uuid import UUID, uuid4
@@ -234,7 +234,7 @@ class ChannelConfig:
 
 def _utcnow() -> datetime:
     # Timezone-aware UTC — avoids the deprecation warning from datetime.utcnow()
-    return datetime.now(tz=timezone.utc)
+    return datetime.now(tz=UTC)
 
 
 class Event(BaseModel, frozen=True):

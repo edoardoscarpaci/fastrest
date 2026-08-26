@@ -31,7 +31,8 @@ Async safety:   ✅ No I/O at decoration time.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 if TYPE_CHECKING:
     from varco_fastapi.auth.guard import RouteGuard

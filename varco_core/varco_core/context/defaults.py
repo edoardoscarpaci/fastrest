@@ -19,7 +19,8 @@ support ticket. Wrap the call in the app's own cache if it needs one.
 from __future__ import annotations
 
 import dataclasses
-from typing import Mapping, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
+from collections.abc import Mapping
 
 __all__ = [
     "TenantLocalizationDefaults",

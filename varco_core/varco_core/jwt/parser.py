@@ -66,7 +66,7 @@ class JwtParser:
         audience: str | list[str] | None = None,
         options: dict[str, Any] | None = None,
         transformer: ClaimTransformer | None = None,
-        profiles: "TokenProfileRegistry | None" = None,
+        profiles: TokenProfileRegistry | None = None,
         leeway: float | None = None,
     ) -> JsonWebToken:
         """
@@ -168,7 +168,7 @@ class JwtParser:
         token: str,
         *,
         transformer: ClaimTransformer | None = None,
-        profiles: "TokenProfileRegistry | None" = None,
+        profiles: TokenProfileRegistry | None = None,
     ) -> JsonWebToken:
         """
         Decode a JWT string WITHOUT verifying the signature.
@@ -226,7 +226,7 @@ class JwtParser:
         raw: dict[str, Any],
         *,
         transformer: ClaimTransformer | None = None,
-        profiles: "TokenProfileRegistry | None" = None,
+        profiles: TokenProfileRegistry | None = None,
     ) -> JsonWebToken:
         """
         Construct a ``JsonWebToken`` from a raw decoded claims dict.

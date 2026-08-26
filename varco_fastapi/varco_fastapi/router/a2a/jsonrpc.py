@@ -39,8 +39,9 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from datetime import datetime, timezone, UTC
+from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable
 
 if TYPE_CHECKING:
     from varco_core.auth.base import AuthContext
@@ -105,7 +106,7 @@ def _task_dict(
         "id": task_id,
         "status": {
             "state": state,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
     }
     if error is not None:
@@ -132,7 +133,7 @@ class JsonRpcDispatcher:
     Async safety:   ✅ ``dispatch()`` is the only async entry point.
     """
 
-    def __init__(self, adapter: "SkillAdapter") -> None:
+    def __init__(self, adapter: SkillAdapter) -> None:
         self._adapter = adapter
         # In-process task bookkeeping for tasks/get, tasks/list, tasks/cancel.
         # DESIGN: plain dict, not the JobStore
@@ -144,7 +145,7 @@ class JsonRpcDispatcher:
         #      /tasks/send path when crash recovery matters.
         self._tasks: dict[str, dict[str, Any]] = {}
         self._methods: dict[
-            str, Callable[[dict[str, Any], "AuthContext | None"], Awaitable[Any]]
+            str, Callable[[dict[str, Any], AuthContext | None], Awaitable[Any]]
         ] = {
             "message/send": self._message_send,
             "message/stream": self._message_send,  # no push transport — single-shot
@@ -155,7 +156,7 @@ class JsonRpcDispatcher:
         }
 
     async def dispatch(
-        self, body: dict[str, Any], *, ctx: "AuthContext | None" = None
+        self, body: dict[str, Any], *, ctx: AuthContext | None = None
     ) -> dict[str, Any]:
         """
         Dispatch one JSON-RPC 2.0 request.
@@ -212,7 +213,7 @@ class JsonRpcDispatcher:
     # ── Method handlers ──────────────────────────────────────────────────────
 
     async def _message_send(
-        self, params: dict[str, Any], ctx: "AuthContext | None"
+        self, params: dict[str, Any], ctx: AuthContext | None
     ) -> dict[str, Any]:
         skill_id = params.get("skill_id")
         if not skill_id or not isinstance(skill_id, str):
@@ -235,7 +236,7 @@ class JsonRpcDispatcher:
         return task
 
     async def _tasks_get(
-        self, params: dict[str, Any], ctx: "AuthContext | None"
+        self, params: dict[str, Any], ctx: AuthContext | None
     ) -> dict[str, Any]:
         task_id = params.get("task_id")
         if not task_id or not isinstance(task_id, str):
@@ -246,12 +247,12 @@ class JsonRpcDispatcher:
         return task
 
     async def _tasks_list(
-        self, params: dict[str, Any], ctx: "AuthContext | None"
+        self, params: dict[str, Any], ctx: AuthContext | None
     ) -> dict[str, Any]:
         return {"tasks": list(self._tasks.values())}
 
     async def _tasks_cancel(
-        self, params: dict[str, Any], ctx: "AuthContext | None"
+        self, params: dict[str, Any], ctx: AuthContext | None
     ) -> dict[str, Any]:
         task_id = params.get("task_id")
         if not task_id or not isinstance(task_id, str):

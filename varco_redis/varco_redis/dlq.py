@@ -108,7 +108,7 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from uuid import UUID
 
@@ -132,7 +132,7 @@ def _coerce_utc(dt: datetime | None) -> datetime | None:
     if dt is None or dt.tzinfo is not None:
         return dt
     _logger.warning("RedisDLQ received a naive datetime filter — assuming UTC.")
-    return dt.replace(tzinfo=timezone.utc)
+    return dt.replace(tzinfo=UTC)
 
 
 # ── RedisDLQ ──────────────────────────────────────────────────────────────────
@@ -536,7 +536,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
             """Parse ISO-8601 datetime, defaulting to UTC if no tz info."""
             dt = datetime.fromisoformat(value)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt
 
         return DeadLetterEntry(

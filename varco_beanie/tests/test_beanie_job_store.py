@@ -36,8 +36,9 @@ from __future__ import annotations
 
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Any, Generator
+from datetime import datetime, timezone, UTC
+from typing import Any
+from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -187,12 +188,12 @@ class TestJobDocument:
         """JobDocument gets a fresh UUIDv4 if no id is provided."""
         doc = JobDocument(
             status=JobStatus.PENDING.value,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         assert isinstance(doc.id, uuid.UUID)
 
     def test_id_is_unique_per_instance(self) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=UTC)
         doc1 = JobDocument(status="pending", created_at=now)
         doc2 = JobDocument(status="pending", created_at=now)
         assert doc1.id != doc2.id
@@ -200,7 +201,7 @@ class TestJobDocument:
     def test_optional_fields_default_to_none(self) -> None:
         doc = JobDocument(
             status=JobStatus.PENDING.value,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         assert doc.started_at is None
         assert doc.completed_at is None
@@ -214,14 +215,14 @@ class TestJobDocument:
     def test_job_metadata_defaults_to_empty_dict(self) -> None:
         doc = JobDocument(
             status=JobStatus.PENDING.value,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         assert doc.job_metadata == {}
 
     def test_repr_contains_key_fields(self) -> None:
         doc = JobDocument(
             status=JobStatus.PENDING.value,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         r = repr(doc)
         assert "JobDocument" in r
@@ -231,7 +232,7 @@ class TestJobDocument:
         """status is stored as the StrEnum value, not the enum object."""
         doc = JobDocument(
             status=JobStatus.RUNNING.value,
-            created_at=datetime.now(tz=timezone.utc),
+            created_at=datetime.now(tz=UTC),
         )
         assert doc.status == "running"
 
@@ -244,16 +245,16 @@ class TestEnsureTz:
         assert _ensure_tz(None) is None
 
     def test_aware_datetime_unchanged(self) -> None:
-        dt = datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc)
+        dt = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
         result = _ensure_tz(dt)
         assert result is dt
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_naive_datetime_coerced_to_utc(self) -> None:
         naive = datetime(2024, 6, 15, 10, 30, 0)
         result = _ensure_tz(naive)
         assert result is not None
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
         assert result.year == 2024
         assert result.month == 6
 
@@ -339,7 +340,7 @@ class TestSerializationRoundTrip:
         doc.created_at = datetime(2024, 3, 1, 8, 0, 0)  # naive
 
         restored = _doc_to_job(doc)
-        assert restored.created_at.tzinfo == timezone.utc
+        assert restored.created_at.tzinfo == UTC
 
 
 # ── BeanieJobStore construction ───────────────────────────────────────────────

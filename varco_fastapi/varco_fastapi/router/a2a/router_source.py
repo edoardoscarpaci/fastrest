@@ -126,7 +126,7 @@ def _resolve_description(
 
 
 async def _dispatch_route(
-    client: "AsyncVarcoClient",
+    client: AsyncVarcoClient,
     route: ResolvedRoute,
     body: dict[str, Any],
 ) -> Any:
@@ -208,7 +208,7 @@ class RouterSkillSource:
         router_cls: type,
         *,
         enabled_routes: set[str] | None = None,
-        client: "AsyncVarcoClient | None" = None,
+        client: AsyncVarcoClient | None = None,
     ) -> None:
         self.router_cls = router_cls
         self._resource = _resource_name(router_cls)
@@ -272,7 +272,7 @@ class RouterSkillSource:
         skill_id: str,
         payload: dict[str, Any],
         *,
-        ctx: "AuthContext | None" = None,
+        ctx: AuthContext | None = None,
     ) -> Any:
         """
         Dispatch a skill call through the wrapped ``AsyncVarcoClient``.

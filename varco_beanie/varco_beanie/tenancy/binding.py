@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # but a *different* set of Document classes never collide on a stale
 # cached binding built for the other caller's model set.
 _CacheKey = tuple[str, str, tuple[int, ...]]
-_binding_cache: dict[_CacheKey, "BeanieTenantBinding"] = {}
+_binding_cache: dict[_CacheKey, BeanieTenantBinding] = {}
 _binding_locks: dict[_CacheKey, asyncio.Lock] = {}
 
 

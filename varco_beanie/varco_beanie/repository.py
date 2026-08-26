@@ -13,7 +13,8 @@ Async safety:   ✅ All methods are ``async def``.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Generic, Sequence, TypeVar
+from typing import Any, Generic, TypeVar
+from collections.abc import AsyncIterator, Sequence
 
 from varco_core.mapper import AbstractMapper
 from varco_core.model import DomainModel

@@ -15,7 +15,7 @@ integration``.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from varco_core.event import Event
@@ -152,7 +152,7 @@ class TestBeanieDeadLetterQueueIntegration:
         for _ in range(5):
             await dlq.push(_entry())
 
-        cutoff = datetime.now(timezone.utc)
+        cutoff = datetime.now(UTC)
         await asyncio.sleep(0.01)
 
         total = 0

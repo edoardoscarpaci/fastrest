@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -30,7 +30,7 @@ def _make_entry(handler_name: str = "on_order", order_id: str = "1") -> DeadLett
         handler_name=handler_name,
         last_exc=RuntimeError("boom"),
         attempts=3,
-        first_failed_at=datetime.now(timezone.utc),
+        first_failed_at=datetime.now(UTC),
     )
 
 
@@ -213,7 +213,7 @@ class TestNatsDLQDeleteWhereRaises:
     async def test_delete_where_raises_not_implemented_naming_maxage(self) -> None:
         dlq = NatsDLQ(NatsEventBusSettings())
         with pytest.raises(NotImplementedError, match="MaxAge"):
-            await dlq.delete_where(older_than=datetime.now(timezone.utc))
+            await dlq.delete_where(older_than=datetime.now(UTC))
 
 
 class TestNatsDLQGetRaises:

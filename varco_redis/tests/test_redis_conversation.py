@@ -18,7 +18,7 @@ Sections
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import Any
 
 from varco_core.service.conversation import ConversationTurn
@@ -108,7 +108,7 @@ class TestRedisConversationStoreAppendGet:
     async def test_append_multiple_turns_preserves_order(self) -> None:
         """Turns are returned in insertion order (oldest first)."""
         _, store = _make_store()
-        t0 = datetime.now(tz=timezone.utc)
+        t0 = datetime.now(tz=UTC)
         turns_in = [
             ConversationTurn(role="user", content="Hello", timestamp=t0),
             ConversationTurn(
@@ -156,7 +156,7 @@ class TestRedisConversationStoreAppendGet:
     async def test_timestamp_preserved(self) -> None:
         """The turn's timestamp is preserved through serialization."""
         _, store = _make_store()
-        ts = datetime(2024, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2024, 6, 1, 12, 0, 0, tzinfo=UTC)
         turn = ConversationTurn(role="agent", content="response", timestamp=ts)
         await store.append("task-1", turn)
 

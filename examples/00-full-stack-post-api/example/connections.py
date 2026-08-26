@@ -121,7 +121,7 @@ def make_postgres_settings() -> PostgresConnectionSettings:
     return PostgresConnectionSettings.from_env()
 
 
-def make_engine(*, echo: bool = False) -> "AsyncEngine":
+def make_engine(*, echo: bool = False) -> AsyncEngine:
     """
     Build a SQLAlchemy ``AsyncEngine`` from ``POSTGRES_*`` env vars.
 
@@ -161,8 +161,8 @@ def make_engine(*, echo: bool = False) -> "AsyncEngine":
 
 
 def make_di_sa_provider(
-    base: "type[Any]",
-    *entity_classes: "type[Any]",
+    base: type[Any],
+    *entity_classes: type[Any],
     echo: bool = False,
 ) -> Any:
     """
@@ -213,7 +213,7 @@ def make_di_sa_provider(
     _echo = echo
 
     @Provider(singleton=True)
-    def _sa_config_provider() -> "SAConfig":
+    def _sa_config_provider() -> SAConfig:
         """DI provider: builds SAConfig from POSTGRES_* env vars."""
         engine = make_engine(echo=_echo)
         session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -301,7 +301,7 @@ def make_kafka_settings() -> KafkaConnectionSettings:
     return KafkaConnectionSettings.from_env()
 
 
-def make_kafka_producer() -> "AIOKafkaProducer":
+def make_kafka_producer() -> AIOKafkaProducer:
     """
     Build an ``AIOKafkaProducer`` from ``KAFKA_*`` env vars.
 
@@ -343,7 +343,7 @@ def make_kafka_producer() -> "AIOKafkaProducer":
     return AIOKafkaProducer(**kwargs)
 
 
-def make_kafka_consumer(*topics: str) -> "AIOKafkaConsumer":
+def make_kafka_consumer(*topics: str) -> AIOKafkaConsumer:
     """
     Build an ``AIOKafkaConsumer`` subscribed to the given topics, from
     ``KAFKA_*`` env vars.
@@ -420,7 +420,7 @@ def make_http_settings(prefix: str) -> HttpConnectionSettings:
     return HttpConnectionSettings.from_env(prefix=prefix)
 
 
-def make_http_client(prefix: str) -> "httpx.AsyncClient":
+def make_http_client(prefix: str) -> httpx.AsyncClient:
     """
     Build an ``httpx.AsyncClient`` from env vars with the given prefix.
 

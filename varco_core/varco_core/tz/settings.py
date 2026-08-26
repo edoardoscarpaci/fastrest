@@ -38,7 +38,7 @@ class TimezoneSettings(VarcoSettings):
     header: str = "X-Timezone"
 
     @model_validator(mode="after")
-    def _validate_default_timezone(self) -> "TimezoneSettings":
+    def _validate_default_timezone(self) -> TimezoneSettings:
         if validate_iana_zone(self.default_timezone) is None:
             raise ValueError(
                 f"TimezoneSettings.default_timezone={self.default_timezone!r} "

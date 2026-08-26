@@ -14,7 +14,7 @@ class SessionContext(AbstractAsyncContextManager):
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.token: Optional[Token] = None
+        self.token: Token | None = None
 
     async def __aenter__(self):
         self.token = current_session.set(self.session)

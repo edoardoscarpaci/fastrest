@@ -35,8 +35,9 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import suppress
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable
+from datetime import datetime, timezone, UTC
+from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
 
 from varco_core.profiling.backend import (
     CpuProfilerBackend,
@@ -201,7 +202,7 @@ class ProfileSession:
             artifacts=tuple(artifacts),
             cpu_backend=cpu_backend_name,
             memory_backend=memory_backend_name,
-            captured_at=datetime.now(timezone.utc),
+            captured_at=datetime.now(UTC),
         )
 
         self._dispatch(self._report, cfg)

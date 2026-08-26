@@ -29,7 +29,7 @@ from __future__ import annotations
 import enum
 import logging
 from datetime import datetime, timedelta
-from datetime import timezone as dt_timezone
+from datetime import timezone as dt_timezone, UTC
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -80,7 +80,7 @@ class ScheduleGapError(Exception):
     ``GapPolicy.SKIP`` or ``GapPolicy.ERROR``."""
 
 
-def datetime_exists(wall: datetime, zone: "ZoneInfo") -> bool:
+def datetime_exists(wall: datetime, zone: ZoneInfo) -> bool:
     """
     ``True`` iff ``wall`` (naive) is a real wall-clock instant in ``zone``.
 
@@ -88,18 +88,18 @@ def datetime_exists(wall: datetime, zone: "ZoneInfo") -> bool:
     UTC and back to itself.
     """
     aware = wall.replace(tzinfo=zone)
-    back = aware.astimezone(dt_timezone.utc).astimezone(zone).replace(tzinfo=None)
+    back = aware.astimezone(UTC).astimezone(zone).replace(tzinfo=None)
     return back == wall
 
 
-def datetime_ambiguous(wall: datetime, zone: "ZoneInfo") -> bool:
+def datetime_ambiguous(wall: datetime, zone: ZoneInfo) -> bool:
     """``True`` iff ``wall`` (naive) occurs twice in ``zone`` (fall-back overlap)."""
     offset0 = wall.replace(tzinfo=zone, fold=0).utcoffset()
     offset1 = wall.replace(tzinfo=zone, fold=1).utcoffset()
     return offset0 != offset1
 
 
-def _search_valid(wall: datetime, zone: "ZoneInfo", *, forward: bool) -> datetime:
+def _search_valid(wall: datetime, zone: ZoneInfo, *, forward: bool) -> datetime:
     step = timedelta(minutes=1) if forward else -timedelta(minutes=1)
     candidate = wall
     for _ in range(_MAX_GAP_SEARCH_MINUTES):
@@ -115,7 +115,7 @@ def _search_valid(wall: datetime, zone: "ZoneInfo", *, forward: bool) -> datetim
 
 def resolve_zoned(
     wall: datetime,
-    zone: "ZoneInfo",
+    zone: ZoneInfo,
     *,
     fold: int = 0,
     gap: GapPolicy = GapPolicy.NEXT_VALID,

@@ -122,7 +122,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from uuid import UUID
 
@@ -681,7 +681,7 @@ class RedisStreamDLQ(AbstractDeadLetterQueue):
             dt = datetime.fromisoformat(value)
             if dt.tzinfo is None:
                 # Legacy data stored without timezone — assume UTC.
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return dt
 
         return DeadLetterEntry(

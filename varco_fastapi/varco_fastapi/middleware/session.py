@@ -132,7 +132,7 @@ class DISessionMiddleware(BaseHTTPMiddleware):
     """
 
     def __init__(
-        self, app: ASGIApp, *, container: Optional[DIContainer] = None
+        self, app: ASGIApp, *, container: DIContainer | None = None
     ) -> None:
         super().__init__(app)
         self._container = container or DIContainer.current()

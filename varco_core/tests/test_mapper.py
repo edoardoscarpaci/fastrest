@@ -12,7 +12,7 @@ is needed.  Tests cover:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 
 import pytest
@@ -91,9 +91,9 @@ def test_to_orm_plain_pk_injected_when_set():
 
 def test_to_orm_audited_sets_created_and_updated_at():
     mapper = _make_mapper(_Audited)
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
     orm = mapper.to_orm(_Audited(name="Edo"))
-    after = datetime.now(tz=timezone.utc)
+    after = datetime.now(tz=UTC)
     assert before <= orm.created_at <= after
     assert before <= orm.updated_at <= after
 
@@ -146,7 +146,7 @@ def test_from_orm_sets_raw_orm():
 
 def test_from_orm_audited_reads_timestamps():
     mapper = _make_mapper(_Audited)
-    ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    ts = datetime(2024, 1, 1, tzinfo=UTC)
     orm = _ORM(id=1, name="Edo", created_at=ts, updated_at=ts)
     entity = mapper.from_orm(orm)
     assert entity.created_at == ts
@@ -155,7 +155,7 @@ def test_from_orm_audited_reads_timestamps():
 
 def test_from_orm_versioned_reads_system_fields():
     mapper = _make_mapper(_Versioned)
-    ts = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    ts = datetime(2024, 1, 1, tzinfo=UTC)
     orm = _ORM(
         id=1,
         name="Edo",
@@ -190,7 +190,7 @@ class SlugMigrator(DomainMigrator):
 
 def test_from_orm_triggers_migration_when_stale():
     mapper = _make_mapper(_VersionedWithSlug, migrator=SlugMigrator)
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     orm = _ORM(
         id=1,
         name="Hello World",
@@ -207,7 +207,7 @@ def test_from_orm_triggers_migration_when_stale():
 
 def test_from_orm_skips_migration_when_current():
     mapper = _make_mapper(_VersionedWithSlug, migrator=SlugMigrator)
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     orm = _ORM(
         id=1,
         name="Already",
@@ -223,7 +223,7 @@ def test_from_orm_skips_migration_when_current():
 
 def test_from_orm_no_migrator_reads_stored_version():
     mapper = _make_mapper(_Versioned)
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     orm = _ORM(
         id=1,
         name="Edo",
@@ -251,7 +251,7 @@ def test_sync_to_orm_updates_business_fields():
 
 def test_sync_to_orm_never_touches_created_at():
     mapper = _make_mapper(_Audited)
-    original_ts = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    original_ts = datetime(2020, 1, 1, tzinfo=UTC)
     entity = _Audited(name="Edo")
     object.__setattr__(entity, "created_at", original_ts)
     object.__setattr__(entity, "updated_at", original_ts)
@@ -262,19 +262,19 @@ def test_sync_to_orm_never_touches_created_at():
 
 def test_sync_to_orm_refreshes_updated_at():
     mapper = _make_mapper(_Audited)
-    original_ts = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    original_ts = datetime(2020, 1, 1, tzinfo=UTC)
     entity = _Audited(name="Edo")
     object.__setattr__(entity, "created_at", original_ts)
     object.__setattr__(entity, "updated_at", original_ts)
     orm = _ORM(id=1, name="Old", created_at=original_ts, updated_at=original_ts)
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
     mapper.sync_to_orm(entity, orm)
     assert orm.updated_at >= before
 
 
 def test_sync_to_orm_increments_row_version():
     mapper = _make_mapper(_Versioned)
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     entity = _Versioned(name="Edo")
     object.__setattr__(entity, "row_version", 3)
     object.__setattr__(entity, "definition_version", 1)
@@ -295,7 +295,7 @@ def test_sync_to_orm_increments_row_version():
 
 def test_sync_to_orm_raises_stale_entity_error_on_conflict():
     mapper = _make_mapper(_Versioned)
-    ts = datetime.now(tz=timezone.utc)
+    ts = datetime.now(tz=UTC)
     entity = _Versioned(name="Edo")
     object.__setattr__(entity, "row_version", 2)  # loaded at v2
     object.__setattr__(entity, "definition_version", 1)

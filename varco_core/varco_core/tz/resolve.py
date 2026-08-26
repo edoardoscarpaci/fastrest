@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import timezone as dt_timezone, UTC
 from typing import TYPE_CHECKING
 
 from varco_core.context.precedence import Resolved, resolve_precedence
@@ -35,9 +35,9 @@ async def resolve_timezone(
     header: str | None,
     user_profile_zoneinfo: str | None,
     tenant_id: str | None,
-    tenant_defaults_provider: "TenantDefaultsProvider",
+    tenant_defaults_provider: TenantDefaultsProvider,
     default_timezone: str,
-) -> Resolved["ZoneInfo"] | None:
+) -> Resolved[ZoneInfo] | None:
     """
     Resolve a timezone via the five-source precedence chain
     (``query_param`` -> ``header`` -> ``user_profile`` -> ``tenant_default``
@@ -56,7 +56,7 @@ async def resolve_timezone(
         default_timezone: The final fallback IANA zone name.
     """
 
-    def _valid(name: str | None, *, source: str) -> "ZoneInfo | None":
+    def _valid(name: str | None, *, source: str) -> ZoneInfo | None:
         zone = validate_iana_zone(name)
         if name and zone is None:
             logger.warning(
@@ -64,12 +64,12 @@ async def resolve_timezone(
             )
         return zone
 
-    tenant_default: "ZoneInfo | None" = None
+    tenant_default: ZoneInfo | None = None
     if tenant_id is not None:
         defaults = await tenant_defaults_provider.defaults_for(tenant_id)
         tenant_default = _valid(defaults.timezone, source="tenant_default")
 
-    candidates: list[tuple[str, "ZoneInfo | None"]] = [
+    candidates: list[tuple[str, ZoneInfo | None]] = [
         ("query_param", _valid(query_param, source="query_param")),
         ("header", _valid(header, source="header")),
         ("user_profile", _valid(user_profile_zoneinfo, source="user_profile")),
@@ -104,6 +104,6 @@ def to_user_tz(instant: datetime) -> datetime:
 
 def now_local() -> datetime:
     """``datetime.now()`` in the ambient timezone, or aware-UTC if none is resolved."""
-    now = datetime.now(dt_timezone.utc)
+    now = datetime.now(UTC)
     zone = current_timezone()
     return now.astimezone(zone) if zone is not None else now

@@ -141,7 +141,7 @@ class KafkaConnectionSettings(ConnectionSettings):
     # ── Validator ─────────────────────────────────────────────────────────────
 
     @model_validator(mode="after")
-    def _synthesise_bootstrap_servers(self) -> "KafkaConnectionSettings":
+    def _synthesise_bootstrap_servers(self) -> KafkaConnectionSettings:
         """
         When ``bootstrap_servers`` is the default value and ``host``/``port`` were
         explicitly set to non-default values, synthesise ``bootstrap_servers``.

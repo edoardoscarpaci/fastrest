@@ -184,7 +184,7 @@ def enable_rls_ddl(
 
 
 async def set_tenant_local(
-    session: "AsyncSession",
+    session: AsyncSession,
     tenant_id: str,
     *,
     setting: str = "rls.tenant_id",

@@ -51,7 +51,7 @@ class _DeleteBody(BaseModel):
 def build_tenant_router(
     control_service: Any,
     *,
-    server_auth: "AbstractServerAuth | None",
+    server_auth: AbstractServerAuth | None,
     admin_role: str = "tenant-admin",
     prefix: str = "/tenancy",
     tags: list[str] | None = None,
@@ -118,7 +118,7 @@ def build_tenant_router(
     router = APIRouter(prefix=prefix, tags=tags or ["tenancy"])
     guard = require_roles(admin_role)
 
-    async def _admin(request: Request) -> "AuthContext":
+    async def _admin(request: Request) -> AuthContext:
         from varco_core.exception.service import ServiceAuthorizationError
 
         ctx = await server_auth(request)
@@ -136,7 +136,7 @@ def build_tenant_router(
 
     @router.post("/tenants", status_code=201)
     async def provision_tenant(
-        body: _ProvisionBody, _ctx: "AuthContext" = admin
+        body: _ProvisionBody, _ctx: AuthContext = admin
     ) -> dict:
         existing_before = None
         try:
@@ -156,14 +156,14 @@ def build_tenant_router(
 
     @router.get("/tenants")
     async def list_tenants(
-        status: str | None = None, _ctx: "AuthContext" = admin
+        status: str | None = None, _ctx: AuthContext = admin
     ) -> list[dict]:
         parsed_status = TenantStatus(status) if status else None
         descriptors = await control_service.list_tenants(status=parsed_status)
         return [_descriptor_to_dict(d) for d in descriptors]
 
     @router.get("/tenants/{tenant_id}")
-    async def get_tenant(tenant_id: str, _ctx: "AuthContext" = admin) -> dict:
+    async def get_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
         try:
             descriptors = await control_service.list_tenants(status=None)
         except Exception as exc:  # noqa: BLE001
@@ -175,7 +175,7 @@ def build_tenant_router(
 
     @router.patch("/tenants/{tenant_id}")
     async def patch_tenant(
-        tenant_id: str, body: dict = Body(...), _ctx: "AuthContext" = admin
+        tenant_id: str, body: dict = Body(...), _ctx: AuthContext = admin
     ) -> dict:
         action = body.get("action")
         if action == "suspend":
@@ -194,7 +194,7 @@ def build_tenant_router(
         tenant_id: str,
         broadcast: bool = False,
         body: _DeleteBody = Body(default=_DeleteBody()),
-        _ctx: "AuthContext" = admin,
+        _ctx: AuthContext = admin,
     ) -> None:
         if not body.confirm:
             raise HTTPException(
@@ -213,7 +213,7 @@ def build_tenant_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.post("/tenants/{tenant_id}/migrate")
-    async def migrate_tenant(tenant_id: str, _ctx: "AuthContext" = admin) -> dict:
+    async def migrate_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
         migrate_fn = getattr(control_service, "migrate", None)
         if migrate_fn is None:
             raise HTTPException(
@@ -225,7 +225,7 @@ def build_tenant_router(
 
     @router.post("/tenants/{tenant_id}/request-provision", status_code=202)
     async def request_provision_tenant(
-        tenant_id: str, _ctx: "AuthContext" = admin
+        tenant_id: str, _ctx: AuthContext = admin
     ) -> dict:
         """
         Broadcast-only (RD-14): emits ``TenantProvisionRequested`` fleet-wide
@@ -237,7 +237,7 @@ def build_tenant_router(
         return {"tenant_id": tenant_id, "broadcast": "provision"}
 
     @router.post("/tenants/{tenant_id}/activate")
-    async def activate_tenant(tenant_id: str, _ctx: "AuthContext" = admin) -> dict:
+    async def activate_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
         """Manual terminator (Plan 008, Phase 3) — flips ``tenant_id`` to
         ``ACTIVE`` without waiting for a ``TenantReadinessCoordinator``."""
         descriptor = await control_service.mark_active(tenant_id)
@@ -249,7 +249,7 @@ def build_tenant_router(
 
         @router.get("/tenants/{tenant_id}/readiness")
         async def get_tenant_readiness(
-            tenant_id: str, _ctx: "AuthContext" = admin
+            tenant_id: str, _ctx: AuthContext = admin
         ) -> dict:
             """
             Readiness snapshot (Plan 008, Phase 3).

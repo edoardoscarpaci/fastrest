@@ -128,7 +128,7 @@ class FakeMsg:
         self.acked = True
         self._remove_if_workqueue()
 
-    async def ack_sync(self, timeout: float = 1.0) -> "FakeMsg":
+    async def ack_sync(self, timeout: float = 1.0) -> FakeMsg:
         """
         Confirming ack, mirroring nats-py's ``Msg.ack_sync``.
 

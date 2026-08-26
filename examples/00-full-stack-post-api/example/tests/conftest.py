@@ -60,7 +60,7 @@ import asyncio
 import logging
 import os
 import socket
-from typing import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator
 
 import httpx
 import pytest

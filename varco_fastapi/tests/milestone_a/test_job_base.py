@@ -4,7 +4,7 @@ Tests for varco_core.job.base — Job, JobStatus, auth snapshot helpers.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from uuid import uuid4
 
 import pytest
@@ -33,7 +33,7 @@ def test_job_status_terminal_states():
 
 def test_job_as_running():
     """as_running() transitions PENDING → RUNNING and sets started_at."""
-    job = Job(job_id=uuid4(), created_at=datetime.now(timezone.utc))
+    job = Job(job_id=uuid4(), created_at=datetime.now(UTC))
     running = job.as_running()
     assert running.status == JobStatus.RUNNING
     assert running.started_at is not None

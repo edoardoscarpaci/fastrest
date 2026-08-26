@@ -55,7 +55,7 @@ import dataclasses
 import json
 import logging
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import Any
 from uuid import UUID
 
@@ -162,7 +162,7 @@ def _str_to_dt(s: str | None) -> datetime | None:
     dt = datetime.fromisoformat(s)
     # Coerce naive datetimes from SQLite (no timezone stored) to UTC.
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
     return dt
 
 
@@ -239,7 +239,7 @@ def _row_to_job(row: Any) -> Job:
         """Coerce naive datetimes (SQLite) to UTC."""
         if dt is None:
             return None
-        return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
     task_payload: TaskPayload | None = None
     if row.task_payload is not None:
@@ -641,7 +641,7 @@ class SAJobStore(AbstractJobStore):
         Async safety: ✅ Uses ``engine.begin()`` — fully atomic transaction.
         """
         use_skip_locked = self._engine.dialect.name == "postgresql"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         async with self._engine.begin() as conn:
             select_stmt = sa.select(_jobs_table).where(_jobs_table.c.job_id == job_id)
@@ -662,7 +662,7 @@ class SAJobStore(AbstractJobStore):
             if row.run_at is not None:
                 row_run_at = row.run_at
                 if row_run_at.tzinfo is None:
-                    row_run_at = row_run_at.replace(tzinfo=timezone.utc)
+                    row_run_at = row_run_at.replace(tzinfo=UTC)
                 if row_run_at > now:
                     # Scheduled for the future — not yet eligible.
                     return None
@@ -731,7 +731,7 @@ class SAJobStore(AbstractJobStore):
         Async safety: ✅ All I/O is awaited.
         """
         use_skip_locked = self._engine.dialect.name == "postgresql"
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
 
         async with self._engine.connect() as conn:
             select_stmt = (
@@ -778,7 +778,7 @@ class SAJobStore(AbstractJobStore):
 
         Async safety: ✅ Uses ``engine.begin()`` — one atomic transaction.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         new_expires_at = now + timedelta(seconds=lease_ttl)
         async with self._engine.begin() as conn:
             result = await conn.execute(
@@ -818,7 +818,7 @@ class SAJobStore(AbstractJobStore):
 
         Async safety: ✅ Uses ``engine.begin()`` — one atomic transaction.
         """
-        current = now if now is not None else datetime.now(timezone.utc)
+        current = now if now is not None else datetime.now(UTC)
         async with self._engine.begin() as conn:
             select_stmt = (
                 sa.select(_jobs_table)

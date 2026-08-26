@@ -133,7 +133,7 @@ class HealthRouter:
                 self._composite.check_all(),
                 timeout=self._timeout,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # All checks timed out — return a single UNHEALTHY result
             return [
                 HealthResult(

@@ -9,7 +9,7 @@ translation logic using simple in-memory objects.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Annotated
 from uuid import UUID, uuid4
 
@@ -202,7 +202,7 @@ def test_mapper_to_orm_versioned_sets_row_version():
 
 def test_mapper_to_orm_versioned_sets_timestamps():
     _, mapper = _factory().build(_VersionedNote)
-    before = datetime.now(tz=timezone.utc)
+    before = datetime.now(tz=UTC)
     doc = mapper.to_orm(_VersionedNote(content="Hi"))
     assert doc.created_at >= before
     assert doc.updated_at >= before

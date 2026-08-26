@@ -11,7 +11,7 @@ so ``-t tests.test_retention_cli:factory_name`` resolves them.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 from varco_core.event import Event
 from varco_core.event.dlq import DeadLetterEntry, InMemoryDeadLetterQueue
@@ -83,7 +83,7 @@ class TestRetentionPruneExitCodes:
                 "--type",
                 "dlq",
                 "--before",
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 "--target",
                 "tests.test_retention_cli:_dlq_target_factory",
             ]
@@ -119,7 +119,7 @@ class TestRetentionPruneDryRun:
                 "--type",
                 "dlq",
                 "--before",
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 "--target",
                 "tests.test_retention_cli:_dlq_target_factory",
                 "--dry-run",

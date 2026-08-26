@@ -30,7 +30,8 @@ Async safety:   ✅ All methods are async coroutines.
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, AsyncIterator
+from typing import TYPE_CHECKING, Any
+from collections.abc import AsyncIterator
 from uuid import UUID
 
 if TYPE_CHECKING:

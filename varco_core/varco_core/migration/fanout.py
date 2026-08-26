@@ -17,7 +17,8 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Callable
 
 from varco_core.tenancy.settings import TenantStatus
 
@@ -69,9 +70,9 @@ class TenantFanoutMigrator:
     def __init__(
         self,
         *,
-        catalog: "AbstractTenantCatalog",
-        global_migrator: "AbstractMigrator | Any",
-        tenant_migrator_factory: "Callable[[TenantDescriptor], AbstractMigrator | Any]",
+        catalog: AbstractTenantCatalog,
+        global_migrator: AbstractMigrator | Any,
+        tenant_migrator_factory: Callable[[TenantDescriptor], AbstractMigrator | Any],
         fanout_on_failure: Literal["stop", "continue"] = "stop",
         skip_global: bool = False,
     ) -> None:
@@ -81,7 +82,7 @@ class TenantFanoutMigrator:
         self._fanout_on_failure = fanout_on_failure
         self._skip_global = skip_global
 
-    async def _targeted_tenants(self) -> list["TenantDescriptor"]:
+    async def _targeted_tenants(self) -> list[TenantDescriptor]:
         all_tenants = await self._catalog.list_tenants(status=None)
         targeted = [d for d in all_tenants if d.status in _TARGETED_STATUSES]
         return sorted(targeted, key=lambda d: d.tenant_id)

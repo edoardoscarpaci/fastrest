@@ -73,7 +73,8 @@ import inspect
 import json
 import typing
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, overload
+from typing import Any, overload
+from collections.abc import Callable, Coroutine
 
 from varco_core.job.serializer import (
     DEFAULT_SERIALIZER,

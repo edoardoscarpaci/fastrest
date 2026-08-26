@@ -98,8 +98,9 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, ClassVar, Sequence
+from datetime import datetime, timedelta, timezone, UTC
+from typing import TYPE_CHECKING, ClassVar
+from collections.abc import Sequence
 from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event
@@ -183,7 +184,7 @@ class OutboxEntry:
     payload: bytes = b""
 
     # UTC creation time — useful for monitoring stale entries.
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # Attempt tracking (Plan 005 Phase 3, U-6) — all defaulted so
     # from_event() and every existing construction site are unaffected.
@@ -733,7 +734,7 @@ class OutboxRelay:
         # A universal fallback that needs no get_pending() signature change —
         # works with every existing OutboxRepository implementation, at the
         # cost of still fetching (but not publishing) not-yet-due entries.
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         due_entries = [
             e for e in entries if e.next_attempt_at is None or e.next_attempt_at <= now
         ]
@@ -873,7 +874,7 @@ class OutboxRelay:
                 )
             return
 
-        next_attempt_at = datetime.now(timezone.utc) + timedelta(
+        next_attempt_at = datetime.now(UTC) + timedelta(
             seconds=self._retry_policy.compute_delay(new_attempts - 1)
         )
 

@@ -53,7 +53,7 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 
 from providify import Singleton
@@ -87,7 +87,7 @@ class ConversationTurn:
     content: Any
     """Message content.  Typically an A2A message dict or plain string."""
 
-    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(tz=UTC))
     """UTC datetime when this turn was recorded."""
 
 

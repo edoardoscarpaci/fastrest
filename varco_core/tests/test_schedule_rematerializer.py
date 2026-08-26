@@ -11,7 +11,7 @@ save(expected_epoch=...), catching and skipping StaleLeaseError."
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from uuid import uuid4
 
 from varco_core.job.base import AbstractJobStore, Job, JobStatus
@@ -78,7 +78,7 @@ async def test_unchanged_run_at_produces_zero_writes() -> None:
     # use the wall time's real UTC materialization so sweep_once() has
     # nothing to change.
     run_at_wall = datetime(2026, 6, 1, 9, 0)
-    run_at = run_at_wall.replace(tzinfo=timezone.utc)
+    run_at = run_at_wall.replace(tzinfo=UTC)
     job = _zoned_job(run_at, run_at_wall, "UTC")
     await store.save(job)
     store.save_calls.clear()
@@ -92,7 +92,7 @@ async def test_unchanged_run_at_produces_zero_writes() -> None:
 async def test_run_at_tz_is_null_job_is_never_touched() -> None:
     store = _RematStore()
     unzoned = Job(
-        job_id=uuid4(), run_at=datetime.now(timezone.utc) + timedelta(hours=1)
+        job_id=uuid4(), run_at=datetime.now(UTC) + timedelta(hours=1)
     )
     await store.save(unzoned)
     store.save_calls.clear()
@@ -105,7 +105,7 @@ async def test_run_at_tz_is_null_job_is_never_touched() -> None:
 
 async def test_horizon_bounds_the_query() -> None:
     store = _RematStore()
-    far_future = datetime.now(timezone.utc) + timedelta(days=365 * 4)
+    far_future = datetime.now(UTC) + timedelta(days=365 * 4)
     job = _zoned_job(far_future, datetime(2030, 1, 1), "UTC")
     await store.save(job)
     store.save_calls.clear()

@@ -7,7 +7,7 @@ Plan line (step 49): "format_rfc9557(instant, zone) -> str emitting
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from zoneinfo import ZoneInfo
 
 from varco_core.tz.format import format_rfc9557
@@ -24,7 +24,7 @@ def test_format_rfc9557_emits_offset_and_bracketed_zone() -> None:
     # reflects real tzdata instead of an internally-inconsistent example;
     # the offset/bracket SHAPE the plan documents is unchanged and still
     # exercised end-to-end.
-    instant = datetime(2026, 3, 1, 14, 0, tzinfo=timezone.utc)
+    instant = datetime(2026, 3, 1, 14, 0, tzinfo=UTC)
     zone = ZoneInfo("America/New_York")
     result = format_rfc9557(instant, zone)
     assert result == "2026-03-01T09:00:00-05:00[America/New_York]"

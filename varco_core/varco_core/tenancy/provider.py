@@ -58,7 +58,7 @@ class DynamicTenantUoWProvider:
             provider).
     """
 
-    def __init__(self, pool: "TenantResourcePool[Any] | _PeekablePool") -> None:
+    def __init__(self, pool: TenantResourcePool[Any] | _PeekablePool) -> None:
         self._pool = pool
 
     def make_uow(self) -> Any:

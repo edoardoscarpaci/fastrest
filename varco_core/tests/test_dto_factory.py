@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from datetime import timezone as _tz
+from datetime import timezone as _tz, UTC
 from typing import Annotated
 from uuid import UUID
 
@@ -529,7 +529,7 @@ def test_auto_dto_dtos_accessible_via_class():
 # Pydantic v2 validates list[T] contents at runtime — results must be real
 # ReadDTO instances, not plain Python objects.  A minimal subclass suffices.
 
-_NOW = datetime.now(tz=_tz.utc)
+_NOW = datetime.now(tz=UTC)
 
 # Use the generated ReadDTO from a real domain model so we get proper
 # Pydantic validation — Pydantic v2 validates list[ReadDTO] contents at runtime.

@@ -79,7 +79,8 @@ from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Literal, Mapping
+from typing import Any, Literal
+from collections.abc import Callable, Mapping
 from uuid import UUID
 
 _logger = logging.getLogger(__name__)

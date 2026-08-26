@@ -117,7 +117,7 @@ class SAEngineRegistry:
         """Dispose every engine. Idempotent."""
         await self._pool.aclose()
 
-    async def __aenter__(self) -> "SAEngineRegistry":
+    async def __aenter__(self) -> SAEngineRegistry:
         return self
 
     async def __aexit__(self, *exc_info: object) -> None:

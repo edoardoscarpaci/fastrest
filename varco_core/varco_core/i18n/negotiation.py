@@ -57,7 +57,7 @@ def parse_accept_language(header: str) -> list[tuple[str, float]]:
 
 
 def negotiate_locale(
-    header: str | None, supported: "list[str] | tuple[str, ...]", *, default: str
+    header: str | None, supported: list[str] | tuple[str, ...], *, default: str
 ) -> str | None:
     """
     RFC 4647 §3.4 Lookup over an ``Accept-Language`` header.

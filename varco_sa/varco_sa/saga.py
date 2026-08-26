@@ -46,7 +46,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import Any
 from uuid import UUID
 
@@ -87,7 +87,7 @@ _sagas_table = Table(
         "updated_at",
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     ),
 )
 
@@ -103,7 +103,7 @@ def _state_to_row(state: SagaState) -> dict[str, Any]:
         "completed_steps": state.completed_steps,
         "context": json.dumps(state.context),
         "error": state.error,
-        "updated_at": datetime.now(timezone.utc),
+        "updated_at": datetime.now(UTC),
     }
 
 

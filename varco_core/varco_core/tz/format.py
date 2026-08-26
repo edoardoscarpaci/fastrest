@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 __all__ = ["format_rfc9557"]
 
 
-def format_rfc9557(instant: datetime, zone: "ZoneInfo") -> str:
+def format_rfc9557(instant: datetime, zone: ZoneInfo) -> str:
     """
     Format ``instant`` (converted to ``zone``) as RFC 9557, e.g.
     ``"2026-03-08T09:00:00-05:00[America/New_York]"``.

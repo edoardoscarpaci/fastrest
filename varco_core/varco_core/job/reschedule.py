@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 from typing import TYPE_CHECKING
 
 from varco_core.job.base import StaleLeaseError
@@ -92,7 +92,7 @@ class ScheduleRematerializer:
         Run one sweep. Returns the number of jobs actually re-materialized
         (writes only happen on an actual change).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         before = now + self._horizon
         candidates = await self._store.list_pending_zoned(before)
 
@@ -110,7 +110,7 @@ class ScheduleRematerializer:
         zone = ZoneInfo(job.run_at_tz)
         new_run_at = resolve_zoned(
             job.run_at_wall, zone, fold=job.run_at_fold
-        ).astimezone(timezone.utc)
+        ).astimezone(UTC)
 
         if job.run_at is not None and new_run_at == job.run_at:
             return 0

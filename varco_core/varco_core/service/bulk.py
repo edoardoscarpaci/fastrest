@@ -63,7 +63,8 @@ Async safety:   ✅ All methods are async def; UoW and hook calls are awaited.
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, Generic, Sequence, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
+from collections.abc import Sequence
 
 from varco_core.auth import Action, AuthContext, Resource
 from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO

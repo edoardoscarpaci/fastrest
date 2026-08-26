@@ -32,10 +32,10 @@ class _FakeCoordinator:
     def __init__(self) -> None:
         self._by_tenant: dict[str, _FakeReadiness] = {}
 
-    def set_readiness(self, snapshot: "_FakeReadiness") -> None:
+    def set_readiness(self, snapshot: _FakeReadiness) -> None:
         self._by_tenant[snapshot.tenant_id] = snapshot
 
-    def readiness(self, tenant_id: str) -> "_FakeReadiness":
+    def readiness(self, tenant_id: str) -> _FakeReadiness:
         if tenant_id not in self._by_tenant:
             from varco_core.tenancy.catalog import TenantNotFoundError
 
@@ -60,7 +60,7 @@ class _FakeControlService:
         pass
 
 
-def _build_app(role: str, coordinator: "_FakeCoordinator"):
+def _build_app(role: str, coordinator: _FakeCoordinator):
     from varco_fastapi.tenancy.router import build_tenant_router
 
     ctx = AuthContext(user_id="u1", roles=frozenset({role}))

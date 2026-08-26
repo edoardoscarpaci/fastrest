@@ -40,7 +40,7 @@ Async safety:   ✅ All Beanie methods are ``async def``.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -106,7 +106,7 @@ class SagaDocument(Document):
     error: str | None = None
     """Human-readable error from the failing step; ``None`` if not yet failed."""
 
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(tz=UTC))
     """UTC timestamp of the last ``save()`` call."""
 
     class Settings:
@@ -217,7 +217,7 @@ class BeanieSagaRepository(AbstractSagaRepository):
             completed_steps=state.completed_steps,
             context=dict(state.context),
             error=state.error,
-            updated_at=datetime.now(tz=timezone.utc),
+            updated_at=datetime.now(tz=UTC),
         )
         await doc.insert(**find_kwargs)
 

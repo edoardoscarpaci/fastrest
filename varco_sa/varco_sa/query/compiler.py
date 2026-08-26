@@ -199,7 +199,7 @@ class SQLAlchemyQueryCompiler(BinaryWalkingVisitor):
         node: ComparisonNode,
         args: object = None,
         **kwargs: object,
-    ) -> Union[ColumnElement[bool], BinaryExpression[bool]]:
+    ) -> ColumnElement[bool] | BinaryExpression[bool]:
         """
         Compile a ``ComparisonNode`` to a SQLAlchemy boolean expression.
 

@@ -113,7 +113,7 @@ class CachedTenantCatalog(AbstractTenantCatalog):
         async with self._get_lock():
             self._cache.pop(tenant_id, None)
 
-    async def on_catalog_changed(self, event: "TenantCatalogChanged") -> None:
+    async def on_catalog_changed(self, event: TenantCatalogChanged) -> None:
         """Invalidate the cached entry for ``event.tenant_id`` immediately."""
         async with self._get_lock():
             self._cache.pop(event.tenant_id, None)

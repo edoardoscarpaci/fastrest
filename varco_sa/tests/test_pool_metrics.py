@@ -13,7 +13,7 @@ Uses SQLite in-memory with StaticPool — no real DB connection required.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -32,7 +32,7 @@ def _make_metrics(**kwargs) -> SAPoolMetrics:
         overflow=0,
         max_overflow=5,
         invalid=0,
-        captured_at=datetime.now(timezone.utc),
+        captured_at=datetime.now(UTC),
         pool_type="QueuePool",
     )
     defaults.update(kwargs)

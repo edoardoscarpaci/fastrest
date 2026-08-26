@@ -47,7 +47,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import timezone
+from datetime import timezone, UTC
 from typing import Any
 
 import sqlalchemy as sa
@@ -107,7 +107,7 @@ def _row_to_turn(row: Any) -> ConversationTurn:
     """Convert a SA Core row back to a ``ConversationTurn``."""
     ts = row.turn_ts
     if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
+        ts = ts.replace(tzinfo=UTC)
     return ConversationTurn(
         role=row.role,
         content=json.loads(row.content),

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, UTC
 
 import pytest
 from varco_core.event import Event
@@ -69,7 +69,7 @@ class TestDeadLetterEntry:
     def test_from_failure_populates_all_fields(self) -> None:
         event = SampleEvent()
         exc = ConnectionError("service down")
-        first_failed = datetime.now(tz=timezone.utc)
+        first_failed = datetime.now(tz=UTC)
 
         entry = DeadLetterEntry.from_failure(
             event=event,
@@ -97,13 +97,13 @@ class TestDeadLetterEntry:
             handler_name="H.h",
             last_exc=TypeError("bad type"),
             attempts=1,
-            first_failed_at=datetime.now(tz=timezone.utc),
+            first_failed_at=datetime.now(tz=UTC),
         )
         assert entry.error_type == "TypeError"
 
     def test_from_failure_auto_generates_entry_id(self) -> None:
         event = SampleEvent()
-        first_failed = datetime.now(tz=timezone.utc)
+        first_failed = datetime.now(tz=UTC)
         entry = DeadLetterEntry.from_failure(
             event=event,
             channel="ch",
@@ -444,7 +444,7 @@ class TestDeleteWhereConcreteButRaising:
     async def test_delete_where_raises_not_implemented_by_default(self) -> None:
         dlq = _BareDLQ()
         with pytest.raises(NotImplementedError):
-            await dlq.delete_where(older_than=datetime.now(tz=timezone.utc))
+            await dlq.delete_where(older_than=datetime.now(tz=UTC))
 
     async def test_delete_where_no_predicate_raises_value_error_when_implemented(
         self,

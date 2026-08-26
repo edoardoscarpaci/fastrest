@@ -10,7 +10,7 @@ RED until these methods land on ``SADeadLetterQueue``.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, UTC
 
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -91,7 +91,7 @@ class TestSADeadLetterQueueDeleteWhereSweep:
         for _ in range(5):
             await dlq.push(_entry())
 
-        cutoff = datetime.now(timezone.utc) + timedelta(seconds=1)
+        cutoff = datetime.now(UTC) + timedelta(seconds=1)
 
         total = 0
         while True:
