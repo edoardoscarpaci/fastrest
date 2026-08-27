@@ -101,6 +101,7 @@ from typing import Annotated, Any
 # unit tests can patch varco_nats.bus.connect without reaching into the nats
 # namespace directly.
 from nats import connect
+from nats.js.api import ConsumerConfig
 from nats.js.errors import NotFoundError
 from providify import Inject, InjectMeta, Instance, PostConstruct, PreDestroy, Singleton
 from varco_core.event.base import (
@@ -513,11 +514,22 @@ class NatsEventBus(AbstractEventBus):
         durable = self._config.durable_for(channel)
         # manual_ack=True → the callback is responsible for ack/nak.  We ack
         # explicitly in _on_message per the delivery semantics.
+        #
+        # config= wires ack_wait_seconds and max_deliver into the actual
+        # JetStream consumer (Plan 019 / RT2-B, Status corrections) — prior to
+        # this the settings were read from env but never reached the broker,
+        # so ack_wait_seconds was dead configuration and max_deliver did not
+        # exist at all (JetStream's server-side default is unlimited
+        # redelivery, research 005 §B).
         sub = await self._js.subscribe(
             subject,
             durable=durable,
             cb=self._on_message,
             manual_ack=True,
+            config=ConsumerConfig(
+                ack_wait=self._config.ack_wait_seconds,
+                max_deliver=self._config.max_deliver,
+            ),
         )
         self._jetstream_subs[subject] = sub
         _logger.debug("Opened JetStream consumer (subject=%r, durable=%r)", subject, durable)
@@ -526,14 +538,21 @@ class NatsEventBus(AbstractEventBus):
         """
         JetStream delivery callback — deserialize, dispatch, acknowledge.
 
-        Acknowledgement timing follows ``delivery_semantics``:
+        Acknowledgement / redelivery outcome (Plan 019 / RT2-B — this is the
+        specification the prior "ack in a finally regardless of outcome"
+        implementation violated; see the DESIGN block below):
 
-        - ``AT_MOST_ONCE``  → ack BEFORE dispatch (a crash loses the message).
-        - ``AT_LEAST_ONCE`` / ``EXACTLY_ONCE`` → ack AFTER dispatch, whether or
-          not a handler raised.  Handler failures are handled in-process by
-          varco's retry/DLQ wrapper, never by JetStream redelivery — so the
-          message is acked regardless and JetStream only redelivers on a
-          process crash.
+        - ``AT_MOST_ONCE``            → ``ack()`` BEFORE dispatch (unchanged;
+          a crash after this ack loses the message).
+        - deserialization error       → ``term()`` (a poison payload can never
+          succeed on retry — naking it would be an infinite loop).
+        - dispatch succeeded          → ``ack()``.
+        - dispatch raised, redelivery budget exhausted
+          (``msg.metadata.num_delivered >= max_deliver``) → ``term()`` + a
+          WARNING naming the subject and the delivery count.
+        - dispatch raised, budget remaining → ``nak()`` — immediate
+          redelivery (research 005 §D; a bare non-acked message instead waits
+          out the full ``ack_wait`` before JetStream retries).
 
         Args:
             msg: The nats-py ``Msg`` delivered by the durable consumer.
@@ -541,9 +560,48 @@ class NatsEventBus(AbstractEventBus):
         Edge cases:
             - ``asyncio.CancelledError`` propagates — it is shutdown, not a
               message error.
-            - Deserialization / handler errors are logged; the message is still
-              acked so a poison payload is not redelivered forever (mirrors
-              ``KafkaEventBus`` advancing the offset past bad payloads).
+            - Under ``ErrorPolicy.FIRE_FORGET`` a raising handler's exception
+              never leaves ``_dispatch`` (``_dispatch``'s ``FIRE_FORGET``
+              branch only logs), so this method observes a *successful*
+              dispatch and ``ack()``s — FIRE_FORGET opts out of JetStream
+              redelivery, which is coherent with its name but must be known
+              by anyone relying on ``AT_LEAST_ONCE`` + ``FIRE_FORGET``
+              together.
+
+        DESIGN: outcome-driven ack/nak/term, bounded by max_deliver
+            ✅ ``nak()`` on a raising handler triggers **immediate**
+               redelivery (research 005 §D) rather than waiting out the full
+               ``ack_wait`` (default 30s) for JetStream's own timeout-based
+               retry — the difference between a ~1s test/production retry and
+               a 30s one.
+            ❌ Rejected — do not ack at all, let ``ack_wait`` expire: no new
+               API surface, but redelivery latency becomes ``ack_wait`` per
+               attempt and the broker cannot distinguish "handler failed" from
+               "consumer hung".
+            ✅ ``max_deliver`` bounds the redelivery count — JetStream's
+               server-side default is *unlimited* redelivery (research 005
+               §B), so a permanently-failing handler naking forever is an
+               infinite hot loop without this bound. The bound is
+               load-bearing, not polish.
+            ❌ Rejected — ``nak(delay=...)`` with an exponential backoff
+               schedule: varco already owns one retry model
+               (``varco_core.resilience.RetryPolicy``, reused by
+               ``@listen(retry_policy=...)``); a broker-side backoff schedule
+               configured separately would be a second one. Bare ``nak()``,
+               with the handler-level policy remaining the place backoff is
+               expressed.
+            ❌ ``ErrorPolicy.FIRE_FORGET`` opts OUT of redelivery — its
+               handler exceptions are swallowed inside ``_dispatch`` before
+               this method ever sees them, so a FIRE_FORGET + AT_LEAST_ONCE
+               combination behaves like AT_MOST_ONCE for retry purposes. This
+               is coherent with FIRE_FORGET's name but must be documented
+               (README, CLAUDE.md pitfalls) rather than silently discovered.
+            ❌ Rejected — route exhausted messages to ``NatsDLQ`` via the
+               ``$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES`` advisory subject
+               (research 005 §B): a second subscription with its own
+               lifecycle and ``@PostConstruct`` wiring — an L-sized feature
+               bolted onto this S-sized fix. ``@listen(dlq=...)`` already
+               gives handlers a DLQ path; filed as a BACKLOG row instead.
         """
         semantics = self._config.delivery_semantics
         pre_ack = semantics is NatsDeliverySemantics.AT_MOST_ONCE
@@ -551,24 +609,69 @@ class NatsEventBus(AbstractEventBus):
         # AT_MOST_ONCE commits the message before any handler runs.
         if pre_ack:
             await self._safe_ack(msg)
+            try:
+                event = self._serializer.deserialize(msg.data)
+                channel = self._config.channel_from_subject(msg.subject)
+                await self._chain(event, channel)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — already acked; must not stop consumption
+                _logger.warning(
+                    "Failed to process NATS message from subject %s (AT_MOST_ONCE, "
+                    "already acked): %s",
+                    msg.subject,
+                    exc,
+                    exc_info=True,
+                )
+            return
 
+        # AT_LEAST_ONCE / EXACTLY_ONCE — outcome-driven ack/nak/term.
         try:
             event = self._serializer.deserialize(msg.data)
-            channel = self._config.channel_from_subject(msg.subject)
-            await self._chain(event, channel)
         except asyncio.CancelledError:
             raise
-        except Exception as exc:  # noqa: BLE001 — a bad message must not stop consumption
+        except Exception as exc:  # noqa: BLE001 — poison payload, never retryable
             _logger.warning(
-                "Failed to process NATS message from subject %s: %s",
+                "Failed to deserialize NATS message from subject %s — terminating "
+                "(will not be redelivered): %s",
                 msg.subject,
                 exc,
                 exc_info=True,
             )
-        finally:
-            # AT_LEAST_ONCE / EXACTLY_ONCE ack here — after the dispatch attempt.
-            if not pre_ack:
-                await self._safe_ack(msg)
+            await self._safe_term(msg)
+            return
+
+        channel = self._config.channel_from_subject(msg.subject)
+        try:
+            await self._chain(event, channel)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — decide nak vs term below
+            num_delivered = getattr(msg.metadata, "num_delivered", 1)
+            if num_delivered >= self._config.max_deliver:
+                _logger.warning(
+                    "NATS message from subject %s exhausted its redelivery budget "
+                    "(num_delivered=%d, max_deliver=%d) — terminating: %s",
+                    msg.subject,
+                    num_delivered,
+                    self._config.max_deliver,
+                    exc,
+                    exc_info=True,
+                )
+                await self._safe_term(msg)
+            else:
+                _logger.warning(
+                    "Failed to process NATS message from subject %s "
+                    "(num_delivered=%d/%d) — nak() for immediate redelivery: %s",
+                    msg.subject,
+                    num_delivered,
+                    self._config.max_deliver,
+                    exc,
+                    exc_info=True,
+                )
+                await self._safe_nak(msg)
+        else:
+            await self._safe_ack(msg)
 
     async def _safe_ack(self, msg: Any) -> None:
         """
@@ -588,6 +691,59 @@ class NatsEventBus(AbstractEventBus):
         except Exception as exc:  # noqa: BLE001 — ack failure must not crash the consumer
             _logger.warning(
                 "NATS message ack failed (subject=%s): %s",
+                getattr(msg, "subject", "<unknown>"),
+                exc,
+                exc_info=True,
+            )
+
+    async def _safe_nak(self, msg: Any) -> None:
+        """
+        Negatively-acknowledge ``msg`` (request immediate redelivery) without
+        ever propagating a nak failure.
+
+        Args:
+            msg: The nats-py ``Msg`` to nak.
+
+        Edge cases:
+            - Mirrors ``_safe_ack`` — a nak failure (e.g. the ack-wait deadline
+              already passed) is logged and swallowed rather than killing the
+              consumer; JetStream will still redeliver once ``ack_wait``
+              elapses even if the explicit ``nak()`` itself failed.
+        """
+        try:
+            await msg.nak()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — nak failure must not crash the consumer
+            _logger.warning(
+                "NATS message nak failed (subject=%s): %s",
+                getattr(msg, "subject", "<unknown>"),
+                exc,
+                exc_info=True,
+            )
+
+    async def _safe_term(self, msg: Any) -> None:
+        """
+        Terminate ``msg`` (disable all future redeliveries) without ever
+        propagating a term failure.
+
+        Args:
+            msg: The nats-py ``Msg`` to terminate.
+
+        Edge cases:
+            - Mirrors ``_safe_ack`` / ``_safe_nak``. A term failure is logged
+              and swallowed — the message is still gone from this consumer's
+              perspective (either it was terminated, or JetStream will
+              eventually redeliver it again and this callback will re-evaluate
+              the same outcome table).
+        """
+        try:
+            await msg.term()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — term failure must not crash the consumer
+            _logger.warning(
+                "NATS message term failed (subject=%s): %s",
                 getattr(msg, "subject", "<unknown>"),
                 exc,
                 exc_info=True,

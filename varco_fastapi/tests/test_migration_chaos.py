@@ -40,8 +40,6 @@ from varco_fastapi.router.presets import GenericRouter
 
 pytestmark = [pytest.mark.integration, pytest.mark.chaos]
 
-_CHAOS_DSN: dict[str, str] = {}
-
 
 class _PingRouter(GenericRouter):
     _prefix = "/ping"
@@ -51,23 +49,34 @@ class _PingRouter(GenericRouter):
         return {"ok": True}
 
 
+def _postgres_url(container) -> str:  # noqa: ANN001 — DockerContainer, PostgresContainer subclass
+    url = container.get_connection_url(driver="asyncpg")
+    assert url.startswith("postgresql+asyncpg://"), f"unexpected DSN shape: {url}"
+    return url
+
+
 @pytest.fixture(scope="module")
 def postgres_container_chaos() -> Iterator[ChaosContainer]:
     """
     A Postgres container this module is allowed to break.
 
     Yields:
-        A ``ChaosContainer`` wrapping ``postgres:16-alpine``.
+        A ``ChaosContainer`` wrapping ``postgres:16-alpine``, with a
+        ``url_factory`` so ``.url`` always re-derives the current DSN
+        (Plan 019 / §RT7b-port) rather than any caller trusting a value
+        captured before a ``restart()`` — this module's primary scenario
+        uses ``pg_terminate_backend`` instead, but ``chaos.restart()``
+        remains the documented fallback (see the test docstring), so the
+        fixture must be correct for that path too.
     """
     from testcontainers.postgres import PostgresContainer  # noqa: PLC0415
 
     with PostgresContainer("postgres:16-alpine") as container:
-        url = container.get_connection_url(driver="asyncpg")
-        assert url.startswith("postgresql+asyncpg://"), f"unexpected DSN shape: {url}"
-        _CHAOS_DSN["postgres"] = url
+        _postgres_url(container)  # shape check at fixture setup, as before
         yield ChaosContainer(
             container,
             ready=lambda logs: "database system is ready to accept connections" in logs,
+            url_factory=_postgres_url,
         )
 
 
@@ -138,7 +147,7 @@ async def test_crashed_lock_holder_releases_and_next_boot_proceeds(
     chaos = postgres_container_chaos
     assert chaos is not None  # the fallback handle; see the docstring
     run_id = uuid.uuid4().hex[:8]
-    db_url = await _isolated_db_url(_CHAOS_DSN["postgres"], f"migchaos_{run_id}")
+    db_url = await _isolated_db_url(chaos.url, f"migchaos_{run_id}")
 
     settings = MigrationSettings(mode="upgrade", lock_timeout=1.0, timeout=180.0)
 

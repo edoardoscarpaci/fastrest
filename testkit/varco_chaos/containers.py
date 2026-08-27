@@ -11,6 +11,7 @@ instead.
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -18,6 +19,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from testcontainers.core.container import DockerContainer
+
+_logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 1.0
 """Seconds between readiness polls — matches testcontainers' own
@@ -29,21 +32,36 @@ class ChaosContainer:
     Wraps a running ``DockerContainer`` with restart/pause primitives safe
     for integration chaos tests.
 
-    DESIGN: docker-py ``restart()``, never ``.stop()`` + ``.start()``
+    DESIGN: docker-py ``restart()`` preserves the container ID, NOT the host
+    port — the URL must be re-derived on every access (Plan 019 / §RT7b-port;
+    supersedes this class's original port-survivorship claim, which rested
+    on research 002 §1 and was itself overturned by research 006 §A/§B/§F)
         ✅ ``container.get_wrapped_container().restart()`` preserves the
-           container's ID *and* its host port mapping (research 002 §1) — a
-           connection URL/DSN captured once at fixture-boot time (before any
-           chaos operation) stays valid across every ``restart()`` call in
-           the module.
+           container's **ID** — that is still why ``.stop()`` + ``.start()``
+           is forbidden below (it deletes and recreates the container,
+           losing even the ID). Preserving the ID is what makes restarting
+           *in place* meaningful at all.
+        ❌ Docker's own Engine API reference states the allocated host port
+           "might be changed when restarting the container", and moby's
+           libnetwork portmapper releases ephemeral ports on unmap and
+           re-requests on map at every restart (research 006 §A) —
+           platform-independent and version-stable from moby v1.3.0 to v29.1
+           (006 §B), including GitHub Actions' native-Linux dockerd (006
+           §F). A URL/DSN captured once at fixture-boot time and reused
+           after a ``restart()`` is therefore a **live bug**, not a
+           defensive habit — this is why ``ChaosContainer`` owns a ``url``
+           property (below) instead of callers capturing a string once.
+        ✅ ``DockerContainer.get_exposed_port()`` re-queries the docker
+           daemon on **every call** (no caching on testcontainers' side,
+           verified by source inspection — ``.venv/…/core/container.py:
+           247-258``), so re-deriving the URL on each ``.url`` access is
+           cheap and always current.
         ❌ ``DockerContainer.stop()`` followed by ``.start()`` **deletes and
-           recreates** the container, which testcontainers re-exposes on a
-           **new random host port** — every captured URL silently goes
-           stale, and the test fails with a confusing connection error that
-           has nothing to do with the chaos scenario under test.
-        A future "simplification" back to stop/start would reintroduce
-        exactly that failure mode — this class exists so the reasoning does
-        not have to be re-derived, or worse, re-discovered, per chaos
-        module.
+           recreates** the container (loses the ID too, not just the port),
+           which is still strictly worse and remains forbidden.
+        A future "simplification" back to stop/start would reintroduce that
+        worse failure mode — this class exists so neither reasoning has to
+        be re-derived, or worse, re-discovered, per chaos module.
 
     DESIGN: readiness is checked against **log output emitted after the last
     restart**, never the container's full cumulative log history
@@ -85,6 +103,15 @@ class ChaosContainer:
             this container has no readiness predicate declared
             (``wait_ready()`` then raises immediately — fail loudly rather
             than silently returning without waiting for anything).
+        url_factory: A callable that derives this container's current
+            connection URL/DSN from the (live) ``DockerContainer`` — e.g.
+            ``lambda c: c.get_connection_url(driver="asyncpg")``. Called
+            fresh on every ``.url`` access, never memoised (Plan 019 /
+            §RT7b-port) — this is what makes it structurally impossible for
+            a caller to hold a stale URL across a ``restart()``. ``None``
+            means this container has no URL derivation declared (``.url``
+            then raises immediately, mirroring ``wait_ready()``'s missing-
+            ``ready`` contract).
 
     Async safety: every method is synchronous and blocks the calling thread
         (docker-py's HTTP calls to the daemon, and this class's own polling
@@ -98,14 +125,43 @@ class ChaosContainer:
         container: DockerContainer,
         *,
         ready: Callable[[str], bool] | None = None,
+        url_factory: Callable[[DockerContainer], str] | None = None,
     ) -> None:
         self._container = container
         self._ready = ready
+        self._url_factory = url_factory
         # Offset (stdout_bytes, stderr_bytes) into the container's cumulative
         # log stream, advanced by restart() to just-before the docker
         # restart call. wait_ready() only matches the predicate against log
         # content at-or-after this offset — see the class DESIGN block.
         self._log_offset: tuple[int, int] = (0, 0)
+
+    @property
+    def url(self) -> str:
+        """
+        This container's current connection URL/DSN, re-derived fresh on
+        every access — **never memoised** (Plan 019 / §RT7b-port).
+
+        A restart-based chaos scenario can move the container's ephemeral
+        host port (research 006 §A) at any time; a cached string would go
+        stale the instant that happens. Reading this property is the only
+        sanctioned way for a caller to obtain a connection URL from a
+        ``ChaosContainer`` — never capture it into a local once and reuse it
+        across a ``restart()``.
+
+        Returns:
+            The freshly-derived connection URL/DSN.
+
+        Raises:
+            ValueError: no ``url_factory`` was supplied at construction time
+                — fail loudly rather than silently returning nothing.
+        """
+        if self._url_factory is None:
+            raise ValueError(
+                f"{type(self).__name__} was constructed without a `url_factory` — "
+                "cannot derive a connection URL"
+            )
+        return self._url_factory(self._container)
 
     def _log_lengths(self) -> tuple[int, int]:
         stdout_b, stderr_b = self._container.get_logs()
@@ -126,9 +182,11 @@ class ChaosContainer:
                 predicate never matches new log output within its timeout.
 
         Edge cases:
-            - The container ID and host port mapping are unchanged by
-              design (see the class ``DESIGN`` block) — any URL/DSN captured
-              before this call remains valid after it returns.
+            - The container ID is unchanged by design (see the class
+              ``DESIGN`` block), but the host port mapping is **not** —
+              docker may re-allocate it (research 006 §A). Callers must read
+              ``.url`` again after this returns; never reuse a URL captured
+              before the call.
             - The log offset is captured **before** issuing the restart, so
               a readiness line from the boot sequence this call triggers is
               always at-or-after the offset, never lost to a race.
@@ -136,6 +194,12 @@ class ChaosContainer:
         self._log_offset = self._log_lengths()
         self._container.get_wrapped_container().restart(timeout=timeout)
         self.wait_ready()
+        if self._url_factory is not None:
+            # Re-derive and log the (possibly new) URL now that the
+            # container has confirmed it is ready again — makes a port
+            # remap visible in test output without requiring the caller to
+            # do anything extra.
+            _logger.info("ChaosContainer.restart: post-restart url=%s", self.url)
 
     @contextmanager
     def paused(self) -> Iterator[None]:

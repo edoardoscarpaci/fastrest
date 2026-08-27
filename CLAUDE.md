@@ -117,6 +117,8 @@ System". Usage: README's "Consumer — EventConsumer + @listen".
 
 **`@listen` is declarative / `register_to` is imperative.** The decorator stores metadata on the function object at class-definition time. No subscription is created until `consumer.register_to(bus)` is called (typically in a `@PostConstruct` method). This separation makes the consumer bus-agnostic and testable.
 
+**`ChannelManager` implementations must satisfy `declare_channel(c)` ⟹ `channel_exists(c)` is `True` until `delete_channel(c)`** — declared-or-present, not "carries data". Enforced by `testkit/varco_conformance/channel_manager.py`, one of **five** conformance modules (Plan 019 / RT2-C — see §Test Conventions' conformance paragraph).
+
 ### Service layer (varco_core.service)
 
 `AsyncService[D, PK, C, R, U]` — generic type parameters and the `_get_repo` abstract method:
@@ -615,22 +617,27 @@ There are now **three** container-scope conventions, each solving a different is
 
 `ChaosContainer` (`testkit/varco_chaos/containers.py`) is the **only** sanctioned caller of
 `DockerContainer.get_wrapped_container()` in the repo — every chaos test goes through its
-three-method surface (`restart()`, `paused()`, `wait_ready()`) instead of reaching for the raw
-docker-py handle. `restart()` always uses docker-py's own `Container.restart()`, **never**
-`DockerContainer.stop()` + `.start()` — the latter deletes and recreates the container on
-testcontainers' side, which (research 002 §1) re-exposes it on a **new random host port**,
-silently invalidating every URL/DSN a test captured before the restart. ⚠️ Even `restart()` is
-not an unconditional guarantee in every Docker environment — see the Common Pitfalls table's
-"chaos `restart()` port instability" row.
+surface (`restart()`, `paused()`, `wait_ready()`, and its `url` property, Plan 019 / §RT7b-port)
+instead of reaching for the raw docker-py handle. `restart()` always uses docker-py's own
+`Container.restart()`, **never** `DockerContainer.stop()` + `.start()` — the latter deletes and
+recreates the container on testcontainers' side, losing even the container ID.
+⚠️ `restart()` does **not** guarantee the host port survives — research 006 §A/§B/§F: Docker's
+own Engine API reference documents that the allocated port "might be changed when restarting the
+container", and this is platform-independent and version-stable (moby v1.3.0 → v29.1), including
+GitHub Actions' native-Linux dockerd. This is documented Docker behaviour, not a WSL2-specific
+flake (research 002 §1's original "port survives" claim is superseded — see its in-tree banner).
+See the Common Pitfalls table's "chaos `restart()` port instability" row — the fix is
+`ChaosContainer.url`, never a captured string.
 
 Chaos tests run nightly + `workflow_dispatch` only (`.github/workflows/integration.yml`'s
 `chaos` job, `if: github.event_name != 'push'`), never on `push: main`, and are never a required
 check — a chaos scenario is designed to provoke a real race under container failure, and an
 occasional red run is a BACKLOG/operator-triage signal, not a merge blocker.
 
-**Conformance suite opt-in** (`testkit/varco_conformance`, Plan 012 / RT6) — a shared,
-never-packaged suite of behavioral contract tests, one module per `varco_core` ABC
-(`event_bus.py`, `cache.py`, `job_store.py`, `dlq.py`). Reached via one `pythonpath =
+**Conformance suite opt-in** (`testkit/varco_conformance`, Plan 012 / RT6, plus
+`channel_manager.py` added by Plan 019 / RT2-C) — a shared, never-packaged suite of behavioral
+contract tests, **five** modules, one per `varco_core` ABC (`event_bus.py`, `cache.py`,
+`job_store.py`, `dlq.py`, `channel_manager.py`). Reached via one `pythonpath =
 ["../testkit"]` line in a package's `[tool.pytest.ini_options]`; a backend opts in with a thin
 subclass overriding the abstract fixture:
 
@@ -647,8 +654,11 @@ class TestRedisEventBusConformance(EventBusConformance):
 
 The base classes are deliberately not named `Test*` — pytest never collects them standalone, so
 an unimplemented fixture fails loudly (`NotImplementedError`) instead of silently passing.
-`varco_core/tests/test_conformance_inmemory.py` runs the same four suites against every
-in-process implementation with no Docker required — the fast feedback loop.
+`varco_core/tests/test_conformance_inmemory.py` runs the other four suites (`event_bus`, `cache`,
+`job_store`, `dlq`) against every in-process implementation with no Docker required — the fast
+feedback loop. `channel_manager.py` has no in-process implementation to run there (there is no
+`InMemoryChannelManager` — `ChannelManager` is inherently a broker-admin concern) and is
+subclassed only by the three real-broker backends (`varco_kafka`, `varco_redis`, `varco_nats`).
 
 **A conformance failure that reveals a genuine backend ABC-contract violation becomes
 `@pytest.mark.xfail(reason="BUG: ...", strict=True)` plus a one-line BACKLOG.md entry — never an
@@ -687,6 +697,7 @@ guarantee with no conftest edits anywhere in the repo.
 | Pitfall | Symptom | Root Cause | Fix |
 |---------|---------|-----------|-----|
 | **Direct bus access in service** | Service holds `AbstractEventBus` and calls `bus.publish()` | Violates layer rule; bus is infra, not for app logic | Always inject `AbstractEventProducer`; it abstracts the bus |
+| **NATS handler raises under `FIRE_FORGET`** | Message is acked and never retried despite `AT_LEAST_ONCE` | The exception never leaves `_dispatch` (`bus.py`'s `FIRE_FORGET` branch only logs), so `_on_message` sees a successful dispatch | Use `COLLECT_ALL` (the default) or `FAIL_FAST` if you want JetStream-level redelivery on handler failure (Plan 019 / RT2-B) |
 | **Events published after commit** | Events silently lost when broker is unavailable | Post-commit publish has no rollback path | Use `OutboxRepository` + `OutboxRelay` within same transaction |
 | **Subscription in `__init__`** | Service won't instantiate if broker is down; hard to test | Coupling service creation to bus state | Defer to `@PostConstruct` + `register_to()` |
 | **Per-call CircuitBreaker** | Circuit never opens, all requests fail after threshold | Instance never accumulates enough failures | Use shared `CircuitBreaker` per external dependency |
@@ -715,7 +726,7 @@ guarantee with no conftest edits anywhere in the repo.
 | **`varco_memcached.async_bootstrap()` opens a pool you didn't want** | An unwanted Memcached connection is opened just from calling `async_bootstrap()` | `setup_cache` defaults `True` — unconditional `ainstall(MemcachedCacheConfiguration)`, unlike `varco_redis.di.async_bootstrap()` which defaults `setup_cache=False` | Pass `setup_cache=False` for the sync-scan-only equivalent of `bootstrap()`. Note the defaults deliberately differ: `varco_redis`'s `async_bootstrap` also serves a streams/event-bus path where no cache is wanted; memcached's only reason to exist is the cache, so its default stays `True` for backward compatibility (Plan 014 / audit F7) |
 | **Linting with `uvx ruff`** | Local green, CI red (or vice versa) with no code change | `uvx` resolves the newest ruff release at invocation time; CI resolves the pin recorded in `uv.lock` | Always `uv run ruff`, never `uvx ruff` — the pin lives in the root `[dependency-groups] lint` group (Plan 017 / RL-6) |
 | **Restarting a session-scoped container** | Unrelated tests in the same package fail with connection errors after a chaos test runs | The session-scoped fixture (`redis_url`, `kafka_bootstrap`, …) is shared by the whole package suite — restarting/pausing it under one test breaks every other test mid-flight or afterward | Declare a **module-scoped `*_container_chaos` fixture inside the chaos module itself**, never in `conftest.py` (Plan 018 / RT7, §chaos-fixture) — see Test Conventions' "Chaos tests" paragraph |
-| **Chaos `restart()` port instability** | A restart-based chaos test (`ChaosContainer.restart()`) connects to a stale DSN/URL captured before the restart and gets `ConnectionRefusedError`, even though `wait_ready()` returned successfully | docker-py's `Container.restart()` is documented (research 002 §1) to preserve the host port mapping, but this was **not observed to hold** in at least one Docker environment (27.5.1 / WSL2, verified with a raw docker-py script independent of testcontainers) — the container came back on a *different* ephemeral host port | Not yet fixed (Plan 018, filed as BACKLOG's RT7b-port-remap finding) — if a restart-based chaos test (`test_kafka_chaos.py`, `test_sa_chaos.py`, `test_migration_chaos.py`) is flaky specifically on the environment you're running in, re-query the container's exposed port/connection URL **after** `restart()` rather than trusting a value captured earlier; do not assume the pause-based tests (`test_redis_chaos.py`, `test_nats_health_chaos.py`) share the bug — pausing never remaps a port |
+| **Assuming a chaos container's URL is stable across `restart()`** | `ConnectionRefusedError` after `restart()` even though `wait_ready()` returned successfully | Docker re-allocates ephemeral host ports on restart **by design** (research 006 §A/§B/§F) — platform-independent, version-stable moby v1.3.0 → v29.1, including GitHub Actions' native-Linux dockerd. Not a WSL2-specific flake and not unverified — research 002 §1's original "port survives restart" claim is superseded (in-tree banner points here) | Fixed (Plan 019 / §RT7b-port, closes BACKLOG's RT7b-port-remap): read `chaos.url` at every use — it re-derives fresh from the docker daemon on every access, never memoised. Pin the host port when the server advertises its own mapped address at first boot (Kafka's `tc-start.sh` bakes `KAFKA_ADVERTISED_LISTENERS` in as a literal — re-querying alone cannot fix it, so `kafka_container_chaos` additionally pins via `testkit/varco_chaos/ports.py`'s `reserve_host_port()` + `with_bind_ports`); do not assume the pause-based tests (`test_redis_chaos.py`, `test_nats_health_chaos.py`) needed this — pausing never remaps a port |
 
 Feature-specific operational pitfalls (wrong env var → wrong runtime behaviour) live in each feature's own `technical_docs/features/*.md` **Pitfalls** section, not here.
 

@@ -17,10 +17,15 @@ Restarting the session-scoped ``postgres_container`` would break every other
 integration test in ``varco_sa/tests/``.
 
 ⚠️ ``ChaosContainer.restart()`` uses docker-py's ``restart()``, which
-preserves the container id and its host port mapping. ``.stop()`` +
-``.start()`` on a testcontainers container **deletes and recreates** it on a
-new random host port (research 002 §1), which would silently invalidate the
-DSN captured below. Do not "simplify" it back to that form.
+preserves the container **id** but NOT its host port mapping — Docker may
+re-allocate the ephemeral port on every restart (research 006 §A/§B/§F,
+Plan 019 / §RT7b-port; supersedes research 002 §1's original "port
+survives" claim). ``.stop()`` + ``.start()`` on a testcontainers container
+is still strictly worse — it **deletes and recreates** the container,
+losing the id too — and remains forbidden. This module therefore never
+captures the connection URL into a local once; every use reads
+``chaos.url`` fresh, which re-derives it from the live container on every
+access.
 """
 
 from __future__ import annotations
@@ -42,7 +47,11 @@ _M = 15
 
 _DRAIN_TIMEOUT = 90.0
 
-_CHAOS_DSN: dict[str, str] = {}
+
+def _postgres_url(container) -> str:  # noqa: ANN001 — DockerContainer, PostgresContainer subclass
+    url = container.get_connection_url(driver="asyncpg")
+    assert url.startswith("postgresql+asyncpg://"), f"unexpected DSN shape: {url}"
+    return url
 
 
 @pytest.fixture(scope="module")
@@ -51,7 +60,10 @@ def postgres_container_chaos() -> Iterator[ChaosContainer]:
     A Postgres container this module is allowed to restart.
 
     Yields:
-        A ``ChaosContainer`` wrapping ``postgres:16-alpine``.
+        A ``ChaosContainer`` wrapping ``postgres:16-alpine``, with a
+        ``url_factory`` so ``.url`` always re-derives the current DSN
+        (Plan 019 / §RT7b-port) instead of any caller trusting a value
+        captured before a ``restart()``.
 
     Edge cases:
         - Module-scoped: the boot cost (~1-5 s) is paid once for the module.
@@ -61,12 +73,11 @@ def postgres_container_chaos() -> Iterator[ChaosContainer]:
     from testcontainers.postgres import PostgresContainer  # noqa: PLC0415
 
     with PostgresContainer("postgres:16-alpine") as container:
-        url = container.get_connection_url(driver="asyncpg")
-        assert url.startswith("postgresql+asyncpg://"), f"unexpected DSN shape: {url}"
-        _CHAOS_DSN["postgres"] = url
+        _postgres_url(container)  # shape check at fixture setup, as before
         yield ChaosContainer(
             container,
             ready=lambda logs: "database system is ready to accept connections" in logs,
+            url_factory=_postgres_url,
         )
 
 
@@ -139,7 +150,7 @@ async def test_outbox_rows_survive_a_database_restart(
     from varco_sa.outbox import SARelayOutboxRepository, outbox_metadata
 
     chaos = postgres_container_chaos
-    dsn = _CHAOS_DSN["postgres"]
+    dsn = chaos.url
     run_id = uuid.uuid4().hex[:8]
     channel = f"chaos-{run_id}"
 
@@ -177,12 +188,15 @@ async def test_outbox_rows_survive_a_database_restart(
     )
     await engine.dispose()
 
-    # The database goes away mid-flight.
+    # The database goes away mid-flight. restart() already re-waits
+    # readiness internally; chaos.url is read again afterward — never the
+    # `dsn` captured above — since the host port may have moved
+    # (research 006 §A, Plan 019 / §RT7b-port).
     chaos.restart()
-    chaos.wait_ready()
+    dsn_after_restart = chaos.url
 
     # (2) A fresh engine sees every row, still pending.
-    engine2 = create_async_engine(dsn, echo=False)
+    engine2 = create_async_engine(dsn_after_restart, echo=False)
     repo2 = SARelayOutboxRepository(async_sessionmaker(engine2, expire_on_commit=False))
     try:
         survivors = _mine(await repo2.get_pending(limit=1000))

@@ -80,7 +80,7 @@ varco's `@listen(retry_policy=..., dlq=...)` machinery.
 | `delivery_semantics` | Behaviour |
 |----------------------|-----------|
 | `at_most_once` | Message acked **before** dispatch. Crash → message lost. No duplicates. |
-| `at_least_once` *(default)* | Message acked **after** dispatch. Crash before ack → JetStream redelivers. |
+| `at_least_once` *(default)* | Message acked **after** dispatch. Crash before ack → JetStream redelivers. **A handler that merely raises (no crash) also redelivers** (Plan 019 / RT2-B): the message is `nak()`ed for immediate redelivery, bounded by `max_deliver`. |
 | `exactly_once` | As `at_least_once` + every publish carries `Nats-Msg-Id = event.event_id`, so JetStream drops producer-retry duplicates within `duplicate_window`. |
 
 ```python
@@ -89,8 +89,29 @@ from varco_nats import NatsDeliverySemantics
 config = NatsEventBusSettings(
     servers="nats://localhost:4222",
     delivery_semantics=NatsDeliverySemantics.EXACTLY_ONCE,
+    max_deliver=5,  # redelivery budget — JetStream's own default is unlimited
 )
 ```
+
+⚠️ **BREAKING (behaviour), Plan 019 / RT2-B**: prior to this, a handler that
+raised under `AT_LEAST_ONCE`/`EXACTLY_ONCE` was silently acked and never
+redelivered — only a process crash triggered redelivery. Now a raising
+handler `nak()`s the message for redelivery, up to `max_deliver` attempts
+(default 5, env `VARCO_NATS_MAX_DELIVER`), after which it is `term()`ed
+(never redelivered again) with a WARNING log. **A non-idempotent handler
+with no `@listen(retry_policy=...)` may now see repeat side-effects** where
+it previously saw exactly one delivery. A deserialization failure is always
+`term()`ed regardless of delivery count — a poison payload can never
+succeed on retry.
+
+⚠️ **`ErrorPolicy.FIRE_FORGET` opts OUT of redelivery.** `FIRE_FORGET`
+swallows a handler exception inside `_dispatch` before `_on_message` ever
+sees it — the bus observes a "successful" dispatch and acks. Use the
+default `COLLECT_ALL` or `FAIL_FAST` if you want `AT_LEAST_ONCE` redelivery
+on handler failure.
+
+`ack_wait_seconds` (previously dead configuration — see the env-var table
+below) now actually reaches the JetStream consumer.
 
 ---
 
@@ -105,6 +126,8 @@ VARCO_NATS_SUBJECT_PREFIX=orders
 VARCO_NATS_DURABLE_NAME=order-service
 VARCO_NATS_DELIVERY_SEMANTICS=at_least_once
 VARCO_NATS_CHANNEL_PREFIX=prod.
+VARCO_NATS_ACK_WAIT_SECONDS=30.0    # now live — reaches the JetStream consumer (Plan 019 / RT2-B)
+VARCO_NATS_MAX_DELIVER=5            # redelivery budget before term() (Plan 019 / RT2-B)
 ```
 
 ```python
@@ -133,18 +156,35 @@ config = NatsEventBusSettings(connect_kwargs=conn.to_nats_kwargs())
 
 ## Stream management
 
-`NatsStreamManager` administers the backing JetStream stream:
+`NatsStreamManager` administers the backing JetStream stream. `channel_exists()`
+implements the `ChannelManager` ABC's **declared-or-present** contract (Plan
+019 / RT2-C): `declare_channel(c)` implies `channel_exists(c)` is `True`
+until `delete_channel(c)`, even with zero messages published — via a
+process-local declaration registry layered on top of broker evidence
+("does the subject currently carry a message?", still available separately
+as `channel_has_messages()`):
 
 ```python
 from varco_nats import NatsStreamManager, NatsChannelManagerSettings
 
 settings = NatsChannelManagerSettings(servers="nats://localhost:4222")
 async with NatsStreamManager(settings) as manager:
-    await manager.declare_channel("orders")  # ensures the backing stream
-    exists = await manager.channel_exists("orders")  # has the subject any message?
-    channels = await manager.list_channels()  # channels carrying messages
-    await manager.delete_channel("orders")  # purge that channel's messages
+    await manager.declare_channel("orders")  # ensures the stream + registers "orders"
+    exists = await manager.channel_exists("orders")  # True — declared, even with 0 messages
+    has_data = await manager.channel_has_messages("orders")  # NATS-only: old "carries a message?" predicate
+    channels = await manager.list_channels()  # declared channels ∪ channels carrying messages
+    await manager.delete_channel("orders")  # purge messages + discard from the registry
 ```
+
+⚠️ **BREAKING (behaviour), Plan 019 / RT2-C**: `channel_exists()`/
+`list_channels()` previously answered "does this channel currently carry a
+message?" — a freshly declared, empty channel reported as not existing,
+which violated the `ChannelManager` ABC's own documented contract. They now
+answer "was this channel declared (by this manager instance) or does it
+carry a message?", matching Kafka and Redis. The registry is
+**process-local** — a fresh manager in another process reports `False` for
+a channel declared elsewhere that has never carried a message (identical to
+Redis's long-standing, documented limitation).
 
 ---
 

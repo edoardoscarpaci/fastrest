@@ -96,11 +96,24 @@ class _StoredMsg:
         self.delivered = False
 
 
+class FakeMsgMetadata:
+    """
+    Fake nats-py ``Msg.metadata`` — exposes ``num_delivered`` for direct
+    attribute access (research 005 §C: "direct attribute access, no getter").
+    """
+
+    def __init__(self, num_delivered: int = 1) -> None:
+        self.num_delivered = num_delivered
+
+
 class FakeMsg:
     """
     Fake nats-py ``Msg`` delivered to a callback or returned by ``fetch()``.
 
-    Tracks ack/nak/term so tests can assert acknowledgement behaviour.
+    Tracks ack/nak/term so tests can assert acknowledgement behaviour, and
+    carries a settable ``metadata.num_delivered`` so redelivery-count-driven
+    branches (nak vs term at ``max_deliver``) can be exercised without a
+    real broker.
     """
 
     def __init__(
@@ -111,6 +124,7 @@ class FakeMsg:
         *,
         stored: _StoredMsg | None = None,
         stream: FakeStream | None = None,
+        num_delivered: int = 1,
     ) -> None:
         self.subject = subject
         self.data = data
@@ -118,6 +132,8 @@ class FakeMsg:
         self.acked = False
         self.naked = False
         self.termed = False
+        self.nak_delay: float | None = None
+        self.metadata = FakeMsgMetadata(num_delivered)
         # When backed by a WorkQueue stream, ack()/term() delete the stored
         # message — this is what makes NatsDLQ.count() exact.
         self._stored = stored
@@ -142,6 +158,7 @@ class FakeMsg:
 
     async def nak(self, delay: float | None = None) -> None:
         self.naked = True
+        self.nak_delay = delay
 
     async def term(self) -> None:
         self.termed = True

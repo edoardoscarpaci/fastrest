@@ -2,6 +2,34 @@
 Failing tests for the ``varco_migrations`` lock document (Plan 006, Phase 3,
 step 37). Real MongoDB testcontainer — the lock document + heartbeat
 reclaim mechanic cannot be expressed against a mocked collection.
+
+Division of labour with ``test_beanie_migration_integration.py`` (Plan 019 /
+§RT9-beanie, Step 34 — mirrors what Plan 018 did for `test_kafka_eos.py`):
+this module already drives a **real** ``mongod`` (both modules do; a
+correction to Plan 019's own Design-section assumption that this file used a
+hand-rolled fake — verified in source, U-8), and pre-dates the newer
+module's per-test ``uuid4().hex[:8]``-namespaced database convention (it
+uses one fixed ``varco_migration_lock_test`` database instead). Kept as-is
+rather than merged: `test_two_migrators_concurrent_upgrade_exactly_one_applies`
+and `test_lock_reclaimable_only_after_ttl_when_heartbeat_dies` cover the
+same ground as the newer module's tests (2) and (4) with a tighter, shorter
+TTL (1.0s vs 30.0s) — a useful timing-margin cross-check, not redundant
+duplication. `test_beanie_migration_integration.py` adds the ground this
+module does **not** cover: the `DuplicateKeyError`-as-lock-lost race
+(test 5, only reachable against a real `mongod`, never the fake collections
+`test_beanie_migrator.py` uses elsewhere) and the deterministic
+holder-that-never-releases `MigrationLockTimeout` scenario (test 3).
+⚠️ This module's own `test_index_mode_create_creates_missing_index_check_does_not`
+predates — and is silently vacuous under — the same
+`BeanieMigrator.upgrade()`-returns-early-on-no-pending-migrations defect
+`test_beanie_migration_integration.py::test_index_mode_upgrade_creates_indexes_and_is_idempotent`
+now documents with `xfail(strict=True)` (BACKLOG's
+RT9-beanie-index-mode-no-pending-migrations row): it calls
+`migrator_create.upgrade()` on an empty `MigrationRegistry` but asserts
+nothing about the resulting indexes. Left un-xfailed here — it does not
+fail today, it just proves nothing — and out of this plan's scope to
+retrofit (the licence to touch production code covers only the four named
+RT2-B/RT2-C/RT7a/RT7b-port rows).
 """
 
 from __future__ import annotations

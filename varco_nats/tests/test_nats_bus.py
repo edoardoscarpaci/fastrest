@@ -336,9 +336,11 @@ class TestAckSemantics:
 
         assert ack_state_at_handler_time == [True]
 
-    async def test_message_acked_even_when_handler_raises(self) -> None:
-        # Handler failures are handled in-process by varco's retry/DLQ wrapper —
-        # the JetStream message is acked regardless so it is not redelivered.
+    async def test_message_naked_when_handler_raises(self) -> None:
+        # Plan 019 / RT2-B: a raising handler under AT_LEAST_ONCE now naks
+        # (immediate redelivery, bounded by max_deliver) instead of acking —
+        # superseded by TestRedeliveryOnHandlerFailure below, kept here as the
+        # direct regression check for this exact pre-existing scenario.
         bus = NatsEventBus(NatsEventBusSettings())
         msg = self._msg(OrderPlacedEvent(order_id="1"))
 
@@ -348,15 +350,138 @@ class TestAckSemantics:
         bus.subscribe(OrderPlacedEvent, boom, channel="orders")
         await bus._on_message(msg)  # must not raise
 
-        assert msg.acked is True
+        assert msg.naked is True
+        assert msg.acked is False
 
-    async def test_poison_payload_is_acked_not_looped(self) -> None:
-        # A payload that cannot be deserialized is still acked — mirrors Kafka
-        # advancing past bad payloads instead of redelivering forever.
+    async def test_poison_payload_is_termed_not_acked(self) -> None:
+        # Plan 019 / RT2-B: a payload that cannot be deserialized is term()ed
+        # (never redelivered) rather than ack()ed — mirrors Kafka advancing
+        # past bad payloads, but via the JetStream-native "never again" API
+        # instead of a silent ack.
         bus = NatsEventBus(NatsEventBusSettings())
         msg = FakeMsg("varco.orders", b"not-valid-json")
         await bus._on_message(msg)  # must not raise
+        assert msg.termed is True
+        assert msg.acked is False
+
+
+# ── Redelivery on handler failure (RT2-B) ───────────────────────────────────
+#
+# The current implementation acks unconditionally in a `finally`, regardless
+# of outcome (bus.py:568-571) — every test below is expected to FAIL against
+# that implementation because nak()/term() are never called and ack() is
+# always called, contradicting the outcome-driven table in Plan 019 §RT2-B-nak.
+
+
+class TestRedeliveryOnHandlerFailure:
+    def _msg(self, event: Event, *, num_delivered: int = 1) -> FakeMsg:
+        return FakeMsg(
+            "varco.orders",
+            JsonEventSerializer().serialize(event),
+            num_delivered=num_delivered,
+        )
+
+    async def test_handler_raises_under_at_least_once_naks_not_acks(self) -> None:
+        # AT_LEAST_ONCE + a raising handler must nak() for immediate
+        # redelivery (research 005 §D), never ack() — acking would silently
+        # drop the failed dispatch, which is the RT2-B bug.
+        config = NatsEventBusSettings(max_deliver=5)
+        bus = NatsEventBus(config)
+        msg = self._msg(OrderPlacedEvent(order_id="1"), num_delivered=1)
+
+        async def boom(e: Event) -> None:
+            raise RuntimeError("handler failed")
+
+        bus.subscribe(OrderPlacedEvent, boom, channel="orders")
+        await bus._on_message(msg)  # must not raise
+
+        assert msg.naked is True
+        assert msg.acked is False
+        assert msg.termed is False
+
+    async def test_handler_succeeds_acks_not_naks(self) -> None:
+        config = NatsEventBusSettings(max_deliver=5)
+        bus = NatsEventBus(config)
+        msg = self._msg(OrderPlacedEvent(order_id="1"), num_delivered=1)
+
+        async def handler(e: Event) -> None:
+            return None
+
+        bus.subscribe(OrderPlacedEvent, handler, channel="orders")
+        await bus._on_message(msg)
+
         assert msg.acked is True
+        assert msg.naked is False
+        assert msg.termed is False
+
+    async def test_handler_raises_at_max_deliver_terms_not_naks(self) -> None:
+        # num_delivered has already reached max_deliver — redelivery budget
+        # exhausted, term() disables all future redeliveries (research 005 §A).
+        config = NatsEventBusSettings(max_deliver=3)
+        bus = NatsEventBus(config)
+        msg = self._msg(OrderPlacedEvent(order_id="1"), num_delivered=3)
+
+        async def boom(e: Event) -> None:
+            raise RuntimeError("handler failed")
+
+        bus.subscribe(OrderPlacedEvent, boom, channel="orders")
+        await bus._on_message(msg)  # must not raise
+
+        assert msg.termed is True
+        assert msg.naked is False
+        assert msg.acked is False
+
+    async def test_deserialization_failure_terms_regardless_of_num_delivered(self) -> None:
+        # A poison payload can never succeed on retry — term() unconditionally,
+        # never nak() (which would infinite-loop a payload that can never parse).
+        config = NatsEventBusSettings(max_deliver=5)
+        bus = NatsEventBus(config)
+        msg = FakeMsg("varco.orders", b"not-valid-json", num_delivered=1)
+
+        await bus._on_message(msg)  # must not raise
+
+        assert msg.termed is True
+        assert msg.naked is False
+        assert msg.acked is False
+
+    async def test_at_most_once_acks_before_dispatch_even_when_handler_raises(self) -> None:
+        # The documented weakness must survive the fix — AT_MOST_ONCE is
+        # unchanged: pre-acked, message lost on handler failure.
+        config = NatsEventBusSettings(
+            delivery_semantics=NatsDeliverySemantics.AT_MOST_ONCE, max_deliver=5
+        )
+        bus = NatsEventBus(config)
+        msg = self._msg(OrderPlacedEvent(order_id="1"), num_delivered=1)
+
+        async def boom(e: Event) -> None:
+            raise RuntimeError("handler failed")
+
+        bus.subscribe(OrderPlacedEvent, boom, channel="orders")
+        await bus._on_message(msg)  # must not raise
+
+        assert msg.acked is True
+        assert msg.naked is False
+        assert msg.termed is False
+
+    async def test_fire_forget_error_policy_acks_raising_handler(self) -> None:
+        # FIRE_FORGET swallows the exception inside _dispatch — the bus sees a
+        # successful dispatch and acks; this is FIRE_FORGET's documented
+        # opt-out from redelivery (§RT2-B-nak's second ❌).
+        from varco_core.event.base import ErrorPolicy
+
+        config = NatsEventBusSettings(max_deliver=5)
+        bus = NatsEventBus(config, error_policy=ErrorPolicy.FIRE_FORGET)
+        msg = self._msg(OrderPlacedEvent(order_id="1"), num_delivered=1)
+
+        async def boom(e: Event) -> None:
+            raise RuntimeError("handler failed")
+
+        bus.subscribe(OrderPlacedEvent, boom, channel="orders")
+        await bus._on_message(msg)  # must not raise
+
+        assert msg.acked is True
+        assert msg.naked is False
+        assert msg.termed is False
 
 
 # ── repr ──────────────────────────────────────────────────────────────────────

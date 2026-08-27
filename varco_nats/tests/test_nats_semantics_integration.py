@@ -52,6 +52,7 @@ def _settings(
     *,
     run_id: str,
     semantics: NatsDeliverySemantics,
+    max_deliver: int = 5,
 ) -> NatsEventBusSettings:
     """Build a fully namespaced settings object for one test."""
     return NatsEventBusSettings(
@@ -60,6 +61,7 @@ def _settings(
         subject_prefix=f"sem{run_id}",
         durable_name=f"sem-durable-{run_id}",
         delivery_semantics=semantics,
+        max_deliver=max_deliver,
     )
 
 
@@ -73,27 +75,21 @@ async def _poll_until(predicate, timeout: float) -> bool:
     return predicate()
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG: NatsEventBus's AT_LEAST_ONCE path acks in a `finally` "
-        "(bus.py:565-573), and the module's own docstring says the message "
-        "is acked 'whether or not a handler raised … JetStream only "
-        "redelivers on a process crash.' A handler that merely raises "
-        "(without the process crashing) is therefore never redelivered, "
-        "contradicting the 'at least one successful dispatch' guarantee "
-        "this test asserts. See BACKLOG.md's RT2-B row."
-    ),
-    strict=True,
-)
 async def test_at_least_once_redelivers_after_handler_raises(nats_url: str) -> None:
     """
     Under ``AT_LEAST_ONCE`` a message whose handler raised must be delivered
     again — the message was never successfully processed, so the guarantee
     ("at least one *successful* dispatch") is unmet until it is.
 
+    Fixed by Plan 019 / RT2-B: ``_on_message`` now ``nak()``s a raising
+    handler's message, which is an explicit request for **immediate**
+    redelivery (research 005 §D) rather than the ack-wait-driven timeout the
+    old (buggy) unconditional-ack implementation would have needed to be
+    waited out even if it had been fixed a different way.
+
     Edge cases:
-        - JetStream redelivery is ack-wait driven, so the second delivery can
-          be tens of seconds later; the deadline is widened accordingly.
+        - Redelivery is still asynchronous broker round-trip work, so the
+          deadline stays generous even though the common case is now fast.
     """
     run_id = uuid.uuid4().hex[:8]
     settings = _settings(nats_url, run_id=run_id, semantics=NatsDeliverySemantics.AT_LEAST_ONCE)
@@ -186,4 +182,42 @@ async def test_exactly_once_dedups_duplicate_publish(nats_url: str) -> None:
     assert len(deliveries) == 1, (
         "EXACTLY_ONCE attaches Nats-Msg-Id so a repeat publish inside the "
         f"duplicate window is collapsed by JetStream; got {len(deliveries)} deliveries"
+    )
+
+
+async def test_at_least_once_stops_redelivering_after_max_deliver(nats_url: str) -> None:
+    """
+    A permanently-raising handler must not nak() forever — once
+    ``num_delivered`` reaches ``max_deliver`` the message is term()ed and
+    redelivery stops. This is the guard against "fixed RT2-B" silently
+    meaning "infinite redelivery loop" (Plan 019 §RT2-B-nak, Edge cases).
+
+    Edge cases:
+        - Deliveries must plateau at exactly ``max_deliver`` — polling a while
+          past the point they should have stopped confirms no further
+          redelivery occurs, not just that the count eventually reaches it.
+    """
+    run_id = uuid.uuid4().hex[:8]
+    settings = _settings(
+        nats_url, run_id=run_id, semantics=NatsDeliverySemantics.AT_LEAST_ONCE
+    ).model_copy(update={"max_deliver": 3})
+
+    deliveries: list[str] = []
+
+    async def failing_handler(event: SemanticsOrderEvent) -> None:
+        deliveries.append(event.order_id)
+        raise RuntimeError("simulated handler failure")
+
+    bus = NatsEventBus(settings)
+    bus.subscribe(SemanticsOrderEvent, failing_handler, channel="orders")
+    async with bus:
+        await bus.publish(SemanticsOrderEvent(order_id="o-1"), channel="orders")
+        await _poll_until(lambda: len(deliveries) >= 3, _REDELIVERY_TIMEOUT)
+        # Quiet period past the point redelivery should have stopped — proves
+        # the count plateaus rather than merely having reached 3 once.
+        await asyncio.sleep(_QUIET_PERIOD)
+
+    assert len(deliveries) == 3, (
+        "redelivery must stop exactly at max_deliver, never grow past it; "
+        f"got {len(deliveries)} deliveries"
     )

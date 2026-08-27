@@ -24,6 +24,18 @@ How to build RT7 (chaos / fault-injection) tests using testcontainers-python 4.1
   - `stop(timeout=10)`, `kill(signal=None)` — stop (graceful) or kill (SIGKILL)
   - — [Containers — Docker SDK for Python 7.2.0 documentation](https://docker-py.readthedocs.io/en/stable/containers.html) (official docker-py API reference).
 
+> ⚠️ **SUPERSEDED by research 006 §A/§B/§F.** The "port and container ID survive" claim below
+> is wrong for the port half. Docker's own Engine API reference states the allocated host port
+> "might be changed when restarting the container", and moby's libnetwork portmapper releases
+> ephemeral ports on unmap and re-requests on map at every `restart()` — platform-independent
+> and version-stable from moby v1.3.0 to v29.1, including GitHub Actions' native-Linux dockerd.
+> The container **ID** claim still holds (that is why `restart()`, not `.stop()`+`.start()`,
+> remains the sanctioned mechanism) — only the port-stability half is overturned. Fixed in
+> `testkit/varco_chaos/containers.py` (Plan 019 / §RT7b-port, Step 28): `ChaosContainer.url` now
+> re-derives the connection URL fresh on every access instead of any caller trusting a value
+> captured once. This entry is left in place, uncorrected below, per the register's own
+> "verify in source, keep the history" discipline (U-8).
+
 **CRITICAL FINDING — Port survivorship**:
 - **Testcontainers `.stop()` deletes the container immediately** — calling `.start()` afterward recreates it on a **new, randomly-assigned port** — [Testing a error scenario by stopping and restarting container => new port chosen each time · Issue #3615 · testcontainers/testcontainers-java](https://github.com/testcontainers/testcontainers-java/issues/3615) (confirmed across all Testcontainers languages).
 - **Container ID and port mappings are NOT preserved** by `.stop()` / `.start()` pairs — not suitable for mid-test broker-restart tests where connection URLs must remain stable.

@@ -57,22 +57,6 @@ async def _store(redis_url: str) -> AsyncIterator[RedisJobStore]:
         await client.aclose()
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG: RedisJobStore.reap_expired_leases() does not release the "
-        "SET-NX-EX claim guard key try_claim() created for the original "
-        "claim (job_store.py:595-605). The guard's TTL (`claim_ttl`, default "
-        "30s) is independent of `lease_ttl` and is never cleared on reap, so "
-        "worker B's try_claim() is refused with 'claim key already held' for "
-        "up to `claim_ttl` seconds after a legitimate reap — even though the "
-        "job is correctly PENDING again with an advanced lease_epoch. "
-        "varco_sa's SAJobStore has no equivalent second guard key and does "
-        "not exhibit this — the two backends disagree, exactly the finding "
-        "this twin-test pair (Plan 018 / RT7a) exists to surface. See "
-        "BACKLOG.md."
-    ),
-    strict=True,
-)
 async def test_reaped_lease_fences_the_zombie_worker_on_save(redis_url: str) -> None:
     """
     Worker A claims, crashes, is reaped, B re-claims — then A's late write is

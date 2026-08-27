@@ -148,7 +148,9 @@ varco_casbin    ──┘   (+ optional varco_fastapi[fastapi] extra for the RES
 AbstractEventBus (ABC)
   ├── InMemoryEventBus        (tests)
   ├── KafkaEventBus           (varco_kafka)
-  ├── NatsEventBus            (varco_nats)    — NATS JetStream, durable, at-least-once
+  ├── NatsEventBus            (varco_nats)    — NATS JetStream, durable, at-least-once (redelivers
+  │                                             on a crash AND on a raising handler via nak(),
+  │                                             bounded by max_deliver — Plan 019 / RT2-B)
   └── RedisEventBus           (varco_redis)
 
 AbstractEventProducer (ABC)
@@ -168,6 +170,15 @@ AbstractDeadLetterQueue (ABC)
 DeadLetterEntry (Plan 005 Phase 3) — event: DomainEvent | None, source: DeadLetterSource
   (CONSUMER default / OUTBOX_RELAY / JOB), source_ref, payload — one shape for all three
   producers (EventConsumer retry exhaustion, OutboxRelay, JobRunner)
+
+ChannelManager (ABC) — admin-level create/delete/exists/list, separate from AbstractEventBus
+  ├── KafkaChannelManager    (varco_kafka)   — broker topic metadata is the existence predicate
+  ├── RedisChannelManager    (varco_redis)   — process-local declaration registry (Pub/Sub has no per-channel object)
+  └── NatsStreamManager      (varco_nats)    — declaration registry + broker evidence (Plan 019 / RT2-C)
+  Contract (enforced by testkit/varco_conformance/channel_manager.py, one of five conformance
+  modules): declare_channel(c) ⟹ channel_exists(c) is True until delete_channel(c) — "declared or
+  present", not "carries data". NatsStreamManager additionally exposes channel_has_messages(),
+  a NATS-only affordance preserving the old "subject carries a message" predicate.
 
 EventMiddleware (Callable[[Event, str, next] → Awaitable[None]])
   ├── CorrelationMiddleware   — propagates correlation_id across the event chain

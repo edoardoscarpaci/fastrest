@@ -19,6 +19,7 @@ Sections
 from __future__ import annotations
 
 import pytest
+from varco_conformance.channel_manager import ChannelManagerConformance
 from varco_core.event.base import ChannelConfig
 from varco_redis.channel import RedisChannelManager, RedisChannelManagerSettings
 from varco_redis.config import RedisEventBusSettings
@@ -215,3 +216,17 @@ class TestRedisChannelManagerRepr:
             await m.declare_channel("orders")
             await m.declare_channel("payments")
             assert "2" in repr(m)
+
+
+# ── ChannelManager conformance suite (Plan 019 / §RT2-C-contract, Step 14) ────
+# Expected green immediately — RedisChannelManager is a registry-based
+# implementation the ABC's declare-Channel-registry carve-out already blesses
+# (channel.py's own docstring / delete_channel's Edge cases block).
+# No Redis connection needed: start()/stop() are no-ops here too.
+
+
+class TestRedisChannelManagerConformance(ChannelManagerConformance):
+    @pytest.fixture
+    async def manager(self):
+        async with RedisChannelManager(RedisEventBusSettings()) as m:
+            yield m

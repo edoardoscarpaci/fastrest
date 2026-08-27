@@ -17,13 +17,20 @@ Unlike Kafka — where each channel is a distinct topic — NATS channels are
 
 Consequences for this manager:
 
-- ``declare_channel`` ensures the *backing stream* exists.  Individual channels
-  need no per-channel declaration — they are covered by the wildcard the
-  moment the stream exists.
-- ``channel_exists`` reports whether a channel's subject currently carries at
-  least one message in the stream (JetStream tracks per-subject counts).
-- ``list_channels`` enumerates the subjects that currently carry messages.
-- ``delete_channel`` purges a channel's messages from the stream.
+- ``declare_channel`` ensures the *backing stream* exists **and** records the
+  channel in a process-local declaration registry (Plan 019 / RT2-C-contract
+  — see ``NatsStreamManager``'s DESIGN block).
+- ``channel_exists`` reports ``True`` if the backing stream exists AND the
+  channel is either declared (registry) or currently carries a message
+  (broker evidence) — the declared-or-present contract
+  ``varco_core.event.channel.ChannelManager`` documents.
+- ``list_channels`` enumerates the union of declared channels and subjects
+  that currently carry messages.
+- ``delete_channel`` purges a channel's messages from the stream **and**
+  discards it from the registry.
+- ``channel_has_messages`` (NATS-only, not on the ABC) preserves the old
+  "subject currently carries a message" predicate under an honest name, for
+  operational introspection.
 
 Configuration
 -------------
@@ -197,10 +204,41 @@ class NatsStreamManager(ChannelManager):
     under one stream's wildcard, the channel-keyed operations administer that
     single backing stream:
 
-    - ``declare_channel`` → ensure the backing stream exists.
-    - ``channel_exists``  → does the channel's subject carry any message?
-    - ``list_channels``   → which subjects currently carry messages?
-    - ``delete_channel``  → purge the channel's messages from the stream.
+    - ``declare_channel`` → ensure the backing stream exists AND record the
+      channel in the local declaration registry.
+    - ``channel_exists``  → stream exists AND (declared OR carries a message).
+    - ``list_channels``   → sorted union of declared channels and subjects
+      that currently carry messages.
+    - ``delete_channel``  → purge the channel's messages from the stream AND
+      discard it from the registry.
+    - ``channel_has_messages`` → NATS-only affordance preserving the original
+      "subject currently carries a message" predicate.
+
+    DESIGN: declaration registry + broker evidence (Plan 019 / RT2-C-contract)
+        The ABC's ``channel_exists`` docstring requires the round-trip
+        ``declare_channel(c)`` ⟹ ``channel_exists(c)`` is ``True`` until
+        ``delete_channel(c)``. NATS has no per-channel broker object (every
+        channel is a subject under one stream's wildcard), so — exactly like
+        Redis's documented Pub/Sub registry (``varco_core.event.channel``'s
+        own ``delete_channel`` Edge cases block already blesses this shape)
+        — this manager tracks declared channels itself.
+        ✅ Satisfies the ABC round-trip that a pure "has messages" predicate
+           could not (the RT2-C bug this fixes).
+        ✅ The ``OR carries messages`` half keeps today's operational value:
+           a channel declared by *another* process becomes discoverable once
+           it carries data, so ``list_channels()`` still reflects reality
+           beyond this instance's own declarations.
+        ❌ The registry is per-instance and process-local — a fresh manager
+           in another pod reports ``False`` for a channel declared elsewhere
+           that has never carried a message. Identical, and equally
+           documented, limitation to Redis's ``ChannelManager``.
+        ❌ Rejected — one JetStream stream per channel (a real broker object
+           per channel, research 005 §E's suggested shape): a topology and
+           wire-format change. ``stream_name`` is one shared stream with a
+           ``{prefix}.>`` wildcard that the bus, the DLQ, and every existing
+           deployment already share; splitting it per-channel changes
+           retention/replica/dedup-window management from one object to N
+           and breaks every existing stream. Rejected for this fix.
 
     Lifecycle:
         Must be started before any operation::
@@ -222,9 +260,14 @@ class NatsStreamManager(ChannelManager):
     Async safety:   ✅  All public methods are ``async def``.
 
     Edge cases:
-        - ``declare_channel`` is idempotent — an existing stream is left as-is.
-        - ``channel_exists`` returns ``False`` for a channel that has never
-          received a message, even though the wildcard would accept one.
+        - ``declare_channel`` is idempotent — an existing stream is left as-is,
+          and re-declaring an already-declared channel is a no-op.
+        - ``channel_exists`` returns ``True`` immediately after
+          ``declare_channel``, even with zero messages published — the
+          declared-or-present contract, not "carries data".
+        - A channel this manager never declared, but that carries a message
+          (published by another process, or before this manager started),
+          still reports ``True`` — broker evidence supplements the registry.
         - ``stream_name`` / ``subject_prefix`` / ``channel_prefix`` MUST match
           the bus's values or the manager administers the wrong stream.
     """
@@ -239,6 +282,11 @@ class NatsStreamManager(ChannelManager):
         # objects must be created inside a running event loop.
         self._nc: Any | None = None
         self._js: Any | None = None
+        # Process-local declaration registry (Plan 019 / RT2-C-contract) — the
+        # value is unused today but kept as ChannelConfig | None so a future
+        # need to recall "what config was this channel declared with" has
+        # somewhere to live without a second dict.
+        self._declared: dict[str, ChannelConfig | None] = {}
 
     # ── ChannelManager implementation ─────────────────────────────────────────
 
@@ -284,15 +332,19 @@ class NatsStreamManager(ChannelManager):
         config: ChannelConfig | None = None,
     ) -> None:
         """
-        Ensure the backing JetStream stream exists.
+        Ensure the backing JetStream stream exists, and record ``channel`` in
+        the local declaration registry.
 
         Because every channel is a subject under the stream's ``{prefix}.>``
         wildcard, declaring *any* channel ensures the *stream* — there is no
-        per-channel object in NATS.  This method is therefore idempotent stream
-        creation: the ``channel`` argument is only used for logging.
+        per-channel broker object in NATS. This method additionally records
+        ``channel`` in ``self._declared`` (Plan 019 / RT2-C-contract) so
+        ``channel_exists``/``list_channels`` can satisfy the ABC's
+        declared-or-present contract without a per-channel broker object.
 
         Args:
-            channel: Logical channel name (used for logging only).
+            channel: Logical channel name — recorded in the declaration
+                     registry (no longer "logging only").
             config:  Optional channel configuration.  Only
                      ``replication_factor`` is honoured — it maps to the
                      JetStream stream's ``num_replicas``.  ``num_partitions``
@@ -303,7 +355,8 @@ class NatsStreamManager(ChannelManager):
 
         Edge cases:
             - Idempotent — if the stream already exists it is left untouched
-              (its replica count is NOT changed to match ``config``).
+              (its replica count is NOT changed to match ``config``), and
+              re-declaring an already-declared channel is a no-op.
             - If another stream already captures the wildcard subject, the
               underlying ``add_stream`` raises — overlapping subjects are a
               configuration error and must surface.
@@ -320,6 +373,7 @@ class NatsStreamManager(ChannelManager):
                 stream,
                 channel,
             )
+            self._declared[channel] = config
             return
         except NotFoundError:
             # Stream is absent — create it below.
@@ -331,6 +385,7 @@ class NatsStreamManager(ChannelManager):
             num_replicas=cfg.replication_factor,
             duplicate_window=self._settings.duplicate_window_seconds,
         )
+        self._declared[channel] = config
         _logger.info(
             "Created JetStream stream %r (subjects=[%s], replicas=%d) while declaring channel %r",
             stream,
@@ -341,7 +396,8 @@ class NatsStreamManager(ChannelManager):
 
     async def delete_channel(self, channel: str) -> None:
         """
-        Purge all messages for ``channel`` from the backing stream.
+        Purge all messages for ``channel`` from the backing stream, and
+        discard it from the declaration registry.
 
         NATS has no per-channel object to delete — instead this purges every
         message stored under the channel's subject.  The stream itself and
@@ -357,6 +413,8 @@ class NatsStreamManager(ChannelManager):
             - Irreversible — purged messages are permanently gone.
             - Purging a channel that never received a message is a no-op
               (``purge_stream`` simply removes zero messages).
+            - Discarding a channel that was never declared by this manager
+              instance is a no-op on the registry (``dict.pop(..., None)``).
             - To delete the whole stream, use the nats-py
               ``JetStreamManager.delete_stream`` API directly.
         """
@@ -367,6 +425,7 @@ class NatsStreamManager(ChannelManager):
             self._settings.stream_name,
             subject=subject,
         )
+        self._declared.pop(channel, None)
         _logger.info(
             "Purged channel %r (subject=%r) from stream %r",
             channel,
@@ -376,10 +435,54 @@ class NatsStreamManager(ChannelManager):
 
     async def channel_exists(self, channel: str) -> bool:
         """
-        Return ``True`` if the channel's subject currently carries any message.
+        Return ``True`` if the channel is declared-or-present: the backing
+        stream exists AND (the channel was declared by this manager OR its
+        subject currently carries at least one message).
 
-        JetStream tracks a per-subject message count in the stream state.  This
-        queries that count for the channel's subject.
+        Satisfies the ABC's round-trip contract
+        (``varco_core.event.channel.ChannelManager.channel_exists``):
+        ``declare_channel(c)`` ⟹ ``channel_exists(c)`` is ``True`` until
+        ``delete_channel(c)`` — even with zero messages published.
+
+        Args:
+            channel: Logical channel name to check.
+
+        Returns:
+            ``True`` if the stream exists and the channel is declared or
+            carries a message.
+
+        Raises:
+            RuntimeError: If called before ``start()``.
+
+        Edge cases:
+            - Returns ``False`` (not an error) if the backing stream itself
+              does not exist yet.
+            - A channel declared by *another* process (not this manager
+              instance) reports ``False`` unless it also carries a message —
+              the registry is process-local. See the class DESIGN block.
+            - For the old "carries a message" predicate alone, use
+              ``channel_has_messages()``.
+        """
+        self._require_started()
+        if channel in self._declared:
+            # Still confirm the backing stream itself exists — a channel
+            # declared before the stream was later deleted out-of-band must
+            # not report True.
+            try:
+                await self._js.stream_info(self._settings.stream_name)  # type: ignore[union-attr]
+            except NotFoundError:
+                return False
+            return True
+        return await self.channel_has_messages(channel)
+
+    async def channel_has_messages(self, channel: str) -> bool:
+        """
+        Return ``True`` if the channel's subject currently carries any
+        message — the predicate ``channel_exists`` implemented before Plan
+        019 / RT2-C-contract, preserved here under an honest name.
+
+        NATS-only affordance, not part of the ``ChannelManager`` ABC —
+        Kafka/Redis brokers cannot answer this question the same way.
 
         Args:
             channel: Logical channel name to check.
@@ -392,11 +495,8 @@ class NatsStreamManager(ChannelManager):
             RuntimeError: If called before ``start()``.
 
         Edge cases:
-            - Returns ``False`` for a channel that has never received a message
-              — even though the stream wildcard would accept one.  "Exists"
-              here means "carries data", not "would be routed".
-            - Returns ``False`` (not an error) if the backing stream itself
-              does not exist yet.
+            - Returns ``False`` for a channel that has never received a
+              message, or if the backing stream does not exist yet.
         """
         self._require_started()
         subject = self._settings.subject_name(channel)
@@ -416,21 +516,24 @@ class NatsStreamManager(ChannelManager):
 
     async def list_channels(self) -> list[str]:
         """
-        Return all channels that currently carry messages, sorted.
+        Return the sorted union of declared channels and channels that
+        currently carry messages.
 
-        Derived from JetStream's per-subject message counts — every subject
-        under the stream wildcard with at least one message is reported.
+        Combines the local declaration registry with JetStream's per-subject
+        message counts — every declared channel is listed even with zero
+        messages, and every channel carrying data is listed even if this
+        manager instance never declared it (broker evidence).
 
         Returns:
-            Sorted list of logical channel names (subject prefix stripped).
+            Sorted list of logical channel names, deduplicated.
 
         Raises:
             RuntimeError: If called before ``start()``.
 
         Edge cases:
-            - Channels that have never received a message are NOT listed.
-            - Returns an empty list (not an error) if the backing stream does
-              not exist.
+            - Returns just the declared set (not an error) if the backing
+              stream does not exist yet — ``channel_has_messages``'s
+              stream-absent branch contributes an empty set in that case.
         """
         self._require_started()
         try:
@@ -439,16 +542,16 @@ class NatsStreamManager(ChannelManager):
                 subjects_filter=self._settings.wildcard_subject(),
             )
         except NotFoundError:
-            return []
+            return sorted(self._declared)
 
         subjects = getattr(info.state, "subjects", None) or {}
         # Map each subject carrying messages back to its logical channel name.
-        channels = [
+        carrying_messages = {
             self._settings.channel_from_subject(subject)
             for subject, count in subjects.items()
             if count > 0
-        ]
-        return sorted(channels)
+        }
+        return sorted(set(self._declared) | carrying_messages)
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

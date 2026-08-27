@@ -575,6 +575,17 @@ class RedisJobStore(AbstractJobStore):
                linked.  A crash after NX-SET but before job JSON update leaves the
                job PENDING until the claim TTL expires.  After expiry, another runner
                can re-claim.
+            ✅ (Plan 019 / RT7a-guard) The guard is now released on **every**
+               non-success path this call takes, not only the future-``run_at``
+               and exception branches — a missing job, a non-PENDING job, or
+               any other early exit all release it too, via the
+               ``claimed``-flag / ``finally`` below. It is also released by
+               ``reap_expired_leases()`` for jobs it actually reaps
+               (superseding this claim's own guard), immediately after the
+               ``save()`` that advances ``lease_epoch`` — ``save``-then-
+               ``delete`` ordering means a crash between the two degrades to
+               today's (merely slow) TTL-expiry behaviour, never to a lost
+               job.
 
         Args:
             job_id: The UUID of the PENDING job to claim.
@@ -605,6 +616,12 @@ class RedisJobStore(AbstractJobStore):
             )
             return None
 
+        # Plan 019 / RT7a-guard: the guard must be released on EVERY
+        # non-success path, not just the future-run_at and exception
+        # branches it used to cover. `claimed` is set only just before the
+        # single successful `return running_job` below; the `finally`
+        # releases the guard on every other exit (including exceptions).
+        claimed = False
         try:
             raw = await self._client.get(self._job_key(job_id))
             if raw is None:
@@ -617,9 +634,7 @@ class RedisJobStore(AbstractJobStore):
                 return None
 
             if job.run_at is not None and job.run_at > datetime.now(UTC):
-                # Scheduled for the future — not yet eligible. Release the
-                # claim key so another (later) attempt can succeed.
-                await self._client.delete(claim_key)
+                # Scheduled for the future — not yet eligible.
                 return None
 
             # Transition PENDING → RUNNING and persist.
@@ -632,14 +647,13 @@ class RedisJobStore(AbstractJobStore):
                     lease_epoch=job.lease_epoch + 1,
                 )
             await self.save(running_job)
+            claimed = True
 
             _logger.debug("RedisJobStore.try_claim: claimed job_id=%s → RUNNING", job_id)
             return running_job
-
-        except Exception:
-            # On any error, release the claim key so another runner can try.
-            await self._client.delete(claim_key)
-            raise
+        finally:
+            if not claimed:
+                await self._client.delete(claim_key)
 
     async def claim_next(
         self,
@@ -728,6 +742,14 @@ class RedisJobStore(AbstractJobStore):
         Move RUNNING jobs whose lease has expired back to PENDING,
         incrementing ``lease_epoch`` to fence out the stalled owner.
 
+        Plan 019 / RT7a-guard: for each job actually reaped, the ``try_claim``
+        guard key (``_claim_key``) the original claim created is released
+        immediately **after** ``save()`` — a second worker must be able to
+        re-claim right away instead of being refused for up to
+        ``claim_ttl`` seconds by a guard whose owner is provably gone (the
+        job is correctly PENDING again with an advanced ``lease_epoch``, the
+        real fence for the leased path).
+
         Args:
             now: The "current time" to compare ``lease_expires_at`` against.
             limit: Maximum number of jobs to reap in one call.
@@ -735,8 +757,21 @@ class RedisJobStore(AbstractJobStore):
         Returns:
             The list of jobs moved back to PENDING (post-reap state).
 
-        Async safety: ✅ All I/O is awaited; each reaped job's save is
-            independent (no cross-job atomicity needed).
+        Async safety: ✅ All I/O is awaited; each reaped job's save (+ guard
+            delete) is independent (no cross-job atomicity needed).
+
+        Edge cases:
+            - Only jobs with a non-``None`` ``lease_expires_at`` are ever
+              considered here (the ``continue`` above) — a job claimed with
+              ``lease_ttl=None`` (no lease) is never reaped and therefore
+              never reaches this guard-delete; that path's guard key is
+              unaffected by this change (§Risks: the no-lease path's only
+              protection is the guard key itself, since it never advances
+              ``lease_epoch``).
+            - A crash between ``save()`` and ``delete(claim_key)`` leaves the
+              guard to expire on its own TTL — degraded (a re-claim is
+              refused a little longer) but never a lost job, because the job
+              itself is already correctly PENDING.
         """
         current = now if now is not None else datetime.now(UTC)
         running = await self.list_by_status(JobStatus.RUNNING, limit=limit)
@@ -752,6 +787,9 @@ class RedisJobStore(AbstractJobStore):
                 lease_expires_at=None,
             )
             await self.save(new_job)
+            # save() first, delete(claim_key) second — see the Edge cases
+            # note above for why this ordering is load-bearing.
+            await self._client.delete(self._claim_key(job.job_id))
             reaped.append(new_job)
         _logger.debug("RedisJobStore.reap_expired_leases: reaped %d jobs", len(reaped))
         return reaped

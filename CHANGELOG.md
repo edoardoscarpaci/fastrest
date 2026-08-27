@@ -9,6 +9,67 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed — Plan 018 findings remediation (Plan 019, RT2-B/RT2-C/RT7a/RT7b/RT9-beanie)
+
+Pays off the `xfail(strict=True)` markers Plan 018 filed rather than fixed. Every marker removed
+in the same commit as its fix — see BACKLOG.md's "Plan 018 findings" table for full evidence.
+
+- ⚠️ **BREAKING (behaviour) — `varco_nats` `AT_LEAST_ONCE`/`EXACTLY_ONCE` now redeliver a
+  message whose handler raised** (RT2-B). Previously a handler that merely raised (no process
+  crash) was silently acked and never retried — only a crash triggered JetStream redelivery,
+  contradicting the documented "at-least-once" guarantee. `_on_message` now `nak()`s on handler
+  failure (immediate redelivery) and `term()`s once `msg.metadata.num_delivered` reaches the new
+  `NatsEventBusSettings.max_deliver` (default 5, env `VARCO_NATS_MAX_DELIVER`) — JetStream's own
+  default is *unlimited* redelivery, so this bound is load-bearing, not polish. A deserialization
+  failure is always `term()`ed regardless of delivery count. **A non-idempotent NATS handler
+  with no `@listen(retry_policy=...)` may now see up to `max_deliver` deliveries where it
+  previously saw exactly one.** `ErrorPolicy.FIRE_FORGET` opts out of this (its handler
+  exceptions never leave `_dispatch`, so the bus still observes a "successful" dispatch and
+  acks) — documented in `varco_nats/README.md` and CLAUDE.md's pitfall table.
+- **`VARCO_NATS_ACK_WAIT_SECONDS` now actually reaches the broker.** Previously read from env
+  but never passed to `js.subscribe()` — dead configuration. Fixed as part of the same
+  `_open_jetstream_consumer` call site RT2-B needed anyway (`config=ConsumerConfig(ack_wait=...,
+  max_deliver=...)`).
+- ⚠️ **BREAKING (behaviour) — `NatsStreamManager.channel_exists()`/`list_channels()` now report
+  declared channels, not only channels currently carrying messages** (RT2-C). Previously a
+  freshly `declare_channel()`d, empty channel reported as not existing — violating the
+  `ChannelManager` ABC's own documented "declare implies exists" contract, and disagreeing with
+  Kafka's and Redis's conformant implementations. `NatsStreamManager` now tracks a process-local
+  declaration registry (`declare_channel(c)` records `c`; `delete_channel(c)` discards it) layered
+  on top of broker evidence, so a channel declared by *another* process remains discoverable once
+  it carries data. The old "does the subject currently carry a message?" predicate is preserved
+  under an honest name, `channel_has_messages()` (NATS-only, not on the ABC). New
+  `testkit/varco_conformance/channel_manager.py` — the fifth conformance module — machine-checks
+  the round-trip across Kafka, Redis, and NATS.
+- **`RedisJobStore` releases its claim guard on reap, and stops leaking it on every failed
+  `try_claim`** (RT7a). `reap_expired_leases()` now deletes the `SET NX EX` claim-guard key for
+  each job it actually reaps, immediately after the `save()` that advances `lease_epoch` — a
+  second worker's legitimate re-claim was previously refused for up to `claim_ttl` (default 30s)
+  after a correct reap. `try_claim()` also now releases its guard on every non-success exit (a
+  missing job, a non-PENDING job), not only the future-`run_at` and exception branches it
+  covered before — closing a guard-key leak `SAJobStore` never exhibited.
+- **Chaos test infrastructure — `ChaosContainer` owns its connection URL** (RT7b). Prior guidance
+  (research 002 §1) that docker-py's `restart()` preserves a container's host port mapping is
+  wrong — Docker documents the port as re-allocatable on every restart (research 006), confirmed
+  in this session's environment. `ChaosContainer` gains a `url_factory` constructor argument and
+  a `url` property that re-derives the connection URL fresh on **every** access, never memoised,
+  making it structurally impossible for a chaos test to hold a stale DSN across a `restart()`.
+  The three restart-based chaos modules (`test_sa_chaos.py`, `test_kafka_chaos.py`,
+  `test_migration_chaos.py`) now read `chaos.url` instead of a DSN captured once at fixture
+  boot; Kafka additionally pins its host port (`testkit/varco_chaos/ports.py`'s
+  `reserve_host_port()`) because its advertised listener is baked into an on-disk script at
+  first boot, so re-querying alone cannot fix it. Test-only — no runtime package changed.
+- **`test_beanie_migration_integration.py` (new)** — real-`mongod` coverage for
+  `MigrationStore`'s lock (`find_one_and_update` + upsert + `_id`-uniqueness, already the
+  research-007-sanctioned pattern) and `BeanieMigrator`'s index-mode lifecycle: concurrent
+  migrators serialize correctly, a crashed holder's lock is reclaimed at its `expires_at` (no
+  TTL index involved — deliberately, seconds-scale not the 60-120s a TTL monitor would need),
+  and a racing upsert's `DuplicateKeyError` is read as "lock lost". One genuine, pre-existing
+  `BeanieMigrator` defect found and filed as `xfail(strict=True)` + BACKLOG (not fixed — outside
+  this release's four-row licence): `upgrade()` returns early on an empty/fully-applied
+  `MigrationRegistry`, before ever reaching its `index_mode="create"` reconciliation, so a
+  missing index is silently never created even though `plan()` independently reports the drift.
+
 ### Added — real-broker reliability coverage + chaos test suite (Plan 018, RT2/RT3/RT4/RT5/RT7/RT9)
 
 **Test-only release — no runtime package changed.** Every change in this section lives under a

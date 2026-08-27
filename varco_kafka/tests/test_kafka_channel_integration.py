@@ -23,6 +23,7 @@ import os
 import uuid
 
 import pytest
+from varco_conformance.channel_manager import ChannelManagerConformance
 
 pytestmark = pytest.mark.integration
 
@@ -100,3 +101,18 @@ class TestKafkaChannelManagerIntegration:
         config = ChannelConfig(num_partitions=3, replication_factor=1)
         await manager.declare_channel(channel, config=config)
         assert await manager.channel_exists(channel) is True
+
+
+# ── ChannelManager conformance suite (Plan 019 / §RT2-C-contract, Step 14) ────
+# Expected green immediately — KafkaChannelManager already conforms
+# (channel_exists() reads real broker topic metadata).
+
+
+class TestKafkaChannelManagerConformance(ChannelManagerConformance):
+    @pytest.fixture
+    async def manager(self, kafka_bootstrap: str):
+        from varco_kafka.channel import KafkaChannelManager, KafkaChannelManagerSettings
+
+        settings = KafkaChannelManagerSettings(bootstrap_servers=kafka_bootstrap)
+        async with KafkaChannelManager(settings) as m:
+            yield m

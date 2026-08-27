@@ -74,10 +74,14 @@ class NatsDeliverySemantics(str, enum.Enum):  # noqa: UP042
     AT_LEAST_ONCE — The message is acknowledged **after** the local dispatch
                     chain completes (default).  A crash between dispatch and ack
                     causes JetStream to redeliver — handlers may see duplicates.
-                    This mirrors ``KafkaEventBus`` at-least-once semantics:
-                    JetStream redelivery is the broker-level safety net, while
-                    handler-level retries are the responsibility of varco's
-                    ``@listen(retry_policy=..., dlq=...)`` machinery.
+                    A handler that merely *raises* (no crash) also triggers
+                    redelivery: the message is ``nak()``ed immediately, bounded
+                    by ``max_deliver`` (Plan 019 / RT2-B — see
+                    ``NatsEventBus._on_message``'s DESIGN block for the full
+                    outcome table). This mirrors ``KafkaEventBus`` at-least-once
+                    semantics: JetStream redelivery is the broker-level safety
+                    net, while handler-level retries are the responsibility of
+                    varco's ``@listen(retry_policy=..., dlq=...)`` machinery.
 
     EXACTLY_ONCE  — As AT_LEAST_ONCE for acknowledgement, plus producer-side
                     deduplication: every published message carries a
@@ -142,6 +146,20 @@ class NatsEventBusSettings(EventBusSettings):
                                   before redelivering it.  Should exceed the
                                   worst-case handler dispatch time.
                                   Env var: ``VARCO_NATS_ACK_WAIT_SECONDS``.
+        max_deliver:              Maximum number of delivery attempts
+                                  JetStream makes for a single message before
+                                  giving up.  Research 005 §B: JetStream's
+                                  broker-side default is **unlimited**
+                                  redelivery, so without this bound a
+                                  permanently-failing handler that ``nak()``s
+                                  on every attempt becomes an infinite
+                                  redelivery loop (Plan 019 / RT2-B). Once
+                                  ``msg.metadata.num_delivered`` reaches this
+                                  value the message is ``term()``ed instead of
+                                  ``nak()``ed and a WARNING is logged — the
+                                  redelivery budget is exhausted, not the
+                                  message dropped silently.
+                                  Env var: ``VARCO_NATS_MAX_DELIVER``.
         duplicate_window_seconds: Stream dedup window for ``EXACTLY_ONCE``.
                                   Messages with a repeated ``Nats-Msg-Id``
                                   inside this window are dropped.
@@ -186,6 +204,9 @@ class NatsEventBusSettings(EventBusSettings):
 
     ack_wait_seconds: float = 30.0
     """JetStream ack-wait before redelivery.  Env: ``VARCO_NATS_ACK_WAIT_SECONDS``."""
+
+    max_deliver: int = 5
+    """Max JetStream delivery attempts before term(). Env: ``VARCO_NATS_MAX_DELIVER``."""
 
     duplicate_window_seconds: float = 120.0
     """Dedup window for EXACTLY_ONCE.  Env: ``VARCO_NATS_DUPLICATE_WINDOW_SECONDS``."""

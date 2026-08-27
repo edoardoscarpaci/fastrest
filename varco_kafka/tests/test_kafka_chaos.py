@@ -24,6 +24,41 @@ Container scope (§chaos-fixture): a **module**-scoped
 restarting the session-scoped ``kafka_bootstrap`` container would break
 every other test in this package. Both tests here leave the container
 healthy (``restart()`` always re-waits readiness).
+
+⚠️ Kafka needs its host port **pinned**, unlike the other restart-based
+chaos modules (Plan 019 / §RT7b-port — re-querying alone, which is what
+``ChaosContainer.url`` does for every other backend, is insufficient here):
+``KafkaContainer.tc_start()`` writes ``/tc-start.sh`` **into the container**
+at first boot with ``KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://{host}:{port}``
+baked in as a **literal**, resolved from ``get_exposed_port()`` once. A
+``restart()`` re-runs that same on-disk script, so the broker comes back
+advertising the **pre-restart** host port regardless of what port docker
+actually re-exposes it on. If the ephemeral port moved (research 006 §A),
+the client connects to the *new* port, receives metadata pointing at the
+*old* one, and every produce/fetch fails. Pinning the host port via
+``testkit/varco_chaos/ports.py``'s ``reserve_host_port()`` +
+``with_bind_ports`` means the port is never drawn from the ephemeral pool,
+so it is never subject to Docker's re-allocation-on-restart behaviour, and
+the baked-in advertised listener stays correct across every restart in this
+module.
+
+⚠️ **KRaft mode is required for `restart()` to recover at all** — a second,
+independent finding surfaced while verifying this module locally (Docker
+27.5.1 / WSL2), orthogonal to the port-pinning fix above. The default
+``KafkaContainer()`` runs Kafka against an **embedded ZooKeeper in the same
+container**. On ``docker restart``, the new Kafka process re-registers its
+broker id in ZooKeeper via an ephemeral znode *before* ZooKeeper's own
+session-timeout has expired the previous (now-dead) process's session for
+that same znode, and the broker exits fatally with
+``org.apache.zookeeper.KeeperException$NodeExistsException`` — confirmed
+directly against docker-py, independent of this test suite or of the port
+work above. ``KafkaContainer().with_kraft()`` removes ZooKeeper from the
+picture entirely (Kafka's own Raft-based metadata quorum, no ephemeral
+znode to race), and the broker reliably recovers within ~20-30s of a
+restart instead of never recovering. This is a container-image/test-fixture
+choice, not a ``varco_kafka`` production code change — the KRaft broker
+speaks the identical wire protocol the production ``KafkaEventBus``
+already talks to.
 """
 
 from __future__ import annotations
@@ -46,33 +81,53 @@ pytestmark = [pytest.mark.integration, pytest.mark.chaos]
 _M = 20
 """Outbox entries per test — enough that the restart lands mid-drain."""
 
-_DRAIN_TIMEOUT = 120.0
-
-# Captured once at boot. ``ChaosContainer.restart()`` uses docker-py's
-# ``restart()`` (never ``.stop()`` + ``.start()``), which preserves the
-# container id AND its host port mapping — so this URL stays valid across
-# every restart in this module.
-_CHAOS_BOOTSTRAP: dict[str, str] = {}
+_DRAIN_TIMEOUT = 240.0
+"""
+Generous on purpose (CLAUDE.md: widen a flaky timing margin, never xfail
+it) — a single-broker KRaft Kafka's post-restart recovery time in this
+module was observed to vary considerably (roughly 25s-160s across runs
+during Plan 019 / §RT7b-port verification), driven by controller-quorum
+re-election and consumer-group re-coordination overhead on top of the
+broker's own boot time, not by anything this test controls.
+"""
 
 
 @pytest.fixture(scope="module")
 def kafka_container_chaos() -> Iterator[ChaosContainer]:
     """
-    A Kafka container this module is allowed to break.
+    A Kafka container this module is allowed to break, with its host port
+    **pinned** (Plan 019 / §RT7b-port — see the module docstring for why
+    Kafka, uniquely among the restart-based chaos containers, needs this).
 
     Yields:
-        A ``ChaosContainer`` wrapping a single-broker Kafka.
+        A ``ChaosContainer`` wrapping a single-broker Kafka, with a
+        ``url_factory`` that reads the bootstrap server address fresh on
+        every ``.url`` access.
 
     Edge cases:
         - Module-scoped (§chaos-fixture): the ~20-30 s boot is paid once for
           the module, not once per test. Every test must leave the container
           healthy or the module's later tests fail confusingly.
+        - The pinned port is read from the installed ``KafkaContainer.port``
+          attribute (the *container-internal* port to bind), never
+          hardcoded — a wrong constant would produce a container that starts
+          but is unreachable.
+        - ``with_kraft()`` — see the module docstring's ZooKeeper-race
+          finding for why this is required for ``restart()`` to ever
+          recover, independent of the port-pinning fix.
     """
     from testcontainers.kafka import KafkaContainer  # noqa: PLC0415
+    from varco_chaos.ports import reserve_host_port  # noqa: PLC0415
 
-    with KafkaContainer() as container:
-        _CHAOS_BOOTSTRAP["kafka"] = container.get_bootstrap_server()
-        yield ChaosContainer(container, ready=lambda logs: "started" in logs.lower())
+    container = KafkaContainer().with_kraft()
+    host_port = reserve_host_port()
+    container = container.with_bind_ports(container.port, host_port)
+    with container:
+        yield ChaosContainer(
+            container,
+            ready=lambda logs: "started" in logs.lower(),
+            url_factory=lambda c: c.get_bootstrap_server(),
+        )
 
 
 class ChaosOrderEvent(Event):
@@ -145,7 +200,7 @@ async def test_outbox_entries_survive_a_broker_restart_and_are_republished(
     duplicate after a broker restart is *correct*, not a bug.
     """
     chaos = kafka_container_chaos
-    bootstrap = _CHAOS_BOOTSTRAP["kafka"]
+    bootstrap = chaos.url
     run_id = uuid.uuid4().hex[:8]
     channel = "orders"
 
@@ -223,7 +278,7 @@ async def test_relay_does_not_dead_letter_on_a_transient_broker_outage(
           setting both would enable the dead-letter path this test denies).
     """
     chaos = kafka_container_chaos
-    bootstrap = _CHAOS_BOOTSTRAP["kafka"]
+    bootstrap = chaos.url
     run_id = uuid.uuid4().hex[:8]
     channel = "orders"
 

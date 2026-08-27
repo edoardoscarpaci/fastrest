@@ -4,7 +4,7 @@ varco_conformance
 
 Shared, test-only conformance suites for ``varco_core`` ABCs
 (``AbstractEventBus``, ``CacheBackend``, ``AbstractJobStore``,
-``AbstractDeadLetterQueue``).
+``AbstractDeadLetterQueue``, ``ChannelManager``).
 
 This package lives at the repo root under ``testkit/`` — it is **never**
 packaged or published, and is reached only via each participating package's

@@ -168,6 +168,14 @@ class ChannelManager(ABC):
         """
         Return ``True`` if the channel exists on the backend.
 
+        **Contract (Plan 019 / RT2-C-contract, ``testkit/varco_conformance/
+        channel_manager.py`` enforces this across every backend):**
+        ``declare_channel(c)`` implies ``channel_exists(c)`` is ``True`` until
+        ``delete_channel(c)``. This is the only reading a caller can safely
+        act on — a predicate that answers ``False`` immediately after a
+        successful ``declare_channel`` is not a weaker version of "exists",
+        it answers a different question.
+
         Args:
             channel: Logical channel name to check.
 
@@ -176,12 +184,26 @@ class ChannelManager(ABC):
 
         Raises:
             RuntimeError: If called before ``start()``.
+
+        Edge cases:
+            - Backends with no per-channel broker object (Redis Pub/Sub,
+              NATS subjects under one wildcard-captured stream) satisfy the
+              round-trip via a **process-local declaration registry** rather
+              than broker evidence. A fresh manager instance in another
+              process therefore reports ``False`` for a channel it never
+              declared itself and that has not (yet, for NATS) carried a
+              message — this is a known, documented limitation, not a
+              contract violation.
         """
 
     @abstractmethod
     async def list_channels(self) -> list[str]:
         """
         Return all channels known to the backend.
+
+        Same declared-or-present contract as ``channel_exists`` — a channel
+        this manager (or, where the backend can observe it, another process)
+        has declared must appear here until ``delete_channel``.
 
         Returns:
             Sorted list of logical channel name strings.
@@ -193,6 +215,8 @@ class ChannelManager(ABC):
             - Kafka: returns ALL topics the admin client can see — this may
               include topics from other services.  Use ``channel_prefix``
               filtering in the implementation to narrow the result.
+            - Redis / NATS: process-local declaration registry — see
+              ``channel_exists``'s Edge cases.
         """
 
     # ── Async context manager default implementation ──────────────────────────

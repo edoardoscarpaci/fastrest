@@ -433,6 +433,100 @@ class TestRedisJobStoreLifecycle:
 
 
 # ════════════════════════════════════════════════════════════════════════════════
+# Plan 019, Phase 3 — RT7a: the reaper releases the claim guard (§RT7a-guard)
+# ════════════════════════════════════════════════════════════════════════════════
+#
+# RED until reap_expired_leases() deletes the claim guard key for jobs it
+# actually reaps, and try_claim() releases its own guard on every
+# non-success path (job_store.py's `raw is None` / `status != PENDING`
+# early returns currently leak it — Plan 019 Status corrections).
+
+
+class TestRedisJobStoreClaimGuardRelease:
+    async def test_reap_releases_guard_and_second_worker_can_reclaim(self) -> None:
+        # After a legitimate reap the previous holder is gone and the job is
+        # PENDING again — a second worker's try_claim() must succeed
+        # immediately, not be refused for up to claim_ttl seconds by a
+        # guard key the (correct) reap left behind.
+        import asyncio
+
+        fake, store = _make_store(claim_ttl=30)
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=0.001)
+        assert claimed is not None
+
+        await asyncio.sleep(0.05)
+        reaped = await store.reap_expired_leases()
+        assert any(j.job_id == claimed.job_id for j in reaped)
+
+        claim_key = store._claim_key(job.job_id)  # noqa: SLF001
+        assert claim_key not in fake._store  # noqa: SLF001 — guard must be gone
+
+        second = await store.try_claim(job.job_id, owner_id="worker-2", lease_ttl=30.0)
+        assert second is not None
+        assert second.owner_id == "worker-2"
+
+    async def test_reap_does_not_touch_guard_of_a_live_unexpired_lease(self) -> None:
+        # Negative guard: reap must not delete every claim key on every
+        # tick — only the jobs it actually reaps. A live lease's guard
+        # (and its RUNNING status) must survive a reap sweep untouched.
+        fake, store = _make_store(claim_ttl=30)
+        job = _pending_job()
+        await store.save(job)
+        claimed = await store.try_claim(job.job_id, owner_id="worker-1", lease_ttl=9999.0)
+        assert claimed is not None
+
+        reaped = await store.reap_expired_leases()
+        assert reaped == []
+
+        claim_key = store._claim_key(job.job_id)  # noqa: SLF001
+        assert claim_key in fake._store  # noqa: SLF001 — untouched, live lease
+        fetched = await store.get(job.job_id)
+        assert fetched is not None
+        assert fetched.status == JobStatus.RUNNING
+
+    async def test_try_claim_releases_guard_on_missing_job(self) -> None:
+        # job_store.py:610-612 — `raw is None` currently falls straight out
+        # of the try without releasing the guard it just acquired.
+        fake, store = _make_store(claim_ttl=30)
+        missing_id = uuid4()
+
+        result = await store.try_claim(missing_id)
+        assert result is None
+
+        claim_key = store._claim_key(missing_id)  # noqa: SLF001
+        assert claim_key not in fake._store  # noqa: SLF001
+
+    async def test_try_claim_releases_guard_on_non_pending_job(self) -> None:
+        # job_store.py:615-617 — the `status != PENDING` branch leaks too.
+        fake, store = _make_store(claim_ttl=30)
+        job = _pending_job().as_running()
+        await store.save(job)
+
+        result = await store.try_claim(job.job_id)
+        assert result is None
+
+        claim_key = store._claim_key(job.job_id)  # noqa: SLF001
+        assert claim_key not in fake._store  # noqa: SLF001
+
+    async def test_try_claim_still_releases_guard_on_future_run_at(self) -> None:
+        # Regression cover for the refactor — this release already exists
+        # (job_store.py:619-623) and must keep working.
+        from datetime import datetime, timedelta
+
+        fake, store = _make_store(claim_ttl=30)
+        job = _pending_job(run_at=datetime.now(UTC) + timedelta(seconds=60))
+        await store.save(job)
+
+        result = await store.try_claim(job.job_id)
+        assert result is None
+
+        claim_key = store._claim_key(job.job_id)  # noqa: SLF001
+        assert claim_key not in fake._store  # noqa: SLF001
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 # Plan 005, Phase 4, Step 56 — RedisJobStore time/lease/fencing matrix
 # ════════════════════════════════════════════════════════════════════════════════
 #

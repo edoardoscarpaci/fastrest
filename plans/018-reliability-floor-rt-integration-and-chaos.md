@@ -108,6 +108,13 @@ FINDING — Port survivorship*, confirmed by testcontainers-java issue #3615 acr
 languages) — so a naive uniform "restart everything" would silently break every connection URL.
 Rejected.
 
+> ⚠️ **SUPERSEDED by Plan 019 / §RT7b-port.** Research 002 §1's premise that even `restart()`
+> (as opposed to `.stop()`+`.start()`) preserves the host port is itself wrong — research 006
+> §A/§B/§F: Docker documents the port as re-allocatable on every restart, platform-independent.
+> The rejection above still holds (`.stop()`+`.start()` is strictly worse — it loses the
+> container ID too), but its premise that plain `restart()` was a safe alternative for URL
+> stability does not. Fixed via `ChaosContainer.url`, not a reopening of this rejection.
+
 ### §RT7-toxiproxy — **not adopted for 3.0.0.** `pause`/`restart` buys enough ✅
 
 Research 002 §3–§4 is genuinely favourable to Toxiproxy: transparent, deterministic, no
@@ -777,7 +784,7 @@ against production code is a finding, never a licence to edit `varco_*/varco_*/`
 
 | Input / state | Expected behaviour |
 |---|---|
-| `chaos.restart()` on a container | Host port and container ID **survive** (docker-py `restart()`, research 002 §1). Captured connection URLs stay valid. If a future refactor swaps in `.stop()`+`.start()`, every chaos test fails with a connection error on a *new random port* — the `DESIGN:` block in Step 2 exists to prevent exactly that. |
+| `chaos.restart()` on a container | Container ID **survives** (docker-py `restart()`). ⚠️ **SUPERSEDED by Plan 019 / §RT7b-port** — the host port does **not** reliably survive (research 006 §A/§B/§F overturns research 002 §1's "port survives" claim); `ChaosContainer.url` now re-derives fresh on every access instead of any caller trusting a captured value. If a future refactor swaps in `.stop()`+`.start()`, the container ID is also lost — the `DESIGN:` block in Step 2 (as updated by Plan 019) exists to prevent exactly that. |
 | A chaos test fails inside `chaos.paused()` | `paused()` unpauses in `finally`, so the remaining tests in that module still run. A leaked pause would cascade into every later test in the module (module scope). |
 | Broker restarts but never becomes ready within `wait_ready(timeout)` | `TimeoutError` naming the container and the readiness predicate — never a silent `sleep`-and-hope. Research 002 §5: deterministic waits are the primary flakiness reducer. |
 | Outbox relay ticks while the broker is down | Entry is **not** deleted (`outbox.py:809-816`); with no `retry_policy` it is not dead-lettered either (`:838-850`). Both asserted (Steps 29, 30). |
@@ -868,6 +875,14 @@ make lint && make type-check && make test \
   restart, (b) `pause()`/`unpause()` instead of `restart()` for the outbox tests too — weaker
   (processes are frozen, not restarted, so it does not prove recovery from a cold broker) but
   sufficient for "publish raises while the broker is unreachable".
+
+  > ⚠️ **SUPERSEDED by Plan 019 / §RT7b-port.** The assumption does not hold — research 006
+  > §A/§B/§F settles it without needing an experiment: Docker documents the port as
+  > re-allocatable on every restart, platform-independent and version-stable. Fallback (a),
+  > "re-derive the URL from the container after restart," is exactly what was implemented:
+  > `ChaosContainer.url` (a property, re-derived on every access, never memoised) plus a pinned
+  > host port for Kafka specifically (its advertised listener is baked into an on-disk script at
+  > first boot, so re-querying alone is insufficient there). Fallback (b) was not needed.
 - ⚠️ **ASSUMPTION — Toxiproxy on Actions.** Not adopted (§RT7-toxiproxy), so not a live risk; the
   assumption being *avoided* is research 002 §Evidence Gaps 4's *"Assumed feasible … but
   untested"*. Recorded so the 3.1 BACKLOG row carries its own precondition.
