@@ -171,7 +171,7 @@ class SkillAdapter:
         agent_name: str,
         agent_description: str,
         agent_version: str = "1.0.0",
-        client: AsyncVarcoClient | None = None,
+        client: AsyncVarcoClient[Any] | None = None,
         base_url: str | None = None,
         enabled_routes: set[str] | None = None,
         job_runner: AbstractJobRunner | None = None,

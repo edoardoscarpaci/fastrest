@@ -68,7 +68,7 @@ Loader = Callable[[], Awaitable[Any]]
 
 
 async def read_through(
-    cache: AsyncCache,
+    cache: AsyncCache[str, Any],
     key: str,
     loader: Loader,
     policy: CachePolicy,
@@ -125,7 +125,7 @@ async def read_through(
 
 
 async def _read_through(
-    cache: AsyncCache,
+    cache: AsyncCache[str, Any],
     key: str,
     loader: Loader,
     policy: CachePolicy,
@@ -174,7 +174,7 @@ async def _read_through(
 
 
 async def _serve_stale_and_refresh(
-    cache: AsyncCache,
+    cache: AsyncCache[str, Any],
     key: str,
     loader: Loader,
     policy: CachePolicy,
@@ -209,7 +209,7 @@ async def _serve_stale_and_refresh(
 
 
 async def _compute(
-    cache: AsyncCache,
+    cache: AsyncCache[str, Any],
     key: str,
     loader: Loader,
     policy: CachePolicy,
@@ -247,14 +247,16 @@ async def _compute(
         raise
 
 
-async def _load_and_store(cache: AsyncCache, key: str, loader: Loader, policy: CachePolicy) -> Any:
+async def _load_and_store(
+    cache: AsyncCache[str, Any], key: str, loader: Loader, policy: CachePolicy
+) -> Any:
     """Call ``loader()`` and persist the result per ``policy``, then return it."""
     result = await loader()
     await _store(cache, key, result, policy)
     return result
 
 
-async def _store(cache: AsyncCache, key: str, value: Any, policy: CachePolicy) -> None:
+async def _store(cache: AsyncCache[str, Any], key: str, value: Any, policy: CachePolicy) -> None:
     """
     Persist ``value`` under ``key`` per ``policy`` — raw value for the
     identity policy (byte-identical default), envelope otherwise.
@@ -307,7 +309,7 @@ BatchLoader = Callable[["list[str]"], Awaitable["dict[str, Any]"]]
 
 
 async def read_through_many(
-    cache: AsyncCache,
+    cache: AsyncCache[str, Any],
     keys: list[str],
     loader: BatchLoader,
     policy: CachePolicy,
@@ -458,7 +460,8 @@ async def read_through_many(
                     shared["error"] = exc
             if "error" in shared:
                 raise shared["error"]
-            return shared["result"]
+            batch_result: dict[str, Any] = shared["result"]
+            return batch_result
 
     async def _wrapper(k: str) -> Any:
         batch = await _get_batch()
@@ -484,7 +487,7 @@ async def read_through_many(
 
 
 async def _load_one_and_store(
-    cache: AsyncCache, key: str, loader: BatchLoader, policy: CachePolicy
+    cache: AsyncCache[str, Any], key: str, loader: BatchLoader, policy: CachePolicy
 ) -> Any:
     batch = await loader([key])
     value = batch.get(key)
@@ -492,7 +495,9 @@ async def _load_one_and_store(
     return value
 
 
-async def _store_many(cache: AsyncCache, items: dict[str, Any], policy: CachePolicy) -> None:
+async def _store_many(
+    cache: AsyncCache[str, Any], items: dict[str, Any], policy: CachePolicy
+) -> None:
     """Write every ``(key, value)`` pair per ``policy`` — uses ``set_many``
     when available, else a loop over ``_store`` (per-key ``set``)."""
     from varco_core.cache.base import BulkCache

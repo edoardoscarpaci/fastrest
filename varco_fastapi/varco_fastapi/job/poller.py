@@ -124,7 +124,7 @@ class JobPoller:
         # no deployment starts deleting rows on upgrade.
         self._retention_sweep = retention_sweep
         self._retention_batch_size = retention_batch_size or batch_size
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     def __repr__(self) -> str:
         return (

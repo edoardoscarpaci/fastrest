@@ -1,0 +1,9 @@
+varco_kafka/varco_kafka/health.py:114: error: Type of variable becomes "Any | None" due to an unfollowed import  [no-any-unimported]
+varco_kafka/varco_kafka/dlq.py:240: error: Type of variable becomes "dict[str, tuple[Any, int]]" due to an unfollowed import  [no-any-unimported]
+varco_kafka/varco_kafka/dlq.py:566: error: Return type becomes "Coroutine[Any, Any, Any]" due to an unfollowed import  [no-any-unimported]
+varco_kafka/varco_kafka/channel.py:205: error: Type of variable becomes "Any | None" due to an unfollowed import  [no-any-unimported]
+varco_casbin/varco_casbin/beanie_adapter.py:181: error: Base type AsyncAdapter becomes "Any" due to an unfollowed import  [no-any-unimported]
+varco_casbin/varco_casbin/beanie_adapter.py:181: note: Error code "no-any-unimported" not covered by "type: ignore[misc]" comment
+varco_casbin/varco_casbin/engine.py:154: error: Type of variable becomes "Any | None" due to an unfollowed import  [no-any-unimported]
+varco_casbin/varco_casbin/engine.py:230: error: Return type becomes "Any" due to an unfollowed import  [no-any-unimported]
+Found 7 errors in 5 files (checked 439 source files)

@@ -897,7 +897,7 @@ class VarcoRouter(Generic[D, PK, C, R, U]):
 
 def _make_create_handler(
     *,
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     route: Any,
     service: Any,
     server_auth: Any,
@@ -948,7 +948,7 @@ def _make_create_handler(
 
 def _make_read_handler(
     *,
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     route: Any,
     service: Any,
     server_auth: Any,
@@ -982,7 +982,7 @@ def _make_read_handler(
 
 def _make_update_handler(
     *,
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     route: Any,
     service: Any,
     server_auth: Any,
@@ -1018,7 +1018,7 @@ def _make_update_handler(
 
 def _make_patch_handler(
     *,
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     route: Any,
     service: Any,
     server_auth: Any,
@@ -1058,7 +1058,7 @@ def _make_patch_handler(
 
 def _make_delete_handler(
     *,
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     route: Any,
     service: Any,
     server_auth: Any,
@@ -1092,7 +1092,7 @@ def _make_delete_handler(
 
 def _make_list_handler(
     *,
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     route: Any,
     service: Any,
     server_auth: Any,
@@ -1389,7 +1389,7 @@ def _synthesize_custom_signature(
 
 def _make_custom_handler(
     *,
-    router_instance: VarcoRouter,
+    router_instance: VarcoRouter[Any, Any, Any, Any, Any],
     method_fn: Any,
     route: Any,
     server_auth: Any,
@@ -1520,7 +1520,7 @@ def _make_noop_handler(route: Any) -> Any:
 
 
 async def _submit_job(
-    router: VarcoRouter,
+    router: VarcoRouter[Any, Any, Any, Any, Any],
     job_runner: Any,
     auth: AuthContext | None,
     coro_fn: Any,

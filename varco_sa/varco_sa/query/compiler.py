@@ -296,7 +296,7 @@ class SQLAlchemyQueryCompiler(BinaryWalkingVisitor):
 
     # ── Column resolution ──────────────────────────────────────────────────────
 
-    def _resolve_column(self, field_path: str) -> MappedColumn:
+    def _resolve_column(self, field_path: str) -> MappedColumn[Any]:
         """
         Resolve a column attribute, traversing SA relationships for dotted paths.
 
@@ -334,7 +334,8 @@ class SQLAlchemyQueryCompiler(BinaryWalkingVisitor):
         if "." not in field_path:
             # Fast path — flat column, no join needed
             try:
-                return getattr(self.model, field_path)
+                column: MappedColumn[Any] = getattr(self.model, field_path)
+                return column
             except AttributeError as exc:
                 raise FieldNotFound(
                     field=field_path,
@@ -393,7 +394,8 @@ class SQLAlchemyQueryCompiler(BinaryWalkingVisitor):
         # Resolve the final column on the leaf model
         col_name = parts[-1]
         try:
-            return getattr(current_model, col_name)
+            leaf_column: MappedColumn[Any] = getattr(current_model, col_name)
+            return leaf_column
         except AttributeError as exc:
             raise FieldNotFound(
                 field=col_name,

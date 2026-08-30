@@ -94,7 +94,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from beanie import Document
@@ -176,7 +176,7 @@ class OutboxDocument(Document):
         # DESIGN: no index on created_at declared here — callers can add one
         # via a separate migration or Beanie's index management if the
         # collection grows large.  Avoid surprising schema side-effects.
-        indexes: list = []
+        indexes: list[Any] = []
 
     def __repr__(self) -> str:
         return (
@@ -312,7 +312,7 @@ class BeanieOutboxRepository(OutboxRepository):
         """
         # sort(+OutboxDocument.created_at) = ascending order (oldest first)
         # session kwarg is accepted by Beanie's find() for transaction isolation
-        find_kwargs: dict = {}
+        find_kwargs: dict[str, Any] = {}
         if self._session is not None:
             find_kwargs["session"] = self._session
 
@@ -366,7 +366,7 @@ class BeanieOutboxRepository(OutboxRepository):
 
         Async safety: ✅ Awaits Beanie ``delete()`` call.
         """
-        delete_kwargs: dict = {}
+        delete_kwargs: dict[str, Any] = {}
         if self._session is not None:
             delete_kwargs["session"] = self._session
 
@@ -425,7 +425,7 @@ class BeanieOutboxRepository(OutboxRepository):
             for entry in entries
         ]
 
-        insert_kwargs: dict = {}
+        insert_kwargs: dict[str, Any] = {}
         if self._session is not None:
             insert_kwargs["session"] = self._session
 

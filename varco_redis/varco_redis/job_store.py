@@ -292,14 +292,16 @@ class RedisJobStore(AbstractJobStore):
                 existing_raw = await pipe.get(job_key)
                 current_job = _json_to_job(existing_raw) if existing_raw is not None else None
                 if current_job is None or current_job.lease_epoch != expected_epoch:
-                    await pipe.reset()
+                    # redis-py ships no py.typed marker — Pipeline.reset() is untyped upstream.
+                    await pipe.reset()  # type: ignore[no-untyped-call]
                     raise StaleLeaseError(
                         f"save() refused for job {job.job_id}: expected_epoch="
                         f"{expected_epoch} does not match stored lease_epoch "
                         f"({current_job.lease_epoch if current_job is not None else 'row not found'})."
                     )
                 fenced_old_status = current_job.status
-                pipe.multi()
+                # redis-py ships no py.typed marker — Pipeline.multi() is untyped upstream.
+                pipe.multi()  # type: ignore[no-untyped-call]
                 pipe.set(job_key, _job_to_json(job))
                 if fenced_old_status != job.status:
                     pipe.zrem(self._status_key(fenced_old_status), str(job.job_id))

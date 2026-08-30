@@ -13,6 +13,8 @@ Async safety:   ✅ Synchronous; safe to call from async contexts.
 
 from __future__ import annotations
 
+from typing import Any
+
 from lark import Transformer
 
 from varco_core.exception.query import OperationNotFound
@@ -25,7 +27,7 @@ from varco_core.query.type import (
 )
 
 
-class QueryTransformer(Transformer):
+class QueryTransformer(Transformer[Any, Any]):
     """
     Lark ``Transformer`` that rewrites a grammar parse tree into typed AST nodes.
 
@@ -40,7 +42,7 @@ class QueryTransformer(Transformer):
           (fail-fast at parse time rather than silently passing through).
     """
 
-    def string(self, s: list) -> str:
+    def string(self, s: list[Any]) -> str:
         """
         Strip surrounding quotes from a grammar ``ESCAPED_STRING`` terminal.
 
@@ -50,10 +52,13 @@ class QueryTransformer(Transformer):
         Returns:
             Unquoted string value.
         """
-        # s[0] is the Token — strip the outer quote characters
-        return s[0][1:-1]
+        # s[0] is the Token (a lark Token, str subclass) — strip the outer
+        # quote characters. Annotated because `s: list[Any]` makes the
+        # slice's inferred type Any.
+        unquoted: str = s[0][1:-1]
+        return unquoted
 
-    def number(self, n: list) -> float:
+    def number(self, n: list[Any]) -> float:
         """
         Convert a ``SIGNED_NUMBER`` terminal to a Python ``float``.
 
@@ -65,7 +70,7 @@ class QueryTransformer(Transformer):
         """
         return float(n[0])
 
-    def field(self, f: list) -> str:
+    def field(self, f: list[Any]) -> str:
         """
         Extract a ``CNAME`` field name as a plain string.
 
@@ -77,7 +82,7 @@ class QueryTransformer(Transformer):
         """
         return str(f[0])
 
-    def in_list(self, items: list) -> ComparisonNode:
+    def in_list(self, items: list[Any]) -> ComparisonNode:
         """
         Build an ``IN`` comparison node from a field and value list.
 
@@ -93,7 +98,7 @@ class QueryTransformer(Transformer):
         values = items[1:]
         return ComparisonNode(field=field_name, op=Operation.IN, value=list(values))
 
-    def is_null(self, items: list) -> ComparisonNode:
+    def is_null(self, items: list[Any]) -> ComparisonNode:
         """
         Build an ``IS NULL`` comparison node.
 
@@ -105,7 +110,7 @@ class QueryTransformer(Transformer):
         """
         return ComparisonNode(field=items[0], op=Operation.IS_NULL)
 
-    def is_not_null(self, items: list) -> ComparisonNode:
+    def is_not_null(self, items: list[Any]) -> ComparisonNode:
         """
         Build an ``IS NOT NULL`` comparison node.
 
@@ -117,7 +122,7 @@ class QueryTransformer(Transformer):
         """
         return ComparisonNode(field=items[0], op=Operation.IS_NOT_NULL)
 
-    def comparison(self, items: list) -> ComparisonNode:
+    def comparison(self, items: list[Any]) -> ComparisonNode:
         """
         Build a standard binary comparison node.
 
@@ -137,7 +142,7 @@ class QueryTransformer(Transformer):
             raise OperationNotFound(op=op_str)
         return ComparisonNode(field=field_name, op=Operation(op_str), value=value)
 
-    def and_expr(self, items: list) -> AndNode:
+    def and_expr(self, items: list[Any]) -> AndNode:
         """
         Build an ``AND`` binary node from two child expressions.
 
@@ -149,7 +154,7 @@ class QueryTransformer(Transformer):
         """
         return AndNode(left=items[0], right=items[1])
 
-    def or_expr(self, items: list) -> OrNode:
+    def or_expr(self, items: list[Any]) -> OrNode:
         """
         Build an ``OR`` binary node from two child expressions.
 
@@ -161,7 +166,7 @@ class QueryTransformer(Transformer):
         """
         return OrNode(left=items[0], right=items[1])
 
-    def not_expr(self, items: list) -> NotNode:
+    def not_expr(self, items: list[Any]) -> NotNode:
         """
         Build a ``NOT`` unary node from a single child expression.
 
@@ -173,7 +178,7 @@ class QueryTransformer(Transformer):
         """
         return NotNode(child=items[0])
 
-    def group(self, items: list) -> object:
+    def group(self, items: list[Any]) -> object:
         """
         Unwrap a parenthesised expression group.
 

@@ -81,7 +81,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from beanie import Document
@@ -289,7 +289,7 @@ class BeanieDeduplicator(AbstractDeduplicator):
             - Any DB error returns ``False`` — safe default (process the event
               rather than silently drop it on transient failure).
         """
-        find_kwargs: dict = {}
+        find_kwargs: dict[str, Any] = {}
         if self._session is not None:
             find_kwargs["session"] = self._session
 
@@ -350,7 +350,7 @@ class BeanieDeduplicator(AbstractDeduplicator):
             now = datetime.now(UTC)
             doc = DeduplicationDocument(event_id=event_id, processed_at=now)
 
-            insert_kwargs: dict = {}
+            insert_kwargs: dict[str, Any] = {}
             if self._session is not None:
                 insert_kwargs["session"] = self._session
 

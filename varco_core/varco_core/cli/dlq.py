@@ -34,7 +34,7 @@ from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterSource
 from varco_core.event.redrive import DeadLetterNotAddressable, DlqRedriver
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the ``dlq`` subcommand parser and its verbs."""
     parser = subparsers.add_parser("dlq", help="Browse, redrive, or purge a dead letter queue")
     parser.set_defaults(_run=_run)

@@ -49,7 +49,7 @@ _REQUEST_ID_HEADER: Final[str] = "X-Session-Id"
 T = TypeVar("T")
 
 
-def _generate_session_id():
+def _generate_session_id() -> str:
     return str(uuid4())
 
 

@@ -308,11 +308,14 @@ def test_mcp_adapter_mount_without_auth_does_not_add_middleware():
     app = FastAPI()
     initial_user_middleware_count = len(app.user_middleware)
 
-    # Patch to_mcp_server to avoid needing the mcp SDK in tests
+    # Patch to_mcp_server to avoid needing a real MCP server built — mount()
+    # (Plan 020 / KI-11) no longer calls `.sse_app()`/`.asgi_app()` on the
+    # returned object (the low-level Server has neither); it only closes over
+    # it inside an SSE-request handler that these middleware-registration
+    # tests never invoke, so a bare placeholder is sufficient.
     def _fake_to_mcp_server() -> Any:
         class _FakeServer:
-            def sse_app(self) -> Any:
-                return _ok_app
+            pass
 
         return _FakeServer()
 
@@ -341,8 +344,7 @@ def test_mcp_adapter_mount_with_auth_adds_middleware():
 
     def _fake_to_mcp_server() -> Any:
         class _FakeServer:
-            def sse_app(self) -> Any:
-                return _ok_app
+            pass
 
         return _FakeServer()
 

@@ -98,7 +98,7 @@ import warnings
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from varco_core.event.base import CHANNEL_ALL, AbstractEventBus, Event, Subscription
 
@@ -196,7 +196,7 @@ class _ListenEntry:
     priority: int = 0
     """Dispatch priority.  Higher values run first.  Defaults to ``0``."""
 
-    retry_policy: RetryPolicy | None = _UNSET  # type: ignore[assignment]
+    retry_policy: RetryPolicy | None | _Unset = _UNSET
     """
     Optional retry policy for this handler.
 
@@ -205,6 +205,14 @@ class _ListenEntry:
     passed ``retry_policy=None``, which must NOT inherit the process-wide
     default ``ReliabilityPreset``. See ``_Unset``'s docstring and
     ``EventConsumer.register_to()``'s resolution order.
+
+    Annotated ``RetryPolicy | None | _Unset`` (Plan 021 §D4) — the prior
+    ``RetryPolicy | None`` annotation was simply wrong: it excluded the
+    sentinel the field is actually assigned by default, which is why the
+    ``is not _UNSET`` identity check at ``register_to()`` used to need a
+    ``# type: ignore[comparison-overlap]``. Widening the annotation to match
+    reality removes the need for any suppression; the runtime behaviour is
+    unchanged.
 
     When set, ``register_to()`` wraps the handler so that on failure it is
     retried up to ``retry_policy.max_attempts`` times with the configured
@@ -215,12 +223,15 @@ class _ListenEntry:
     ``RetryExhaustedError`` — which propagates to the bus's error policy.
     """
 
-    dlq: AbstractDeadLetterQueue | None = _UNSET  # type: ignore[assignment]
+    dlq: AbstractDeadLetterQueue | None | _Unset = _UNSET
     """
     Optional Dead Letter Queue for this handler.
 
     Same ``_UNSET``-sentinel default and resolution rule as ``retry_policy``
     above (Plan 009, Phase 9 / R5, RD-7).
+
+    Annotated ``AbstractDeadLetterQueue | None | _Unset`` (Plan 021 §D4) —
+    same annotation-was-wrong fix as ``retry_policy`` above.
 
     When set alongside ``retry_policy``, events that exhaust all retry
     attempts are pushed here instead of raising ``RetryExhaustedError``.
@@ -308,7 +319,7 @@ def listen(
     dlq: AbstractDeadLetterQueue | None = _UNSET,  # type: ignore[assignment]
     deduplicator: AbstractDeduplicator | None = None,
     inbox: InboxRepository | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Method decorator for ``EventConsumer`` subclasses.
 
@@ -426,7 +437,7 @@ def listen(
             "Usage: @listen(MyEvent) or @listen(MyEvent, OtherEvent)"
         )
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Initialise the entries list on first decoration.
         # Using setdefault-style check so stacking @listen on the same method
         # appends to the existing list rather than overwriting it.
@@ -866,11 +877,33 @@ class EventConsumer:
                 #      called; resolved HERE, at register_to() time, so a
                 #      preset set after class definition still applies).
                 entry_declared = entry.retry_policy is not _UNSET or entry.dlq is not _UNSET
+                # DESIGN: explicit local annotations here, not narrowing.
+                # mypy does not narrow an attribute read (`entry.retry_policy`)
+                # across a ternary the way it narrows a local variable, so
+                # without these the inferred type stays
+                # `RetryPolicy | None | _Unset` and every later `is not None`
+                # comparison against `effective_retry_policy` mismatches the
+                # `_make_retry_wrapper` signature below. Annotating states the
+                # already-true post-condition (the `_UNSET` branch was
+                # excluded) rather than fighting mypy's narrowing limits.
+                effective_retry_policy: RetryPolicy | None
+                effective_dlq: AbstractDeadLetterQueue | None
                 if entry_declared:
-                    effective_retry_policy = (
-                        None if entry.retry_policy is _UNSET else entry.retry_policy
+                    # cast(): mypy does not narrow `x is SENTINEL` for a plain
+                    # (non-Literal, non-enum) singleton instance — only
+                    # `isinstance`/`is None`/enum-member comparisons narrow.
+                    # `entry_declared` above already proves neither field is
+                    # `_UNSET` reaches this branch as `_UNSET` on its own; the
+                    # `None if ... is _UNSET else ...` ternary re-derives the
+                    # same fact mypy can't carry into the ternary's type.
+                    effective_retry_policy = cast(
+                        "RetryPolicy | None",
+                        None if entry.retry_policy is _UNSET else entry.retry_policy,
                     )
-                    effective_dlq = None if entry.dlq is _UNSET else entry.dlq
+                    effective_dlq = cast(
+                        "AbstractDeadLetterQueue | None",
+                        None if entry.dlq is _UNSET else entry.dlq,
+                    )
                 elif retry_policy is not None or dlq is not None:
                     effective_retry_policy = retry_policy
                     effective_dlq = dlq

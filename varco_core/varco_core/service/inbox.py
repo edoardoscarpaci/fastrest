@@ -399,7 +399,7 @@ class InboxPoller:
         self._poll_interval = poll_interval
         self._batch_size = batch_size
         # Background asyncio Task — created in start(), cancelled in stop().
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 

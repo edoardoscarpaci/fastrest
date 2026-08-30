@@ -18,6 +18,8 @@ that revision's DESIGN block for the rationale.
 
 from __future__ import annotations
 
+from typing import Any
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -28,7 +30,7 @@ branch_labels = None
 depends_on = None
 
 _TABLE = "varco_audit_log"
-_COLUMNS: tuple[tuple[str, sa.types.TypeEngine], ...] = (
+_COLUMNS: tuple[tuple[str, sa.types.TypeEngine[Any]], ...] = (
     ("seq", sa.Integer()),
     ("prev_hash", sa.String(64)),
     ("entry_hash", sa.String(64)),

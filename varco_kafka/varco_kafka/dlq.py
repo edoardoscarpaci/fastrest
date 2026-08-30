@@ -237,7 +237,8 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         # Populated by pop_batch(), consumed by ack().
         # Not persisted — if the process restarts, entries are re-read by
         # the consumer from the last committed offset (at-least-once delivery).
-        self._in_flight: dict[str, tuple[TopicPartition, int]] = {}
+        # aiokafka ships no py.typed marker — TopicPartition resolves to Any.
+        self._in_flight: dict[str, tuple[TopicPartition, int]] = {}  # type: ignore[no-any-unimported]
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -563,7 +564,8 @@ class KafkaDLQ(AbstractDeadLetterQueue):
 
     # ── Consumer lifecycle helper ──────────────────────────────────────────────
 
-    async def _ensure_consumer(self) -> AIOKafkaConsumer:
+    # aiokafka ships no py.typed marker — AIOKafkaConsumer resolves to Any.
+    async def _ensure_consumer(self) -> AIOKafkaConsumer:  # type: ignore[no-any-unimported]
         """
         Create and start the DLQ consumer on first use.
 
@@ -660,7 +662,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         Edge cases:
             - Datetimes without timezone info are treated as UTC.
         """
-        data: dict = json.loads(payload.decode("utf-8"))
+        data: dict[str, Any] = json.loads(payload.decode("utf-8"))
 
         event = self._serializer.deserialize(data["event_payload"].encode("utf-8"))
 

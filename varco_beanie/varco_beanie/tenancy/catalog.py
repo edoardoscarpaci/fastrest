@@ -112,7 +112,7 @@ class BeanieTenantCatalog(AbstractTenantCatalog):
                     simple bootstrap deployments.
     """
 
-    def __init__(self, *, collection: AsyncCollection | None = None) -> None:
+    def __init__(self, *, collection: AsyncCollection[dict[str, Any]] | None = None) -> None:
         self._collection = collection
         self._memory: dict[str, TenantDescriptor] = {}
         self._lock: asyncio.Lock | None = None

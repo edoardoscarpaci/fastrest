@@ -98,14 +98,14 @@ class HealthRouter:
         self._timeout = timeout
         # Build composite once — it owns concurrent execution logic.
         # CompositeHealthCheck takes *checks (variadic), not a list.
-        self._composite = None  # Lazy construction
+        self._composite: CompositeHealthCheck | None = None  # Lazy construction
         self._resolved = False
 
     def __repr__(self) -> str:
         checks_len = len(self._checks) if isinstance(self._checks, list) else 0
         return f"HealthRouter(checks={checks_len}, prefix={self._prefix!r})"
 
-    async def _resolve_checks(self):
+    async def _resolve_checks(self) -> None:
         if self._checks and isinstance(self._checks, InstanceProxy):
             self._checks = await self._checks.aget_all()
         self._composite = CompositeHealthCheck(*self._checks) if self._checks else None

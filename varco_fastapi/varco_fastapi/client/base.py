@@ -41,7 +41,7 @@ import json
 import os
 import typing
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 import httpx
 
@@ -646,7 +646,7 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
     # Set by metaclass when class is parameterized with a VarcoRouter
     _router_class: ClassVar[type | None] = None
     # Class-level configurator — used for zero-URL instantiation
-    _configurator: ClassVar[type[ClientConfigurator] | None] = None
+    _configurator: ClassVar[type[ClientConfigurator[Any]] | None] = None
     # Class-level profile default
     _profile: ClassVar[ClientProfile | None] = None
 
@@ -657,7 +657,7 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
         port: int | None = None,
         verify: bool | str = True,
         config: ClientConfig | None = None,
-        configurator: ClientConfigurator | None = None,
+        configurator: ClientConfigurator[Any] | None = None,
         profile: ClientProfile | None = None,
         middleware: tuple[AbstractClientMiddleware, ...] | None = None,
         trust_store: TrustStore | None = None,
@@ -948,7 +948,11 @@ class AsyncVarcoClient(Generic[R], metaclass=_VarcoClientMeta):
             async def make_next(
                 req: PreparedRequest, __mw: Any = _mw, __next: Any = _next
             ) -> httpx.Response:
-                return await __mw(req, __next)
+                # __mw is typed Any (captured via a default-arg closure
+                # trick to avoid late-binding) — annotate the local so the
+                # declared return type is honestly proven, not just assumed.
+                resp: httpx.Response = await __mw(req, __next)
+                return resp
 
             handler = make_next
 
@@ -992,7 +996,7 @@ def make_client(
     middleware: tuple[AbstractClientMiddleware, ...] = (),
     timeout: float = 30.0,
     profile: ClientProfile | None = None,
-) -> AsyncVarcoClient:
+) -> AsyncVarcoClient[Any]:
     """
     Factory that creates a typed ``AsyncVarcoClient`` subclass at runtime without
     requiring a ``class MyClient(AsyncVarcoClient[MyRouter]): pass`` declaration.
@@ -1037,14 +1041,21 @@ def make_client(
         # to find the router type parameter.
         {"__orig_bases__": (AsyncVarcoClient[router_cls],)},  # type: ignore[valid-type]
     )
-    return ClientClass(
-        base_url,
-        port=port,
-        verify=verify,
-        config=config,
-        middleware=middleware or None,
-        timeout=timeout if timeout != 30.0 else None,
-        profile=profile,
+    # why: ClientClass is a metaclass-constructed type built at runtime
+    # (`_VarcoClientMeta(...)` above) — mypy cannot statically prove it is
+    # an AsyncVarcoClient[Any] subclass, only its docstring/runtime
+    # __orig_bases__ trick does.
+    return cast(
+        "AsyncVarcoClient[Any]",
+        ClientClass(
+            base_url,
+            port=port,
+            verify=verify,
+            config=config,
+            middleware=middleware or None,
+            timeout=timeout if timeout != 30.0 else None,
+            profile=profile,
+        ),
     )
 
 

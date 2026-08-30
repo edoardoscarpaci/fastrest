@@ -317,7 +317,7 @@ class RedisBulkhead:
         finally:
             await self._release(token)
 
-    def protect(self, func: Callable) -> Callable:
+    def protect(self, func: Callable[..., Any]) -> Callable[..., Any]:
         """
         Decorator that routes all calls to ``func`` through this bulkhead.
 

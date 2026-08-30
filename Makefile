@@ -42,17 +42,10 @@
 .DEFAULT_GOAL := help
 
 # ── Package list ──────────────────────────────────────────────────────────────
-PACKAGES := \
-	varco_core \
-	varco_kafka \
-	varco_nats \
-	varco_redis \
-	varco_sa \
-	varco_beanie \
-	varco_memcached \
-	varco_ws \
-	varco_fastapi \
-	varco_casbin
+# Derived from [tool.uv.workspace] members (root pyproject.toml) via
+# scripts/packages.sh — single source of truth, Plan 020 / RL-18. Do NOT
+# hand-edit this list; edit the workspace members instead.
+PACKAGES := $(shell $(CURDIR)/scripts/packages.sh)
 
 # Optional single-package override: make test PKG=varco_redis
 PKG ?=
@@ -84,6 +77,7 @@ help:
 	@echo ""
 	@echo "  make install                 sync all workspace deps"
 	@echo "  make sync                    alias for install"
+	@echo "  make print-packages          print the derived package list (RL-18)"
 	@echo "  make lint                    ruff check (whole repo)"
 	@echo "  make lint PKG=varco_redis    ruff check (one package's source dirs)"
 	@echo "  make format                  ruff format + fix (whole repo)"
@@ -124,6 +118,13 @@ help:
 install sync:
 	uv sync
 
+# print-packages — prints the derived PACKAGES list, space-separated. Used by
+# varco_core/tests/test_repo_package_lists.py's drift guard, and useful for
+# humans (`make -s print-packages` for scripting).
+.PHONY: print-packages
+print-packages:
+	@echo $(PACKAGES)
+
 # ── Lint ──────────────────────────────────────────────────────────────────────
 # §RL-6-ruff: whole repo (`.`) by default — covers tests/, testkit/, examples/,
 # scripts/ and varco_casbin too, none of which the old $(_SRC_DIRS)-only scope
@@ -134,6 +135,7 @@ _LINT_TARGET := $(if $(PKG),$(_SRC_DIRS),.)
 .PHONY: lint
 lint:
 	$(RUFF) check $(_LINT_TARGET)
+	$(RUFF) format --check $(_LINT_TARGET)
 
 # ── Format ────────────────────────────────────────────────────────────────────
 .PHONY: format

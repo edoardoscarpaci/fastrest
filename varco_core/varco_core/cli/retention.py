@@ -36,7 +36,7 @@ from datetime import datetime
 from typing import Any
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the ``retention`` subcommand parser and its verbs."""
     parser = subparsers.add_parser(
         "retention", help="Prune DLQ / audit-log entries (retention sweep)"

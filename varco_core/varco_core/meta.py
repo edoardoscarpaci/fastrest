@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import dataclasses
 import typing
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any, TypeVar
 
 from varco_core.tenancy.settings import TenantScope
@@ -91,7 +91,7 @@ type CompositeKey2[_T1, _T2] = tuple[_T1, _T2]
 type CompositeKey3[_T1, _T2, _T3] = tuple[_T1, _T2, _T3]
 
 # Untyped alias for generic code that only checks ``isinstance(pk, tuple)``.
-type CompositeKey = tuple
+type CompositeKey = tuple[Any, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -195,8 +195,7 @@ class FieldHint:
 # ════════════════════════════════════════════════════════════════════════════════
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class PKStrategy(str, Enum):  # noqa: UP042
+class PKStrategy(StrEnum):
     """
     Controls how a *single* primary key value is generated.
 
@@ -888,7 +887,7 @@ class MetaReader:
     @staticmethod
     def _validate_constraints(
         domain_cls: type,
-        raw: list,
+        raw: list[Any],
         valid_names: set[str],
     ) -> list[UniqueConstraint | CheckConstraint]:
         """
@@ -961,9 +960,10 @@ class MetaReader:
         if len(non_none) == 1:
             inner = non_none[0]
         else:
-            # `typing.Union[tuple(non_none)]`, not `X | Y`: built dynamically
-            # from a variable-length tuple — `X | Y` syntax needs literal
-            # operands, so this can't be rewritten to it.
+            # PERMANENT (Plan 020 / RL-15-keep, not migration debt):
+            # `typing.Union[tuple(non_none)]`, not `X | Y` — built dynamically
+            # from a variable-length tuple at runtime. `X | Y` syntax requires
+            # literal operands, so this construct is not expressible that way.
             inner = typing.Union[tuple(non_none)]  # noqa: UP007
         return inner, is_optional
 
@@ -987,7 +987,7 @@ class MetaReader:
         return None
 
     @staticmethod
-    def domain_fields(domain_cls: type) -> list[dataclasses.Field]:
+    def domain_fields(domain_cls: type) -> list[dataclasses.Field[Any]]:
         """
         Return user-declared business fields, excluding ``pk`` and ``_*``
         bookkeeping fields.

@@ -173,7 +173,7 @@ class RedisEventBus(AbstractEventBus):
 
         self._redis: Any | None = None
         self._pubsub: Any | None = None
-        self._listener_task: asyncio.Task | None = None
+        self._listener_task: asyncio.Task[None] | None = None
         self._started = False
 
         self._chain: Callable[[Event, str], Coroutine[Any, Any, None]] = self._build_chain()

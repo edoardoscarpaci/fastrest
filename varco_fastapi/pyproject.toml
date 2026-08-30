@@ -41,7 +41,12 @@ dependencies = [
 ws  = ["varco-ws"]
 # MCP (Model Context Protocol) adapter support
 # Enables MCPAdapter.to_mcp_server() and MCPAdapter.mount()
-mcp = ["mcp>=1.0"]
+# Upper-bounded <2 (Plan 020 / KI-11-pin, research brief 003): unbounded
+# `>=1.0` would auto-upgrade to the v2 line, which removes the low-level
+# `Server` decorator API `to_mcp_server()`/`mount()` are built on (constructor-
+# based handler registration instead — filed forward as BACKLOG row MCP-v2).
+# Lower-bounded 1.28.1 per brief 003's stated stable-v1 floor for this API.
+mcp = ["mcp>=1.28.1,<2"]
 # A2A (Agent-to-Agent / Google A2A protocol) support
 # SkillAdapter works without this extra (it uses FastAPI directly);
 # install for the google-a2a SDK types if you need A2A client utilities.

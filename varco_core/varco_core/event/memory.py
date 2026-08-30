@@ -173,7 +173,7 @@ class InMemoryEventBus(AbstractEventBus):
         # collecting tasks before they complete.  Each task removes itself
         # via add_done_callback when it finishes.
         # DESIGN: set over list — O(1) discard vs O(n) remove.
-        self._pending_tasks: set[asyncio.Task] = set()
+        self._pending_tasks: set[asyncio.Task[None]] = set()
 
         # Pre-build the middleware chain once — avoids rebuilding per publish.
         # Typed as Coroutine (not just Awaitable) so asyncio.create_task()
@@ -288,7 +288,7 @@ class InMemoryEventBus(AbstractEventBus):
 
     # ── Background task error handling ────────────────────────────────────────
 
-    def _on_task_done(self, task: asyncio.Task) -> None:
+    def _on_task_done(self, task: asyncio.Task[None]) -> None:
         """
         Handle a completed background dispatch task.
 

@@ -75,8 +75,8 @@ class CreateMixin(RouterMixin):
     _create_summary: ClassVar[str | None] = None
     _create_description: ClassVar[str | None] = None
     _create_response_description: ClassVar[str] = "Created"
-    _create_responses: ClassVar[dict | None] = None
-    _create_dependencies: ClassVar[list | None] = None
+    _create_responses: ClassVar[dict[str | int, dict[str, Any]] | None] = None
+    _create_dependencies: ClassVar[list[Any] | None] = None
     _create_tags: ClassVar[list[str] | None] = None
     _create_operation_id: ClassVar[str | None] = None
     _create_deprecated: ClassVar[bool] = False
@@ -129,8 +129,8 @@ class ReadMixin(RouterMixin):
     _read_summary: ClassVar[str | None] = None
     _read_description: ClassVar[str | None] = None
     _read_response_description: ClassVar[str] = "Successful Response"
-    _read_responses: ClassVar[dict | None] = None
-    _read_dependencies: ClassVar[list | None] = None
+    _read_responses: ClassVar[dict[str | int, dict[str, Any]] | None] = None
+    _read_dependencies: ClassVar[list[Any] | None] = None
     _read_tags: ClassVar[list[str] | None] = None
     _read_operation_id: ClassVar[str | None] = None
     _read_deprecated: ClassVar[bool] = False
@@ -174,8 +174,8 @@ class UpdateMixin(RouterMixin):
     _update_summary: ClassVar[str | None] = None
     _update_description: ClassVar[str | None] = None
     _update_response_description: ClassVar[str] = "Successful Response"
-    _update_responses: ClassVar[dict | None] = None
-    _update_dependencies: ClassVar[list | None] = None
+    _update_responses: ClassVar[dict[str | int, dict[str, Any]] | None] = None
+    _update_dependencies: ClassVar[list[Any] | None] = None
     _update_tags: ClassVar[list[str] | None] = None
     _update_operation_id: ClassVar[str | None] = None
     _update_deprecated: ClassVar[bool] = False
@@ -228,8 +228,8 @@ class PatchMixin(RouterMixin):
     _patch_summary: ClassVar[str | None] = None
     _patch_description: ClassVar[str | None] = None
     _patch_response_description: ClassVar[str] = "Successful Response"
-    _patch_responses: ClassVar[dict | None] = None
-    _patch_dependencies: ClassVar[list | None] = None
+    _patch_responses: ClassVar[dict[str | int, dict[str, Any]] | None] = None
+    _patch_dependencies: ClassVar[list[Any] | None] = None
     _patch_tags: ClassVar[list[str] | None] = None
     _patch_operation_id: ClassVar[str | None] = None
     _patch_deprecated: ClassVar[bool] = False
@@ -276,8 +276,8 @@ class DeleteMixin(RouterMixin):
     _delete_summary: ClassVar[str | None] = None
     _delete_description: ClassVar[str | None] = None
     _delete_response_description: ClassVar[str] = "No Content"
-    _delete_responses: ClassVar[dict | None] = None
-    _delete_dependencies: ClassVar[list | None] = None
+    _delete_responses: ClassVar[dict[str | int, dict[str, Any]] | None] = None
+    _delete_dependencies: ClassVar[list[Any] | None] = None
     _delete_tags: ClassVar[list[str] | None] = None
     _delete_operation_id: ClassVar[str | None] = None
     _delete_deprecated: ClassVar[bool] = False
@@ -347,8 +347,8 @@ class ListMixin(RouterMixin):
     _list_summary: ClassVar[str | None] = None
     _list_description: ClassVar[str | None] = None
     _list_response_description: ClassVar[str] = "Successful Response"
-    _list_responses: ClassVar[dict | None] = None
-    _list_dependencies: ClassVar[list | None] = None
+    _list_responses: ClassVar[dict[str | int, dict[str, Any]] | None] = None
+    _list_dependencies: ClassVar[list[Any] | None] = None
     _list_tags: ClassVar[list[str] | None] = None
     _list_operation_id: ClassVar[str | None] = None
     _list_deprecated: ClassVar[bool] = False

@@ -17,13 +17,12 @@ DESIGN: mode-based stub over multiple stub classes
 from __future__ import annotations
 
 import asyncio
-from enum import Enum
+from enum import StrEnum
 
 # ── FailMode ──────────────────────────────────────────────────────────────────
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class FailMode(str, Enum):  # noqa: UP042
+class FailMode(StrEnum):
     """
     Controls how the stub behaves on each call.
 

@@ -113,7 +113,7 @@ class SagaDocument(Document):
         """Beanie collection configuration."""
 
         name = "varco_sagas"
-        indexes: list = []
+        indexes: list[Any] = []
 
     def __repr__(self) -> str:
         return (
@@ -200,7 +200,7 @@ class BeanieSagaRepository(AbstractSagaRepository):
 
         Async safety: ✅ Awaits ``find_one()``, ``delete()``, and ``insert()``.
         """
-        find_kwargs: dict = {}
+        find_kwargs: dict[str, Any] = {}
         if self._session is not None:
             find_kwargs["session"] = self._session
 
@@ -242,7 +242,7 @@ class BeanieSagaRepository(AbstractSagaRepository):
 
         Async safety: ✅ Single ``find_one()`` call.
         """
-        find_kwargs: dict = {}
+        find_kwargs: dict[str, Any] = {}
         if self._session is not None:
             find_kwargs["session"] = self._session
 

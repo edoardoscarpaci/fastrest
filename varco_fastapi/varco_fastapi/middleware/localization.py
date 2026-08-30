@@ -157,7 +157,8 @@ def _auth_ctx_claim(request: Request, claim: str) -> str | None:
             continue
         extra_claims = getattr(auth_ctx, "extra_claims", None)
         if extra_claims and claim in extra_claims:
-            return extra_claims[claim]
+            claim_value: str = extra_claims[claim]
+            return claim_value
         direct = getattr(auth_ctx, claim, None)
         if isinstance(direct, str):
             return direct

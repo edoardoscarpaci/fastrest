@@ -68,7 +68,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, ClassVar, Final
 from uuid import UUID, uuid4
 
@@ -97,8 +97,7 @@ CHANNEL_DEFAULT: Final[str] = "default"
 # ── ErrorPolicy ───────────────────────────────────────────────────────────────
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class ErrorPolicy(str, Enum):  # noqa: UP042
+class ErrorPolicy(StrEnum):
     """
     Controls how ``AbstractEventBus`` handles exceptions raised by handlers.
 
@@ -136,8 +135,7 @@ class ErrorPolicy(str, Enum):  # noqa: UP042
     """Log handler errors at WARNING level; never propagate them."""
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class DispatchMode(str, Enum):  # noqa: UP042
+class DispatchMode(StrEnum):
     """
     Controls whether ``AbstractEventBus.publish`` waits for handlers to complete.
 
@@ -653,7 +651,7 @@ class AbstractEventBus(ABC):
         *event_types: type[Event] | str,
         channel: str = CHANNEL_ALL,
         filter: Callable[[Event], bool] | None = None,  # noqa: A002
-    ) -> Callable:
+    ) -> Callable[..., Any]:
         """
         Decorator that registers a standalone function as an event handler.
 
@@ -682,7 +680,7 @@ class AbstractEventBus(ABC):
             - The function is returned unchanged — no wrapping occurs.
         """
 
-        def decorator(func: Callable) -> Callable:
+        def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
             for et in event_types:
                 # Each event_type gets its own independent subscription
                 self.subscribe(et, func, channel=channel, filter=filter)

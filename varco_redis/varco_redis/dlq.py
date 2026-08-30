@@ -456,7 +456,9 @@ class RedisDLQ(AbstractDeadLetterQueue):
                 "RedisDLQ.count() called before connect(). "
                 "Call await dlq.connect() or use 'async with dlq' first."
             )
-        return await self._redis.zcard(self._queue_key)
+        # redis-py ships no py.typed marker — zcard() is structurally Any.
+        cardinality: int = await self._redis.zcard(self._queue_key)
+        return cardinality
 
     # ── Serialization helpers ──────────────────────────────────────────────────
 
@@ -520,7 +522,7 @@ class RedisDLQ(AbstractDeadLetterQueue):
               strings with timezone.  If stored without timezone (legacy data),
               they are treated as UTC.
         """
-        data: dict = json.loads(payload.decode("utf-8"))
+        data: dict[str, Any] = json.loads(payload.decode("utf-8"))
 
         # Re-deserialize the embedded Event payload — uses self._serializer
         # which resolves the event class via __event_type__ registry lookup.

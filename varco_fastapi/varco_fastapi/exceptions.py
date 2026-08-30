@@ -239,23 +239,23 @@ def add_exception_handlers(
         )
 
     @app.exception_handler(ServiceNotFoundError)
-    async def not_found_handler(request: Request, exc: ServiceNotFoundError):
+    async def not_found_handler(request: Request, exc: ServiceNotFoundError) -> JSONResponse:
         return _respond(exc, request)
 
     @app.exception_handler(ServiceAuthorizationError)
-    async def auth_error_handler(request: Request, exc: ServiceAuthorizationError):
+    async def auth_error_handler(request: Request, exc: ServiceAuthorizationError) -> JSONResponse:
         return _respond(exc, request)
 
     @app.exception_handler(ServiceConflictError)
-    async def conflict_handler(request: Request, exc: ServiceConflictError):
+    async def conflict_handler(request: Request, exc: ServiceConflictError) -> JSONResponse:
         return _respond(exc, request)
 
     @app.exception_handler(ServiceValidationError)
-    async def validation_handler(request: Request, exc: ServiceValidationError):
+    async def validation_handler(request: Request, exc: ServiceValidationError) -> JSONResponse:
         return _respond(exc, request)
 
     @app.exception_handler(ServiceException)
-    async def service_exception_handler(request: Request, exc: ServiceException):
+    async def service_exception_handler(request: Request, exc: ServiceException) -> JSONResponse:
         _logger.error(
             "Unhandled ServiceException: %s: %s",
             type(exc).__name__,

@@ -52,6 +52,7 @@ from typing import Any
 
 from varco_core.model import DomainModel
 
+from varco_beanie.config import BeanieSettings
 from varco_beanie.provider import BeanieRepositoryProvider
 
 # ── BeanieConfig ──────────────────────────────────────────────────────────────
@@ -163,24 +164,25 @@ class BeanieFastrestApp:
             - Registration calls ``BeanieModelFactory.build()`` for each
               entity class synchronously — O(n) at startup.
         """
-        # BUG (surfaced by RL-6's mypy gate, plans/017): BeanieRepositoryProvider's
-        # __init__ only accepts an injected `settings: Inject[BeanieSettings]`
-        # (varco_beanie/provider.py) — it does not accept `mongo_client=`/
-        # `db_name=`/`transactional=` directly, despite that class's own
-        # docstring documenting exactly this call shape. This non-DI
-        # BeanieApp/BeanieFastrestApp construction path is not exercised by
-        # any test, so the mismatch never surfaced as a runtime failure until
-        # now. Not fixed here — reconciling the two construction paths is a
-        # real design decision outside a CI-green pass; tracked as a BACKLOG
-        # row. Do not remove this ignore without fixing the call shape.
-        self._provider = BeanieRepositoryProvider(  # type: ignore[call-arg]
-            mongo_client=config.mongo_client,
-            db_name=config.db_name,
-            transactional=config.transactional,
+        # KI-9/KI-10 (Plan 020): BeanieRepositoryProvider's __init__ only
+        # accepts an injected `settings: Inject[BeanieSettings]`
+        # (varco_beanie/provider.py) — build one from BeanieConfig's
+        # field-for-field-compatible attributes and pass it through. This is
+        # the non-DI construction path's own way of reaching the exact same
+        # settings shape the DI path resolves via the container.
+        self._provider = BeanieRepositoryProvider(
+            settings=BeanieSettings(
+                mongo_client=config.mongo_client,
+                db_name=config.db_name,
+                entity_classes=config.entity_classes,
+                transactional=config.transactional,
+            ),
         )
-        # Register all entity classes immediately so the provider is ready
-        # to build UoWs after init() is called.
-        self._provider.register(*config.entity_classes)
+        # No separate `self._provider.register(*config.entity_classes)` call
+        # here — BeanieSettings.entity_classes is already registered by the
+        # provider's own __init__ (varco_beanie/provider.py:70-71). A second
+        # registration call was redundant (idempotent, guarded by `cls not in
+        # self._built`) but is removed to keep exactly one registration path.
 
     @property
     def uow_provider(self) -> BeanieRepositoryProvider:

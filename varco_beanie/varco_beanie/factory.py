@@ -131,7 +131,7 @@ class BeanieModelFactory:
     """
 
     def __init__(self) -> None:
-        self._cache: dict[type, tuple[type, AbstractMapper]] = {}
+        self._cache: dict[type, tuple[type, AbstractMapper[Any, Any]]] = {}
 
     def build(self, domain_cls: type[D]) -> tuple[type, _BeanieAutoMapper[D]]:
         if domain_cls in self._cache:
@@ -265,8 +265,12 @@ class BeanieModelFactory:
 
         strategy = meta.pk_strategy
         if strategy is PKStrategy.INT_AUTO:
-            # Optional[int], not int | None: returned as a runtime typing
+            # PERMANENT (Plan 020 / RL-15-keep, not migration debt):
+            # Optional[int], not int | None — returned as a runtime typing
             # object for pydantic field construction, not a static annotation.
+            # Rewriting to `int | None` is *probably* accepted by pydantic v2,
+            # but the benefit is zero and the risk is a silent field-schema
+            # change in the model factory. Not worth it.
             return Optional[int], PydanticField(default=None)  # noqa: UP045
         if strategy is PKStrategy.UUID_AUTO:
             return UUID, PydanticField(default_factory=uuid4)

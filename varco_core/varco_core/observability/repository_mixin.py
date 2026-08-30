@@ -79,7 +79,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -102,6 +102,7 @@ _logger = logging.getLogger(__name__)
 
 D = TypeVar("D", bound=DomainModel)
 PK = TypeVar("PK")
+_T = TypeVar("_T")
 
 
 # ── TracingRepositoryMixin ────────────────────────────────────────────────────
@@ -228,7 +229,12 @@ class TracingRepositoryMixin(AsyncRepository[D, PK], ABC, Generic[D, PK]):
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    async def _run_in_span(self, operation: str, coro_fn, *args: Any) -> Any:
+    async def _run_in_span(
+        self,
+        operation: str,
+        coro_fn: Callable[..., Awaitable[_T]],
+        *args: Any,
+    ) -> _T:
         """
         Open a span named ``{ClassName}.{operation}``, run ``coro_fn(*args)``
         inside it, and close on completion or exception.

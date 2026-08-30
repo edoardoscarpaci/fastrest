@@ -254,7 +254,9 @@ class SAAuditRepository(AuditRepository):
         consumer.register_to(event_bus)
     """
 
-    def __init__(self, session_factory: async_sessionmaker, *, hash_chain: bool = False) -> None:
+    def __init__(
+        self, session_factory: async_sessionmaker[AsyncSession], *, hash_chain: bool = False
+    ) -> None:
         """
         Args:
             session_factory: ``async_sessionmaker`` for creating ``AsyncSession``
@@ -276,9 +278,10 @@ class SAAuditRepository(AuditRepository):
                              ``FOR UPDATE`` across multiple processes.
 
         Edge cases:
-            - ``session_factory`` is not type-annotated with a generic parameter
-              to avoid importing ``async_sessionmaker[AsyncSession]`` at runtime
-              on Python < 3.12 without ``from __future__ import annotations``.
+            - ``session_factory`` is annotated ``async_sessionmaker[AsyncSession]``
+              (Plan 021 §D5) — safe at runtime because this module already
+              carries ``from __future__ import annotations`` (PEP 563), so the
+              annotation is never evaluated eagerly.
         """
         # session_factory is called once per operation — no shared session state.
         self._session_factory = session_factory

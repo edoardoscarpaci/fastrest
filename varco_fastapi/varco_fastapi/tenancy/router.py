@@ -35,6 +35,7 @@ from varco_core.tenancy.settings import TenantStatus
 from varco_fastapi.auth.guard import require_roles
 
 if TYPE_CHECKING:
+    from fastapi.responses import JSONResponse
     from varco_core.auth.base import AuthContext
 
     from varco_fastapi.auth.server_auth import AbstractServerAuth
@@ -135,7 +136,9 @@ def build_tenant_router(
     admin = Depends(_admin)
 
     @router.post("/tenants", status_code=201)
-    async def provision_tenant(body: _ProvisionBody, _ctx: AuthContext = admin) -> dict:
+    async def provision_tenant(
+        body: _ProvisionBody, _ctx: AuthContext = admin
+    ) -> dict[str, Any] | JSONResponse:
         existing_before = None
         try:
             existing_before = [
@@ -150,16 +153,22 @@ def build_tenant_router(
 
         # Idempotent POST — a redelivery/duplicate call returns 200, not 201.
         status_code = 200 if existing_before else 201
+        # A redelivery/duplicate call returns a JSONResponse with an
+        # explicit status_code, overriding the route decorator's default
+        # (see _JSONWithStatus's docstring) — hence the dict[str, Any] |
+        # JSONResponse return type above.
         return _JSONWithStatus(descriptor, status_code)
 
     @router.get("/tenants")
-    async def list_tenants(status: str | None = None, _ctx: AuthContext = admin) -> list[dict]:
+    async def list_tenants(
+        status: str | None = None, _ctx: AuthContext = admin
+    ) -> list[dict[str, Any]]:
         parsed_status = TenantStatus(status) if status else None
         descriptors = await control_service.list_tenants(status=parsed_status)
         return [_descriptor_to_dict(d) for d in descriptors]
 
     @router.get("/tenants/{tenant_id}")
-    async def get_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
+    async def get_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict[str, Any]:
         try:
             descriptors = await control_service.list_tenants(status=None)
         except Exception as exc:  # noqa: BLE001
@@ -171,8 +180,8 @@ def build_tenant_router(
 
     @router.patch("/tenants/{tenant_id}")
     async def patch_tenant(
-        tenant_id: str, body: dict = Body(...), _ctx: AuthContext = admin
-    ) -> dict:
+        tenant_id: str, body: dict[str, Any] = Body(...), _ctx: AuthContext = admin
+    ) -> dict[str, Any]:
         action = body.get("action")
         if action == "suspend":
             await control_service.suspend(tenant_id)
@@ -209,7 +218,7 @@ def build_tenant_router(
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.post("/tenants/{tenant_id}/migrate")
-    async def migrate_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
+    async def migrate_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict[str, Any]:
         migrate_fn = getattr(control_service, "migrate", None)
         if migrate_fn is None:
             raise HTTPException(
@@ -220,7 +229,7 @@ def build_tenant_router(
         return {"tenant_id": tenant_id, "migrated": True}
 
     @router.post("/tenants/{tenant_id}/request-provision", status_code=202)
-    async def request_provision_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
+    async def request_provision_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict[str, Any]:
         """
         Broadcast-only (RD-14): emits ``TenantProvisionRequested`` fleet-wide
         without any local catalog write or provisioner call. Pairs with
@@ -231,7 +240,7 @@ def build_tenant_router(
         return {"tenant_id": tenant_id, "broadcast": "provision"}
 
     @router.post("/tenants/{tenant_id}/activate")
-    async def activate_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict:
+    async def activate_tenant(tenant_id: str, _ctx: AuthContext = admin) -> dict[str, Any]:
         """Manual terminator (Plan 008, Phase 3) — flips ``tenant_id`` to
         ``ACTIVE`` without waiting for a ``TenantReadinessCoordinator``."""
         descriptor = await control_service.mark_active(tenant_id)
@@ -242,7 +251,7 @@ def build_tenant_router(
     if coordinator is not None:
 
         @router.get("/tenants/{tenant_id}/readiness")
-        async def get_tenant_readiness(tenant_id: str, _ctx: AuthContext = admin) -> dict:
+        async def get_tenant_readiness(tenant_id: str, _ctx: AuthContext = admin) -> dict[str, Any]:
             """
             Readiness snapshot (Plan 008, Phase 3).
 
@@ -271,7 +280,7 @@ def build_tenant_router(
     return router
 
 
-def _descriptor_to_dict(descriptor: Any) -> dict:
+def _descriptor_to_dict(descriptor: Any) -> dict[str, Any]:
     return {
         "tenant_id": descriptor.tenant_id,
         "schema": descriptor.schema,
@@ -282,11 +291,14 @@ def _descriptor_to_dict(descriptor: Any) -> dict:
     }
 
 
-def _JSONWithStatus(descriptor: Any, status_code: int) -> Any:  # noqa: N802 - internal helper
+def _JSONWithStatus(descriptor: Any, status_code: int) -> JSONResponse:  # noqa: N802 - internal helper
     # Returns a starlette JSONResponse, not a dict — FastAPI special-cases a
     # returned Response subclass (bypasses normal serialization), which is
-    # exactly the point (see below). Typed Any rather than JSONResponse to
-    # avoid importing starlette at module scope for one internal helper.
+    # exactly the point (see below). The route's own declared return type
+    # stays dict[str, Any] (what a *normal* return looks like); this helper
+    # is annotated honestly via the TYPE_CHECKING-only import above (Plan
+    # 021 Phase 6) so no extra runtime import cost is paid for one internal
+    # helper's return type.
     # FastAPI's `status_code=201` decorator kwarg sets the DEFAULT response
     # code; a successful redelivery must instead answer 200. Returning a
     # JSONResponse with an explicit status overrides the route decorator's

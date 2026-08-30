@@ -217,7 +217,7 @@ def bind_clients_from(container: Any, *router_classes: type) -> None:
     from varco_fastapi.client.configurator import ClientConfigurator
     from varco_fastapi.client.front_door import client_class_for
 
-    class _DeferredUrlConfigurator(ClientConfigurator):
+    class _DeferredUrlConfigurator(ClientConfigurator[Any]):
         """
         Resolves to an empty URL rather than raising ``NotImplementedError``
         at construction time.

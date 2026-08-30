@@ -29,7 +29,7 @@ import sys
 from typing import Any
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """
     Register SA-specific verbs under the existing ``migrate`` subparser.
 

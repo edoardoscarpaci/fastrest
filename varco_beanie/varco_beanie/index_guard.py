@@ -254,7 +254,7 @@ class BeanieIndexGuard:
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
-    async def check(self, db: AsyncIOMotorDatabase) -> None:
+    async def check(self, db: AsyncIOMotorDatabase[dict[str, Any]]) -> None:
         """
         Check all registered collections for missing indexes.
 
@@ -279,7 +279,7 @@ class BeanieIndexGuard:
                     names,
                 )
 
-    async def report(self, db: AsyncIOMotorDatabase) -> IndexDriftReport:
+    async def report(self, db: AsyncIOMotorDatabase[dict[str, Any]]) -> IndexDriftReport:
         """
         Compare expected indexes against live collection indexes.
 
@@ -393,7 +393,7 @@ class BeanieIndexGuard:
 
     async def _compare(
         self,
-        db: AsyncIOMotorDatabase,
+        db: AsyncIOMotorDatabase[dict[str, Any]],
         expected: list[_ExpectedIndex],
     ) -> IndexDriftReport:
         """

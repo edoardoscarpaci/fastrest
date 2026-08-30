@@ -178,7 +178,14 @@ class CasbinRuleDocument(Document):
 _V_FIELDS: tuple[str, ...] = ("v0", "v1", "v2", "v3", "v4", "v5")
 
 
-class BeanieAdapter(AsyncAdapter):
+class BeanieAdapter(AsyncAdapter):  # type: ignore[misc, no-any-unimported]
+    # ^ `casbin` ships no type stubs (`ignore_missing_imports=True` types
+    # `AsyncAdapter` as `Any`), so `disallow_subclassing_any` (Plan 020 / RL-14
+    # G4) flags this subclass, and `disallow_any_unimported` (Plan 021 Phase
+    # 8) additionally flags the base type itself resolving to Any. Genuinely
+    # untypable third-party base class — not debt (§RL-14-metric: "a
+    # legitimate suppression on a genuinely untypable third-party call is
+    # not debt").
     """
     Casbin async adapter backed by MongoDB via Beanie.
 
@@ -558,7 +565,12 @@ def _rule_to_doc(ptype: str, rule: list[str]) -> CasbinRuleDocument:
     # Supply default empty strings for missing v* slots so __str__ works correctly.
     for f in _V_FIELDS:
         fields.setdefault(f, "")
-    return CasbinRuleDocument.model_construct(ptype=ptype, id=uuid4(), **fields)
+    # beanie's Document overrides pydantic's model_construct() in a way that
+    # resolves to Any rather than Self (verified: reveal_type() on a minimal
+    # beanie.Document subclass) — annotate the local to restore this
+    # function's own declared return type.
+    doc: CasbinRuleDocument = CasbinRuleDocument.model_construct(ptype=ptype, id=uuid4(), **fields)
+    return doc
 
 
 def _rule_filter(ptype: str, rule: list[str]) -> dict[str, Any]:

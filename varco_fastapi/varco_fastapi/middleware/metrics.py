@@ -342,13 +342,15 @@ class MetricsMiddleware(BaseHTTPMiddleware):
             - ``Content-Length`` absent or non-integer → body size skipped.
         """
         if not self._otel_enabled:
-            return await call_next(request)
+            response: Response = await call_next(request)
+            return response
 
         # Skip paths like /metrics and /health to avoid self-recording
         # phantom traffic from Prometheus scrapers and Kubernetes probes.
         for prefix in self._skip_paths:
             if request.url.path.startswith(prefix):
-                return await call_next(request)
+                response = await call_next(request)
+                return response
 
         method = request.method
 

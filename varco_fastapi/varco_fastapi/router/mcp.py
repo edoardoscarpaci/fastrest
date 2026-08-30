@@ -18,11 +18,14 @@ Typical usage::
     adapter = MCPAdapter(OrderRouter, client=OrderClient(base_url="http://localhost:8080"))
 
     # Option A: mount as HTTP+SSE endpoint on an existing FastAPI app
-    adapter.mount(app)   # adds POST /mcp
+    adapter.mount(app)   # adds GET {path}/sse + POST {path}/messages/
 
     # Option B: run as standalone stdio MCP server (for local LLMs)
-    server = adapter.to_mcp_server()
-    server.run()
+    server = adapter.to_mcp_server()   # a low-level mcp.server.lowlevel.Server
+    # run it over a transport, e.g.:
+    #   from mcp.server.stdio import stdio_server
+    #   async with stdio_server() as (read, write):
+    #       await server.run(read, write, server.create_initialization_options())
 
 DI registration::
 
@@ -55,6 +58,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -64,6 +68,7 @@ from varco_fastapi.router.introspection import ResolvedRoute, introspect_routes
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+    from mcp.types import Tool as _MCPTool
 
     from varco_fastapi.auth.server_auth import AbstractServerAuth
     from varco_fastapi.client.base import AsyncVarcoClient
@@ -270,6 +275,50 @@ def _build_input_schema(route: ResolvedRoute) -> dict[str, Any]:
     return schema
 
 
+# ── mcp SDK Tool builder (§KI-11-testability, Plan 020) ────────────────────────
+
+
+def _to_mcp_tools(tools: Sequence[MCPToolDefinition]) -> list[_MCPTool]:
+    """
+    Build one ``mcp.types.Tool`` per ``MCPToolDefinition``, carrying varco's
+    own JSON Schema dict verbatim.
+
+    This is the fix for BACKLOG KI-11: the high-level ``FastMCP.add_tool()``
+    has never accepted an ``input_schema=`` parameter (SDK issue #761, open
+    since May 2025) — it derives the schema from the handler's type hints,
+    which is fundamentally incompatible with varco's generic ``**kwargs``
+    dispatch shim. ``mcp.types.Tool`` accepts a plain dict for its schema
+    field with no synthesis or post-processing required (research brief 003
+    §finding 2), so this function is a pure, SDK-internals-free mapping.
+
+    Args:
+        tools: The adapter's ``MCPToolDefinition`` sequence (``adapter.tools``).
+
+    Returns:
+        One ``mcp.types.Tool`` per input definition, in the same order.
+
+    Edge cases:
+        - Empty ``tools`` → empty list. Never raises.
+
+    Async safety: N/A — pure, synchronous, no I/O.
+    """
+    from mcp.types import Tool as MCPTool  # noqa: PLC0415 — deferred SDK import (mcp.py:42)
+
+    return [
+        MCPTool(
+            name=tool_def.name,
+            description=tool_def.description,
+            # The pinned mcp>=1.28.1,<2 `Tool` model spells this field
+            # `inputSchema` (camelCase) — verified against the resolved SDK's
+            # `mcp/types.py` per Plan 020 Step 26. v2 renames it to
+            # `input_schema`; that rename is out of scope here (§KI-11
+            # deliberately stays on v1.x).
+            inputSchema=tool_def.input_schema,
+        )
+        for tool_def in tools
+    ]
+
+
 # ── MCPAuthMiddleware ──────────────────────────────────────────────────────────
 
 
@@ -433,12 +482,13 @@ class MCPAdapter:
     Typical usage — mount on FastAPI::
 
         adapter = MCPAdapter(OrderRouter, client=OrderClient(base_url="http://localhost:8080"))
-        adapter.mount(app)   # registers POST /mcp
+        adapter.mount(app)   # registers GET {path}/sse + POST {path}/messages/
 
     Typical usage — stdio transport (local LLM)::
 
-        server = adapter.to_mcp_server()
-        server.run()
+        server = adapter.to_mcp_server()   # a low-level mcp.server.lowlevel.Server
+        # run it over a transport, e.g. mcp.server.stdio.stdio_server() +
+        # server.run(read, write, server.create_initialization_options())
 
     DI-friendly usage::
 
@@ -467,7 +517,7 @@ class MCPAdapter:
         self,
         router_cls: type,
         *,
-        client: AsyncVarcoClient | None = None,
+        client: AsyncVarcoClient[Any] | None = None,
         base_url: str | None = None,
         tool_name_prefix: str = "",
         enabled_routes: set[str] | None = None,
@@ -655,13 +705,49 @@ class MCPAdapter:
 
     def to_mcp_server(self) -> Any:
         """
-        Build a ``FastMCP`` server from the adapter's tool list.
+        Build a low-level ``mcp.server.lowlevel.Server`` from the adapter's tool list.
 
         Requires the ``mcp`` SDK (``pip install varco-fastapi[mcp]``).
 
+        DESIGN: low-level ``Server`` + ``mcp.types.Tool`` carrying varco's schema
+        verbatim, over the high-level ``FastMCP`` (BACKLOG KI-11, research brief 003)
+          ✅ Works today with what varco already has — ``Tool(name=…,
+             description=…, inputSchema={…})`` accepts a plain dict; no
+             signature synthesis, no post-processing (brief 003 §finding 2).
+             ``FastMCP.add_tool()`` has **never** accepted an ``input_schema=``
+             parameter (SDK issue #761, open since May 2025) — it derives the
+             schema from the handler's type hints, which cannot express
+             varco's generic ``execute(tool_name, arguments)`` dispatch (an
+             untyped ``**kwargs`` shim, deliberately — dispatch is generic).
+          ✅ Portable across mcp v1 and v2 — the low-level ``Tool``-with-schema
+             path exists in both; only handler *registration* differs (brief
+             003 §finding 3), so a future v2 migration touches only the
+             registration lines below, not the schema-construction lines in
+             ``_to_mcp_tools``.
+          ✅ Reversible — if SDK issue #761 ever lands ``input_schema=`` on the
+             high-level server, reverting to decorators is a small diff.
+          ❌ More verbose than ``FastMCP``, and loses its automatic argument
+             validation (mitigated: v2 drops that validation anyway — "schemas
+             are advertised but not validated", brief 003 §finding 3 — so this
+             is a cost varco pays one release early rather than a cost it
+             avoids). ``mount()`` also loses ``FastMCP.sse_app()`` and must
+             build its own Starlette SSE routes (§mount below) — bounded cost,
+             since ``mount()`` was already broken by this same defect.
+          ❌ Pins onto mcp's maintenance-only v1.x branch (v1.29.1 is the last
+             v1 release) — filed forward as BACKLOG row MCP-v2.
+          Rejected: synthesizing a typed handler signature from the JSON
+          Schema so FastMCP derives the "right" schema — brief 003 calls this
+          "fragile; no robust off-the-shelf tool" and issue #761 itself
+          records the same workaround as unreliable. Rejected: reaching into
+          ``FastMCP._tool_manager``/``._mcp_server`` — a private-attribute
+          workaround around an upstream gap, the exact thing CLAUDE.md's
+          providify discipline forbids ("use the sanctioned API, file the
+          gap").
+
         Returns:
-            A configured ``mcp.FastMCP`` instance ready to run as a stdio
-            transport or HTTP server.
+            A configured ``mcp.server.lowlevel.Server`` instance with
+            ``list_tools`` and ``call_tool`` handlers registered, ready to be
+            run over stdio or wrapped in an ASGI transport (see ``mount()``).
 
         Raises:
             ImportError: If the ``mcp`` package is not installed.
@@ -669,46 +755,36 @@ class MCPAdapter:
         Usage::
 
             server = adapter.to_mcp_server()
-            server.run()  # stdio transport (for local LLMs)
+            # stdio transport (for local LLMs) — see mcp.server.stdio
 
-        Thread safety:  ✅ Creates a new FastMCP instance — no shared state.
+        Thread safety:  ✅ Creates a new Server instance — no shared state.
         """
         try:
-            # `mcp.server.fastmcp`, NOT `mcp` — FastMCP has never been exported
-            # from the package root.  Importing it from `mcp` raises ImportError
-            # even when the package IS installed, which this except-clause then
-            # reports as "the 'mcp' package is required", sending the caller off
-            # to reinstall a package they already have.
-            from mcp.server.fastmcp import FastMCP  # noqa: PLC0415
+            from mcp.server.lowlevel import Server  # noqa: PLC0415
         except ImportError as exc:
             raise ImportError(
                 "The 'mcp' package is required to run MCPAdapter as an MCP server. "
                 "Install it with: pip install 'varco-fastapi[mcp]'"
             ) from exc
 
-        server = FastMCP(name=f"{self._router_cls.__name__}MCP")
+        server: Any = Server(name=f"{self._router_cls.__name__}MCP")
+        mcp_tools = _to_mcp_tools(self._tools)
 
-        for tool_def in self._tools:
-            # Capture tool_def in closure — late-binding would use the last value
-            _tool = tool_def
+        # `server` is typed `Any` (the `mcp` import is deferred, and `Server`'s
+        # decorator-returning methods are themselves untyped from mypy's
+        # perspective under `ignore_missing_imports`) — `disallow_untyped_decorators`
+        # (Plan 020 / RL-14 G4) flags decorating with an `Any`-typed callable.
+        # Genuinely untypable third-party surface, not debt (§RL-14-metric).
+        @server.list_tools()  # type: ignore[untyped-decorator]
+        async def _list_tools() -> list[Any]:
+            return mcp_tools
 
-            async def _handler(**kwargs: Any) -> Any:
-                # pop() is safe — arguments dict is created fresh per call
-                return await self.execute(_tool.name, dict(kwargs))
+        @server.call_tool()  # type: ignore[untyped-decorator]
+        async def _call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
+            from mcp.types import TextContent  # noqa: PLC0415
 
-            # Register with the mcp SDK
-            server.add_tool(
-                name=_tool.name,
-                description=_tool.description,
-                fn=_handler,
-                # BUG (BACKLOG KI-11): FastMCP.add_tool() has no input_schema
-                # parameter — it derives the schema from the handler's type
-                # hints. Mapping varco's JSON input_schema onto a
-                # signature-derived one is a design change, not a typo, so it is
-                # deferred rather than patched here. Guarded by an
-                # xfail(strict=True) regression test.
-                input_schema=_tool.input_schema,  # type: ignore[call-arg]
-            )
+            result = await self.execute(name, arguments)
+            return [TextContent(type="text", text=_json.dumps(result, default=str))]
 
         return server
 
@@ -723,6 +799,14 @@ class MCPAdapter:
         Mount the MCP adapter as an HTTP+SSE endpoint on a FastAPI application.
 
         Requires the ``mcp`` SDK (``pip install varco-fastapi[mcp]``).
+
+        Builds a Starlette sub-application wiring ``mcp.server.sse.SseServerTransport``
+        (the SDK's own documented recipe — ``mcp/server/sse.py``'s module
+        docstring) directly, since the low-level ``Server`` (unlike the retired
+        ``FastMCP``) has no ``sse_app()``/``asgi_app()`` convenience method.
+        ``mount()`` was already broken before this change (both of its only
+        two call sites — ``to_mcp_server()`` and ``server.sse_app()`` — raised),
+        so this is construction, not repair.
 
         Args:
             app:         The ``FastAPI`` application to mount onto.
@@ -743,7 +827,8 @@ class MCPAdapter:
             adapter.mount(app)                     # MCP endpoint is open (no auth)
 
         Thread safety:  ✅ Called once at startup before requests arrive.
-        Async safety:   ✅ No I/O — only FastAPI route registration.
+        Async safety:   ✅ No I/O at mount time — only FastAPI/Starlette route
+                        registration; the SSE connection itself is async.
         """
         # Wire authentication middleware BEFORE mounting the MCP app so the
         # middleware stack executes in the correct order: auth → mcp app.
@@ -755,12 +840,39 @@ class MCPAdapter:
             )
 
         server = self.to_mcp_server()
-        # mcp SDK provides an ASGI app we can mount
+
         try:
-            mcp_app = server.sse_app()
-        except AttributeError:
-            # Older mcp SDK versions use asgi_app()
-            mcp_app = server.asgi_app()
+            from mcp.server.sse import SseServerTransport  # noqa: PLC0415
+            from starlette.applications import Starlette  # noqa: PLC0415
+            from starlette.responses import Response  # noqa: PLC0415
+            from starlette.routing import Mount, Route  # noqa: PLC0415
+        except ImportError as exc:
+            raise ImportError(
+                "The 'mcp' package is required to run MCPAdapter as an MCP server. "
+                "Install it with: pip install 'varco-fastapi[mcp]'"
+            ) from exc
+
+        # SseServerTransport takes the message-POST endpoint path (relative to
+        # this sub-app's own mount point) — mcp/server/sse.py's own module
+        # docstring recipe.
+        sse_transport = SseServerTransport("/messages/")
+
+        async def _handle_sse(request: Any) -> Any:
+            async with sse_transport.connect_sse(
+                request.scope, request.receive, request._send
+            ) as streams:
+                await server.run(streams[0], streams[1], server.create_initialization_options())
+            # Must return a Response — the SDK's own docstring warns that
+            # returning None causes "TypeError: 'NoneType' object is not
+            # callable" once the client disconnects.
+            return Response()
+
+        mcp_app = Starlette(
+            routes=[
+                Route("/sse", endpoint=_handle_sse, methods=["GET"]),
+                Mount("/messages/", app=sse_transport.handle_post_message),
+            ]
+        )
         app.mount(path, mcp_app)
         _logger.info(
             "MCPAdapter: mounted %d tools at %s for %s%s",

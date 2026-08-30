@@ -546,7 +546,9 @@ class RedisStreamDLQ(AbstractDeadLetterQueue):
                 "RedisStreamDLQ.count() called before connect(). "
                 "Call await dlq.connect() or use 'async with dlq' first."
             )
-        return await self._redis.xlen(self._stream_key)
+        # redis-py ships no py.typed marker — xlen() is structurally Any.
+        length: int = await self._redis.xlen(self._stream_key)
+        return length
 
     # ── Consumer group management ──────────────────────────────────────────────
 
@@ -667,7 +669,7 @@ class RedisStreamDLQ(AbstractDeadLetterQueue):
               inside the JSON payload — NOT a new UUID4.  This ensures the relay
               can correlate entries across re-serializations.
         """
-        data: dict = json.loads(payload.decode("utf-8"))
+        data: dict[str, Any] = json.loads(payload.decode("utf-8"))
 
         # Re-deserialize the embedded Event payload — uses self._serializer
         # which resolves the event class via __event_type__ registry lookup.

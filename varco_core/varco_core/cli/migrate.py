@@ -38,7 +38,7 @@ from varco_core.migration.base import (
 from varco_core.migration.errors import MigrationError
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the ``migrate`` subcommand parser and its verbs."""
     parser = subparsers.add_parser("migrate", help="Run/inspect schema migrations")
     parser.set_defaults(_run=_run)

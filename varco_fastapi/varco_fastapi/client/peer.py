@@ -113,7 +113,7 @@ class PeerRegistry:
         self._profiles = dict(profiles or {})
         self._allow_literal_secret = allow_literal_secret
         self._breakers: dict[str, CircuitBreaker] = {}
-        self._clients: dict[tuple[str, type], AsyncVarcoClient] = {}
+        self._clients: dict[tuple[str, type], AsyncVarcoClient[Any]] = {}
 
         if not allow_literal_secret:
             for cfg in self._peers.values():
@@ -252,7 +252,7 @@ class PeerRegistry:
             timeout=cfg.timeout,
         )
 
-    def client(self, name: str, router_cls: type | None = None) -> AsyncVarcoClient:
+    def client(self, name: str, router_cls: type | None = None) -> AsyncVarcoClient[Any]:
         """
         Build (and cache) a client for peer ``name``.
 

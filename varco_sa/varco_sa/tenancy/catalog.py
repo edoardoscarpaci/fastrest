@@ -23,6 +23,7 @@ DESIGN: lazy ``ensure_table()`` on first use, not a required explicit call
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -100,7 +101,7 @@ class SATenantCatalog(AbstractTenantCatalog):
         await conn.run_sync(tenants_metadata.create_all, checkfirst=True)
 
     @staticmethod
-    def _row_to_descriptor(row: sa.Row) -> TenantDescriptor:
+    def _row_to_descriptor(row: sa.Row[tuple[Any, ...]]) -> TenantDescriptor:
         return TenantDescriptor(
             tenant_id=row.tenant_id,
             schema=row.schema_name,

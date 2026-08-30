@@ -308,7 +308,7 @@ def _bind_repo_provider(container: DIContainer, entity_cls: type[DomainModel]) -
                        construction itself is synchronous; I/O is lazy.
     """
 
-    def _repo_factory(provider: RepositoryProvider) -> AsyncRepository:
+    def _repo_factory(provider: RepositoryProvider) -> AsyncRepository[Any, Any]:
         # provider is injected by the container (resolved as RepositoryProvider
         # singleton from SAModule.repository_provider()).
         # get_repository() returns the correct AsyncSQLAlchemyRepository

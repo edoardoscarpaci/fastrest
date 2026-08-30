@@ -27,7 +27,7 @@ from typing import Any
 __all__ = ["MessageCatalog", "NullMessageCatalog", "DictMessageCatalog"]
 
 
-class _MissingTolerantDict(dict):
+class _MissingTolerantDict(dict[str, Any]):
     """``str.format_map`` mapping whose ``__missing__`` leaves the
     placeholder visible instead of raising ``KeyError``."""
 

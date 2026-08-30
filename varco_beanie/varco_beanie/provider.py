@@ -28,10 +28,13 @@ class BeanieRepositoryProvider(RepositoryProvider):
     Usage::
 
         from pymongo import AsyncMongoClient
+        from varco_beanie.config import BeanieSettings
         from varco_beanie.provider import BeanieRepositoryProvider
 
         client   = AsyncMongoClient("mongodb://localhost:27017")
-        provider = BeanieRepositoryProvider(mongo_client=client, db_name="myapp")
+        provider = BeanieRepositoryProvider(
+            settings=BeanieSettings(mongo_client=client, db_name="myapp"),
+        )
         provider.register(User, Post)   # ← or autodiscover("myapp.models")
 
         await provider.init()           # calls init_beanie() at startup

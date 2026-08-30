@@ -144,7 +144,7 @@ class TenantReadinessCoordinator(EventConsumer):
 
         self._seen: dict[str, set[str]] = {}
         self._lock: asyncio.Lock | None = None
-        self._timeout_tasks: dict[str, asyncio.Task] = {}
+        self._timeout_tasks: dict[str, asyncio.Task[None]] = {}
 
     def _get_lock(self) -> asyncio.Lock:
         if self._lock is None:

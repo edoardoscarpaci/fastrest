@@ -67,6 +67,7 @@ _logger = logging.getLogger(__name__)
 _ANONYMOUS: AuthContext = AuthContext()
 
 if TYPE_CHECKING:
+    from starlette.datastructures import Headers, QueryParams
     from varco_core.authority import TrustedIssuerRegistry
 
 # ── AbstractServerAuth ────────────────────────────────────────────────────────
@@ -657,17 +658,17 @@ class _RequestWithBearerOverride:
         return _HeadersWithBearer(self._request.headers, self._raw_token)
 
     @property
-    def query_params(self):
+    def query_params(self) -> QueryParams:
         return self._request.query_params
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         return getattr(self._request, name)
 
 
 class _HeadersWithBearer:
     """Header accessor that overrides the Authorization entry."""
 
-    def __init__(self, original, raw_token: str) -> None:
+    def __init__(self, original: Headers, raw_token: str) -> None:
         self._original = original
         self._bearer = f"Bearer {raw_token}"
 

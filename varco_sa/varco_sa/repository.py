@@ -492,7 +492,8 @@ class AsyncSQLAlchemyRepository(AsyncRepository[D, PK], Generic[D, PK]):
         result = await self._session.execute(stmt)
         await self._session.flush()
         # rowcount is reliable for UPDATE/DELETE on all supported SA backends
-        return result.rowcount  # type: ignore[attr-defined]
+        rowcount: int = result.rowcount  # type: ignore[attr-defined]
+        return rowcount
 
     # ── Internal helpers ───────────────────────────────────────────────────────
 

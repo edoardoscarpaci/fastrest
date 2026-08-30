@@ -89,7 +89,7 @@ class SyncVarcoClient:
           only headers and timeout from the profile are used.
     """
 
-    def __init__(self, async_client: AsyncVarcoClient) -> None:
+    def __init__(self, async_client: AsyncVarcoClient[Any]) -> None:
         # Store reference to the owning async client for config access
         self._async_client = async_client
         self._client: httpx.Client | None = None

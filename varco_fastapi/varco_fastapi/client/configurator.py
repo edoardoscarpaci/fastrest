@@ -303,7 +303,7 @@ class ClientConfigurator(Generic[R]):
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
-    def _resolve_router_type(self) -> type[VarcoRouter]:
+    def _resolve_router_type(self) -> type[VarcoRouter[Any, Any, Any, Any, Any]]:
         """
         Walk ``__orig_bases__`` to extract the router type ``R``.
 

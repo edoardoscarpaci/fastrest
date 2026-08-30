@@ -432,7 +432,7 @@ def rate_limit(
     limiter: RateLimiter,
     *,
     key_fn: Callable[..., str] | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator that gates calls to an async function through a ``RateLimiter``.
 
@@ -473,7 +473,7 @@ def rate_limit(
         async def upload(user_id: str, data: bytes) -> None: ...
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         # Reject sync functions early — async-only by design.
         if not asyncio.iscoroutinefunction(func):
             raise TypeError(

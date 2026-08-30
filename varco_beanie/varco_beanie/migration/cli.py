@@ -47,7 +47,7 @@ class {class_name}(Migration):
 '''
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register Beanie-specific verbs under the existing ``migrate`` subparser."""
     migrate_parser = subparsers.choices.get("migrate")
     if migrate_parser is None:

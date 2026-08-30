@@ -33,6 +33,8 @@ Same idempotent column-exists guard as ``0002_dlq_audit_tenant_id`` /
 
 from __future__ import annotations
 
+from typing import Any
+
 import sqlalchemy as sa
 from alembic import op
 
@@ -43,7 +45,7 @@ branch_labels = None
 depends_on = None
 
 _TABLE = "varco_jobs"
-_COLUMNS: tuple[tuple[str, sa.types.TypeEngine, dict], ...] = (
+_COLUMNS: tuple[tuple[str, sa.types.TypeEngine[Any], dict[str, Any]], ...] = (
     ("run_at_wall", sa.DateTime(timezone=False), {"nullable": True}),
     ("run_at_tz", sa.String(64), {"nullable": True}),
     ("run_at_fold", sa.Integer(), {"nullable": False, "server_default": "0"}),

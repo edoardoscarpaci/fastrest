@@ -98,8 +98,7 @@ _WS_STOP_SENTINEL = object()
 # ── BackpressurePolicy ─────────────────────────────────────────────────────────
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class BackpressurePolicy(str, enum.Enum):  # noqa: UP042
+class BackpressurePolicy(enum.StrEnum):
     """
     Policy applied when a per-client outbound queue is full.
 

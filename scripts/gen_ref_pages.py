@@ -18,12 +18,52 @@ DESIGN: generate-at-build over committing reference stubs
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import mkdocs_gen_files
 
-# Workspace package roots. Each package follows the ``varco_x/varco_x/`` layout
-# (distribution dir / import package). Keep in sync with pyproject.toml members.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _derive_packages() -> tuple[str, ...]:
+    """Derive the distribution-package list from ``[tool.uv.workspace] members``.
+
+    Single source of truth (Plan 020 / RL-18) — the literal ``PACKAGES`` tuple
+    below used to be a hand-written copy that silently drifted from the
+    workspace (it was missing ``varco_casbin``, so ``make docs`` never
+    rendered that package's API reference). Each package follows the
+    ``varco_x/varco_x/`` layout (distribution dir / import package); a member
+    is a distribution iff ``<member>/<member>/__init__.py`` exists — this
+    structurally excludes non-distribution members (e.g. ``examples``)
+    without naming them.
+
+    Returns:
+        Distribution-package names, in ``members`` order.
+    """
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())
+    members = data["tool"]["uv"]["workspace"]["members"]
+    return tuple(m for m in members if (REPO_ROOT / m / m / "__init__.py").is_file())
+
+
+# Workspace package roots, kept as a literal tuple (not a call) so a static
+# reader (varco_core/tests/test_repo_package_lists.py parses this file with
+# `ast` rather than importing it, since importing triggers mkdocs_gen_files'
+# build-time side effects) can verify it without executing anything.
+#
+# DESIGN: literal tuple + runtime drift assertion, instead of a pure
+# `PACKAGES = _derive_packages()` call
+#   ✅ Stays statically inspectable (ast.literal_eval) for the test suite,
+#      with zero import-time side effects.
+#   ✅ Still can't silently drift: the assertion immediately below fails
+#      loudly (RuntimeError) the moment this literal disagrees with the live
+#      `[tool.uv.workspace] members` derivation — the exact defect this row
+#      exists to remove, just checked at doc-build time instead of at every
+#      Python-level call site.
+#   ❌ Requires updating this literal by hand when a workspace member is
+#      added/removed. Accepted: the assertion turns a missed update into an
+#      immediate `make docs` failure naming the mismatch, never a silent gap
+#      (which is exactly what happened to `varco_casbin` before this fix).
 PACKAGES: tuple[str, ...] = (
     "varco_core",
     "varco_kafka",
@@ -34,9 +74,16 @@ PACKAGES: tuple[str, ...] = (
     "varco_memcached",
     "varco_ws",
     "varco_fastapi",
+    "varco_casbin",
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+_derived_packages = _derive_packages()
+if PACKAGES != _derived_packages:
+    raise RuntimeError(
+        f"scripts/gen_ref_pages.py's PACKAGES literal {PACKAGES!r} has drifted from "
+        f"[tool.uv.workspace] members' derived list {_derived_packages!r} — update the "
+        "literal above to match (Plan 020 / RL-18)."
+    )
 REFERENCE_DIR = Path("reference")
 
 # Directory names whose contents are NOT importable API and must never reach

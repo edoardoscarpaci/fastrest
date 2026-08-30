@@ -189,9 +189,9 @@ class TestDeserialize:
     def test_optional_uuid(self):
         """Optional[UUID] / UUID | None should deserialize the inner UUID."""
         uid_str = "12345678-1234-5678-1234-567812345678"
-        # Intentionally exercises the pre-PEP-604 Optional[] spelling for
-        # backward compatibility (see docstring above) — not a static
-        # annotation, so this is suppressed rather than rewritten.
+        # PERMANENT (Plan 020 / RL-15-keep, not migration debt): this test's
+        # subject IS `Optional[]` backward-compat handling — rewriting the
+        # construct would delete the test's reason to exist.
         result = self.s.deserialize(uid_str, Optional[uuid.UUID])  # noqa: UP045
         assert isinstance(result, uuid.UUID)
 

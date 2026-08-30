@@ -82,7 +82,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from beanie import Document
@@ -170,7 +170,7 @@ class InboxDocument(Document):
         # DESIGN: no index on received_at declared here — callers can add one
         # via a separate migration or Beanie's index management if the
         # collection grows large.  Avoid surprising schema side-effects.
-        indexes: list = []
+        indexes: list[Any] = []
 
     def __repr__(self) -> str:
         return (
@@ -312,7 +312,7 @@ class BeanieInboxRepository(InboxRepository):
 
         Async safety: ✅ Awaits ``find_one()`` and ``update()``.
         """
-        find_kwargs: dict = {}
+        find_kwargs: dict[str, Any] = {}
         if self._session is not None:
             find_kwargs["session"] = self._session
 
@@ -343,11 +343,15 @@ class BeanieInboxRepository(InboxRepository):
 
         # Document exists and is unprocessed — apply the update.
         now = datetime.now(UTC)
-        update_kwargs: dict = {}
+        update_kwargs: dict[str, Any] = {}
         if self._session is not None:
             update_kwargs["session"] = self._session
 
-        await doc.update(Set({InboxDocument.processed_at: now}), **update_kwargs)
+        # beanie ships no py.typed marker — the Set query operator is untyped upstream.
+        await doc.update(
+            Set({InboxDocument.processed_at: now}),  # type: ignore[no-untyped-call]
+            **update_kwargs,
+        )
         _logger.debug(
             "BeanieInboxRepository.mark_processed: marked entry_id=%s as processed",
             entry_id,
@@ -375,7 +379,7 @@ class BeanieInboxRepository(InboxRepository):
 
         Async safety: ✅ Awaits Beanie ``find()`` cursor.
         """
-        find_kwargs: dict = {}
+        find_kwargs: dict[str, Any] = {}
         if self._session is not None:
             find_kwargs["session"] = self._session
 

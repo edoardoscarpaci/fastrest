@@ -209,7 +209,7 @@ class KafkaEventBus(AbstractEventBus):
         # Channel management (admin client) is now handled by KafkaChannelManager.
         self._producer: Any | None = None
         self._consumer: Any | None = None
-        self._consumer_task: asyncio.Task | None = None
+        self._consumer_task: asyncio.Task[None] | None = None
         self._started = False
 
         # Pre-build middleware chain — same approach as InMemoryEventBus.

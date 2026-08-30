@@ -350,7 +350,7 @@ def _log_exhausted(func_name: str, attempts: int, exc: BaseException) -> None:
 # ── @retry decorator ─────────────────────────────────────────────────────────
 
 
-def retry(policy: RetryPolicy) -> Callable:
+def retry(policy: RetryPolicy) -> Callable[..., Any]:
     """
     Decorator factory that wraps a callable with retry + exponential-backoff logic.
 
@@ -400,7 +400,7 @@ def retry(policy: RetryPolicy) -> Callable:
                 return f.read()
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         if asyncio.iscoroutinefunction(func):
             return _wrap_async(func, policy)
         return _wrap_sync(func, policy)

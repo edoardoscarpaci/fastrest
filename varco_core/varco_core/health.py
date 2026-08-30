@@ -56,7 +56,7 @@ from __future__ import annotations
 import abc
 import asyncio
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import ClassVar
 
 # ── HealthStatus ──────────────────────────────────────────────────────────────
@@ -72,8 +72,7 @@ _HEALTH_SEVERITY: dict[str, int] = {
 }
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class HealthStatus(str, Enum):  # noqa: UP042
+class HealthStatus(StrEnum):
     """
     Enumeration of possible component health states.
 

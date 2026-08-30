@@ -126,7 +126,11 @@ class SynthesizedTypeResolver:
         for pname, pschema in properties.items():
             ptype = self.resolve(pschema) or Any
             fields[pname] = (ptype, ... if pname in required else None)
-        model = pydantic.create_model(name, **fields)
+        # pydantic.create_model()'s ModelT is unconstrained here (fields are
+        # dynamically built from an OpenAPI schema fragment) — mypy infers
+        # `type[Any]`; annotate the local to match this module's own cache
+        # type (`dict[str, type]`).
+        model: type = pydantic.create_model(name, **fields)
         self._cache[name] = model
         return model
 

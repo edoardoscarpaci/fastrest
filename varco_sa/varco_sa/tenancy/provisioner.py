@@ -18,6 +18,8 @@ so ``SASchemaProvisioner`` does not require ``SAAdminEngine`` (Phase 6).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING
 
 from varco_core.tenancy.provisioner import AbstractTenantProvisioner
@@ -45,7 +47,12 @@ class SASchemaProvisioner(AbstractTenantProvisioner):
                              validate) the real schema name.
     """
 
-    def __init__(self, *, connection_factory, router: SASchemaRouter | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        connection_factory: Callable[[], AbstractAsyncContextManager[AsyncConnection]],
+        router: SASchemaRouter | None = None,
+    ) -> None:
         self._connection_factory = connection_factory
         self._router = router or SASchemaRouter()
 

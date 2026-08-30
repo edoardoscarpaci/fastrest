@@ -111,7 +111,7 @@ class JobHandle:
         job_id: UUID,
         poll_url: str,
         events_url: str | None,
-        client: AsyncVarcoClient,
+        client: AsyncVarcoClient[Any],
     ) -> None:
         self.job_id = job_id
         self.poll_url = poll_url
@@ -131,7 +131,9 @@ class JobHandle:
         Raises:
             httpx.HTTPStatusError: Server returned non-2xx.
         """
-        response = await self._client._request(
+        # `_request()` is `-> Any` — its return shape depends on the caller's
+        # `response_model=` argument; `response_model=None` means "raw dict".
+        response: dict[str, Any] | None = await self._client._request(
             "GET",
             self.poll_url,
             body=None,

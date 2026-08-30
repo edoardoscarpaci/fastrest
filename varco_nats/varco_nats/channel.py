@@ -512,7 +512,8 @@ class NatsStreamManager(ChannelManager):
             return False
 
         subjects = getattr(info.state, "subjects", None) or {}
-        return subjects.get(subject, 0) > 0
+        has_messages: bool = subjects.get(subject, 0) > 0
+        return has_messages
 
     async def list_channels(self) -> list[str]:
         """

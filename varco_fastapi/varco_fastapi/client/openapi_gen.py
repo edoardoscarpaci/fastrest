@@ -108,7 +108,7 @@ def _get_ref_name(schema_obj: dict[str, Any]) -> str | None:
     Returns:
         ``"Foo"`` or ``None``.
     """
-    ref = schema_obj.get("$ref", "")
+    ref: str = schema_obj.get("$ref", "")
     if ref.startswith("#/components/schemas/"):
         return ref[len("#/components/schemas/") :]
     return None

@@ -377,7 +377,12 @@ class JwtMiddleware(AbstractClientMiddleware):
             builder = builder.audience(self._audience)
         for key, value in self._extra_claims.items():
             builder = builder.claim(key, value)
-        return self._authority.sign(builder)
+        # `_authority` is typed `Any` (accepts any object exposing a
+        # JwtAuthority-shaped sign() — see __init__), so its return is
+        # structurally Any here even though the concrete JwtAuthority.sign()
+        # is `-> str`.
+        signed: str = self._authority.sign(builder)
+        return signed
 
 
 # ── RetryMiddleware ───────────────────────────────────────────────────────────

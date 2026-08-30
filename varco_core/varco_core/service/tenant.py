@@ -540,7 +540,7 @@ class TenantAwareService(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, 
             ServiceAuthorizationError: ``tenant_id`` absent or falsy in
                 ``ctx.metadata``.
         """
-        tid = ctx.metadata.get("tenant_id")
+        tid: str | None = ctx.metadata.get("tenant_id")
         if not tid:
             raise ServiceAuthorizationError("access", self._entity_type())
         return tid

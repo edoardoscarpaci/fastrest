@@ -84,8 +84,8 @@ class _RouteEntry:
     summary: str | None = None
     description: str | None = None
     response_description: str = "Successful Response"
-    responses: dict | None = None
-    dependencies: list | None = None
+    responses: dict[str | int, dict[str, Any]] | None = None
+    dependencies: list[Any] | None = None
     tags: list[str] | None = None
     operation_id: str | None = None
     deprecated: bool = False
@@ -140,8 +140,8 @@ def route(
     summary: str | None = None,
     description: str | None = None,
     response_description: str = "Successful Response",
-    responses: dict | None = None,
-    dependencies: list | None = None,
+    responses: dict[str | int, dict[str, Any]] | None = None,
+    dependencies: list[Any] | None = None,
     tags: list[str] | None = None,
     operation_id: str | None = None,
     deprecated: bool = False,
@@ -160,7 +160,7 @@ def route(
     skill_output_modes: list[str] | None = None,
     # ── Route-level authorization ─────────────────────────────────────────────
     requires: RouteGuard | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator to declare a custom HTTP endpoint on a ``VarcoRouter`` subclass.
 
@@ -256,7 +256,7 @@ def route(
     Async safety:   ✅ No I/O.
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         entry = _RouteEntry(
             method=method.upper(),
             path=path,
@@ -330,7 +330,7 @@ def ws_route(
     summary: str | None = None,
     tags: list[str] | None = None,
     include_in_schema: bool = True,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator to declare a WebSocket endpoint on a ``VarcoRouter`` subclass.
 
@@ -361,7 +361,7 @@ def ws_route(
                 await websocket.send_text(f"echo: {data}")
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         func.__ws_route_entry__ = _WSRouteEntry(  # type: ignore[attr-defined]
             path=path,
             route_order=route_order,
@@ -419,7 +419,7 @@ def sse_route(
     summary: str | None = None,
     tags: list[str] | None = None,
     include_in_schema: bool = True,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator to declare an SSE endpoint on a ``VarcoRouter`` subclass.
 
@@ -447,7 +447,7 @@ def sse_route(
         include_in_schema: Whether to include in OpenAPI.
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         func.__sse_route_entry__ = _SSERouteEntry(  # type: ignore[attr-defined]
             path=path,
             route_order=route_order,

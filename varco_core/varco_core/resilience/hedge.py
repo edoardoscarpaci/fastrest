@@ -234,7 +234,7 @@ async def _hedged_call(
 # ── @hedge decorator ──────────────────────────────────────────────────────────
 
 
-def hedge(config: HedgeConfig) -> Callable:
+def hedge(config: HedgeConfig) -> Callable[..., Any]:
     """
     Decorator factory that wraps an async callable with hedged-request logic.
 
@@ -270,7 +270,7 @@ def hedge(config: HedgeConfig) -> Callable:
             ...  # may send the email twice!
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         if not asyncio.iscoroutinefunction(func):
             raise TypeError(
                 f"@hedge can only decorate async functions; "

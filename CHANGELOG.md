@@ -9,6 +9,104 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Internal / typing — mypy strictness ramp complete (Plan 021, RL-14/RL-14b/RL-14c/RL-14d)
+
+**Not a BREAKING change.** `[tool.mypy]`'s root config now carries `strict = true` (mypy 2.3.1's
+13-flag bundle) plus `disallow_any_unimported = true` across all ten `varco_*` packages, closing
+the strictness ramp Plan 020 started. Every one of the ~280 newly-surfaced errors was fixed by
+annotating varco's own code (bare `dict`/`list`/`Callable` generics, missing return types,
+`Any`-returning functions) — no public signature gained or lost a type parameter. In particular,
+`AsyncVarcoClient`, `VarcoRouter`, `AsyncCache`, `ClientConfigurator`, `AsyncRepository`, and
+`AbstractMapper` keep their exact current declarations; downstream code writing a bare
+`AsyncVarcoClient` still means `AsyncVarcoClient[Any]`, unchanged (Plan 021 §D3). A handful of
+genuinely-untypable third-party call sites (redis-py's `Pipeline.reset()`/`multi()`,
+prometheus_client's `generate_latest()`, beanie's `Set` operator and `casbin`/`aiokafka`'s
+unshipped type stubs) are narrow-suppressed with a reasoned `# type: ignore[<code>]` each — not
+debt, per the existing `§RL-14-metric` convention. See BACKLOG.md's RL-14/RL-14b/RL-14c/RL-14d
+rows (all closed) and `plans/021-mypy-strict-full-ramp.md` for the full per-flag remediation
+record.
+
+### Fixed — Plan 017 findings remediation (Plan 020, KI-9/KI-10/KI-11/RL-15/RL-17/RL-18/RL-19)
+
+Pays off `xfail(strict=True)` markers and BACKLOG rows filed during Plan 017's CI-green pass.
+See BACKLOG.md's "Plan 017 findings" table for full evidence.
+
+- 🔒 **Security-relevant fix — `varco_beanie`'s audit trail is now tenant-scoped.**
+  `BeanieAuditRepository.list_for_entity()` was missing the `tenant_id: str | None = None`
+  keyword-only parameter the `AuditRepository` ABC declares (Plan 009 / R4) — any caller passing
+  `tenant_id=` got a `TypeError`, and the underlying query filtered only on
+  `(entity_type, entity_id)`, i.e. across every tenant. Fixed to mirror
+  `varco_sa.audit.SAAuditRepository` exactly: `tenant_id=None` (default) preserves the
+  pre-existing unscoped behaviour; any other value filters the query. (KI-9)
+- **`BeanieFastrestApp`'s non-DI construction path now actually constructs.** It called
+  `BeanieRepositoryProvider(mongo_client=…, db_name=…, transactional=…)`, but that class's real
+  `__init__` only accepts an injected `settings: Inject[BeanieSettings]` — every call raised
+  `TypeError`. Undetected because the class had zero test coverage. Fixed by building a
+  `BeanieSettings` from `BeanieConfig`'s field-for-field-compatible attributes and passing
+  `settings=`; the now-redundant second `self._provider.register(...)` call is removed (the
+  provider's own `__init__` already registers `entity_classes`). The stale docstring in
+  `BeanieRepositoryProvider` that caused this bug (documenting the deleted `mongo_client=`/
+  `db_name=` call shape) is also fixed. (KI-10)
+- ⚠️ **BREAKING — `MCPAdapter.to_mcp_server()` now returns a low-level `mcp.server.lowlevel.Server`,
+  not a `FastMCP` instance.** Both of `to_mcp_server()`'s public entry points (it, and `mount()`
+  which calls it) were dead code before this fix: the high-level `FastMCP.add_tool()` has never
+  accepted an `input_schema=` parameter (SDK issue #761, open since May 2025) — it derives the
+  tool schema from the handler's type hints, which cannot express varco's generic
+  `execute(tool_name, arguments)` dispatch. Fixed by dropping to the low-level `Server` API with a
+  new `_to_mcp_tools()` builder that passes varco's own JSON Schema dicts to `mcp.types.Tool`
+  verbatim — no synthesis, no post-processing. `mount()` is rebuilt on `mcp.server.sse.SseServerTransport`
+  directly (the low-level `Server` has no `sse_app()`/`asgi_app()` convenience method `FastMCP`
+  had). The `mcp` extra is now upper-bounded: `mcp = ["mcp>=1.28.1,<2"]` (previously unbounded
+  `>=1.0`, which would have auto-upgraded to the v2 line and removed this API entirely). Anyone
+  calling `to_mcp_server()` directly and relying on `FastMCP`-specific methods must migrate to the
+  low-level `Server` API. (KI-11)
+
+⚠️ **BREAKING — eight public enums migrated from `class Foo(str, Enum)` to `enum.StrEnum`**
+(RL-15, spent inside the 3.0.0 breaking-change window per BACKLOG's Locked decisions —
+after 3.0.0 this becomes a major-version-only change): `PKStrategy`, `HealthStatus`,
+`ErrorPolicy`, `DispatchMode`, `CircuitState`, `KafkaDeliverySemantics`,
+`NatsDeliverySemantics`, `BackpressurePolicy` (plus `examples/19-resilience-payment-gateway`'s
+`FailMode`). `StrEnum` undoes Python 3.11's `Enum.__format__` change (CPython #100458): a
+downstream consumer that formats one of these enums now gets its intended value.
+
+| Expression | Before | After |
+|---|---|---|
+| `f"{HealthStatus.HEALTHY}"` | `"HealthStatus.HEALTHY"` | `"healthy"` |
+| `str(CircuitState.OPEN)` | `"CircuitState.OPEN"` | `"open"` |
+| `"%s" % ErrorPolicy.FAIL_FAST` | `"ErrorPolicy.FAIL_FAST"` | `"fail_fast"` |
+
+**Unchanged** (verified by `varco_core/tests/test_strenum_serialization.py`, run both before and
+after migration): `.value` access, `json.dumps(member)` (stdlib `JSONEncoder` does an
+`isinstance(obj, str)` check — identical output either way), and pydantic v2
+`model_dump(mode="json")`/`BaseSettings` env-var parsing (both serialize/parse by value under
+either form). No in-tree caller was affected — measured zero bare `{member}`-style
+interpolations across the repo before migrating (BACKLOG EC-3). If you `str()`- or `%s`-log one
+of these eight types outside varco, update any log-scraping regex that depended on the old
+`ClassName.MEMBER` text.
+
+- **Fixed — `make docs` had never rendered `varco_casbin`'s API reference.** `scripts/
+  gen_ref_pages.py` carried its own hand-written package list (a fourth, previously
+  unreported copy of the same triplication RL-18 fixes below) and it was missing
+  `varco_casbin`. Fixed as a side effect of deriving the list from `[tool.uv.workspace]
+  members`. (RL-18)
+- **`scripts/packages.sh` (new) is now the single source of truth for the workspace package
+  list**, derived from root `pyproject.toml`'s `[tool.uv.workspace] members` via stdlib
+  `tomllib`. Replaces four independent hand-written copies (`Makefile`'s `PACKAGES`,
+  `scripts/unit_tests.sh`, `scripts/integration_tests.sh`, `scripts/gen_ref_pages.py`) — the
+  exact defect class that let `varco_casbin` go missing from `make lint`/`make docs` in the
+  first place. `make print-packages` prints the derived list. Guarded by
+  `varco_core/tests/test_repo_package_lists.py`. (RL-18)
+- **`ruff format --check` is now a CI/`make lint` gate**, at zero `.py` reformatting churn
+  (measured with the pinned `ruff==0.16.4`: 0 of 1107 files would change). Added to
+  `.github/workflows/test.yml`'s `lint` job and the `.pre-commit-config.yaml` `ruff-format`
+  hook, alongside the pre-existing `ruff check`. `[tool.ruff.format]` sets
+  `docstring-code-format = false` explicitly to keep the formatter out of hand-wrapped
+  `Usage::` docstring blocks. (RL-17)
+- **`.pre-commit-config.yaml`'s ruff `rev` is now guarded against drifting from the
+  `ruff==0.16.4` pin** in root `pyproject.toml`'s `[dependency-groups] lint` group, by
+  `varco_core/tests/test_repo_tooling_pins.py` — the prior divergence (`v0.4.1` vs.
+  `ruff==0.16.4`) broke the pre-commit hook silently on the next `git commit`. (RL-19)
+
 ### Fixed — Plan 018 findings remediation (Plan 019, RT2-B/RT2-C/RT7a/RT7b/RT9-beanie)
 
 Pays off the `xfail(strict=True)` markers Plan 018 filed rather than fixed. Every marker removed

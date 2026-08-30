@@ -489,30 +489,19 @@ def test_bind_mcp_adapter_registers_a_singleton():
     assert container.get(MCPAdapter) is container.get(MCPAdapter)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG: to_mcp_server() calls server.add_tool(input_schema=...), but the "
-        "mcp SDK's FastMCP.add_tool() has no input_schema parameter — it derives "
-        "the schema from the handler's type hints, and varco's _handler is an "
-        "untyped **kwargs shim. Mapping varco's JSON input_schema onto a "
-        "signature-derived one is a design change, not a typo. See BACKLOG KI-11."
-    ),
-)
-def test_to_mcp_server_imports_fastmcp_from_its_real_location():
+def test_to_mcp_server_returns_a_low_level_server_and_does_not_raise():
     """
-    Regression: ``to_mcp_server()`` must import ``FastMCP`` from
-    ``mcp.server.fastmcp``, not from the ``mcp`` package root.
+    Plan 020 / KI-11: ``to_mcp_server()`` must construct and return a working
+    server without raising.
 
-    ``FastMCP`` has never been exported from ``mcp/__init__.py``.  The original
-    ``from mcp import FastMCP`` therefore raised ``ImportError`` even when the
-    package WAS installed, and the surrounding ``except ImportError`` re-raised
-    it as "the 'mcp' package is required … pip install 'varco-fastapi[mcp]'" —
-    sending the caller to reinstall something they already had.
-
-    The bug was invisible until the mypy gate ran against a venv synced with
-    ``--all-extras`` (RL-21's up-front sync), because with ``mcp`` absent
-    ``ignore_missing_imports`` typed the whole module as ``Any``.
+    Formerly ``test_to_mcp_server_imports_fastmcp_from_its_real_location``,
+    marked ``xfail(strict=True)`` — both of the method's two independent
+    defects (importing ``FastMCP`` from the wrong location, and calling
+    ``server.add_tool(input_schema=...)``, a parameter ``FastMCP.add_tool()``
+    has never accepted) are now fixed by dropping to the low-level
+    ``mcp.server.lowlevel.Server`` API (§KI-11 design), so this test asserts
+    what ``to_mcp_server()`` now actually does instead of what it used to
+    fail at.
 
     Edge cases:
         - ``mcp`` genuinely not installed → skipped; the ImportError branch is
@@ -523,5 +512,54 @@ def test_to_mcp_server_imports_fastmcp_from_its_real_location():
     adapter = MCPAdapter(OrderRouter, client=AsyncMock())
     server = adapter.to_mcp_server()
 
-    # Constructed a real FastMCP, not raised the misleading ImportError.
-    assert type(server).__name__ == "FastMCP"
+    # Constructed a real low-level Server, not raised.
+    assert type(server).__name__ == "Server"
+
+
+def test_mcp_tool_objects_carry_varco_input_schemas():
+    """
+    Plan 020 / KI-11 (§KI-11-testability): the module-level
+    ``_to_mcp_tools(tools)`` builder does not exist yet — this call raises
+    ``ImportError`` today. Once it exists it must build one ``mcp.types.Tool``
+    per ``MCPToolDefinition``, carrying varco's own JSON Schema verbatim (no
+    signature-derived synthesis), which is the entire point of KI-11.
+    """
+    pytest.importorskip("mcp", reason="the 'mcp' extra is not installed")
+    from varco_fastapi.router.mcp import _to_mcp_tools  # noqa: PLC0415
+
+    adapter = MCPAdapter(OrderRouter, client=AsyncMock())
+    tools = _to_mcp_tools(adapter.tools)
+
+    assert len(tools) == len(adapter.tools)
+    by_name = {tool.name: tool for tool in tools}
+    for tool_def in adapter.tools:
+        mcp_tool = by_name[tool_def.name]
+        assert mcp_tool.description == tool_def.description
+        # The schema field's exact spelling (inputSchema vs input_schema) is
+        # resolved by Plan 020 Step 26's SDK read — assert on whichever
+        # attribute the installed SDK exposes, but its *content* must be
+        # varco's own schema, not something FastMCP synthesized.
+        schema = getattr(mcp_tool, "inputSchema", None)
+        if schema is None:
+            schema = getattr(mcp_tool, "input_schema", None)
+        assert schema == tool_def.input_schema
+
+
+def test_mount_registers_a_route_at_the_given_path():
+    """
+    Plan 020 / KI-11, Step 35: ``mount()`` must register something reachable
+    at the given path on the FastAPI app, without raising.
+
+    Deterministic assertion only — a live SSE stream is not exercised here
+    (that remains a follow-up manual smoke test, per §KI-11's Risks table).
+    """
+    pytest.importorskip("mcp", reason="the 'mcp' extra is not installed")
+    from fastapi import FastAPI  # noqa: PLC0415
+
+    adapter = MCPAdapter(OrderRouter, client=AsyncMock())
+    app = FastAPI()
+
+    adapter.mount(app, path="/mcp")
+
+    mounted_paths = [getattr(r, "path", None) for r in app.routes]
+    assert "/mcp" in mounted_paths

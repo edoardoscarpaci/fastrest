@@ -19,6 +19,7 @@ rather than `yaml.safe_load()`.
 from __future__ import annotations
 
 import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -114,7 +115,12 @@ def test_tool_mypy_table_settings():
     assert mypy.get("explicit_package_bases") is True
     assert mypy.get("namespace_packages") is True
     assert mypy.get("ignore_missing_imports") is True
-    assert mypy.get("warn_unused_ignores") is True
+    # warn_unused_ignores was an individually-landed ramp flag (Plan 020) —
+    # Plan 021 Phase 7 collapsed the whole landed ramp into `strict = true`
+    # (mypy 2.3.1's 13-flag bundle, which includes warn_unused_ignores; see
+    # pyproject.toml's [tool.mypy] comment block). Assert the umbrella flag
+    # instead of the individual one it now subsumes.
+    assert mypy.get("strict") is True
 
     mypy_path = mypy.get("mypy_path")
     assert mypy_path, "mypy_path must be set (exact form unverified by the plan)"
@@ -191,23 +197,42 @@ def test_unit_tests_script_exists_executable_and_excludes_integration_flag():
 
 
 def test_makefile_packages_contains_all_ten_workspace_members():
-    """Step 10: `varco_casbin` was silently excluded from lint/format/
-    type-check/test/build/publish. Derived from [tool.uv.workspace] members
-    so it cannot go stale a second time."""
+    """Step 10 (Plan 017) / Plan 020 RL-18: `varco_casbin` was silently
+    excluded from lint/format/type-check/test/build/publish under the OLD
+    hand-written ``PACKAGES := \\ ...`` literal block.
+
+    Plan 020 / RL-18 replaced that literal with `PACKAGES :=
+    $(shell $(CURDIR)/scripts/packages.sh)` — a single derivation from
+    `[tool.uv.workspace] members` (see `varco_core/tests/test_repo_package_lists.py`
+    for the dedicated RL-18 guard). This test now asserts the Makefile
+    delegates to that script rather than re-parsing a literal block that no
+    longer exists, and cross-checks the script's actual output against the
+    workspace members it derives from — the same "can't go stale a second
+    time" property, achieved through the script rather than through Makefile
+    text.
+    """
     expected = set(_workspace_members())
     assert len(expected) == 10
 
     makefile_text = MAKEFILE.read_text()
-    match = re.search(r"PACKAGES\s*:=\s*(.*?)\n\n", makefile_text, re.DOTALL)
-    assert match, "could not locate PACKAGES := ... block in Makefile"
-    block = match.group(1)
-    found = {
-        line.strip().rstrip("\\").strip()
-        for line in block.splitlines()
-        if line.strip().strip("\\").strip()
-    }
+    assert re.search(
+        r"PACKAGES\s*:=\s*\$\(shell\s+\$\(CURDIR\)/scripts/packages\.sh\)", makefile_text
+    ), (
+        "Makefile's PACKAGES must delegate to scripts/packages.sh (Plan 020 / RL-18), "
+        "not hand-list workspace members"
+    )
+
+    result = subprocess.run(
+        [str(REPO_ROOT / "scripts" / "packages.sh")],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"scripts/packages.sh failed: {result.stderr}"
+    found = {line.strip() for line in result.stdout.splitlines() if line.strip()}
     missing = expected - found
-    assert not missing, f"Makefile PACKAGES is missing: {sorted(missing)}"
+    assert not missing, f"scripts/packages.sh output is missing: {sorted(missing)}"
 
 
 # ---------------------------------------------------------------------------

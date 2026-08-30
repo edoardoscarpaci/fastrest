@@ -36,10 +36,10 @@ from varco_fastapi.client.base import AsyncVarcoClient, ClientProfile, _VarcoCli
 
 # Memoizes router_cls -> generated AsyncVarcoClient subclass so repeated
 # client_for(SameRouter, ...) calls do not re-run the metaclass.
-_client_class_memo: dict[type, type[AsyncVarcoClient]] = {}
+_client_class_memo: dict[type, type[AsyncVarcoClient[Any]]] = {}
 
 
-def client_class_for(router_cls: type) -> type[AsyncVarcoClient]:
+def client_class_for(router_cls: type) -> type[AsyncVarcoClient[Any]]:
     """
     Return (and memoize) the generated client CLASS for ``router_cls``.
 
@@ -88,7 +88,7 @@ def client_for(
     verify: bool | str = True,
     middleware: tuple[Any, ...] | None = None,
     headers: Any = None,
-) -> AsyncVarcoClient:
+) -> AsyncVarcoClient[Any]:
     """
     THE documented way to get a client for a varco service.
 

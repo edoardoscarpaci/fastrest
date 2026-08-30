@@ -61,8 +61,7 @@ from varco_core.event.config import EventBusSettings
 # ── NatsDeliverySemantics ─────────────────────────────────────────────────────
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class NatsDeliverySemantics(str, enum.Enum):  # noqa: UP042
+class NatsDeliverySemantics(enum.StrEnum):
     """
     Delivery guarantee level for ``NatsEventBus``.
 

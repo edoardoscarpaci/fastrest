@@ -673,7 +673,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
         Edge cases:
             - Datetimes without timezone info are treated as UTC.
         """
-        data: dict = json.loads(payload.decode("utf-8"))
+        data: dict[str, Any] = json.loads(payload.decode("utf-8"))
 
         event = self._serializer.deserialize(data["event_payload"].encode("utf-8"))
 

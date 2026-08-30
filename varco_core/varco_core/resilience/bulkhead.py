@@ -346,7 +346,7 @@ class Bulkhead:
                 self.available_slots,
             )
 
-    def protect(self, func: Callable) -> Callable:
+    def protect(self, func: Callable[..., Any]) -> Callable[..., Any]:
         """
         Decorator that routes all calls to ``func`` through this bulkhead.
 
@@ -402,7 +402,7 @@ def bulkhead(
     config: BulkheadConfig,
     *,
     name: str | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator factory that wraps an async function with a new ``Bulkhead``.
 
@@ -436,7 +436,7 @@ def bulkhead(
             ...
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         bulkhead_name = name or func.__qualname__
         bh = Bulkhead(config, name=bulkhead_name)
         return bh.protect(func)

@@ -71,7 +71,8 @@ Async safety:   ✅ Span context manager is entered/exited around ``await super(
 from __future__ import annotations
 
 from abc import ABC
-from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
@@ -90,6 +91,7 @@ PK = TypeVar("PK")
 C = TypeVar("C", bound=CreateDTO)
 R = TypeVar("R", bound=ReadDTO)
 U = TypeVar("U", bound=UpdateDTO)
+_T = TypeVar("_T")
 
 
 # ── TracingServiceMixin ────────────────────────────────────────────────────────
@@ -150,7 +152,12 @@ class TracingServiceMixin(AsyncService[D, PK, C, R, U], ABC, Generic[D, PK, C, R
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
-    async def _run_in_span(self, operation: str, coro_fn, *args):
+    async def _run_in_span(
+        self,
+        operation: str,
+        coro_fn: Callable[..., Awaitable[_T]],
+        *args: Any,
+    ) -> _T:
         """
         Open a span named ``{ClassName}.{operation}``, run ``coro_fn(*args)``
         inside it, close the span on completion or exception.

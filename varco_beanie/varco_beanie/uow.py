@@ -47,7 +47,7 @@ class BeanieUnitOfWork(AsyncUnitOfWork):
 
     def __init__(
         self,
-        mongo_client: AsyncMongoClient,
+        mongo_client: AsyncMongoClient[dict[str, Any]],
         repo_factories: dict[str, Callable[[AsyncClientSession | None], Any]],
         *,
         transactional: bool = False,

@@ -212,8 +212,9 @@ class MetricsRouter:
                 )
 
                 # prometheus_client ≥ 0.20 requires REGISTRY as first arg
+                # prometheus_client ships no py.typed marker — generate_latest() is untyped upstream.
                 return Response(
-                    content=openmetrics_generate(REGISTRY),
+                    content=openmetrics_generate(REGISTRY),  # type: ignore[no-untyped-call]
                     media_type=OPENMETRICS_CONTENT_TYPE,
                 )
             except ImportError:

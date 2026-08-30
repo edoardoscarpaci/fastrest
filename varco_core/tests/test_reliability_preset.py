@@ -195,3 +195,57 @@ class TestListenUnsetSentinel:
         # distinguishable from an explicit `retry_policy=None`.
         assert omitted_entry.retry_policy is _UNSET
         assert explicit_entry.retry_policy is None
+
+    def test_omitted_dlq_is_distinguishable_from_explicit_none(self) -> None:
+        """Same _UNSET-vs-None distinction as retry_policy, for dlq (Plan 009
+        RD-7 states both fields independently; Plan 021 D4 widens both
+        annotations in the same edit, so both need an identity guard)."""
+
+        class Omitted(EventConsumer):
+            @listen(SampleEvent, channel="ch")
+            async def on_event(self, event: SampleEvent) -> None: ...
+
+        class Explicit(EventConsumer):
+            @listen(SampleEvent, channel="ch", retry_policy=None, dlq=None)
+            async def on_event(self, event: SampleEvent) -> None: ...
+
+        omitted_entry = Omitted.on_event.__listen_entries__[0]
+        explicit_entry = Explicit.on_event.__listen_entries__[0]
+
+        from varco_core.event.consumer import _UNSET
+
+        assert omitted_entry.dlq is _UNSET
+        assert explicit_entry.dlq is None
+
+    async def test_explicit_dlq_none_alone_opts_out_of_retry_policy_default_too(
+        self,
+    ) -> None:
+        """Declaring EITHER field explicitly opts the whole entry out of the
+        process-wide default for BOTH fields (register_to()'s `entry_declared`
+        check is `retry_policy is not _UNSET OR dlq is not _UNSET`) -- an
+        entry that only passes `dlq=None` and omits `retry_policy` does NOT
+        fall back to the durable default's retry_policy either. This is the
+        exact branch Plan 021's D4 annotation-widening edit touches; pin it
+        down as a behavioural regression guard."""
+        from varco_core.reliability import (
+            ReliabilityPreset,
+            set_default_reliability_preset,
+        )
+
+        dlq = InMemoryDeadLetterQueue()
+        set_default_reliability_preset(ReliabilityPreset.durable(dlq=dlq))
+
+        class PartiallyDeclaredConsumer(EventConsumer):
+            @listen(SampleEvent, channel="ch", dlq=None)
+            async def on_event(self, event: SampleEvent) -> None:
+                raise RuntimeError("always fails")
+
+        bus = InMemoryEventBus()
+        consumer = PartiallyDeclaredConsumer()
+        consumer.register_to(bus)
+        # No retry_policy is in effect (entry_declared=True short-circuits the
+        # preset fallback entirely), so a single failure propagates
+        # synchronously under SYNC dispatch instead of being retried/DLQ'd.
+        with pytest.raises(Exception):
+            await bus.publish(SampleEvent(), channel="ch")
+        assert await dlq.count() == 0

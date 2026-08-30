@@ -59,18 +59,43 @@ target-version = "py312"
 # checkouts of sibling branches) mounted inside this repo's directory tree.
 # They are gitlinks, not part of this repo's own source — `ruff check .`
 # must never walk into them and mutate another session's working directory.
-extend-exclude = [".claude/worktrees"]
+#
+# `*.md`: `ruff format` (unlike `ruff check`) also reformats fenced Python
+# code blocks inside Markdown files by default. The RL-17 formatter gate is
+# deliberately `.py`-scoped (measured at zero churn there — see
+# [tool.ruff.format] below); Markdown's fenced-code formatting is a separate,
+# unmeasured surface (varco's README "Usage::" blocks are hand-wrapped to read
+# well at 100 columns per CLAUDE.md's docstring conventions) and is excluded
+# here rather than silently gated alongside it.
+extend-exclude = [".claude/worktrees", "*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
-# E501: line-length is enforced by the formatter, not the linter (and this repo
-# does not run a formatter gate yet — Non-goal, plans/017).
+# E501: a formatter gate IS live (see [tool.ruff.format] below, Plan 020 /
+# RL-17) but the formatter cannot fix a long line by itself — it wraps
+# expressions, not URLs, string literals, or comments, none of which have a
+# legal line-break point. Un-ignoring E501 would flag lines nothing can
+# shorten, so the rule stays ignored regardless of the formatter gate.
 # UP046/UP047: flag `Generic[T]` subclasses and generic functions that predate
 # PEP 695 `class Foo[T]:` / `def foo[T]` syntax. Migrating varco's public
 # generic API (AsyncService[D, PK, C, R, U], AsyncCache[K, V], AsyncRepository[D],
 # ...) is a real but separate piece of work, not this CI-green change — ignored
 # here rather than silently drifting to red the moment the lint gate lands.
 ignore = ["E501", "UP046", "UP047"]
+
+# §RL-17 (plans/020-plan-017-findings-remediation.md): adopted at genuinely
+# zero code churn — `uv run ruff format --check .` reported 0 `.py` files
+# would be reformatted across all ten packages + examples (measured with the
+# pinned ruff==0.16.4; the only diffs were two Markdown fenced blocks, out of
+# this gate's `.py` scope).
+[tool.ruff.format]
+# ruff's own default; set explicitly so the decision is visible rather than
+# implicit. Varco's README "Usage::" blocks are hand-wrapped to read well at
+# 100 columns inside an indented docstring per CLAUDE.md's docstring
+# conventions — letting the formatter rewrite them would be exactly the
+# "unmeasured whole-tree churn" RL-17 originally feared, just relocated from
+# source files into docstrings.
+docstring-code-format = false
 
 # §RL-6-mypy (plans/017-ci-green-workflows-and-lint-type-gates.md): defaults +
 # monorepo plumbing. mypy_path lists each varco_X/ outer directory so
@@ -81,5 +106,50 @@ python_version = "3.12"
 explicit_package_bases = true    # research 003 §4 — mandatory for a 10-package monorepo
 namespace_packages = true
 ignore_missing_imports = true    # research 003 §2 — unblocks untyped third-party
-warn_unused_ignores = true       # research 003 §5 — "low churn at first, high value over time"
+warn_unused_configs = true        # NOT part of --strict (verified: `mypy --help`'s own
+                                   # --strict flag list omits it) — kept standalone, harmless
 mypy_path = "varco_core:varco_kafka:varco_nats:varco_redis:varco_sa:varco_beanie:varco_memcached:varco_ws:varco_fastapi:varco_casbin:testkit"
+
+# ── Strictness ramp — COMPLETE (Plan 020 / RL-14 → Plan 021, RL-14/RL-14b/
+# RL-14c/RL-14d all CLOSED). `strict = true` is mypy 2.3.1's 13-flag bundle,
+# per `mypy --help`'s own --strict description (ground truth, not brief 004's
+# prose — §D5's "trust the installed toolchain" discipline applied to mypy
+# itself, not just third-party libraries): disallow_any_generics,
+# disallow_subclassing_any, disallow_untyped_calls, disallow_untyped_defs,
+# disallow_incomplete_defs, check_untyped_defs, disallow_untyped_decorators,
+# warn_redundant_casts, warn_unused_ignores, warn_return_any,
+# no_implicit_reexport, strict_equality, extra_checks. Note
+# `warn_unused_configs` is NOT in this list despite Plan 020's G1 grouping it
+# alongside `warn_redundant_casts` — kept as its own standalone flag above.
+# Verified at Phase 7: replacing the fully-enumerated equivalent with
+# `strict = true` produced a 0-error delta, confirming `extra_checks`
+# (never individually landed or measured) contributes 0 errors here.
+#
+# Landed one flag/tier at a time (Plan 020's G1–G5, then Plan 021's Phases
+# 2–6) rather than in one commit — each landing re-measured M2 (uv run mypy
+# over the ten source dirs) and required `make type-check`/`make lint`/
+# `make test` green before the next flag. `strict = true` replaces that
+# enumerated history now that the ramp is over (Plan 021 §D1): one line
+# instead of ~45 lines of tier-by-tier archaeology, and it is
+# self-maintaining — a future mypy pin bump inherits any new `--strict`
+# member at the moment of a deliberate, reviewed pin-bump commit rather than
+# silently never adopting it.
+#
+# disallow_any_expr: NEVER. Confirmed NOT part of `--strict` in mypy 2.3.1
+# (brief 004 §1); brief 001's "never" verdict stands, unchanged, for this
+# one flag alone.
+# warn_unreachable: not in `--strict`; unmeasured; out of scope (Plan 021).
+#
+# PEP 696 (TypeVar defaults) was considered and rejected as an alternative
+# to parameterizing every bare generic explicitly (Plan 021 §D3's "PEP 696 —
+# considered and rejected"): it requires Python 3.13 (varco_core targets
+# >=3.12) and would need a new runtime `typing_extensions` dependency for a
+# lint-only benefit, and would bake "bare AsyncVarcoClient means [Any]" into
+# the declaration itself rather than leaving it as an unannotated use site.
+strict = true
+
+# disallow_any_unimported — NOT part of `--strict`; landed separately
+# (Plan 021 Phase 8). Re-opened "DECIDED NEVER" verdict, same U-8 evidence
+# discipline as disallow_untyped_calls above: brief 001 assumed hundreds of
+# errors, the 2026-08-30 measurement found 7.
+disallow_any_unimported = true

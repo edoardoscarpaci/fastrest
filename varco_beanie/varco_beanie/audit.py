@@ -186,7 +186,7 @@ class AuditDocument(Document):
         # ``{ entity_type: 1, entity_id: 1, occurred_at: -1 }`` via a
         # Beanie migration or Atlas UI for production ``list_for_entity()``
         # performance.  Declaring indexes here would affect all deployments.
-        indexes: list = []
+        indexes: list[Any] = []
 
     def __repr__(self) -> str:
         return (
@@ -490,21 +490,13 @@ class BeanieAuditRepository(AuditRepository):
             next_seq,
         )
 
-    async def list_for_entity(  # type: ignore[override]
+    async def list_for_entity(
         self,
         entity_type: str,
         entity_id: str,
         *,
         limit: int = 100,
-        # BUG (surfaced by RL-6's mypy gate, plans/017): missing the
-        # `tenant_id: str | None = None` keyword-only param the base class
-        # (varco_core.service.audit.AuditRepository, Plan 009 / R4) declares.
-        # Adding the parameter without also implementing the tenant filter in
-        # the Beanie query below would be worse than the current signature
-        # mismatch — it would silently accept a `tenant_id` and ignore it.
-        # Tracked as a BACKLOG row rather than patched here (Non-goal: no
-        # behaviour changes in a CI-green pass). Do not remove this ignore
-        # without implementing the filter.
+        tenant_id: str | None = None,
     ) -> list[AuditEntry]:
         """
         Return audit entries for a specific entity, newest-first.
@@ -515,18 +507,27 @@ class BeanieAuditRepository(AuditRepository):
             entity_type: Entity class name to filter by (e.g. ``"Order"``).
             entity_id:   Entity primary key string to filter by.
             limit:       Maximum number of entries to return.  Default ``100``.
+            tenant_id:   Plan 009 (R4) — **breaking** keyword-only addition.
+                         ``None`` (default) means no tenant filter — the
+                         pre-existing, unscoped behaviour. An out-of-tree
+                         subclass that does not accept this parameter breaks
+                         loudly (``TypeError``) at call time rather than
+                         silently ignoring the tenant filter, which is the
+                         security bug this change exists to fix.
 
         Returns:
             List of ``AuditEntry`` objects ordered by ``occurred_at DESC``.
             Empty list if no audit records exist for the given entity.
 
         Edge cases:
-            - Without a compound index on ``(entity_type, entity_id, occurred_at)``,
-              this is an in-memory sort over all matching documents — O(N).
-              Add the index for production workloads.
+            - Without a compound index on ``(tenant_id, entity_type, entity_id,
+              occurred_at)``, this is an in-memory sort over all matching
+              documents — O(N). Add the index for production workloads.
             - ``limit=0`` returns an empty list (Beanie / Motor behaviour).
             - If ``session`` is set, the query runs within the caller's
               transaction (replica set only).
+            - ``tenant_id="t"`` where no entry carries that tenant returns an
+              empty list — an unstamped entry belongs to no tenant.
 
         Async safety: ✅ Awaits Beanie ``find()`` cursor.
         """
@@ -534,11 +535,20 @@ class BeanieAuditRepository(AuditRepository):
         if self._session is not None:
             find_kwargs["session"] = self._session
 
+        # Mirrors varco_sa.audit.SAAuditRepository.list_for_entity exactly:
+        # the tenant filter is applied only when tenant_id is not None, so
+        # the pre-existing unscoped behaviour is preserved for every caller
+        # that omits it (purely additive, non-breaking at the call site).
+        filters = [
+            AuditDocument.entity_type == entity_type,
+            AuditDocument.entity_id == entity_id,
+        ]
+        if tenant_id is not None:
+            filters.append(AuditDocument.tenant_id == tenant_id)
+
         docs = (
             await AuditDocument.find(
-                # Filter by entity identity — compound equality filter.
-                AuditDocument.entity_type == entity_type,
-                AuditDocument.entity_id == entity_id,
+                *filters,
                 **find_kwargs,
             )
             # -occurred_at = descending order (newest first).

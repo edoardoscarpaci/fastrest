@@ -224,7 +224,7 @@ class SAModelFactory:
 
     def __init__(self, base: type[DeclarativeBase]) -> None:
         self._base = base
-        self._cache: dict[type, tuple[type, AbstractMapper]] = {}
+        self._cache: dict[type, tuple[type, AbstractMapper[Any, Any]]] = {}
         # Association tables created by ManyToMany declarations.
         # Keyed by through-table name to avoid duplicate Table registrations
         # if two domain classes declare the same M2M through table.
@@ -342,7 +342,7 @@ class SAModelFactory:
     # ── PK column builders ────────────────────────────────────────────────────
 
     @staticmethod
-    def _build_single_pk_column(meta: ParsedMeta) -> Column:
+    def _build_single_pk_column(meta: ParsedMeta) -> Column[Any]:
         """
         Build the ``id`` PK column from ``meta.pk_strategy``.
 
@@ -370,7 +370,7 @@ class SAModelFactory:
     def _build_composite_pk_columns(
         domain_cls: type,
         meta: ParsedMeta,
-    ) -> tuple[dict[str, Column], list[str]]:
+    ) -> tuple[dict[str, Column[Any]], list[str]]:
         """
         Build ``primary_key=True`` columns for each composite PK field.
 
@@ -378,7 +378,7 @@ class SAModelFactory:
             ``(columns_dict, pk_attr_names_in_declaration_order)``
         """
         raw_hints = typing.get_type_hints(domain_cls, include_extras=True)
-        columns: dict[str, Column] = {}
+        columns: dict[str, Column[Any]] = {}
         pk_attr_names: list[str] = []
 
         for field_name in meta.composite_pk_fields:
@@ -395,7 +395,7 @@ class SAModelFactory:
     # ── Non-PK column builder ─────────────────────────────────────────────────
 
     @staticmethod
-    def _build_non_pk_columns(domain_cls: type, meta: ParsedMeta) -> dict[str, Column]:
+    def _build_non_pk_columns(domain_cls: type, meta: ParsedMeta) -> dict[str, Column[Any]]:
         """
         Build all business columns that are NOT part of the primary key.
 
@@ -406,7 +406,7 @@ class SAModelFactory:
             TypeError: Unsupported or unannotated field type.
         """
         raw_hints = typing.get_type_hints(domain_cls, include_extras=True)
-        columns: dict[str, Column] = {}
+        columns: dict[str, Column[Any]] = {}
 
         for field in MetaReader.domain_fields(domain_cls):
             if field.name in meta.composite_pk_fields:
@@ -450,7 +450,7 @@ class SAModelFactory:
     # ── FK and constraint helpers ─────────────────────────────────────────────
 
     @staticmethod
-    def _resolve_fk(field_name: str, meta: ParsedMeta) -> list:
+    def _resolve_fk(field_name: str, meta: ParsedMeta) -> list[Any]:
         """Build ``[sa.ForeignKey(...)]`` for a field, or ``[]`` if no FK."""
         fk_hint = meta.foreign_keys.get(field_name)
         if fk_hint is None:
@@ -464,7 +464,9 @@ class SAModelFactory:
         ]
 
     @staticmethod
-    def _build_table_args(meta: ParsedMeta, *, schema: str | None = None) -> tuple | dict:
+    def _build_table_args(
+        meta: ParsedMeta, *, schema: str | None = None
+    ) -> tuple[Any, ...] | dict[str, Any]:
         """
         Translate domain constraints (+ optional symbolic schema, Plan 007
         RD-3) to SA ``__table_args__`` entries.

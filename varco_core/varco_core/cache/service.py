@@ -357,7 +357,10 @@ class CachedService:
             cached = await self._cache.get(key)
         if cached is not None:
             return bool(cached)
-        result = await self._service.exists(entity_id, **kwargs)
+        # `self._service` is typed Any (duck-typed — see __init__), so its
+        # return is structurally Any here even though every real service's
+        # `exists()` is `-> bool`.
+        result: bool = await self._service.exists(entity_id, **kwargs)
         # Cache both True and False — store as 1/0 since None means "miss"
         await self._cache.set(key, 1 if result else 0, ttl=self._default_ttl)
         return result

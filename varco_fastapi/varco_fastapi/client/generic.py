@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-class GenericClient(AsyncVarcoClient):
+class GenericClient(AsyncVarcoClient[Any]):
     """
     URL-first HTTP client built on the varco middleware pipeline.
 
@@ -143,13 +143,14 @@ class GenericClient(AsyncVarcoClient):
         Raises:
             httpx.HTTPStatusError: Response status did not match ``expected_status``.
         """
-        return await self._request(
+        result: T | dict[str, Any] | None = await self._request(
             "GET",
             path,
             query_params=params or {},
             response_model=response_model,
             expected_status=expected_status,
         )
+        return result
 
     async def post(
         self,
@@ -176,7 +177,7 @@ class GenericClient(AsyncVarcoClient):
         Raises:
             httpx.HTTPStatusError: Response status mismatch.
         """
-        return await self._request(
+        result: T | dict[str, Any] | None = await self._request(
             "POST",
             path,
             body=body,
@@ -184,6 +185,7 @@ class GenericClient(AsyncVarcoClient):
             response_model=response_model,
             expected_status=expected_status,
         )
+        return result
 
     async def put(
         self,
@@ -210,7 +212,7 @@ class GenericClient(AsyncVarcoClient):
         Raises:
             httpx.HTTPStatusError: Response status mismatch.
         """
-        return await self._request(
+        result: T | dict[str, Any] | None = await self._request(
             "PUT",
             path,
             body=body,
@@ -218,6 +220,7 @@ class GenericClient(AsyncVarcoClient):
             response_model=response_model,
             expected_status=expected_status,
         )
+        return result
 
     async def patch(
         self,
@@ -244,7 +247,7 @@ class GenericClient(AsyncVarcoClient):
         Raises:
             httpx.HTTPStatusError: Response status mismatch.
         """
-        return await self._request(
+        result: T | dict[str, Any] | None = await self._request(
             "PATCH",
             path,
             body=body,
@@ -252,6 +255,7 @@ class GenericClient(AsyncVarcoClient):
             response_model=response_model,
             expected_status=expected_status,
         )
+        return result
 
     async def delete(
         self,

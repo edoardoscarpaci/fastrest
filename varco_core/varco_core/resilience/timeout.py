@@ -86,7 +86,7 @@ class CallTimeoutError(Exception):
 # ── @timeout decorator ────────────────────────────────────────────────────────
 
 
-def timeout(seconds: float) -> Callable:
+def timeout(seconds: float) -> Callable[..., Any]:
     """
     Decorator factory that enforces a maximum execution time on an async function.
 

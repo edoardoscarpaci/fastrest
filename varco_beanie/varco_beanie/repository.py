@@ -213,8 +213,10 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
         if params is not None and params.node is not None:
             mongo_filter = BeanieQueryCompiler().visit(params.node)
 
-        # find() with empty dict = no filter; .count() returns total matching
-        return await self._mapper._orm_cls.find(mongo_filter).count()
+        # find() with empty dict = no filter; .count() returns total matching.
+        # beanie ships no py.typed marker — count() is structurally Any.
+        matching: int = await self._mapper._orm_cls.find(mongo_filter).count()
+        return matching
 
     async def exists(self, pk: PK) -> bool:
         """
@@ -236,6 +238,7 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
               ``mapper._pk_orm_attrs``; for scalar PKs uses Beanie's ``find``
               with the ``_id`` filter.
         """
+        count: int
         if isinstance(pk, tuple):
             # Composite PK — build a {field: value, ...} filter dict.
             # count() avoids loading the document body.
@@ -385,8 +388,10 @@ class AsyncBeanieRepository(AsyncRepository[D, PK], Generic[D, PK]):
             mongo_filter = BeanieQueryCompiler().visit(params.node)
 
         result = await self._mapper._orm_cls.find(mongo_filter).update({"$set": update})
-        # Motor's UpdateResult.modified_count = documents actually changed
-        return result.modified_count
+        # Motor's UpdateResult.modified_count = documents actually changed.
+        # beanie ships no py.typed marker — modified_count is structurally Any.
+        modified: int = result.modified_count
+        return modified
 
     async def stream_by_query(
         self,

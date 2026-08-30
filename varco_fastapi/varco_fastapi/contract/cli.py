@@ -29,7 +29,7 @@ import sys
 from typing import Any
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register ``export-contract``, ``gen-client``, ``gen-client-stubs``."""
     export_p = subparsers.add_parser(
         "export-contract", help="Export a router's ServiceContract to JSON"

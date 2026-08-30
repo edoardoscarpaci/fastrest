@@ -102,11 +102,25 @@ if [[ "$MARKER_EXPR" == "integration and not chaos" ]]; then
 fi
 
 # ── Known integration-test packages ───────────────────────────────────────────
-# DESIGN: plain array — no per-package host/port config needed since tests
-# manage their own containers.
-#   ✅ Simple to extend: add the package name here, nothing else.
-#   ❌ bash 4+ only (arrays with expansion); not sh-portable.
-ALL_INTEGRATION_PACKAGES=("varco_redis" "varco_kafka" "varco_beanie" "varco_memcached" "varco_fastapi" "varco_nats" "varco_sa" "varco_casbin" "varco_ws")
+# Derived from scripts/packages.sh (single source of truth, Plan 020 / RL-18),
+# minus a locally-declared, named exclusion list — the derivation intentionally
+# does not decide who gets excluded; that stays visible and reasoned here.
+#
+# INTEGRATION_EXCLUDE: packages with no broker-facing integration tests.
+#   - varco_core: has no broker of its own to integration-test against (it is
+#     the transport/storage-agnostic core); running it here would report a
+#     spurious "no tests collected" pass forever, not a genuine skip.
+INTEGRATION_EXCLUDE=("varco_core")
+
+mapfile -t _ALL_PACKAGES < <("$ROOT/scripts/packages.sh")
+ALL_INTEGRATION_PACKAGES=()
+for pkg in "${_ALL_PACKAGES[@]}"; do
+  excluded=0
+  for ex in "${INTEGRATION_EXCLUDE[@]}"; do
+    [[ "$pkg" == "$ex" ]] && excluded=1 && break
+  done
+  [[ $excluded -eq 0 ]] && ALL_INTEGRATION_PACKAGES+=("$pkg")
+done
 
 # ── Extra suites (RT8, Step 33) ────────────────────────────────────────────────
 # Suites that do not fit the "$pkg/tests" shape assumed above — declared as

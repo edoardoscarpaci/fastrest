@@ -185,7 +185,7 @@ def _make_repo_provider(entity_cls: type[DomainModel]) -> Any:
     Async safety:   ✅ The returned factory is async.
     """
 
-    async def _repo_factory(provider: RepositoryProvider) -> AsyncRepository:
+    async def _repo_factory(provider: RepositoryProvider) -> AsyncRepository[Any, Any]:
         # provider is injected by the container (resolved as RepositoryProvider
         # singleton from @Singleton on BeanieRepositoryProvider).
         # get_repository() returns the correct AsyncBeanieRepository subtype

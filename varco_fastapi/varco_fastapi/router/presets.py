@@ -77,9 +77,9 @@ from varco_fastapi.router.mixins import (
 if TYPE_CHECKING:
     from typing import Any
 
+    from varco_core.dto import CreateDTO, ReadDTO, UpdateDTO
     from varco_core.model import DomainModel
     from varco_core.service import AsyncService
-    from varco_core.service.types import CreateDTO, ReadDTO, UpdateDTO
 
 # Generic type parameters — mirrors VarcoRouter[D, PK, C, R, U]. Bounds match
 # varco_core.service.types' canonical D/PK/C/R/U exactly (string forward-refs,

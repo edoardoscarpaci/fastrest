@@ -1662,11 +1662,12 @@ from varco_fastapi.router.mcp import MCPAdapter, bind_mcp_adapter
 
 # Option A: mount as HTTP+SSE endpoint on an existing FastAPI app
 adapter = MCPAdapter(OrderRouter, client=OrderClient(base_url="http://localhost:8080"))
-adapter.mount(app)  # registers POST /mcp + GET /mcp/sse
+adapter.mount(app)  # registers GET {path}/sse + POST {path}/messages/
 
 # Option B: run as standalone stdio MCP server (for local LLMs)
 server = adapter.to_mcp_server()
-server.run()
+# server is a low-level mcp.server.lowlevel.Server — run it over a transport,
+# e.g. mcp.server.stdio.stdio_server() + server.run(read, write, options)
 
 # DI-friendly usage
 bind_mcp_adapter(container, OrderRouter, client_cls=OrderClient)
@@ -1677,9 +1678,19 @@ bind_mcp_adapter(container, OrderRouter, client_cls=OrderClient)
 from path parameters, request body model (`model_json_schema()`), and pagination/filter
 params for list routes.
 
-**Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=1.0`). The adapter is
-constructible without the extra — `to_mcp_server()` and `mount()` raise `ImportError`
-with a clear install message if the SDK is absent.
+⚠️ **BREAKING (Plan 020 / KI-11)**: `to_mcp_server()` returns a low-level
+`mcp.server.lowlevel.Server`, not a `FastMCP` instance — the high-level `FastMCP.add_tool()`
+has never accepted an `input_schema=` parameter (SDK issue #761), so `to_mcp_server()`/`mount()`
+were both dead code (`TypeError` on every call) before this fix. `_to_mcp_tools()`
+(`varco_fastapi.router.mcp`) builds `mcp.types.Tool` objects carrying varco's JSON Schema
+verbatim. Anyone calling `to_mcp_server()` directly and relying on `FastMCP`-specific methods
+(`.run()`'s no-arg stdio shortcut, `.add_tool()`, `.sse_app()`) must update to the low-level
+`Server` API.
+
+**Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=1.28.1,<2` — upper-bounded because
+v2 removes the low-level `Server` decorator API this adapter is built on; filed forward as
+BACKLOG row MCP-v2). The adapter is constructible without the extra — `to_mcp_server()` and
+`mount()` raise `ImportError` with a clear install message if the SDK is absent.
 
 **Localization / timezone middleware** (`varco_fastapi.middleware.localization`,
 `varco_fastapi.i18n` — Plan 011): `LocalizationMiddleware` resolves locale (I2) and/or

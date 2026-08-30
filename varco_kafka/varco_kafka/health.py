@@ -111,7 +111,8 @@ class KafkaHealthCheck(HealthCheck):
         from aiokafka import AIOKafkaProducer
 
         start = time.monotonic()
-        producer: AIOKafkaProducer | None = None
+        # aiokafka ships no py.typed marker — AIOKafkaProducer resolves to Any.
+        producer: AIOKafkaProducer | None = None  # type: ignore[no-any-unimported]
 
         try:
             producer = AIOKafkaProducer(

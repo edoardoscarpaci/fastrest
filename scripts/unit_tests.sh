@@ -10,11 +10,9 @@
 # two live drift bugs at once: `varco_casbin` and `examples` were never in
 # `Makefile`'s PACKAGES list.
 #
-# ⚠️ KNOWN MAINTENANCE POINT (plan 017 Edge cases table): the package list is
-# duplicated in three places — Makefile's PACKAGES, this script's array, and
-# scripts/integration_tests.sh's ALL_INTEGRATION_PACKAGES. A new workspace
-# member must be added to all three by hand; deriving them from
-# [tool.uv.workspace] members is the obvious future fix and is scope creep here.
+# The package list is derived from [tool.uv.workspace] members via
+# scripts/packages.sh — single source of truth, Plan 020 / RL-18. Do not
+# hand-edit ALL_PACKAGES below; edit the workspace members instead.
 #
 # Usage:
 #   scripts/unit_tests.sh                  # run all ten packages + example
@@ -51,8 +49,8 @@ else
   RED=""; GREEN=""; YELLOW=""; CYAN=""; BOLD=""; RESET=""
 fi
 
-# ── All workspace member packages (mirrors Makefile's PACKAGES) ──────────────
-ALL_PACKAGES=("varco_core" "varco_kafka" "varco_nats" "varco_redis" "varco_sa" "varco_beanie" "varco_memcached" "varco_ws" "varco_fastapi" "varco_casbin")
+# ── All workspace member packages ───────────────────────────────────────────
+mapfile -t ALL_PACKAGES < <("$ROOT/scripts/packages.sh")
 
 # ── Extra suites — the example app is not a workspace member (see
 # scripts/integration_tests.sh's DESIGN comment for why run_from="root" is

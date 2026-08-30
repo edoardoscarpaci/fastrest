@@ -54,7 +54,9 @@ class MigrationStore:
 
     async def get_record(self, version: str) -> dict[str, Any] | None:
         """Return the applied-migration record for ``version``, or ``None``."""
-        return await self._collection.find_one({"_id": version})
+        # motor ships no py.typed marker — find_one() is structurally Any.
+        record: dict[str, Any] | None = await self._collection.find_one({"_id": version})
+        return record
 
     async def record_applied(
         self,

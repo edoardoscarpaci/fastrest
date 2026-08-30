@@ -239,7 +239,11 @@ class ProfileSession:
         """
         try:
             if callable(spec) and not isinstance(spec, str):
-                return spec()
+                # `spec: Callable[[], Any]` — a user-supplied factory, so its
+                # return is structurally Any regardless of this function's
+                # own declared return type.
+                backend: CpuProfilerBackend | MemoryProfilerBackend | None = spec()
+                return backend
             if kind == "cpu":
                 return get_cpu_backend(str(spec))()
             return get_memory_backend(str(spec))()

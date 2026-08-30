@@ -103,11 +103,11 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
 
     def apply_query(  # type: ignore[override]
         self,
-        query: Select,  # type: ignore[override]
+        query: Select[tuple[Any, ...]],  # type: ignore[override]
         node: TransformerNode,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:
+    ) -> Select[tuple[Any, ...]]:
         """
         Apply an AST filter node as ``JOIN`` + ``WHERE`` clauses to ``query``.
 
@@ -152,12 +152,12 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
 
     def apply_pagination(  # type: ignore[override]
         self,
-        query: Select,  # type: ignore[override]
+        query: Select[tuple[Any, ...]],  # type: ignore[override]
         limit: int | None,
         offset: int | None,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:
+    ) -> Select[tuple[Any, ...]]:
         """
         Apply ``LIMIT`` and ``OFFSET`` to ``query``.
 
@@ -179,11 +179,11 @@ class SQLAlchemyQueryApplicator(QueryApplicator):
 
     def apply_sort(  # type: ignore[override]
         self,
-        query: Select,  # type: ignore[override]
+        query: Select[tuple[Any, ...]],  # type: ignore[override]
         sort_fields: list[SortField] | None = None,
         *args: Any,
         **kwargs: Any,
-    ) -> Select:
+    ) -> Select[tuple[Any, ...]]:
         """
         Apply ``ORDER BY`` clauses to ``query``, with relationship JOIN support.
 

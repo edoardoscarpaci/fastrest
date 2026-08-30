@@ -77,7 +77,9 @@ class SQLAlchemyAggregationApplicator:
         """
         self._model_cls = model_cls
 
-    def apply(self, stmt: Select, agg_query: AggregationQuery) -> Select:
+    def apply(
+        self, stmt: Select[tuple[Any, ...]], agg_query: AggregationQuery
+    ) -> Select[tuple[Any, ...]]:
         """
         Apply the aggregation query to a ``Select`` statement.
 
@@ -165,7 +167,7 @@ class SQLAlchemyAggregationApplicator:
               ``AggregationQuery.__post_init__`` and
               ``AggregationExpression.__post_init__``.  No second validation here.
         """
-        col = getattr(self._model_cls, field, None)
+        col: ColumnElement[Any] | None = getattr(self._model_cls, field, None)
         if col is None:
             raise FieldNotFound(
                 field,
@@ -240,7 +242,10 @@ class SQLAlchemyAggregationApplicator:
               clause operates on the GROUP BY output, not on joined tables.
         """
         compiler = SQLAlchemyQueryCompiler(self._model_cls)
-        return compiler.visit(node)
+        # visit() dispatches dynamically per-node-type (ASTVisitor pattern)
+        # and is structurally Any at the call site.
+        clause: ColumnElement[Any] = compiler.visit(node)
+        return clause
 
     def _column_names(self) -> list[str]:
         """

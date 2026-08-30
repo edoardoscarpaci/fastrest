@@ -233,7 +233,7 @@ class JobDocument(Document):
         # DESIGN: no indexes declared here — callers can add status+created_at
         # compound index via Beanie's index management or a separate migration.
         # Avoiding surprise schema side-effects on first import.
-        indexes: list = []
+        indexes: list[Any] = []
 
     def __repr__(self) -> str:
         return f"JobDocument(id={self.id}, status={self.status!r}, created_at={self.created_at!r})"

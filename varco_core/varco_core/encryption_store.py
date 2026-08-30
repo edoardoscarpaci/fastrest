@@ -918,23 +918,29 @@ class EncryptionKeyManager:
     # getattr(), falling back to the tenant methods with scope == tenant_id.
 
     async def _load_for_scope(self, scope: str | None) -> list[EncryptionKeyEntry]:
+        # getattr() is structurally Any — this is the documented capability-
+        # shim probe (see the class docstring above): a third-party store
+        # may or may not implement `load_for_scope`.
         fn = getattr(self._store, "load_for_scope", None)
         if fn is not None:
-            return await fn(scope)
+            result: list[EncryptionKeyEntry] = await fn(scope)
+            return result
         self._warn_shim_once("load_for_scope")
         return await self._store.load_for_tenant(scope)
 
     async def _list_scopes(self) -> list[str]:
         fn = getattr(self._store, "list_scopes", None)
         if fn is not None:
-            return await fn()
+            scopes: list[str] = await fn()
+            return scopes
         self._warn_shim_once("list_scopes")
         return await self._store.list_tenants()
 
     async def _destroy_scope_on_store(self, scope: str) -> tuple[str, ...]:
         fn = getattr(self._store, "destroy_scope", None)
         if fn is not None:
-            return await fn(scope)
+            destroyed: tuple[str, ...] = await fn(scope)
+            return destroyed
         self._warn_shim_once("destroy_scope")
 
         # Portable fallback for a tenant-only store — mirrors

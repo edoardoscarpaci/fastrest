@@ -202,7 +202,8 @@ class KafkaChannelManager(ChannelManager):
         self._settings = settings
         # Admin client is created in start() — aiokafka objects must be created
         # inside a running event loop.
-        self._admin: AIOKafkaAdminClient | None = None
+        # aiokafka ships no py.typed marker — AIOKafkaAdminClient resolves to Any.
+        self._admin: AIOKafkaAdminClient | None = None  # type: ignore[no-any-unimported]
 
     # ── ChannelManager implementation ─────────────────────────────────────────
 

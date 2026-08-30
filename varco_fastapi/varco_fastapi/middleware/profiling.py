@@ -156,13 +156,15 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
 
         # Skip configured paths
         if request.url.path in s.skip_paths:
-            return await call_next(request)
+            response: Response = await call_next(request)
+            return response
 
         lock = self._get_lock()
 
         # Non-blocking: if another request is already being profiled, pass through
         if lock.locked():
-            return await call_next(request)
+            response = await call_next(request)
+            return response
 
         async with lock:
             return await self._profiled_dispatch(request, call_next, s)
@@ -193,7 +195,13 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
                 "ProfilingMiddleware: varco_core.profiling not available; "
                 "request passed through unprofiled."
             )
-            return await call_next(request)
+            # Distinct local name from `response` below — the two are
+            # separate control-flow paths (import missing vs. profiled) and
+            # giving them one shared annotated name would force a single
+            # declared type across both, which is what a `no-redef` mypy
+            # error is warning about.
+            fallback_response: Response = await call_next(request)
+            return fallback_response
 
         name = f"{request.method} {request.url.path}"
         config = ProfileConfig(top_n=s.top_n, track_rss=s.track_rss)

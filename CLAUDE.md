@@ -44,8 +44,9 @@ uv run python -c "from varco_core.event import AbstractEventBus"
 ```
 
 The `Makefile` (workspace root) wraps the above plus lint/type-check/build/docs targets across
-every package in one call — `make lint` (`ruff check`), `make format` (`ruff format` + `ruff
-check --fix`), `make type-check` (`mypy`), `make test` (now delegates to `scripts/unit_tests.sh`
+every package in one call — `make lint` (`ruff check` **+** `ruff format --check` — the
+formatter is a CI gate as of Plan 020 / RL-17, adopted at zero `.py` churn), `make format` (`ruff
+format` + `ruff check --fix`), `make type-check` (`mypy`), `make test` (now delegates to `scripts/unit_tests.sh`
 — runs **all eleven** workspace suites (ten packages + `examples/00-full-stack-post-api`) and
 *accumulates* pass/fail/skip into one summary instead of aborting at the first red package; `make
 test PKG=varco_redis` narrows to one), `make integration-test` / `make integration-test-clean`,
@@ -67,6 +68,27 @@ via PEP 735 `{ include-group = "lint" }`. `make lint`/`make type-check` invoke t
 ruff`/`uv run mypy` — resolving the exact pin recorded in `uv.lock`. **Never invoke linting via
 `uvx ruff`** — `uvx` resolves whatever the newest ruff release is at the moment you run it, which
 can silently diverge from the pin CI enforces (see the Common Pitfalls table).
+
+**mypy strictness ramp — complete** (Plan 020 / RL-14 → Plan 021, RL-14/RL-14b/RL-14c/RL-14d all
+CLOSED; full design: `plans/021-mypy-strict-full-ramp.md`). `[tool.mypy]` is `strict = true`
+(mypy 2.3.1's 13-flag bundle — see the `pyproject.toml` comment block for the exact enumeration,
+sourced from `mypy --help`'s own `--strict` description, not brief prose) plus
+`disallow_any_unimported = true`, landed separately because it is not part of `--strict`. The
+`[[tool.mypy.overrides]]` section is empty — `check_untyped_defs` was hoisted from ten per-package
+override blocks to one global flag (Plan 021 Phase 1). Two metrics, two different roles, both
+still meaningful post-ramp: **M1** (`rg -o 'type: ignore' varco_*/varco_* | wc -l`) is a
+directional suppression-debt gauge only, never a gate; **M2** (`uv run mypy <ten dirs>`) is the
+actual gate — CI's `lint` job running plain `mypy` (no flags — the ten dirs' own `[tool.mypy]`
+already carries `strict`) now **is** M2, trivially.
+
+`disallow_any_expr` is the **one permanent exclusion** — confirmed not part of `--strict` in mypy
+2.3.1 (research brief 004 §1), and untargeted by any brief's "Skip these entirely" reversal
+evidence. `warn_unreachable` is also not in `--strict` and stays out, unmeasured, out of scope.
+Every other flag once filed as "Stopped"/"Decided never"/"Out of scope" (`disallow_any_generics`,
+`warn_return_any`, `disallow_untyped_calls`, `disallow_any_unimported`, `disallow_incomplete_defs`,
+`disallow_untyped_defs`) was re-opened on a fresh measurement (research briefs 004/005) and landed
+— see Plan 021 §D1–§D6 for the full per-flag remediation pattern and U-8 evidence discipline
+applied to each re-opened "never" verdict.
 
 ### CI
 
@@ -724,7 +746,8 @@ guarantee with no conftest edits anywhere in the repo.
 | **Adding a bulk method directly to `AsyncCache`** | `isinstance(third_party_cache, AsyncCache)` silently starts returning `False` for out-of-tree caches | `AsyncCache` is `runtime_checkable` — `isinstance()` tests method presence, so any new method changes what satisfies it | Add to `BulkCache` instead (Plan 011 / D-11) — `AsyncCache` stays byte-for-byte unchanged |
 | **Forgot `<pkg>.bootstrap(container)`** | App starts, `AbstractEventBus` silently absent | `_try_resolve_component()` used to swallow every skip (import error, missing binding, construction failure) into `except Exception: pass` with zero logging | Plan 014 / audit F2 — one WARNING now names the missing binding at startup (`_lifecycle_discovery_warns()`); silence it with `VARCO_LIFECYCLE_DISCOVERY_WARN=false` if the app genuinely has no bus/job runner. Control flow is unchanged — the component is still skipped, the app still starts |
 | **`varco_memcached.async_bootstrap()` opens a pool you didn't want** | An unwanted Memcached connection is opened just from calling `async_bootstrap()` | `setup_cache` defaults `True` — unconditional `ainstall(MemcachedCacheConfiguration)`, unlike `varco_redis.di.async_bootstrap()` which defaults `setup_cache=False` | Pass `setup_cache=False` for the sync-scan-only equivalent of `bootstrap()`. Note the defaults deliberately differ: `varco_redis`'s `async_bootstrap` also serves a streams/event-bus path where no cache is wanted; memcached's only reason to exist is the cache, so its default stays `True` for backward compatibility (Plan 014 / audit F7) |
-| **Linting with `uvx ruff`** | Local green, CI red (or vice versa) with no code change | `uvx` resolves the newest ruff release at invocation time; CI resolves the pin recorded in `uv.lock` | Always `uv run ruff`, never `uvx ruff` — the pin lives in the root `[dependency-groups] lint` group (Plan 017 / RL-6) |
+| **Linting with `uvx ruff`** (applies to `ruff check` AND `ruff format --check`, Plan 020 / RL-17) | Local green, CI red (or vice versa) with no code change | `uvx` resolves the newest ruff release at invocation time; CI resolves the pin recorded in `uv.lock` | Always `uv run ruff`, never `uvx ruff` — the pin lives in the root `[dependency-groups] lint` group (Plan 017 / RL-6) |
+| **Assuming `f"{SomeVarcoEnum.MEMBER}"` still yields `ClassName.MEMBER`** | Log lines / f-strings involving `HealthStatus`, `CircuitState`, `ErrorPolicy`, `DispatchMode`, `PKStrategy`, `KafkaDeliverySemantics`, `NatsDeliverySemantics`, or `BackpressurePolicy` suddenly print the bare value instead of `ClassName.MEMBER` | Python 3.11 changed `Enum.__format__` to print `ClassName.MEMBER` for `(str, Enum)` mixins; Plan 020 / RL-15 migrated all eight of these to `enum.StrEnum`, which undoes that change and formats by value | Intended as of 3.0.0 (BREAKING, see CHANGELOG) — `.value`, `json.dumps(member)`, and pydantic `model_dump(mode="json")` are all unaffected either way; update any `str()`/`%s`-log-scraping regex that depended on the old `ClassName.MEMBER` text |
 | **Restarting a session-scoped container** | Unrelated tests in the same package fail with connection errors after a chaos test runs | The session-scoped fixture (`redis_url`, `kafka_bootstrap`, …) is shared by the whole package suite — restarting/pausing it under one test breaks every other test mid-flight or afterward | Declare a **module-scoped `*_container_chaos` fixture inside the chaos module itself**, never in `conftest.py` (Plan 018 / RT7, §chaos-fixture) — see Test Conventions' "Chaos tests" paragraph |
 | **Assuming a chaos container's URL is stable across `restart()`** | `ConnectionRefusedError` after `restart()` even though `wait_ready()` returned successfully | Docker re-allocates ephemeral host ports on restart **by design** (research 006 §A/§B/§F) — platform-independent, version-stable moby v1.3.0 → v29.1, including GitHub Actions' native-Linux dockerd. Not a WSL2-specific flake and not unverified — research 002 §1's original "port survives restart" claim is superseded (in-tree banner points here) | Fixed (Plan 019 / §RT7b-port, closes BACKLOG's RT7b-port-remap): read `chaos.url` at every use — it re-derives fresh from the docker daemon on every access, never memoised. Pin the host port when the server advertises its own mapped address at first boot (Kafka's `tc-start.sh` bakes `KAFKA_ADVERTISED_LISTENERS` in as a literal — re-querying alone cannot fix it, so `kafka_container_chaos` additionally pins via `testkit/varco_chaos/ports.py`'s `reserve_host_port()` + `with_bind_ports`); do not assume the pause-based tests (`test_redis_chaos.py`, `test_nats_health_chaos.py`) needed this — pausing never remaps a port |
 

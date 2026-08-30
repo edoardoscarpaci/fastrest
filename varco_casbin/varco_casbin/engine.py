@@ -151,7 +151,8 @@ class CasbinPolicyEngine(PolicyEngine, PolicyManagement):
         self._settings = settings
         # Enforcer is built in start() — None until then so a premature
         # enforce() can fail closed with a clear error.
-        self._enforcer: casbin.AsyncEnforcer | None = None
+        # casbin ships no type stubs — AsyncEnforcer resolves to Any.
+        self._enforcer: casbin.AsyncEnforcer | None = None  # type: ignore[no-any-unimported]
         self._adapter: Any | None = None
         # Lazy lock — never create asyncio primitives at __init__ time; the
         # event loop may not exist yet (CLAUDE.md async-safety rule).
@@ -227,7 +228,8 @@ class CasbinPolicyEngine(PolicyEngine, PolicyManagement):
     async def __aexit__(self, *exc: object) -> None:
         await self.stop()
 
-    def _require_enforcer(self) -> casbin.AsyncEnforcer:
+    # casbin ships no type stubs — AsyncEnforcer resolves to Any.
+    def _require_enforcer(self) -> casbin.AsyncEnforcer:  # type: ignore[no-any-unimported]
         """Return the started enforcer or raise — fail closed before start()."""
         if self._enforcer is None:
             raise RuntimeError(

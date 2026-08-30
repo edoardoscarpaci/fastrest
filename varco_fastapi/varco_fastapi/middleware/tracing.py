@@ -114,7 +114,9 @@ class TracingMiddleware(BaseHTTPMiddleware):
             return await self._dispatch_with_otel(request, call_next)
         return await self._dispatch_plain(request, call_next)
 
-    async def _dispatch_plain(self, request: Request, call_next) -> Response:
+    async def _dispatch_plain(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """Dispatch without OTel — just pass through."""
         response = await call_next(request)
         cid = current_correlation_id()
@@ -122,7 +124,9 @@ class TracingMiddleware(BaseHTTPMiddleware):
             response.headers[_CORRELATION_ID_HEADER] = cid
         return response
 
-    async def _dispatch_with_otel(self, request: Request, call_next) -> Response:
+    async def _dispatch_with_otel(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """Dispatch with OTel span wrapping."""
         import opentelemetry.trace as otel_trace
         from opentelemetry.propagate import extract

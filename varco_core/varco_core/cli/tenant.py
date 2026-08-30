@@ -26,7 +26,7 @@ from varco_core.tenancy.provisioner import (
 )
 
 
-def register(subparsers: argparse._SubParsersAction) -> None:
+def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     """Register the ``tenant`` subcommand parser and its verbs."""
     parser = subparsers.add_parser("tenant", help="Tenant control-plane operations")
     parser.set_defaults(_run=_run)

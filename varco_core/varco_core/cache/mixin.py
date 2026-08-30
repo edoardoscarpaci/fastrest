@@ -348,15 +348,20 @@ class CacheServiceMixin(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, P
         key = self._cache_key("get", pk, tenant_id=tenant_id)
 
         if self._cache_policy is not None:
-            return await read_through(
+            # `read_through()`'s cache backend is intentionally untyped
+            # (`AsyncCache[str, Any]`, §D3) — annotate the local so mypy sees
+            # the true type this mixin promises, not `Any` (brief 004 §3
+            # preference #1: annotate over `cast()`).
+            read_through_result: R = await read_through(
                 self._cache,
                 key,
                 lambda: super(CacheServiceMixin, self).get(pk, ctx),
                 self._cache_policy,
                 singleflight=self._get_singleflight(),
             )
+            return read_through_result
 
-        hit = await self._cache.get(key)
+        hit: R | None = await self._cache.get(key)
         if hit is not None:
             _logger.debug(
                 "CacheServiceMixin[%s]: cache hit for key %r.",
@@ -408,7 +413,7 @@ class CacheServiceMixin(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, P
                 return {k: value for k in missing_keys}
 
             policy = self._cache_policy or CachePolicy(ttl=self._cache_ttl)
-            result_map = await read_through_many(
+            result_map: dict[str, list[R]] = await read_through_many(
                 self._cache,
                 [key],
                 _batch_loader,
@@ -418,15 +423,17 @@ class CacheServiceMixin(ServiceMixin, AsyncService[D, PK, C, R, U], Generic[D, P
             return result_map[key]
 
         if self._cache_policy is not None:
-            return await read_through(
+            # See the `get()` override above for why this local is annotated.
+            read_through_result: list[R] = await read_through(
                 self._cache,
                 key,
                 lambda: super(CacheServiceMixin, self).list(params, ctx),
                 self._cache_policy,
                 singleflight=self._get_singleflight(),
             )
+            return read_through_result
 
-        hit = await self._cache.get(key)
+        hit: list[R] | None = await self._cache.get(key)
         if hit is not None:
             _logger.debug(
                 "CacheServiceMixin[%s]: cache hit for list key %r.",

@@ -1403,4 +1403,5 @@ class AsyncService(ABC, Generic[D, PK, C, R, U]):
                     f"subclass as the first type argument. "
                     f"Example: class {type(self).__name__}(AsyncService[MyEntity, ...]): ..."
                 )
-        return type(self)._cached_entity_type  # type: ignore[attr-defined]
+        cached: type[D] = type(self)._cached_entity_type  # type: ignore[attr-defined]
+        return cached

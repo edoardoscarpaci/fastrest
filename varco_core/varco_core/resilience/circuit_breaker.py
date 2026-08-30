@@ -63,7 +63,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any, TypeVar
 
 _logger = logging.getLogger(__name__)
@@ -74,8 +74,7 @@ _R = TypeVar("_R")
 # ── CircuitState ──────────────────────────────────────────────────────────────
 
 
-# str(member) semantics differ under enum.StrEnum (plain value vs `ClassName.MEMBER`); deferred, see BACKLOG
-class CircuitState(str, Enum):  # noqa: UP042
+class CircuitState(StrEnum):
     """
     Operational state of a ``CircuitBreaker``.
 
@@ -411,7 +410,7 @@ class CircuitBreaker:
         self._on_success()
         return result
 
-    def protect(self, func: Callable) -> Callable:
+    def protect(self, func: Callable[..., Any]) -> Callable[..., Any]:
         """
         Decorator that wraps ``func`` so all calls pass through this breaker.
 
@@ -615,7 +614,7 @@ def circuit_breaker(
     config: CircuitBreakerConfig,
     *,
     name: str | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator factory that wraps a function with a ``CircuitBreaker``.
 
@@ -656,7 +655,7 @@ def circuit_breaker(
         async def charge(payload: dict) -> Receipt: ...
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         breaker_name = name or func.__qualname__
         breaker = CircuitBreaker(config, name=breaker_name)
         return breaker.protect(func)

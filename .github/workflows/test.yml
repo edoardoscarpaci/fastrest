@@ -52,6 +52,8 @@ jobs:
         run: uv sync --locked --all-packages --all-extras
       - name: ruff check
         run: uv run ruff check .
+      - name: ruff format --check
+        run: uv run ruff format --check .
       - name: mypy
         run: >
           uv run mypy

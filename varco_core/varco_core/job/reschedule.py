@@ -57,7 +57,7 @@ class ScheduleRematerializer:
         self._store = store
         self._interval = interval
         self._horizon = horizon
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._stopped = False
 
     async def start(self) -> None:

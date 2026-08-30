@@ -16,7 +16,7 @@ Async safety:   ✅ The returned client's own async methods are unaffected.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from varco_fastapi.client.base import AsyncVarcoClient, ClientProfile
@@ -61,7 +61,7 @@ def contract_client(
     *,
     profile: ClientProfile | None = None,
     **kwargs: Any,
-) -> AsyncVarcoClient:
+) -> AsyncVarcoClient[Any]:
     """
     Build a live client from an exported contract — no service import.
 
@@ -85,7 +85,10 @@ def contract_client(
     )
 
     cls = contract_client_class(resolved_contract)
-    instance = cls(base_url, profile=profile, **kwargs)
+    # why: cls is a metaclass-constructed type built at runtime (see
+    # contract_client_class() / _VarcoClientMeta above) — mypy cannot
+    # statically prove the instance is an AsyncVarcoClient[Any] subclass.
+    instance = cast("AsyncVarcoClient[Any]", cls(base_url, profile=profile, **kwargs))
     instance._client = instance._build_httpx_client()
     return instance
 

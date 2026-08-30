@@ -97,7 +97,7 @@ class DeadLetterDocument(Document):
         name = "varco_dead_letters"  # RD-2 — matches the SA table name.
         # DECLARED, not built — varco migrate index --create is the builder
         # (Plan 006's index_mode="check" default precedent).
-        indexes: ClassVar[list] = [
+        indexes: ClassVar[list[Any]] = [
             [("channel", 1), ("last_failed_at", -1)],
             [("source", 1), ("last_failed_at", -1)],
             [("tenant_id", 1), ("last_failed_at", -1)],

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from varco_core.profiling.backend import (
     AllocationStat,
@@ -119,7 +119,7 @@ class ProfileReport:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable dict representation.
 
         Returns:
