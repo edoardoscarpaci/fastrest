@@ -98,7 +98,7 @@ dev = [
     # starlette test client
     "anyio>=4.0",
     # cryptography for JWT auth tests
-    "cryptography>=42.0",
+    "cryptography>=50.0.0",
     # tests/test_app_migrations_integration.py exercises MigrationLifecycle against a
     # real AlembicMigrator + Postgres to prove the varco_core.migration contract end to
     # end. varco_fastapi/varco_fastapi/** still imports ONLY varco_core.migration at

@@ -31,7 +31,7 @@ dependencies = [
     # PyJWT is used by varco_core.jwt for encoding/decoding JWT tokens
     "PyJWT>=2.8,<3.0",
     # cryptography is used by varco_core.jwk for RSA/EC key operations
-    "cryptography>=41.0",
+    "cryptography>=50.0.0",
     # opentelemetry-api + sdk + OTLP exporter — used by varco_core.observability
     # for @span, @counter, @histogram decorators and OtelConfiguration DI module.
     # The SDK and OTLP exporter are required (not just the API) because
