@@ -120,9 +120,35 @@ differed by interpreter would make `--check` unrunnable in CI. So `--check` catc
 heap addresses in sentinel default values are stripped, or every run would report a spurious
 change — see `_ADDRESS_RE`.) Additions and module moves are reported as notes and never fail.
 
+### Lockstep version bump (`scripts/bump.py`)
+
+`scripts/bump.py` (Plan 023 / Phase 1, §RL-9-bump) is the **only** mechanism that writes a version
+number into a `pyproject.toml` in this workspace. It is a tomlkit-based, style-preserving rewriter
+— not `uv version` (which cannot touch sibling requirement strings) and not hatch-vcs (unsuitable
+for a hand-chosen, not CI-derived, version). Same package-list derivation discipline as
+`scripts/api_surface.py`: it executes `scripts/packages.sh` rather than hand-listing the ten names
+(Plan 020 / RL-18).
+
+```bash
+uv run python scripts/bump.py --set 3.0.0            # write + `uv lock`
+uv run python scripts/bump.py --bump minor           # arithmetic bump relative to current
+uv run python scripts/bump.py --set 3.0.0 --dry-run  # print the diff, write nothing
+uv run python scripts/bump.py --check                # verify coherence; write nothing
+```
+
+⚠️ **Contrast with `scripts/api_surface.py --check`: this one IS a CI gate.** It is deterministic
+and hermetic — it parses TOML and imports no `varco_*` module, so none of the three reasons
+`api_surface.py --check` is excluded from CI (interpreter-dependent rendering, heap addresses,
+import cost) apply here. It is wired as a unit test
+(`varco_core/tests/test_bump_script.py::test_workspace_versions_are_coherent`), so it runs in
+`make test` and in CI's existing `unit` job with no new CI surface. Sibling requirements are
+pinned `~=<major>.0` (compatible release), never `==<exact>` — see `CONTRIBUTING.md`'s versioning
+policy for why.
+
 ### CI
 
-Two GitHub Actions workflows gate `main` (`.github/workflows/`):
+Two GitHub Actions workflows gate `main` (`.github/workflows/`), plus three release/supply-chain
+workflows that never gate a PR (Plan 023 / Phase 5):
 
 - **`test.yml`** — runs on every push/PR to `main`. Three jobs: `lint` (`ruff check .` + `mypy`
   over the ten source dirs, Python 3.12 only — mypy is version-independent given a pinned
@@ -142,10 +168,34 @@ Two GitHub Actions workflows gate `main` (`.github/workflows/`):
   (whose eventual promotion is a possibility after a measured flake rate), `chaos` exists to find
   real bugs under deliberate container failure, not to gate merges.
 
+- **`release.yml`** — `push: tags: ["v*"]` + `workflow_dispatch` only. Three jobs: `packages`
+  (derives the `{dir, name}` matrix from `scripts/packages.sh`, RL-18 compliance), `build` (one
+  `uv build --package <dir>` leg per package, one artifact per package), `publish` (matrix over
+  the ten names, `environment: pypi-<name>` + `id-token: write` scoped to that job only, PyPI
+  trusted publishing via `pypa/gh-action-pypi-publish` with PEP 740 attestations on by default).
+  Top-level `permissions: {}`. Never a required check — it never runs on `pull_request`.
+- **`scorecard.yml`** — weekly `schedule` + `push: [main]` + `branch_protection_rule`. Publishes
+  an OpenSSF Scorecard result and SARIF upload. One score covers all ten distributions; never a
+  required check, and `Branch-Protection`/`Signed-Releases` are expected to score low until Plan
+  023's Phase 9 ruleset lands (and PEP 740 attestations do not by themselves satisfy
+  `Signed-Releases`).
+- **`docs.yml`** — versioned docs via `mike`, see the "Versioned documentation" section below.
+  Never a required check.
+
 **Branch protection (repository setting, not in the repo tree — apply manually):** Settings →
 Branches → rule for `main` → Require status checks to pass → select **only** `Tests / All tests
 passed` (the `all-green` job). This has not yet been applied to this repository as of Plan 017 —
-apply it before relying on it.
+Plan 023's Phase 9 + Appendix A now specify it in full (branch ruleset `main-branch-protection` +
+tag ruleset `release-tags`, both with an admin bypass actor, applied only after the `v3.0.0` tag
+has shipped) — apply it before relying on it. The required check is still, and will remain, only
+`Tests / All tests passed` — `release`, `docs`, `scorecard`, and `chaos` must never be selected.
+
+**Manual, out-of-repo operator steps for `release.yml`** (cannot be performed by any file in this
+repo — full detail in `design/varco-1-0-release/release-runbook.md`): ten GitHub Environments
+(`pypi-varco-core` … `pypi-varco-casbin`, no deployment-branch restriction), ten PyPI
+trusted-publisher configs (owner `edoardoscarpaci`, repo `varco`, workflow `release.yml`,
+environment `pypi-<name>`), and the GitHub Pages publishing source for `docs.yml`. None of these
+are scriptable with `gh` today, and `gh` is not installed on the maintainer's machine.
 
 ---
 

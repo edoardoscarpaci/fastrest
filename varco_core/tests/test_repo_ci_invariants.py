@@ -434,25 +434,31 @@ def test_all_uses_lines_pinned_by_commit_sha():
 
 
 # ---------------------------------------------------------------------------
-# Item 12 — publish.yml untouched (Step 26)
+# Item 12 — publish.yml resurrected as release.yml (Plan 023 / Step 26)
 # ---------------------------------------------------------------------------
+#
+# Plan 017's own version of this test explicitly deferred: "publish.yml must
+# remain fully commented (Non-goal: RL-10 owns its resurrection)". Plan 023
+# is that resurrection — §RL-10-publish `git rm`'d the dead publish.yml and
+# replaced it with a real, live release.yml (load-bearing filename — see
+# that workflow's own header comment for why the name must never change
+# again without redoing all ten PyPI trusted-publisher configs).
 
 
-def test_publish_workflow_still_exists_and_still_fully_commented():
-    """Step 26: 'do not touch' — this repo's publish.yml stays 100% dead
-    comments through Plan 017. Kept tolerant of exact byte content per the
-    task's own instruction; only the "still exists, still fully dead" shape
-    is asserted."""
-    path = WORKFLOWS_DIR / "publish.yml"
-    assert path.is_file(), ".github/workflows/publish.yml must still exist"
-    text = path.read_text()
+def test_publish_workflow_was_deleted_and_replaced_by_release_workflow():
+    """Plan 023 / Step 26: the never-run, fully-commented publish.yml is gone;
+    a live release.yml takes its place."""
+    assert not (WORKFLOWS_DIR / "publish.yml").is_file(), (
+        "publish.yml should have been git rm'd by Plan 023 Step 26 "
+        "(replaced by release.yml — RL-10-publish)"
+    )
+    release_path = WORKFLOWS_DIR / "release.yml"
+    assert release_path.is_file(), ".github/workflows/release.yml must exist (Plan 023 / RL-10)"
+    text = release_path.read_text()
     non_comment_non_blank = [
         line for line in text.splitlines() if line.strip() and not line.strip().startswith("#")
     ]
-    assert not non_comment_non_blank, (
-        "publish.yml must remain fully commented (Non-goal: RL-10 owns its "
-        f"resurrection); found live lines: {non_comment_non_blank[:3]}"
-    )
+    assert non_comment_non_blank, "release.yml must be a live workflow, not fully commented"
 
 
 # ---------------------------------------------------------------------------

@@ -1,16 +1,16 @@
 [project]
 name          = "varco-nats"
-version       = "2.1.1"
+version       = "3.0.0"
 description   = "NATS JetStream event bus backend for varco — NatsEventBus built on nats-py"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
-license       = { text = "Apache-2.0" }
+license       = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 keywords      = ["fastapi", "nats", "jetstream", "nats-py", "async", "event-bus", "domain-events", "varco"]
 classifiers   = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
@@ -19,8 +19,8 @@ classifiers   = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Workspace sibling — resolved from the monorepo via [tool.uv.sources] below.
-    "varco-core",
+    # Workspace sibling — resolved from the monorepo via the tool.uv.sources table below.
+    "varco-core~=3.0",
     # nats-py is the async NATS / JetStream client used by NatsEventBus.
     # JetStream (durable, at-least-once) is the only delivery layer this
     # package targets — Core NATS pub/sub is intentionally not exposed.
@@ -58,7 +58,7 @@ dev = [
 ]
 
 [build-system]
-requires      = ["hatchling"]
+requires      = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

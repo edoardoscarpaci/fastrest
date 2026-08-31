@@ -1,16 +1,16 @@
 [project]
 name          = "varco-beanie"
-version       = "1.2.0"
+version       = "3.0.0"
 description   = "Beanie (Motor / MongoDB) async backend for varco — runtime ORM generation, repository, and UoW"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
-license       = { text = "Apache-2.0" }
+license       = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 keywords      = ["fastapi", "beanie", "motor", "mongodb", "async", "domain-model", "repository", "odm"]
 classifiers   = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
@@ -19,8 +19,8 @@ classifiers   = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Workspace sibling — resolved from the monorepo via [tool.uv.sources] below.
-    "varco-core",
+    # Workspace sibling — resolved from the monorepo via the tool.uv.sources table below.
+    "varco-core~=3.0",
     # beanie 2.x dropped motor and uses pymongo>=4.11 async client directly.
     # We target beanie>=2.0 to track the latest stable series.
     "beanie>=2.0",
@@ -57,7 +57,7 @@ dev = [
 ]
 
 [build-system]
-requires      = ["hatchling"]
+requires      = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

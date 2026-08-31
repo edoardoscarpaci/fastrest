@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a defect in one of varco's ten packages
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. Please do **not** use this form for a
+        security vulnerability — use [private vulnerability reporting](../../security/advisories/new)
+        instead (see SECURITY.md).
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      description: Which varco package is affected?
+      options:
+        - varco-core
+        - varco-kafka
+        - varco-nats
+        - varco-redis
+        - varco-sa
+        - varco-beanie
+        - varco-memcached
+        - varco-ws
+        - varco-fastapi
+        - varco-casbin
+        - Not sure / multiple
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: All ten packages are released in lockstep, so one version number covers all of them.
+      placeholder: "3.0.0"
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "3.12.x / 3.13.x"
+    validations:
+      required: true
+  - type: input
+    id: broker
+    attributes:
+      label: Broker / database in use (if relevant)
+      description: e.g. Kafka, NATS, Redis, Postgres, MongoDB, Memcached — and their version.
+      placeholder: "Redis 7.4"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including a minimal reproduction if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      render: shell

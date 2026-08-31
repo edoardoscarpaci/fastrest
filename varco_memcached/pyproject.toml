@@ -1,16 +1,16 @@
 [project]
 name          = "varco-memcached"
-version       = "1.1.1"
+version       = "3.0.0"
 description   = "Memcached cache backend for varco — MemcachedCache built on aiomcache"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
-license       = { text = "Apache-2.0" }
+license       = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 keywords      = ["fastapi", "memcached", "cache", "async", "varco"]
 classifiers   = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
@@ -18,8 +18,8 @@ classifiers   = [
     "Typing :: Typed",
 ]
 dependencies = [
-    # Workspace sibling — resolved from the monorepo via [tool.uv.sources] below.
-    "varco-core",
+    # Workspace sibling — resolved from the monorepo via the tool.uv.sources table below.
+    "varco-core~=3.0",
     # aiomcache is a pure-Python asyncio Memcached client.
     "aiomcache>=0.8",
     # Used for @Configuration / @Provider in MemcachedCacheConfiguration.
@@ -47,7 +47,7 @@ dev = [
 ]
 
 [build-system]
-requires      = ["hatchling"]
+requires      = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

@@ -1,0 +1,39 @@
+# Plan 023 / Phase 5, §RL-10-supply. Two ecosystems, one entry each — a uv
+# workspace has one lock file at the root, so no per-member `directory` entries
+# are needed (brief 005 §5; brief 007's own template says `pip`, but brief
+# 005's `uv`-ecosystem finding is the later, uv-specific one and wins).
+#
+# ⚠️ KNOWN OPEN BUG (dependabot-core#14004, brief 005 §5 Evidence Gap 2,
+# unresolved as of Jan 2026): Dependabot's `uv` ecosystem support may propose
+# edits to `[tool.uv.workspace] members` rather than to a dependency
+# specifier, on a workspace this shape. If the `uv` block below starts
+# producing nonsense PRs, delete that block — the `github-actions` block
+# (the security-relevant one, since it is what keeps SHA pins fresh) is
+# unaffected either way.
+#
+# No `reviewers:` key: a solo maintainer is notified of their own repo's PRs
+# regardless, and a mistyped login would silently break the key.
+#
+# `# vN` trailing comments on every SHA pin in this repo's workflows
+# (test.yml, release.yml, scorecard.yml, docs.yml) are MANDATORY, not
+# cosmetic — Dependabot parses that comment to compute the next SHA.
+
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-dependencies:
+        patterns: ["*"]
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 10

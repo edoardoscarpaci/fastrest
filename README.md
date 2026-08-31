@@ -8,6 +8,10 @@ A modular Python framework for building expressive, backend-agnostic REST APIs o
 brokers via testcontainers (`.github/workflows/integration.yml`). See
 [CLAUDE.md](CLAUDE.md#ci) for the job breakdown.
 
+**Contributing**: see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup and the versioning/
+deprecation policy, [SECURITY.md](SECURITY.md) to report a vulnerability privately, and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+
 ---
 
 ## Packages
@@ -24,6 +28,12 @@ brokers via testcontainers (`.github/workflows/integration.yml`). See
 | `varco_ws` | WebSocket and SSE event bus adapters |
 | `varco_memcached` | Memcached cache backend |
 | `varco_casbin` | Casbin policy-engine authorization backend (ACL/RBAC/ABAC + REST admin router) |
+
+All ten packages are released **in lockstep** — they always share one version number, and a
+breaking change in any one bumps all ten. Install the exact version you need with any package
+manager's usual pin; siblings resolve automatically via a compatible-release pin
+(`varco-core~=3.0`), so `varco-kafka==3.0.0` works with `varco-core` anywhere in the `3.x` line.
+See `CONTRIBUTING.md`'s versioning and deprecation policy for the full contract.
 
 ---
 

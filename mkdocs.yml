@@ -3,6 +3,26 @@ site_description: Async Python monorepo for event-driven, layered services
 docs_dir: technical_docs
 site_dir: site
 
+# site_url is required by mike's version switcher — it resolves versions.json
+# relative to this URL (Plan 023 / §RL-12-docs). The last path segment is the
+# repository slug, resolved to `varco` (§RL-SEC-repo-name).
+site_url: https://edoardoscarpaci.github.io/varco/
+
+# DESIGN: mike (commits to a gh-pages branch) over the Actions-artifact model
+#   ❌ REJECTED on a hard incompatibility, not a preference (brief 006 §3):
+#      mike's entire design is "create commits on a git branch" so it can
+#      write versions.json and rewrite the version-switcher's alias pointers
+#      (dev/3.0/latest); actions/upload-pages-artifact gives it nowhere to
+#      write that file. There is no third option in this ecosystem.
+#   ❌ `contents: write` (to push gh-pages) is a broader grant than the
+#      artifact model's `pages: write` + `id-token: write`, and the branch
+#      grows ~10-20 MB per release (brief 006 Evidence Gap 3) — a non-issue
+#      for 3.0.0, revisited at 4.0. Accepted as the price of the only
+#      mechanism that actually implements a version switcher today.
+extra:
+  version:
+    provider: mike
+
 # DESIGN: MkDocs Material + mkdocstrings over Sphinx
 #   ✅ Consumes the hand-written markdown feature docs natively (no myst-parser).
 #   ✅ mkdocstrings/griffe renders the repo's Google-style docstrings out of the box.

@@ -1,16 +1,16 @@
 [project]
 name          = "varco-casbin"
-version       = "2.1.1"
+version       = "3.0.0"
 description   = "Casbin policy-engine authorization backend for varco — ACL/RBAC/ABAC with dynamic persisted policies and a REST management router"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
-license       = { text = "Apache-2.0" }
+license       = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 keywords      = ["fastapi", "casbin", "authorization", "rbac", "abac", "acl", "policy", "varco"]
 classifiers   = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
@@ -19,7 +19,7 @@ classifiers   = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "varco-core",
+    "varco-core~=3.0",
     "casbin>=1.36",
     "providify>=2.0.0",
     "pydantic-settings>=2.0",
@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # REST management router (CasbinPolicyRouter) — pulls in the FastAPI layer.
-fastapi = ["varco-fastapi"]
+fastapi = ["varco-fastapi~=3.0"]
 # Durable, dynamic-CRUD policy store backed by an async SQLAlchemy adapter.
 sqlalchemy = ["casbin-async-sqlalchemy-adapter>=1.4", "sqlalchemy[asyncio]>=2.0"]
 # Durable, dynamic-CRUD policy store backed by MongoDB via Beanie.
@@ -58,7 +58,7 @@ dev = [
 ]
 
 [build-system]
-requires      = ["hatchling"]
+requires      = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

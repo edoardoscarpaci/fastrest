@@ -1,0 +1,50 @@
+# OpenSSF Scorecard — publishes a supply-chain security posture score.
+#
+# Plan 023 / Phase 5, §RL-10-supply. Appendix A row 44 — do not write this
+# file again in Phase 8; it is delivered here.
+#
+# ⚠️ Monorepo caveat (brief 005 §6): one score covers all ten distributions.
+# The `Branch-Protection` check scores poorly until Phase 9's ruleset lands,
+# and `Signed-Releases` may lag even after (PEP 740 attestations do not by
+# themselves satisfy that check). Accepted and documented rather than gamed
+# — the score is a signal, NEVER a gate, and this workflow is never in any
+# `needs:` and never a required status check.
+
+name: Scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "30 2 * * 1" # weekly, Monday 02:30 UTC
+  push:
+    branches: ["main"]
+
+permissions: {}
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write # to upload SARIF
+      id-token: write # to publish results and get a badge
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        with:
+          sarif_file: results.sarif

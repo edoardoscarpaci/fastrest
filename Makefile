@@ -228,7 +228,13 @@ build:
 	$(foreach pkg,$(_TARGETS),uv build --package $(pkg) --out-dir $(pkg)/dist;)
 
 # ── Publish ───────────────────────────────────────────────────────────────────
-# Requires UV_PUBLISH_TOKEN to be set (or --token flag).
+# ⚠️ BREAK-GLASS MANUAL PATH ONLY (Plan 023 / §RL-10-publish). The sanctioned
+# release path is a `v*` git tag + `.github/workflows/release.yml`, which
+# publishes over OIDC trusted publishing (no token, PEP 740 attestations) —
+# see design/varco-1-0-release/release-runbook.md. This target requires
+# UV_PUBLISH_TOKEN to be set (or --token flag) and stores no token anywhere in
+# this repo or CI; it exists only for a genuine break-glass scenario where the
+# tag-triggered workflow itself cannot be used.
 # Publishes wheels from every package's dist/ directory.
 .PHONY: publish
 publish:

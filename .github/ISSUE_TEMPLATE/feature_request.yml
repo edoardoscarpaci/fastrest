@@ -1,0 +1,33 @@
+name: Feature request
+description: Propose a new capability or an enhancement to an existing one
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, please skim CLAUDE.md's "Decision Tree" and "Pre-Implementation Checklist"
+        sections — they cover most "where should this live" questions (varco_core vs. a backend
+        package, new abstraction vs. extending an existing one).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case this feature would unblock.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the API/behavior you have in mind, if you have one.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This does not require an independent per-package version or a new umbrella meta-package (both are Parked decisions — see BACKLOG.md)
+        - label: I've checked this isn't already covered by an existing abstraction (ARCHITECTURE.md's type hierarchies)

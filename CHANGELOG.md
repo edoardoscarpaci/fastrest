@@ -9,6 +9,28 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-08-31
+
+### Packaging & release (Plan 023, RL-9 / RL-13)
+
+- **Lockstep versioning.** All ten distribution packages now carry the identical version
+  `3.0.0`, written by a tested `scripts/bump.py` (tomlkit-based, style-preserving) rather than by
+  hand. Previous, divergent versions: `varco-core` 1.2.0, `varco-kafka` 2.1.1, `varco-nats` 2.1.1,
+  `varco-redis` 2.1.2, `varco-sa` 2.2.0, `varco-beanie` 1.2.0, `varco-memcached` 1.1.1, `varco-ws`
+  2.1.0, `varco-fastapi` 1.2.0, `varco-casbin` 2.1.1. A future release bumps all ten together;
+  `scripts/bump.py --check` fails CI if they ever diverge again.
+- **Sibling requirement strings are now bounded.** Every `varco-*` sibling dependency (previously
+  a bare, unbounded `"varco-core"`) is now pinned `~=3.0` (PEP 440 compatible release), both in
+  `[project].dependencies` and in the two shipped optional-dependency extras that reference a
+  sibling (`varco-fastapi`'s `ws` extra, `varco-casbin`'s `fastapi` extra). See
+  `CONTRIBUTING.md`'s versioning policy for the full rationale.
+- **PEP 639 license metadata.** All ten packages now declare `license = "Apache-2.0"` (SPDX
+  expression) + `license-files = ["LICENSE"]`, replacing the legacy `license = { text = "..." }`
+  table form; the redundant `"License :: OSI Approved :: Apache Software License"` classifier is
+  removed. `[build-system] requires` is raised to `hatchling>=1.27` in all ten.
+- **`Development Status :: 5 - Production/Stable`** replaces `3 - Alpha` in all ten packages'
+  classifiers — this release is the project's first production-stable statement.
+
 ### BREAKING — API-surface freeze audit (Plan 022, RL-8)
 
 Four accepted breaks out of twelve audited candidates. Each was decided at an

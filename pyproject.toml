@@ -33,6 +33,10 @@ lint = [
 dev = [
     "asyncpg>=0.31.0",
     { include-group = "lint" },   # PEP 735 — `uv sync` installs lint tooling by default
+    # tomlkit powers scripts/bump.py's style-preserving TOML edits (Plan 023 /
+    # §RL-9-bump) — a regex cannot distinguish a shipped [project].dependencies
+    # sibling entry from a [dependency-groups].dev one that must NOT be pinned.
+    "tomlkit>=0.13",
 ]
 # Documentation tooling — MkDocs Material + mkdocstrings (Google-style docstrings).
 # Installed via `make docs-deps`; the built HTML site lands in ./site (gitignored).
@@ -45,6 +49,11 @@ docs = [
     "mkdocs-gen-files>=0.5.0",
     "mkdocs-literate-nav>=0.6.1",
     "mkdocs-section-index>=0.3.9",
+    # mike — versioned docs on GitHub Pages (Plan 023 / §RL-12-docs). Pinned
+    # <3: mike's own versioning contract (dev/3.0/latest aliases via commits
+    # on gh-pages) is what this repo's docs.yml depends on; a future
+    # backward-incompatible major would need a deliberate, reviewed bump.
+    "mike>=2.1,<3",
 ]
 
 # §RL-6-ruff (plans/017-ci-green-workflows-and-lint-type-gates.md): providify's

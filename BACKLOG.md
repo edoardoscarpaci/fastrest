@@ -194,11 +194,11 @@ Must complete **before** the version freeze in phase 5 — 3.0.0 is the last che
 
 | ID | Feature | Severity | Complexity | Rationale | Evidence |
 |----|---------|----------|------------|-----------|----------|
-| RL-9 | **Version unification at 3.0.0 + written SemVer/deprecation policy** — a single-source-of-truth bump mechanism replacing ten hand-edited `version =` fields, and `Development Status :: 5 - Production/Stable` | 🔴 must | M | Current state is incoherent: core/fastapi/beanie 1.2.0, memcached 1.1.1, ws 2.1.0, kafka/nats/casbin 2.1.1, redis 2.1.2, sa 2.2.0 — no bump tool, all still Alpha-classified. Research: a written deprecation policy (PEP 387-style, 2-year cycles) is the expected bar, not optional polish | scan of all ten `pyproject.toml` versions; [research brief](design/varco-1-0-release/research/001-release-and-ecosystem-stakes.md) §1 |
-| RL-10 | **Release automation + supply-chain posture** — tag-triggered PyPI publish via OIDC **trusted publishing**, PEP 740 attestations, `dependabot.yml`, OpenSSF Scorecard workflow, all actions pinned by commit SHA | 🔴 must | M | The user's explicit ask ("similar to providify"). providify ships precisely this and it can be copied in shape across ten packages. Trusted publishing removes the long-lived-token risk entirely | providify `.github/workflows/{release,scorecard}.yml`, `.github/dependabot.yml`; [research brief](design/varco-1-0-release/research/001-release-and-ecosystem-stakes.md) §1 (PyPI attestations) |
-| RL-11 | **Governance + community files** — `CONTRIBUTING.md` (carrying RL-9's versioning/deprecation policy), `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue + PR templates, `CODEOWNERS`; plus gitignore hygiene | 🔴 must | S | All absent today. Research lists `SECURITY.md` as outright release-blocking for a framework handling JWTs, encryption keys and multitenant isolation. Hygiene: `dist/`, `site/`, `scratchpad/`, `integration_test.log` and a stray `varco_beanie/.venv/` are sitting in the working tree | scan of repo root and `.github/`; [research brief](design/varco-1-0-release/research/001-release-and-ecosystem-stakes.md) §1 |
-| RL-12 | **Versioned docs hosting — GitHub Pages + `mike`** — publish the existing mkdocs site from CI with a version switcher (3.0 / latest / dev) | 🔴 must | S/M | `mkdocs.yml` and a locally-built `site/` exist but nothing publishes them. User chose Pages over Read the Docs to stay inside the GitHub setup RL-10 already builds | `mkdocs.yml`, `scripts/gen_ref_pages.py`, untracked `site/`; [research brief](design/varco-1-0-release/research/001-release-and-ecosystem-stakes.md) §1 |
-| RL-13 | **PEP 639 license metadata + PEP 735 dependency-groups audit** across all ten packages | 🟢 nice | S | Modernizes packaging metadata to the 2026 standard while every `pyproject.toml` is already being edited for RL-9. Cheap only if done in the same pass — otherwise it's ten more PRs later | [research brief](design/varco-1-0-release/research/001-release-and-ecosystem-stakes.md) §3 (uv + PEP 735 + PEP 639 standardization) |
+| RL-9 | ✅ **DONE (Plan 023)** — **Version unification at 3.0.0 + written SemVer/deprecation policy** — a single-source-of-truth bump mechanism replacing ten hand-edited `version =` fields, and `Development Status :: 5 - Production/Stable` | 🔴 must | M | All ten packages now `3.0.0` + `Production/Stable`, written by `scripts/bump.py` (tomlkit-based, tested); sibling requirements pinned `~=3.0`; versioning + 12-month deprecation policy in `CONTRIBUTING.md` | `scripts/bump.py`, `varco_core/tests/test_bump_script.py` (19 tests, no xfail), `CONTRIBUTING.md`'s "Versioning and deprecation policy" section, `CHANGELOG.md`'s `[3.0.0]` "Packaging & release" entry |
+| RL-10 | ✅ **DONE (Plan 023)** — **Release automation + supply-chain posture** — tag-triggered PyPI publish via OIDC **trusted publishing**, PEP 740 attestations, `dependabot.yml`, OpenSSF Scorecard workflow, all actions pinned by commit SHA | 🔴 must | M | `.github/workflows/release.yml` (packages/build/publish jobs, matrix derived from `scripts/packages.sh`, per-package `environment:`/`packages-dir`), `dependabot.yml`, `scorecard.yml` all committed; `publish.yml` deleted. ⚠️ The ten GitHub Environments, ten PyPI trusted-publisher configs, and the rc1/final tag pushes are manual operator steps **not applied by this execution** — see the runbook | `.github/workflows/release.yml`/`dependabot.yml`/`scorecard.yml`; `design/varco-1-0-release/release-runbook.md` |
+| RL-11 | ✅ **DONE (Plan 023)** — **Governance + community files** — `CONTRIBUTING.md` (carrying RL-9's versioning/deprecation policy), `SECURITY.md`, `CODE_OF_CONDUCT.md`, issue + PR templates, `CODEOWNERS`; plus gitignore hygiene | 🔴 must | S | All six file groups committed and linked from `README.md`. Gitignore hygiene claim **re-verified, not assumed**: `git status --porcelain`/`git ls-files`/`git check-ignore -v` all showed the tree already clean (`*.log`, `.venv`, `/site`, `dist/` already covered) — no `.gitignore` edit was needed | `CONTRIBUTING.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/*`, `.github/PULL_REQUEST_TEMPLATE.md`; `design/varco-1-0-release/measurements/version-baseline.md` §Step 2 |
+| RL-12 | ✅ **DONE (Plan 023)** — **Versioned docs hosting — GitHub Pages + `mike`** — publish the existing mkdocs site from CI with a version switcher (3.0 / latest / dev) | 🔴 must | S/M | `mike>=2.1,<3` in the docs group; `mkdocs.yml` carries `site_url` + `extra.version.provider: mike`; `.github/workflows/docs.yml` deploys `dev` from `main` and `3.0`/`latest` from a non-pre-release tag. ⚠️ The Pages publishing-source setting and the actual first deploy are manual/tag-triggered and **not applied by this execution** | `mkdocs.yml`, `.github/workflows/docs.yml`, `design/varco-1-0-release/release-runbook.md` §3 |
+| RL-13 | ✅ **DONE (Plan 023)** — **PEP 639 license metadata + PEP 735 dependency-groups audit** across all ten packages | 🟢 nice | S | All ten now declare `license = "Apache-2.0"` + `license-files = ["LICENSE"]` (a per-package `LICENSE` copy was required — verified empirically that `../LICENSE` globs are not honored by hatchling), `hatchling>=1.27`, no `License ::` classifier; verified on a real built wheel's `METADATA` (`Metadata-Version: 2.5`, `License-Expression: Apache-2.0`, `License-File: LICENSE`). PEP 735 audit: already compliant, no migration | `design/varco-1-0-release/packaging-audit.md`; `design/varco-1-0-release/measurements/version-baseline.md` §Step 9-11 |
 
 ---
 
@@ -232,11 +232,22 @@ Must complete **before** the version freeze in phase 5 — 3.0.0 is the last che
   testkit deliberately does not re-export or wrap them, and a consumer conftest redefining
   `di_container` wins over the plugin default. See Plan 016 Design §RL-3d.
 
+## Answered by Plan 023 (do not relitigate)
+
+- **RL-9 bump mechanism** → **a hand-rolled `scripts/bump.py` using tomlkit**, not `uv version`
+  (no `--all-members`/`--workspace` flag, and it cannot rewrite sibling requirement strings) and
+  not hatch-vcs (unsuitable for a hand-chosen, not CI-derived, version — see brief 004 §2's
+  sdist-without-`.git` failure mode). tomlkit's style-preserving parse/dump round-trips
+  byte-identical when nothing changes, verified against the real tree before the script was
+  written. See Plan 023 §RL-9-bump.
+- **RL-9 sibling pin exactness** → **compatible (`~=<major>.0`), not exact (`==<version>`)**.
+  Exact pins force the resolver to reconcile two different exact `varco-core` demands the moment
+  two siblings are on different patch versions — a diamond conflict this monorepo would hit on its
+  first post-3.0.0 patch release. The lockstep guarantee is carried by the *release process* (all
+  ten published from one tag), not by the metadata. See Plan 023 §RL-9-pins.
+
 ## Open questions for `/plan`
 
-- **RL-9 bump mechanism**: which tool owns the single source of truth for the lockstep version
-  (hatch-vcs from the git tag, `uv version`, or a `scripts/bump.py`), and whether the ten
-  packages' inter-dependencies pin exactly (`==3.0.0`) or compatibly (`~=3.0`).
 - **RL-8 audit scope**: the audit produces a ranked list of candidate breaks — an explicit
   accept/reject checkpoint is needed before any of them land, since each one spends
   irreplaceable 3.0.0 budget.
