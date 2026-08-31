@@ -64,6 +64,8 @@ from varco_core.event.dlq import (
 )
 from varco_core.event.serializer import JsonEventSerializer
 
+from ._bson_time import ceil_to_bson_millisecond
+
 _logger = logging.getLogger(__name__)
 
 
@@ -241,7 +243,12 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
         if older_than is not None or newer_than is not None:
             rng: dict[str, Any] = {}
             if older_than is not None:
-                rng["$lt"] = older_than
+                # WHY ceil: BSON is millisecond-precision and pymongo floors
+                # the operand too, so a raw `$lt` silently drops every entry
+                # sharing a millisecond with the cutoff — see
+                # _bson_time.ceil_to_bson_millisecond. `$gt` needs no such
+                # adjustment (floor is already correct for a lower bound).
+                rng["$lt"] = ceil_to_bson_millisecond(older_than)
             if newer_than is not None:
                 rng["$gt"] = newer_than
             query["last_failed_at"] = rng
@@ -276,7 +283,11 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
 
         query: dict[str, Any] = {}
         if older_than is not None:
-            query["last_failed_at"] = {"$lt": older_than}
+            # WHY ceil: without it a chunked sweep re-passing a fixed cutoff
+            # returns 0 while entries stored in the cutoff's own millisecond
+            # remain — the sweep reports "done" and is not. See
+            # _bson_time.ceil_to_bson_millisecond.
+            query["last_failed_at"] = {"$lt": ceil_to_bson_millisecond(older_than)}
         if channel is not None:
             query["channel"] = channel
         if tenant_id is not None:

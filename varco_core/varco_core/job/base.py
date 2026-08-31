@@ -950,6 +950,15 @@ class AbstractJobStore(ABC):
               status before filtering — a backlog larger than that requires
               multiple chunked calls even for `limit=None`, exactly like the
               chunked-sweep recipe.
+            - A BSON-backed implementation (``BeanieJobStore``) stores
+              ``completed_at``/``expires_at`` at millisecond precision and
+              widens both cutoffs to the next whole millisecond before
+              querying (``varco_beanie._bson_time.ceil_to_bson_millisecond``)
+              so a chunked sweep re-passing a fixed cutoff cannot strand a
+              job the store itself reports as strictly before it — see
+              ``technical_docs/features/job-scheduling-and-leases.md``'s
+              Retention section. SA/in-memory implementations keep full
+              microsecond precision and this caveat does not apply to them.
 
         Async safety: ✅ All I/O is awaited.
         """

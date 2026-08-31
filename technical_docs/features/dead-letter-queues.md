@@ -362,6 +362,23 @@ mirrors `varco migrate`'s own config-resolution pattern.
 `retention.ms` (Kafka topic retention) / JetStream `MaxAge` as the correct
 mechanism — retention on a stream-backed store is not a varco concern.
 
+⚠️ **Beanie: `older_than` is evaluated at BSON millisecond resolution, not
+Python microsecond resolution.** `last_failed_at` is stored as a BSON
+`UTCDateTime`, which pymongo truncates (floors) to the millisecond on write
+— and floors the query operand the same way. A raw `$lt` on a
+full-microsecond cutoff is therefore evaluated as `stored_ms <
+floor_ms(cutoff)`, which excludes every entry sharing a millisecond with the
+cutoff even though the value the store itself reports for it is genuinely
+`< cutoff`. A chunked sweep re-passing a fixed cutoff would report `0` and
+stop while such an entry remained. `BeanieDeadLetterQueue.delete_where()`
+and `.list_entries()` fix this by widening only `older_than`'s operand up to
+the next whole millisecond before it reaches pymongo
+(`varco_beanie._bson_time.ceil_to_bson_millisecond`) — `newer_than`'s `$gt`
+is deliberately left alone, since pymongo's floor is already the correct
+rounding for a lower bound. This is Mongo-specific: `SADeadLetterQueue` and
+`InMemoryDeadLetterQueue` store full microsecond precision and need no such
+adjustment.
+
 ## Multitenancy (Plan 009, Phase 6 / R4)
 
 `DeadLetterEntry.tenant_id: str | None = None` (new, defaulted, appended —
@@ -471,5 +488,6 @@ WARNING at mount time naming the risk.
 | **`OutboxRelay(max_attempts=...)` without a `dlq`** | `ValueError` at construction | Deleting a poison entry with nowhere durable to put it is silent data loss — refused by design | Pass a `dlq=` (e.g. `SADeadLetterQueue`) alongside `max_attempts` |
 | **`list_entries(tenant_id="acme")` misses a framework-level dead letter** | An entry produced outside any tenant context (e.g. a boot-time outbox deserialize failure) never shows up under any explicit `tenant_id=` filter | `DeadLetterEntry.tenant_id=None` is deliberately never matched by `tenant_id="acme"` — a `None` tenant is not "every tenant" (Plan 009, RD-4/R4) | Use no `tenant_id` filter at all for the operator/global view; a `None`-tenant entry is correct, expected behaviour, not a bug |
 | **`redrive(entry_id)` called on Kafka/NATS** | `DeadLetterNotAddressable` | Stream-backed stores cannot address a single message by id — `supports_random_access=False` (RD-4) | Use `redrive_batch()` / the CLI's `--batch` flag, which work on every backend |
+| **Beanie chunked sweep reports `0` while an entry stored right at the cutoff still matches** | `delete_where(older_than=cutoff, limit=...)`/`list_entries(older_than=cutoff)` misses an entry whose own reported `last_failed_at` is strictly before `cutoff` | BSON is millisecond-precision and pymongo floors the query operand too, so a raw `$lt` was evaluated as `stored_ms < floor_ms(cutoff)` — excluding every entry sharing a millisecond with the cutoff | Fixed — `BeanieDeadLetterQueue` widens `older_than`'s operand to the next whole millisecond (`_bson_time.ceil_to_bson_millisecond`) before querying; `newer_than` is untouched since pymongo's floor is already correct for a lower bound |
 | **`mount_reliability_admin()` without `acknowledge_bundled_admin=True`** | `ValueError` at mount time, nothing mounted | This surface can replay bus messages and delete audit/DLQ records — at least as privileged as the tenant control plane (RD-9) | Pass it only after confirming a standalone deployment isn't justified — same rule as `mount_tenant_admin()` |
 | **`mount_reliability_admin()` called twice** | Second call silently doubles/duplicates the DLQ+audit admin routes (same `prefix` doubles routes; a different `prefix` produces a second live surface) | No `id(app)` double-mount guard, unlike `mount_tenant_admin()` | Plan 014 / audit F4 — a second call for the same app now raises `ValueError`, same rule as `mount_tenant_admin()`. Calling with neither `audit_repo` nor `dlq` mounts nothing and does not poison the app for a later real mount (deliberate deviation from `mount_tenant_admin()`) |

@@ -80,6 +80,8 @@ from pydantic import Field
 from varco_core.job.base import AbstractJobStore, Job, JobStatus, StaleLeaseError
 from varco_core.job.task import TaskPayload
 
+from ._bson_time import ceil_to_bson_millisecond
+
 _logger = logging.getLogger(__name__)
 
 
@@ -654,10 +656,17 @@ class BeanieJobStore(AbstractJobStore):
                 filters.append(JobDocument.status == status.value)
             else:
                 filters.append({"status": {"$in": [s.value for s in status]}})
+        # WHY ceil: BSON stores milliseconds and pymongo floors the operand,
+        # so a raw `$lt` never matches a row written in the cutoff's own
+        # millisecond — a chunked purge would report 0 with rows still
+        # matching. See _bson_time.ceil_to_bson_millisecond. The `$lte`
+        # lease/run_at predicates elsewhere in this file need no adjustment.
         if completed_before is not None:
-            filters.append({"completed_at": {"$ne": None, "$lt": completed_before}})
+            bound = ceil_to_bson_millisecond(completed_before)
+            filters.append({"completed_at": {"$ne": None, "$lt": bound}})
         if expires_before is not None:
-            filters.append({"expires_at": {"$ne": None, "$lt": expires_before}})
+            bound = ceil_to_bson_millisecond(expires_before)
+            filters.append({"expires_at": {"$ne": None, "$lt": bound}})
 
         if limit is not None:
             matched = await JobDocument.find(*filters).limit(limit).to_list()

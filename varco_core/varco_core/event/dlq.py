@@ -414,6 +414,18 @@ class AbstractDeadLetterQueue(ABC):
 
         Raises:
             NotImplementedError: unless overridden by a random-access backend.
+
+        Edge cases:
+            - A BSON-backed implementation (``BeanieDeadLetterQueue``) stores
+              ``last_failed_at`` at millisecond precision and widens
+              ``older_than`` to the next whole millisecond before querying
+              (``varco_beanie._bson_time.ceil_to_bson_millisecond``) so that
+              every entry the store itself reports as strictly older than
+              the cutoff is still matched — see
+              ``technical_docs/features/dead-letter-queues.md``'s Retention
+              section. ``newer_than`` needs no such adjustment. SA/in-memory
+              implementations keep full microsecond precision and this
+              caveat does not apply to them.
         """
         raise NotImplementedError(
             f"{type(self).__name__} does not support list_entries() — "
@@ -471,6 +483,13 @@ class AbstractDeadLetterQueue(ABC):
                 is not how those stores work.
             ValueError: no predicate at all was given — refuses to silently
                 delete every entry (mirrors ``AbstractJobStore.delete_where``).
+
+        Edge cases:
+            - Same BSON-millisecond caveat as ``list_entries()``'s
+              ``older_than``: ``BeanieDeadLetterQueue`` widens the operand to
+              the next whole millisecond before querying, so a chunked sweep
+              re-passing a fixed cutoff cannot strand an entry the store
+              reports as strictly older than it.
         """
         if older_than is None and source is None and channel is None and tenant_id is None:
             raise ValueError(

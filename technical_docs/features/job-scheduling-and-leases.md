@@ -197,6 +197,22 @@ accident is the point. `JobPoller(retention_sweep=True)` runs
 `delete_where(expires_before=now, limit=...)` each tick; default `False` — no
 deployment starts deleting rows on upgrade.
 
+⚠️ **Beanie: `completed_before`/`expires_before` are evaluated at BSON
+millisecond resolution, not Python microsecond resolution** — the same
+`AbstractDeadLetterQueue.delete_where(older_than=)` issue described in
+`dead-letter-queues.md`'s Retention section applies verbatim to
+`BeanieJobStore.delete_where()`'s two exclusive-upper-bound predicates.
+pymongo floors both the stored `completed_at`/`expires_at` and the query
+operand, so a raw `$lt` cutoff could exclude a job stored in the cutoff's
+own millisecond even though the store's own reported timestamp for it is
+`< cutoff`. Fixed by widening only those two operands to the next whole
+millisecond (`varco_beanie._bson_time.ceil_to_bson_millisecond`) before
+querying. The `$lte` lease (`lease_expires_at`) and `run_at` predicates
+elsewhere in `BeanieJobStore` are deliberately **not** adjusted — pymongo's
+floor is already correct for an inclusive bound, and widening it would fire
+a lease reap or a schedule up to 1ms early. `SAJobStore`/`InMemoryJobStore`
+store full microsecond precision and need no such adjustment.
+
 ## Credential-at-rest — `store_raw_token=False` (U-19, Phase 6)
 
 `request_token` is discouraged, not deprecated: a JWT is base64-encoded, not
@@ -329,3 +345,4 @@ Generate the revision from `jobs_metadata` via `autogenerate`.
 | **Retention sweep starves the pool** | A cleanup job/maintenance script pins a connection for minutes while deleting a huge backlog | `delete_where()` called once with no `limit` (or the caller manually enumerated ids one at a time) under a transaction-mode pooler | Loop bounded `delete_where(..., limit=1000)` calls (each its own short transaction) until it returns `0` — the chunked-sweep recipe on `AbstractJobStore.delete_where` |
 | **Raw JWT readable in the jobs table** | An operator with read access to the jobs table/collection can read PII straight out of `request_token`'s claims | A JWT is base64-encoded, not encrypted — `store_raw_token=True` (default) stores it verbatim | Pass `store_raw_token=False` (`Job(...)`, `JobRunner.enqueue_task(...)`, or `VarcoRouter._store_raw_token = False`) and switch the completion callback to a service-credential/mTLS/signed-URL auth scheme instead of replaying the caller's token |
 | **`enqueue(tz=...)` raises `ValueError` naming the store class** | A zoned-schedule `enqueue()` call fails at the store name instead of scheduling the job | Plan 011 / RD-5's `_prepare_zoned_job()` guard, now wired into the shipped `varco_fastapi.job.runner.JobRunner.enqueue()`, refuses a zoned schedule (`run_at_wall=`/`tz=`) targeting a store whose `supports_zoned_schedules` is `False` (the default) | Use a store that opts in (`SAJobStore`, `BeanieJobStore`, the in-memory store), or add the three columns/fields to a custom store and set `supports_zoned_schedules = True` |
+| **Beanie `delete_where(completed_before=cutoff)` misses a job stored right at the cutoff** | A chunked purge sweep returns `0` while a job whose reported `completed_at`/`expires_at` is strictly before `cutoff` still matches | BSON is millisecond-precision and pymongo floors the query operand too — a raw `$lt` was evaluated as `stored_ms < floor_ms(cutoff)` | Fixed — `BeanieJobStore` widens `completed_before`/`expires_before` to the next whole millisecond (`_bson_time.ceil_to_bson_millisecond`) before querying; the `$lte` lease/`run_at` predicates are untouched (pymongo's floor is already correct for an inclusive bound) |
