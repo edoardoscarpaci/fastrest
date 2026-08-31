@@ -24,7 +24,7 @@ dependencies = [
     # pydantic-settings provides BaseSettings — used by VarcoSettings and all
     # backend config classes (RedisEventBusSettings, KafkaEventBusSettings, etc.)
     # to read configuration from environment variables automatically.
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.14.2",
     "providify>=2.0.0",
     # lark is used by QueryParser — runtime dependency, not dev-only
     "lark>=1.1",
