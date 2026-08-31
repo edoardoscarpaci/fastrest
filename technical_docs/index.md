@@ -29,6 +29,10 @@ varco_casbin      — Casbin policy-engine authorization backend (ACL/RBAC/ABAC 
 
 ## Notable guides
 
+- [Common pitfalls](common-pitfalls.md) — the cross-cutting catalogue of traps that have
+  actually bitten someone here (shared-instance resilience objects, cache-key scoping, DI
+  binding annotations, BSON millisecond truncation). Read it before writing code against
+  any of those primitives.
 - [OTel automatic parameter capture & global attributes](features/observability-attributes.md)
   — how `@span` records call arguments as span attributes, and how the process-wide
   global attribute registry labels every span and metric.

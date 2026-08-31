@@ -7,6 +7,35 @@ type hierarchies (navigate the codebase without reading files one-by-one). [READ
 — runnable usage snippets and env-var reference tables for every subsystem.
 [technical_docs/features/](technical_docs/features/) — per-feature design rationale and
 operator Pitfalls tables.
+[technical_docs/common-pitfalls.md](technical_docs/common-pitfalls.md) — the cross-cutting
+pitfall catalogue.
+
+---
+
+## What this file is (and is not)
+
+**CLAUDE.md is agent guidance, not documentation.** It exists to tell an agent *how to work
+in this repo*: which command to run, which layer a change belongs in, which rule must not be
+broken, and where the real documentation lives. It is a routing table and a rulebook.
+
+**It is not the product's documentation, and content must not accumulate here.** Anything a
+*human user of varco* would want to read — how a subsystem works, worked usage examples,
+env-var reference tables, design rationale, API surface — belongs in README.md,
+ARCHITECTURE.md, or `technical_docs/`, and is linked from here rather than restated.
+
+Rules for editing this file:
+
+- **Link, don't inline.** A section here should be short enough to read in one screen and
+  should end by pointing at the doc that carries the detail. If a section grows into a
+  reference table or a tutorial, that is the signal to move it out and leave a pointer —
+  exactly what happened to the Common Pitfalls catalogue.
+- **One home per fact.** Never restate in this file something README.md,
+  ARCHITECTURE.md, `technical_docs/`, or CHANGELOG.md already says. Duplicated prose drifts,
+  and the copy here is the one that silently goes stale.
+- **Keep only what changes an agent's behaviour.** A rule ("never `uvx ruff`", "services
+  never hold `AbstractEventBus`"), a non-obvious command, a layer boundary, a decision tree.
+  If removing a paragraph would not change what an agent *does*, it belongs elsewhere.
+- **New feature docs go to `technical_docs/`**, and get at most a one-line pointer here.
 
 ---
 
@@ -67,7 +96,8 @@ same six-`VARCO_TEST_*_URL`-unset clean-room contract `integration-test-clean` u
 via PEP 735 `{ include-group = "lint" }`. `make lint`/`make type-check` invoke them as `uv run
 ruff`/`uv run mypy` — resolving the exact pin recorded in `uv.lock`. **Never invoke linting via
 `uvx ruff`** — `uvx` resolves whatever the newest ruff release is at the moment you run it, which
-can silently diverge from the pin CI enforces (see the Common Pitfalls table).
+can silently diverge from the pin CI enforces (see
+[technical_docs/common-pitfalls.md](technical_docs/common-pitfalls.md)).
 
 **mypy strictness ramp — complete** (Plan 020 / RL-14 → Plan 021, RL-14/RL-14b/RL-14c/RL-14d all
 CLOSED; full design: `plans/021-mypy-strict-full-ramp.md`). `[tool.mypy]` is `strict = true`
@@ -761,7 +791,8 @@ own Engine API reference documents that the allocated port "might be changed whe
 container", and this is platform-independent and version-stable (moby v1.3.0 → v29.1), including
 GitHub Actions' native-Linux dockerd. This is documented Docker behaviour, not a WSL2-specific
 flake (research 002 §1's original "port survives" claim is superseded — see its in-tree banner).
-See the Common Pitfalls table's "chaos `restart()` port instability" row — the fix is
+See [technical_docs/common-pitfalls.md](technical_docs/common-pitfalls.md)'s chaos
+`restart()` port-instability row — the fix is
 `ChaosContainer.url`, never a captured string.
 
 Chaos tests run nightly + `workflow_dispatch` only (`.github/workflows/integration.yml`'s
@@ -827,45 +858,19 @@ guarantee with no conftest edits anywhere in the repo.
 
 ---
 
-## Common Pitfalls & How to Avoid Them
+## Common Pitfalls
 
-| Pitfall | Symptom | Root Cause | Fix |
-|---------|---------|-----------|-----|
-| **Direct bus access in service** | Service holds `AbstractEventBus` and calls `bus.publish()` | Violates layer rule; bus is infra, not for app logic | Always inject `AbstractEventProducer`; it abstracts the bus |
-| **NATS handler raises under `FIRE_FORGET`** | Message is acked and never retried despite `AT_LEAST_ONCE` | The exception never leaves `_dispatch` (`bus.py`'s `FIRE_FORGET` branch only logs), so `_on_message` sees a successful dispatch | Use `COLLECT_ALL` (the default) or `FAIL_FAST` if you want JetStream-level redelivery on handler failure (Plan 019 / RT2-B) |
-| **Events published after commit** | Events silently lost when broker is unavailable | Post-commit publish has no rollback path | Use `OutboxRepository` + `OutboxRelay` within same transaction |
-| **Subscription in `__init__`** | Service won't instantiate if broker is down; hard to test | Coupling service creation to bus state | Defer to `@PostConstruct` + `register_to()` |
-| **Per-call CircuitBreaker** | Circuit never opens, all requests fail after threshold | Instance never accumulates enough failures | Use shared `CircuitBreaker` per external dependency |
-| **Mixin hook doesn't chain** | Later mixins in MRO never run | Hook returns value without calling `super()` | Always `return await super()._hook_name(...)` |
-| **Instantiate InvalidationStrategy outside lifecycle** | Consumer crashes on `start()` or subscriptions leak | Strategy may spawn background tasks or hold subscriptions | Let `CacheBackend` create it; call `backend.start()` / `stop()` |
-| **Cache key collision** | Wrong data returned to different users | Key function doesn't include scope (tenant_id, user_id) | Use namespaced keys: `f"user:{tenant_id}:{user_id}"` |
-| **Forgot `@PostConstruct` on consumer** | Events never delivered | `register_to()` never called; subscription created at wrong time | Add `@PostConstruct` method that calls `self.register_to(self._bus)` |
-| **Async lock at module level** | `RuntimeError: no running event loop` | Locks created before event loop starts | Create locks lazily inside methods: `self._lock = self._lock or asyncio.Lock()` |
-| **Missing `await` on async call** | Coroutine leaked, cleanup never runs | Easy to miss on unfamiliar APIs | IDE linting catches this; always `await` calls to `async def` |
-| **Per-call Bulkhead** | Concurrency never limited, dependency can be overwhelmed | Instance has its own fresh semaphore each call | Shared `Bulkhead` per external dependency, same as `CircuitBreaker` |
-| **InMemoryRateLimiter in multi-pod** | Each pod has its own counter; total rate = N × configured rate | Per-process storage, not shared | Use `varco_redis.RedisRateLimiter` for distributed (multi-pod) enforcement |
-| **In-process `Bulkhead` in multi-pod** | Each pod caps its own concurrency; fleet-wide concurrency to the downstream dependency = N × `max_concurrent` | `varco_core.resilience.Bulkhead` is a per-process semaphore, not shared state — the same defect class as `InMemoryRateLimiter` above, but for *concurrency* rather than *rate* (U-7, Plan 005 Phase 8: they are genuinely different primitives) | Use `varco_redis.RedisBulkhead` — a Redis sorted-set-backed distributed semaphore with TTL-based reclaim for crashed holders (mirrors `RedisLock`'s Lua pattern); same `call()`/`protect()`/`available_slots()` surface as `Bulkhead` |
-| **Hedging non-idempotent writes** | Duplicate side-effects (email sent twice, double charge) | Both hedged copies execute concurrently | Only apply `@hedge` to idempotent reads/upserts; never to INSERT or transactional writes |
-| **`@Singleton` on pydantic `BaseSettings`** | `LookupError: Cannot resolve 'values'` at resolution — on providify < 1.1.0 | providify injects pydantic's `**values` ctor param | Register settings via a `@Provider` (see `varco_casbin.di`), not `@Singleton`. **Version nuance (Plan 014):** on providify ≥ 1.1.0 the per-parameter resolver skips `VAR_KEYWORD` params outright (`providify/_annotations.py:583-590`), so `@Singleton` on this exact shape now *appears* to work — `container.get(SomeSettings)` resolves and is a singleton, and a required field raises `pydantic.ValidationError`, not `LookupError` (characterized in `varco_kafka/tests/test_kafka_di.py::TestKafkaRequiredFieldCharacterization`). The rule is still enforced regardless: the sanctioned shape must not depend on an undocumented third-party implementation detail that a future providify release could revert. `KafkaEventBusSettings`/`NatsEventBusSettings`/`RedisEventBusSettings` were converted to `@Provider` factories (`kafka_event_bus_settings`/`nats_event_bus_settings`/`redis_event_bus_settings`) for exactly this reason — see `plans/014-refactor-di-settings-and-provider-helper.md` |
-| **Quoted `@Provider` return annotation** | An *unrelated* provider fails with `TypeError: xxx() missing 1 required positional argument`; every `Inject[...]` in the container is silently dropped | Under PEP 563 `-> "Foo"` is stored as the string `"'Foo'"`; providify's fallback `eval` returns the **str** `'Foo'` and registers it as the binding interface → `DIContainer._build_localns()` raises `AttributeError: 'str' object has no attribute '__name__'` → `_collect_kwargs_sync()` swallows it with `hints = {}` for **every** provider | Never quote a `@Provider` return annotation (`from __future__ import annotations` already makes it lazy) and import the type at **module scope** so `fn.__globals__` can resolve it. Guarded by `varco_fastapi/tests/test_di_binding_health.py` |
-| **Quoted `TypeAlias` used in an injected annotation** | `AnnotationResolutionError: … TypeError: unsupported operand type(s) for \|: 'str' and 'NoneType'` at `validate_bindings()` (providify ≥ 1.1.0), or the parameter is **silently never injected** (< 1.1.0) | `X: TypeAlias = "Foo[Bar]"` binds the **string** to the module name at runtime, so any annotation doing `X \| None` evaluates `str \| None`. Quoting is usually a symptom of the inner type being imported under `TYPE_CHECKING` | Prefer annotating the **interface directly** (`Serializer[Event]`, not an alias). If you must alias, import the referenced types at **runtime** and leave it unquoted, or use PEP 695 `TypeAliasType`. Guarded by `varco_core/tests/test_event_serializer_alias.py` |
-| **Protocol impl not resolvable by DI** | `container.get(Serializer[Event])` finds no binding although a conforming class exists | Structural (`Protocol`) satisfaction is invisible to the container — it binds on declared base classes | Subclass the protocol **explicitly** (`class JsonEventSerializer(Serializer[Event])`) and decorate it; use `@Singleton(priority=-sys.maxsize - 1)` for a framework default so any app binding wins regardless of registration order |
-| **A package's suite is green but its container won't bootstrap** | Tests pass; a real app dies at startup with `AnnotationResolutionError` (or a cycle/scope-leak that only surfaces once every binding is wired together) | No test hit a path that resolves *binding* annotations — unit tests construct objects directly instead of resolving them | Add a `container.scan(pkg); container.validate_bindings()` test per package — one call covers every present and future singleton's annotations (see `varco_redis/tests/test_redis_di.py`) **plus** `container.validate(raise_on_error=False)` filtered to structural errors only (`AMBIGUOUS_BINDING`/`CIRCULAR_DEPENDENCY`/`SCOPE_LEAK`/`LIVE_REQUIRED`/`UNRESOLVED_ANNOTATION`, tolerating `MISSING_BINDING` since a package scanned alone legitimately lacks the app's own bindings) — providify ≥ 2.0.0, via the shared `testkit/varco_conformance.providify_health.assert_no_structural_di_issues()` helper (Plan 016 / RL-3a) |
-| **`container.provide(lambda: X())`** | `ProviderBindingNotDecoratedError` at bootstrap | `provide()` only accepts `@Provider`-decorated callables and takes no second "interface" argument | Declare a module-level `@Provider(singleton=True) def x() -> X:` and pass the function |
-| **Override registered after `install()`/`scan()`** | The package default wins; your settings are silently ignored | Equal-priority bindings resolve to the **first** registered | `provide()` before `install()`/`scan()`, or declare `@Provider(..., priority=100)` |
-| **Per-call `Singleflight`** | Concurrent misses never coalesce — the loader runs once per caller, same as before | A fresh `Singleflight()` has an empty in-flight dict every call — same defect class as a per-call `CircuitBreaker`/`Bulkhead` | `@cached` creates one `Singleflight` per decorated function at decoration time; `CacheServiceMixin` creates one per service instance (lazily, on first use) — never construct one inside a request handler |
-| **Coalescing on a pre-tenant-namespaced key** | Cross-tenant data leak — two tenants' concurrent misses share one recompute and one result | `Singleflight`/`read_through()` never build or namespace keys themselves; a caller that coalesces on the raw pk instead of the final `tenant:{id}:`-prefixed key defeats tenant isolation | Always pass the final, already-namespaced cache key (the one `tenancy_cache_key()`/`CacheServiceMixin._cache_key()` produced) to `Singleflight.do()`/`read_through()` — guarded by `varco_core/tests/test_cache_singleflight_tenancy.py` |
-| **Per-call `RedisPubSubBackplane`** | Invalidations never propagate — each instance has its own listener/subscription state | Same shared-instance rule as `CircuitBreaker`/`Bulkhead`/`Singleflight` | Construct one `RedisPubSubBackplane` and pass it into every `LayeredCache` that must share coherence; let `LayeredCache.start()`/`stop()` drive its lifecycle, never call `start()`/`stop()` directly |
-| **Adding a bulk method directly to `AsyncCache`** | `isinstance(third_party_cache, AsyncCache)` silently starts returning `False` for out-of-tree caches | `AsyncCache` is `runtime_checkable` — `isinstance()` tests method presence, so any new method changes what satisfies it | Add to `BulkCache` instead (Plan 011 / D-11) — `AsyncCache` stays byte-for-byte unchanged |
-| **Forgot `<pkg>.bootstrap(container)`** | App starts, `AbstractEventBus` silently absent | `_try_resolve_component()` used to swallow every skip (import error, missing binding, construction failure) into `except Exception: pass` with zero logging | Plan 014 / audit F2 — one WARNING now names the missing binding at startup (`_lifecycle_discovery_warns()`); silence it with `VARCO_LIFECYCLE_DISCOVERY_WARN=false` if the app genuinely has no bus/job runner. Control flow is unchanged — the component is still skipped, the app still starts |
-| **`varco_memcached.async_bootstrap()` opens a pool you didn't want** | An unwanted Memcached connection is opened just from calling `async_bootstrap()` | `setup_cache` defaults `True` — unconditional `ainstall(MemcachedCacheConfiguration)`, unlike `varco_redis.di.async_bootstrap()` which defaults `setup_cache=False` | Pass `setup_cache=False` for the sync-scan-only equivalent of `bootstrap()`. Note the defaults deliberately differ: `varco_redis`'s `async_bootstrap` also serves a streams/event-bus path where no cache is wanted; memcached's only reason to exist is the cache, so its default stays `True` for backward compatibility (Plan 014 / audit F7) |
-| **Linting with `uvx ruff`** (applies to `ruff check` AND `ruff format --check`, Plan 020 / RL-17) | Local green, CI red (or vice versa) with no code change | `uvx` resolves the newest ruff release at invocation time; CI resolves the pin recorded in `uv.lock` | Always `uv run ruff`, never `uvx ruff` — the pin lives in the root `[dependency-groups] lint` group (Plan 017 / RL-6) |
-| **Assuming `f"{SomeVarcoEnum.MEMBER}"` still yields `ClassName.MEMBER`** | Log lines / f-strings involving `HealthStatus`, `CircuitState`, `ErrorPolicy`, `DispatchMode`, `PKStrategy`, `KafkaDeliverySemantics`, `NatsDeliverySemantics`, or `BackpressurePolicy` suddenly print the bare value instead of `ClassName.MEMBER` | Python 3.11 changed `Enum.__format__` to print `ClassName.MEMBER` for `(str, Enum)` mixins; Plan 020 / RL-15 migrated all eight of these to `enum.StrEnum`, which undoes that change and formats by value | Intended as of 3.0.0 (BREAKING, see CHANGELOG) — `.value`, `json.dumps(member)`, and pydantic `model_dump(mode="json")` are all unaffected either way; update any `str()`/`%s`-log-scraping regex that depended on the old `ClassName.MEMBER` text |
-| **Restarting a session-scoped container** | Unrelated tests in the same package fail with connection errors after a chaos test runs | The session-scoped fixture (`redis_url`, `kafka_bootstrap`, …) is shared by the whole package suite — restarting/pausing it under one test breaks every other test mid-flight or afterward | Declare a **module-scoped `*_container_chaos` fixture inside the chaos module itself**, never in `conftest.py` (Plan 018 / RT7, §chaos-fixture) — see Test Conventions' "Chaos tests" paragraph |
-| **Assuming a chaos container's URL is stable across `restart()`** | `ConnectionRefusedError` after `restart()` even though `wait_ready()` returned successfully | Docker re-allocates ephemeral host ports on restart **by design** (research 006 §A/§B/§F) — platform-independent, version-stable moby v1.3.0 → v29.1, including GitHub Actions' native-Linux dockerd. Not a WSL2-specific flake and not unverified — research 002 §1's original "port survives restart" claim is superseded (in-tree banner points here) | Fixed (Plan 019 / §RT7b-port, closes BACKLOG's RT7b-port-remap): read `chaos.url` at every use — it re-derives fresh from the docker daemon on every access, never memoised. Pin the host port when the server advertises its own mapped address at first boot (Kafka's `tc-start.sh` bakes `KAFKA_ADVERTISED_LISTENERS` in as a literal — re-querying alone cannot fix it, so `kafka_container_chaos` additionally pins via `testkit/varco_chaos/ports.py`'s `reserve_host_port()` + `with_bind_ports`); do not assume the pause-based tests (`test_redis_chaos.py`, `test_nats_health_chaos.py`) needed this — pausing never remaps a port |
-| **An `older_than`/`completed_before`/`expires_before`-style exclusive-upper-bound cutoff on a Mongo-backed store** | A chunked sweep (`BeanieDeadLetterQueue.delete_where()`, `BeanieJobStore.delete_where()`) returns `0` and stops while an entry the store itself still reports as strictly older than the cutoff remains | BSON `UTCDateTime` is millisecond-precision and pymongo floors **both** the stored value and the query operand, so a raw `$lt` is evaluated as `stored_ms < floor_ms(cutoff)` — excluding every row sharing a millisecond with the cutoff | Fixed at the two shipped call sites via `varco_beanie._bson_time.ceil_to_bson_millisecond()`, applied only to the exclusive-upper-bound operand — never to a lower bound (`$gt`/`$gte`) or an inclusive upper bound (`$lte`), where pymongo's floor is already correct. Any new Mongo-backed exclusive-upper-bound query needs the same widening |
+The pitfall catalogue lives in **[technical_docs/common-pitfalls.md](technical_docs/common-pitfalls.md)**
+— a cross-cutting table of coding-pattern traps that have actually bitten someone here
+(per-call `CircuitBreaker`/`Bulkhead`/`Singleflight`, quoted `@Provider` return
+annotations, `uvx ruff` vs. the pin, BSON millisecond truncation on a Mongo
+exclusive-upper-bound sweep, …). **Read it before writing code that touches any of those
+primitives**, and add a row when you find a new one.
 
-Feature-specific operational pitfalls (wrong env var → wrong runtime behaviour) live in each feature's own `technical_docs/features/*.md` **Pitfalls** section, not here.
+Two neighbours, so you file a new pitfall in the right place:
+- Feature-specific *operational* pitfalls (wrong env var → wrong runtime behaviour) go in
+  that feature's own `technical_docs/features/*.md` **Pitfalls** section.
+- Agent/contributor *workflow* rules stay in this file.
 
 ---
 
