@@ -1,5 +1,5 @@
 # varco-casbin
-
+[![PyPI version](https://img.shields.io/pypi/v/varco-casbin.svg)](https://pypi.org/project/varco-casbin/)
 Casbin policy-engine authorization backend for **varco** — ACL, RBAC, and ABAC
 with dynamic, persisted policies and a ready-made REST management router.
 

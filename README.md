@@ -2,6 +2,9 @@
 
 A modular Python framework for building expressive, backend-agnostic REST APIs on top of SQLAlchemy and MongoDB (Beanie/Motor). It provides a clean domain model layer, a generic service layer with built-in authorization, a fluent query builder with AST-based filtering, automatic ORM class generation, and a pluggable type coercion system.
 
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/edoardoscarpaci/varco/badge)](https://securityscorecards.dev/viewer?uri=github.com/edoardoscarpaci/varco)
+[![CI](https://github.com/edoardoscarpaci/varco/actions/workflows/test.yml/badge.svg)](https://github.com/edoardoscarpaci/varco/actions/workflows/test.yml)
+
 **CI**: every push and pull request to `main` runs a live GitHub Actions gate — `ruff` +
 `mypy` + the full unit suite across Python 3.12 and 3.13
 (`.github/workflows/test.yml`) — plus a nightly + push-to-`main` integration run against real

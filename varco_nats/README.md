@@ -1,4 +1,5 @@
 # varco-nats
+[![PyPI version](https://img.shields.io/pypi/v/varco-nats.svg)](https://pypi.org/project/varco-nats/)
 
 NATS **JetStream** event bus backend for [varco](https://github.com/edoardoscarpaci/varco) —
 `NatsEventBus` built on [nats-py](https://github.com/nats-io/nats.py).

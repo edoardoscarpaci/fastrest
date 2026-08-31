@@ -27,11 +27,15 @@
 # is still deploying runs the release deploy AFTER the dev deploy finishes,
 # never concurrently.
 #
-# `fetch-depth: 0` + `uv sync --locked --all-packages --all-extras` (not just
-# the `docs` group) are both required: mike needs the full git history to
-# manage the gh-pages branch's commits, and mkdocstrings imports the actual
-# packages live to render the API reference (brief 006 §6) — a docs-group-
-# only install cannot do that.
+# `fetch-depth: 0` + `uv sync --locked --all-packages --all-extras --group docs`
+# are all required: mike needs the full git history to manage the gh-pages
+# branch's commits, and mkdocstrings imports the actual packages live to render
+# the API reference (brief 006 §6) — a docs-group-only install cannot do that.
+#
+# ⚠️ `--group docs` is NOT optional, and `--all-extras` does not imply it: extras
+# and PEP 735 dependency groups are different mechanisms, and `docs` is not a
+# default group, so `mkdocs`/`mike` are simply absent without it (the failure is
+# `error: Failed to spawn: mike`). This is the CI equivalent of `make docs-deps`.
 
 name: Docs
 
@@ -65,7 +69,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
       - name: Install workspace (locked, full — mkdocstrings imports packages live)
-        run: uv sync --locked --all-packages --all-extras
+        run: uv sync --locked --all-packages --all-extras --group docs
       - name: git identity for mike's commits
         run: |
           git config user.name "github-actions[bot]"
@@ -120,7 +124,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
       - name: Install workspace (locked, full)
-        run: uv sync --locked --all-packages --all-extras
+        run: uv sync --locked --all-packages --all-extras --group docs
       - name: git identity for mike's commits
         run: |
           git config user.name "github-actions[bot]"

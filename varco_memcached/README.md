@@ -1,5 +1,5 @@
 # varco-memcached
-
+[![PyPI version](https://img.shields.io/pypi/v/varco-memcached.svg)](https://pypi.org/project/varco-memcached/)
 Memcached cache backend for the [varco](https://github.com/edoardoscarpaci/varco) framework.
 
 `MemcachedCache` implements `varco_core.cache.CacheBackend` on top of

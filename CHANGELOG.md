@@ -9,6 +9,15 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI: the `Docs` workflow could never run `mike`.** Both the `dev` and `release` jobs installed
+  the workspace with `uv sync --locked --all-packages --all-extras`, which resolves *extras* but
+  not PEP 735 *dependency groups* — and `mike`/`mkdocs`/`mkdocstrings` live in the non-default
+  `docs` group, so every docs deploy died with `error: Failed to spawn: mike`. Both jobs now pass
+  `--group docs` as well (the CI equivalent of `make docs-deps`), keeping `--all-packages
+  --all-extras` because mkdocstrings imports the packages live to render the API reference.
+
 ## [3.0.0] — 2026-08-31
 
 ### Packaging & release (Plan 023, RL-9 / RL-13)

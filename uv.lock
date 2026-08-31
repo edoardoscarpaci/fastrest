@@ -26,7 +26,12 @@ members = [
 [manifest.dependency-groups]
 dev = [
     { name = "asyncpg", specifier = ">=0.31.0" },
+    { name = "mike", specifier = ">=2.2.0" },
+    { name = "mkdocs-gen-files", specifier = ">=0.6.1" },
+    { name = "mkdocs-literate-nav", specifier = ">=0.6.3" },
+    { name = "mkdocs-material", specifier = ">=9.7.6" },
     { name = "mypy", specifier = "==2.3.1" },
+    { name = "pymdown-extensions", specifier = ">=10.21.3" },
     { name = "ruff", specifier = "==0.16.4" },
     { name = "tomlkit", specifier = ">=0.13" },
 ]
