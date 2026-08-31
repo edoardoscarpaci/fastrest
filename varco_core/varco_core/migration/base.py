@@ -1,7 +1,7 @@
 """
 varco_core.migration.base
 ==========================
-Backend-agnostic migration contracts: ``Revision``, ``MigrationPlan``,
+Backend-agnostic migration contracts: ``Revision``, ``SchemaMigrationPlan``,
 ``MigrationReport``, and ``AbstractMigrator``.
 
 The vocabulary mirrors Alembic's (``current``/``heads``/``pending``/
@@ -56,7 +56,7 @@ class Revision:
 
 
 @dataclass(frozen=True)
-class MigrationPlan:
+class SchemaMigrationPlan:
     """
     The result of ``AbstractMigrator.plan()`` — what is applied vs. pending.
 
@@ -130,7 +130,7 @@ class AbstractMigrator(ABC):
     """
 
     @abstractmethod
-    async def plan(self) -> MigrationPlan:
+    async def plan(self) -> SchemaMigrationPlan:
         """Return the current/pending revision state without applying anything."""
         raise NotImplementedError
 
@@ -173,7 +173,7 @@ class AbstractMigrator(ABC):
         """
         raise NotImplementedError
 
-    async def check(self) -> MigrationPlan:
+    async def check(self) -> SchemaMigrationPlan:
         """
         Resolve the current plan and raise if anything is pending.
 
@@ -181,7 +181,7 @@ class AbstractMigrator(ABC):
         default and is not broken by this method's addition.
 
         Returns:
-            The ``MigrationPlan`` when nothing is pending.
+            The ``SchemaMigrationPlan`` when nothing is pending.
 
         Raises:
             PendingMigrationsError: The plan has pending revisions.
@@ -203,7 +203,7 @@ class AbstractMigrator(ABC):
 
 __all__ = [
     "AbstractMigrator",
-    "MigrationPlan",
+    "SchemaMigrationPlan",
     "MigrationReport",
     "Revision",
 ]

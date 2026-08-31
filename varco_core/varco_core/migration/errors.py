@@ -3,8 +3,8 @@ varco_core.migration.errors
 ============================
 Exception hierarchy for the migration layer.
 
-All exceptions inherit from ``MigrationError`` so callers can catch the
-whole family with a single ``except MigrationError`` clause and dispatch on
+All exceptions inherit from ``SchemaMigrationError`` so callers can catch the
+whole family with a single ``except SchemaMigrationError`` clause and dispatch on
 subtype when finer handling is needed — the same pattern as
 ``ServiceException`` in ``varco_core.exception.service``.
 
@@ -17,31 +17,31 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from varco_core.migration.base import MigrationPlan
+    from varco_core.migration.base import SchemaMigrationPlan
 
 
-class MigrationError(Exception):
+class SchemaMigrationError(Exception):
     """Base class for all migration-layer exceptions."""
 
 
-class PendingMigrationsError(MigrationError):
+class PendingMigrationsError(SchemaMigrationError):
     """
     Raised by ``AbstractMigrator.check()`` when the schema is behind.
 
-    Carries the ``MigrationPlan`` so the caller (typically
+    Carries the ``SchemaMigrationPlan`` so the caller (typically
     ``MigrationLifecycle`` in ``mode="check"``) can render the pending
     revisions in the failure message without a second round-trip.
 
     Args:
-        plan: The ``MigrationPlan`` whose ``pending`` tuple is non-empty.
+        plan: The ``SchemaMigrationPlan`` whose ``pending`` tuple is non-empty.
     """
 
-    def __init__(self, plan: MigrationPlan) -> None:
+    def __init__(self, plan: SchemaMigrationPlan) -> None:
         self.plan = plan
         super().__init__(f"Pending migrations detected — schema is behind:\n{plan.format()}")
 
 
-class MigrationLockTimeout(MigrationError):
+class MigrationLockTimeout(SchemaMigrationError):
     """
     Raised when the migration lock could not be acquired within the
     configured timeout AND migrations are still pending after re-checking.
@@ -60,14 +60,14 @@ class MigrationLockTimeout(MigrationError):
         )
 
 
-class IrreversibleMigrationError(MigrationError):
+class IrreversibleMigrationError(SchemaMigrationError):
     """
     Raised when ``downgrade()`` is attempted on a migration with no
     ``down()`` implementation (MongoDB migrations, primarily).
     """
 
 
-class MigrationBackendUnavailable(MigrationError):
+class MigrationBackendUnavailable(SchemaMigrationError):
     """
     Raised when a migration backend's optional dependency is not installed
     (e.g. ``varco_sa.migration`` imported without ``alembic``).
@@ -80,7 +80,7 @@ class MigrationBackendUnavailable(MigrationError):
 __all__ = [
     "IrreversibleMigrationError",
     "MigrationBackendUnavailable",
-    "MigrationError",
+    "SchemaMigrationError",
     "MigrationLockTimeout",
     "PendingMigrationsError",
 ]

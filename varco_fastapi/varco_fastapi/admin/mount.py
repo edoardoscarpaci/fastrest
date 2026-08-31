@@ -17,6 +17,7 @@ Async safety:   N/A — synchronous FastAPI route registration.
 from __future__ import annotations
 
 import logging
+import weakref
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -31,7 +32,15 @@ _logger = logging.getLogger(__name__)
 # Tracks which FastAPI app instances already had the admin surface mounted
 # — refuses a second mount rather than silently duplicating routes. Same
 # pattern as varco_fastapi.tenancy.mount._MOUNTED_APPS.
-_MOUNTED_APPS: set[int] = set()
+#
+# A WeakSet, not a ``set[int]`` of ``id(app)`` (Plan 022 / RIDER-2): ``id()``
+# is unique only among *live* objects, so once an app was collected its
+# address could be reused by a new, unrelated FastAPI instance, which would
+# then match a stale entry and have its surface **silently not mounted**.
+# WeakSet entries vanish when the app is collected, so no stale identity can
+# ever be matched, and membership stays identity-based without keeping the
+# app alive.
+_MOUNTED_APPS: weakref.WeakSet[Any] = weakref.WeakSet()
 
 
 def mount_reliability_admin(
@@ -78,10 +87,13 @@ def mount_reliability_admin(
           the app id is only recorded when at least one router was actually
           included. This is a deliberate deviation from
           ``mount_tenant_admin()``, which has no "mount nothing" case.
-        - The double-mount guard is keyed by ``id(app)`` — an app instance
-          that has been garbage-collected releases its id, which a new,
-          unrelated ``FastAPI`` instance could reuse (same caveat as
-          ``mount_tenant_admin()``'s ``_MOUNTED_APPS``).
+        - The double-mount guard is a ``weakref.WeakSet`` keyed by app
+          identity. A collected app drops out of the set on its own, so a
+          later, unrelated ``FastAPI`` instance can never collide with it.
+          (Until 3.0.0 the guard was a ``set[int]`` of ``id(app)``, which
+          could reuse a collected app's address and silently skip mounting —
+          Plan 022 / RIDER-2, fixed in both this module and
+          ``mount_tenant_admin()`` together.)
     """
     if not acknowledge_bundled_admin:
         raise ValueError(
@@ -92,7 +104,7 @@ def mount_reliability_admin(
             "deployment genuinely isn't justified."
         )
 
-    if id(app) in _MOUNTED_APPS:
+    if app in _MOUNTED_APPS:
         raise ValueError(
             "mount_reliability_admin() was already called for this app — "
             "refusing to mount a second time (would duplicate routes)."
@@ -140,7 +152,7 @@ def mount_reliability_admin(
     # no-op call (neither audit_repo nor dlq given) must not refuse a
     # later, legitimate mount on the same app (see Edge cases above).
     if mounted_any:
-        _MOUNTED_APPS.add(id(app))
+        _MOUNTED_APPS.add(app)
 
 
 __all__ = ["mount_reliability_admin"]

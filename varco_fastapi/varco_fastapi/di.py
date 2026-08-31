@@ -290,7 +290,8 @@ class VarcoFastAPIModule:
     @Provider(singleton=True, priority=-sys.maxsize - 1)
     def cors_config(self) -> CORSConfig:
         """
-        CORS configuration from ``VARCO_CORS_ORIGINS`` env var.
+        CORS configuration from ``VARCO_CORS_ORIGINS`` env var. An unset
+        var yields an empty origin list — no cross-origin access (AB-5).
 
         Returns:
             A ``CORSConfig`` configured from the environment.

@@ -224,9 +224,13 @@ async def test_request_context_middleware_propagates_request_id():
 
 
 def test_cors_config_default_values():
-    """CORSConfig has sensible defaults."""
+    """CORSConfig has sensible defaults — and as of 3.0.0 a *closed* origin list."""
     cfg = CORSConfig()
-    assert "*" in cfg.allow_origins
+    # AB-5 (Plan 022): allow_origins defaulted to ("*",) until 3.0.0, which
+    # combined with allow_credentials=True to reflect any origin. The default
+    # is now closed; opting in is explicit. Full coverage in
+    # varco_fastapi/tests/test_cors_secure_default.py.
+    assert cfg.allow_origins == ()
     assert "GET" in cfg.allow_methods
     assert "Authorization" in cfg.allow_headers
 

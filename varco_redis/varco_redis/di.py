@@ -198,7 +198,10 @@ async def async_bootstrap(
                      When ``False`` (default), no cache is installed.
 
     Returns:
-        The ``DIContainer`` after scanning and optional cache installation.
+        The ``DIContainer`` after scanning and optional cache installation, or
+        ``None`` when providify is not installed — mirroring
+        :func:`bootstrap`'s own contract. Prior to 3.0.0 this path raised
+        ``AttributeError`` instead (Plan 022 / RIDER-1).
 
     Raises:
         ConnectionError: If ``setup_cache=True`` and Redis is unreachable.
@@ -206,6 +209,8 @@ async def async_bootstrap(
     Edge cases:
         - ``setup_cache=False`` is the same as calling :func:`bootstrap` — no
           async work is done.
+        - When providify is absent, ``None`` is returned and no cache is
+          installed, regardless of ``setup_cache``.
         - The cache URL is read from ``VARCO_REDIS_CACHE_URL`` (via
           ``RedisCacheSettings.from_env()``), not from ``VARCO_REDIS_URL``.
           Both can point at the same Redis instance.
@@ -214,6 +219,15 @@ async def async_bootstrap(
     Async safety:   ✅ ``async def`` — safe to ``await``.
     """
     container = bootstrap(container, streams=streams)
+
+    # RIDER-1 (Plan 022 / Phase 3). ``bootstrap()`` returns ``None`` when
+    # providify is absent (its own ``except ImportError: return None`` path),
+    # so without this guard the next line raised
+    # ``AttributeError: 'NoneType' object has no attribute 'ainstall'`` —
+    # a crash on exactly the path documented as a graceful no-op. Returning
+    # ``None`` here makes this function's contract match ``bootstrap()``'s.
+    if container is None:
+        return None
 
     if setup_cache:
         from varco_redis.cache import RedisCacheConfiguration  # noqa: PLC0415

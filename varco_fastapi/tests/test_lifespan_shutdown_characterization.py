@@ -24,6 +24,18 @@ varco-side change this plan is driving. A green result here is the correct
 and expected outcome, unlike the other Phase D "new file" steps which must
 start red.
 
+ADOPTED — Plan 022 / Phase 4 (RL-8a), Step 24. This file is the de-risking it
+was written for: Plan 022's measurement
+(``design/api-freeze-and-standards/measurements/predestroy-vs-lifespan.md``)
+found **6 orphaned ``@PreDestroy`` singletons out of 10**, so §D-8a2's "adopt"
+branch fired. ``VarcoLifespan`` gains a ``shutdown=`` hook that
+``create_varco_app()`` fills with ``lambda: container.ashutdown()``, and per
+§D-8a2(c) the aggregated ``ShutdownError`` pinned below is logged at ERROR —
+one line per ``ShutdownFailure`` — rather than re-raised out of the ASGI
+shutdown. The adoption's own tests live in ``test_lifespan_shutdown.py``; this
+file keeps characterizing the *upstream* shape they depend on, so an upstream
+providify change surfaces here rather than as a confusing failure there.
+
 Thread safety:  N/A (unit test)
 Async safety:   ✅ ``ashutdown()`` is awaited directly.
 """

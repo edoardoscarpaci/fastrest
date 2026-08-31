@@ -90,6 +90,36 @@ Every other flag once filed as "Stopped"/"Decided never"/"Out of scope" (`disall
 — see Plan 021 §D1–§D6 for the full per-flag remediation pattern and U-8 evidence discipline
 applied to each re-opened "never" verdict.
 
+### Public API surface snapshot (`scripts/api_surface.py`)
+
+`scripts/api_surface.py` (Plan 022 / Phase 0, §D-AUDIT) records the public API surface — for every
+name in each distribution package's top-level `__all__`, its kind (`class`/`function`/`constant`),
+defining module, and (functions only) `inspect.signature()`. It derives its package list by
+*executing* `scripts/packages.sh`, so it structurally cannot drift the way a hand-written list
+would (Plan 020 / RL-18).
+
+```bash
+uv run python scripts/api_surface.py          # regenerate the committed snapshot
+uv run python scripts/api_surface.py --check  # diff live tree vs. snapshot; exit 1 on a break
+```
+
+Outputs `design/api-freeze-and-standards/measurements/api-surface.json` (machine-readable, what
+`--check` diffs) and a sibling `.md` (sorted, human-diffable in a PR). `--snapshot PATH` and
+`--packages PKG…` narrow the run.
+
+⚠️ **This is not a gate today.** `--check` is deliberately *not* wired into `make lint` or any CI
+job — the plan schedules that for Phase 7 (§D-AA4's snapshot-plus-`--check` precedent). Until then
+it is a tool a contributor must know to re-run **by hand** after touching any `__all__` or any
+exported function's signature, and to commit the regenerated snapshot alongside the change.
+
+⚠️ **Known limitation, deliberate:** class signatures are **not** recorded. They are synthesised
+from `__init__`/`__new__` and, for pydantic models and dataclasses, from generated code whose
+rendering is not guaranteed identical across the 3.12/3.13 unit-test matrix — a snapshot that
+differed by interpreter would make `--check` unrunnable in CI. So `--check` catches **removals and
+*function* signature changes only**; a narrowed class `__init__` is invisible to it. (Relatedly,
+heap addresses in sentinel default values are stripped, or every run would report a spurious
+change — see `_ADDRESS_RE`.) Additions and module moves are reported as notes and never fail.
+
 ### CI
 
 Two GitHub Actions workflows gate `main` (`.github/workflows/`):
@@ -176,13 +206,22 @@ function's own docstring for the "why".
 | `bind_*(container, ...)` | sync, mutates container | registers N *typed, per-item* generic bindings unknowable before app startup | `varco_sa.di.bind_repositories`, `varco_fastapi.client.bind_clients_from`, `varco_ws.di.bind_websocket_adapter` |
 | `enable_*(container)` | sync, mutates container | flips on an opt-in DI **binding** that would shadow an app default if auto-registered | `varco_casbin.di.enable_policy_authorizer` |
 | `mount_*(app, ...)` | sync, mutates the ASGI app | flips on an opt-in privileged **HTTP surface**, always behind an explicit acknowledgement kwarg | `varco_fastapi.tenancy.mount_tenant_admin`, `varco_fastapi.admin.mount_reliability_admin` |
-| `install_*(...)` | sync, **container-free** | a process-global side effect (OTel instrument registration) — despite the verb, unrelated to `container.install(SomeConfiguration)` | `install_cache_metrics`, `install_reliability_metrics` |
+| `install_*(...)` | sync, **container-free**; **two shapes** | ⚠️ one verb, two shapes (Plan 022 / AB-3). **(a)** a process-global side effect (OTel instrument registration), taking no argument at all; **(b)** an ASGI-app mutation, taking and modifying an `app`. Neither takes a container — both are unrelated to `container.install(SomeConfiguration)` | (a) `install_cache_metrics`, `install_reliability_metrics` · (b) `install_middleware_stack`, `install_cors` |
 
-Two name collisions this table exists specifically to call out:
+Name collisions this table exists specifically to call out (audited at Plan 022's RL-8
+checkpoint — see `design/api-freeze-and-standards/api-break-candidates.md` for each verdict):
 - `install_*` in this taxonomy takes **no container** — `container.install(X)` is providify's
-  unrelated `@Configuration`-install verb.
-- `enable_rls_ddl()` (`varco_sa/varco_sa/rls.py`) is **not** in the `enable_*` family — it is a
-  pure DDL-string generator, touches no container, performs no I/O.
+  unrelated `@Configuration`-install verb. **AB-3 verdict: `leave-and-document`** — renaming four
+  functions to fix a naming *adjacency* this row already resolves is a poor use of the 3.0.0
+  window. What the audit did fix is the row itself, which used to claim `install_*` was uniformly
+  "a process-global side effect": that is false of `install_middleware_stack` and `install_cors`,
+  which take and mutate an ASGI `app`. Do **not** move that pair into the `mount_*` family —
+  `mount_*` is "an opt-in privileged HTTP surface, always behind an explicit acknowledgement
+  kwarg", which middleware installation is not.
+- ~~`enable_rls_ddl()`~~ → **`render_rls_ddl()`** (`varco_sa/varco_sa/rls.py`). **AB-1 verdict:
+  `rename+alias`, landed in 3.0.0.** It was never in the `enable_*` family — it is a pure
+  DDL-string generator, touches no container, performs no I/O — and `render_*` now says so. The
+  old name remains as a deprecated alias until 4.0.0.
 
 Several `bind_*` factories above register a binding whose interface is only known at call time
 (a generic alias like `AsyncRepository[User]`, or a plain class captured in a closure) —
@@ -480,11 +519,16 @@ story, `ensure_table()` reconciliation, Mongo index-mode).
 **the recommended production posture**) / `upgrade` (lock → apply → release; for
 single-instance, dev, and PaaS-without-a-pre-deploy-hook).
 
-⚠️ **`MigrationError` and `MigrationPlan` are NOT re-exported from `varco_core`** — the
-pre-existing, unrelated `varco_core.migrator` (domain data/field migration) already owns
-those names. Import them from `varco_core.migration` explicitly. Everything else
-(`AbstractMigrator`, `Revision`, `MigrationReport`, `MigrationSettings`,
-`InMemoryMigrator`, the other three exceptions) is on `varco_core` directly.
+**Renamed in 3.0.0 (Plan 022 / AB-2): `SchemaMigrationError` / `SchemaMigrationPlan`.** The
+schema-migration pair used to be called `MigrationError`/`MigrationPlan`, colliding at the
+`varco_core` top level with the unrelated, older `varco_core.migrator` (domain data/field
+migration) pair of the same names — so the schema pair was deliberately *not* re-exported and had
+to be imported from `varco_core.migration` explicitly. The rename closes that hole: **the entire
+schema-migration surface is now on `varco_core` directly**, and an import site says which concept
+it means. `varco_core.migration.MigrationError` / `.MigrationPlan` still resolve, to the identical
+objects (so `except` and `isinstance` are unaffected), emit a `DeprecationWarning`, and are removed
+in 4.0.0. `varco_core.MigrationError`/`.MigrationPlan` still mean the **domain-migration** pair and
+are unchanged.
 
 `alembic` is an optional extra: `pip install "varco-sa[migrations]"`. See
 `technical_docs/features/schema-migrations.md`.
@@ -551,21 +595,40 @@ itself is missing, wrong, or forces a hand-rolled workaround (private-attribute 
 copy-pasted patch-before-register dances, silent behavior differences across versions),
 **stop and report it — don't paper over it.**
 
-- Write (or update) an entry in [UPSTREAM-GAPS.md](UPSTREAM-GAPS.md)'s `## providify` section,
-  following the existing entry format (`U-N`, Raised by / Status / What providify does today /
-  Why this is a gap / The ask / Priority / Interim). Verify the claim **in providify's own
-  source**, not from memory or `varco`'s docs about it — the register has a standing lesson
-  (U-8, the "Maintainer response" section) about entries filed off documentation that didn't
-  survive contact with source.
+**The report is a file; the ledger is only an index.** Two artifacts, and the split matters:
+
+1. **`design/upstream-gaps/<library>-<short-slug>.md` — the durable report.** This is the real
+   deliverable and it is never deleted. Cover: what upstream does today, why it is a gap, a
+   minimal reproduction, the ask (with ✅/❌ per candidate fix, so the maintainer is choosing
+   between options rather than reading a complaint), and any interim workaround.
+2. **[UPSTREAM-GAPS.md](UPSTREAM-GAPS.md) — a one-row pointer into that file.**
+   ⚠️ **This ledger is cleared from time to time, and its absence is expected, not an error.**
+   If it is missing it was wiped to clear resolved rows — recreate it from the template in its
+   own header and add your row. Never skip filing because the ledger is not there, and never go
+   hunting for what happened to it. Nothing is lost in a clearing because the ledger holds no
+   content of its own; it can always be rebuilt with `ls design/upstream-gaps/*.md`.
+   (An earlier incarnation inlined every entry's full body, was deleted in `cae7f33`, and took
+   all of them with it. That is the failure this split prevents.)
+
+- **Verify the claim in providify's own source, citing `file:line`** — not from memory, not from
+  `varco`'s docs about it, not from a docstring. The register carries a standing lesson (U-8)
+  about entries filed off documentation that did not survive contact with source. A docstring
+  that *contradicts* the source is itself good evidence, but quote both.
+- **Guard every gap with a `strict=True` xfail** so the fix cannot land unnoticed and untested.
+  Prefer a fast, dependency-free reproduction that runs in `make test` over one gated behind
+  Docker and `-m integration` — a nightly-only guard will not warn you while you work.
+- **Say so plainly if the gap is partly ours.** If varco can fix its own symptom today with a
+  supported mechanism, that belongs in its own section of the report. A report that blames
+  upstream for something we control is worse than no report — it turns our bug into a wait.
+  (Worked example: `P22-PROVIDER-PREDESTROY` §5, where a `@Disposes` closes varco's leak with
+  no upstream change at all.)
 - If a workaround is genuinely unavoidable in the short term (e.g. the now-deleted
   `varco_core` compat shim filed under U-20 — six independent hand-rolled annotation
   patches consolidated into one shared, documented, deletable helper until providify 2.0.0
   shipped `@Provider(returns=...)` natively), centralize it in exactly one place, name it as a
-  shim intended for deletion, and still file the UPSTREAM-GAPS.md entry — the shim is not a
-  substitute for the report.
-- This mirrors the same rule already documented for downstream consumers of `varco_*` (see the
-  register's own purpose statement) — inside this repo, `providify` is the upstream and the same
-  discipline applies to it.
+  shim intended for deletion, and still write the report — the shim is not a substitute for it.
+- This mirrors the rule for downstream consumers of `varco_*` — inside this repo, `providify` is
+  the upstream and the same discipline applies to it.
 
 ---
 

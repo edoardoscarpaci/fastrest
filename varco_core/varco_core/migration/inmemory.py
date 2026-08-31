@@ -25,9 +25,9 @@ import time
 
 from varco_core.migration.base import (
     AbstractMigrator,
-    MigrationPlan,
     MigrationReport,
     Revision,
+    SchemaMigrationPlan,
 )
 from varco_core.migration.errors import IrreversibleMigrationError
 
@@ -84,13 +84,13 @@ class InMemoryMigrator(AbstractMigrator):
         self.calls: list[str] = []
         self.closed = False
 
-    async def plan(self) -> MigrationPlan:
+    async def plan(self) -> SchemaMigrationPlan:
         self.calls.append("plan")
         if self._skip_triggered and self._pending_after_skip is not None:
-            return MigrationPlan(current=(), pending=tuple(self._pending_after_skip))
+            return SchemaMigrationPlan(current=(), pending=tuple(self._pending_after_skip))
         applied = self._revisions[: self._applied_count]
         pending = tuple(self._revisions[self._applied_count :])
-        return MigrationPlan(
+        return SchemaMigrationPlan(
             current=tuple(rev.id for rev in applied),
             pending=pending,
         )

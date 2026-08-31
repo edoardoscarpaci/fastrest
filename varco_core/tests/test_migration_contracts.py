@@ -2,7 +2,7 @@
 Failing tests for varco_core.migration contracts + settings (Plan 006, Phase 1,
 step 11).
 
-Contracts only — ``AbstractMigrator``, ``MigrationPlan``, ``MigrationReport``,
+Contracts only — ``AbstractMigrator``, ``SchemaMigrationPlan``, ``MigrationReport``,
 ``MigrationSettings``. Nothing here touches alembic or pymongo.
 """
 
@@ -54,21 +54,21 @@ async def test_from_env_unknown_mode_raises_valueerror_naming_legal_values() -> 
     assert "upgrade" in message
 
 
-# ── MigrationPlan ────────────────────────────────────────────────────────────
+# ── SchemaMigrationPlan ────────────────────────────────────────────────────────────
 
 
 async def test_migration_plan_is_empty_true_for_no_pending_revisions() -> None:
-    from varco_core.migration.base import MigrationPlan
+    from varco_core.migration.base import SchemaMigrationPlan
 
-    plan = MigrationPlan(current=(), pending=())
+    plan = SchemaMigrationPlan(current=(), pending=())
 
     assert plan.is_empty is True
 
 
 async def test_migration_plan_is_empty_false_when_revisions_pending() -> None:
-    from varco_core.migration.base import MigrationPlan, Revision
+    from varco_core.migration.base import Revision, SchemaMigrationPlan
 
-    plan = MigrationPlan(current=(), pending=(Revision(id="0001", label="init"),))
+    plan = SchemaMigrationPlan(current=(), pending=(Revision(id="0001", label="init"),))
 
     assert plan.is_empty is False
 
@@ -102,12 +102,12 @@ async def test_abstract_migrator_cannot_be_instantiated_directly() -> None:
 
 
 async def test_abstract_migrator_check_is_concrete_and_raises_when_pending() -> None:
-    from varco_core.migration.base import AbstractMigrator, MigrationPlan, Revision
+    from varco_core.migration.base import AbstractMigrator, Revision, SchemaMigrationPlan
     from varco_core.migration.errors import PendingMigrationsError
 
     class _StubMigrator(AbstractMigrator):
-        async def plan(self) -> MigrationPlan:
-            return MigrationPlan(current=(), pending=(Revision(id="0001", label="init"),))
+        async def plan(self) -> SchemaMigrationPlan:
+            return SchemaMigrationPlan(current=(), pending=(Revision(id="0001", label="init"),))
 
         async def upgrade(self, target: str = "heads", *, dry_run: bool = False):
             raise NotImplementedError
@@ -125,11 +125,11 @@ async def test_abstract_migrator_check_is_concrete_and_raises_when_pending() -> 
 
 
 async def test_abstract_migrator_check_returns_plan_when_nothing_pending() -> None:
-    from varco_core.migration.base import AbstractMigrator, MigrationPlan
+    from varco_core.migration.base import AbstractMigrator, SchemaMigrationPlan
 
     class _StubMigrator(AbstractMigrator):
-        async def plan(self) -> MigrationPlan:
-            return MigrationPlan(current=("0001",), pending=())
+        async def plan(self) -> SchemaMigrationPlan:
+            return SchemaMigrationPlan(current=("0001",), pending=())
 
         async def upgrade(self, target: str = "heads", *, dry_run: bool = False):
             raise NotImplementedError
@@ -148,11 +148,11 @@ async def test_abstract_migrator_check_returns_plan_when_nothing_pending() -> No
 
 
 async def test_abstract_migrator_close_is_concrete_noop_by_default() -> None:
-    from varco_core.migration.base import AbstractMigrator, MigrationPlan
+    from varco_core.migration.base import AbstractMigrator, SchemaMigrationPlan
 
     class _StubMigrator(AbstractMigrator):
-        async def plan(self) -> MigrationPlan:
-            return MigrationPlan(current=(), pending=())
+        async def plan(self) -> SchemaMigrationPlan:
+            return SchemaMigrationPlan(current=(), pending=())
 
         async def upgrade(self, target: str = "heads", *, dry_run: bool = False):
             raise NotImplementedError

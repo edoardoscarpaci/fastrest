@@ -74,7 +74,7 @@ Async safety:   ✅ No async operations — route registration is synchronous.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
@@ -417,7 +417,25 @@ def create_varco_app(
         if _catalog is not None:
             lifespan_components = [*lifespan_components, I18nLifecycle(_catalog)]
 
-    varco_lifespan = VarcoLifespan(*lifespan_components)
+    # ── Container teardown (Plan 022 / RL-8a, §D-8a2(a)) ──────────────────────
+    # Hand VarcoLifespan a plain coroutine factory — never the container itself,
+    # which the lifespan's own DESIGN block refuses ("a plain orchestrator — no
+    # DI knowledge").  This is what finally tears down the six measured orphaned
+    # @PreDestroy singletons (design/api-freeze-and-standards/measurements/
+    # predestroy-vs-lifespan.md), including RedisCache/MemcachedCache which are
+    # eagerly constructed with an already-started connection pool.
+    # Container-free apps (container=None is a supported path, see the module
+    # docstring's "Works without DI") get shutdown=None — byte-identical to
+    # pre-3.0.0 behaviour, since there is nothing to sweep.
+    _container_shutdown: Callable[[], Awaitable[None]] | None = None
+    if container is not None:
+
+        async def _container_shutdown_hook() -> None:
+            await container.ashutdown()
+
+        _container_shutdown = _container_shutdown_hook
+
+    varco_lifespan = VarcoLifespan(*lifespan_components, shutdown=_container_shutdown)
 
     @asynccontextmanager
     async def _lifespan(app: FastAPI) -> AsyncIterator[None]:

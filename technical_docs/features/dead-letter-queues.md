@@ -403,7 +403,7 @@ def downgrade() -> None:
 
 `framework_rls_upgrade`/`framework_rls_downgrade`
 (`varco_sa.rls_framework`, `FRAMEWORK_RLS_TABLES = ("varco_audit_log", "varco_dead_letters")`)
-wrap `varco_sa.rls.enable_rls_ddl()` directly so the correct
+wrap `varco_sa.rls.render_rls_ddl()` directly so the correct
 `(SELECT current_setting(..., true))` InitPlan form is always used — never a
 bare `current_setting()` call, which is not `LEAKPROOF` and silently forces
 a sequential scan on Postgres. **Nothing in varco enables this

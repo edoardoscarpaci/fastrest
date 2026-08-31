@@ -170,11 +170,21 @@ class TenantProvisionConsumer(EventConsumer):
                     "control_service=TenantControlService(catalog=..., "
                     "provisioner=..., producer=...) directly instead."
                 )
+            # NOT migrated to @deprecated (Plan 022 / Phase 2 step 14, and the
+            # one deviation from §D-DEP recorded there): this deprecation is
+            # *argument-conditional* — only the provisioner=/catalog= shape is
+            # deprecated, while control_service= is the supported path through
+            # the same constructor. @deprecated decorates a whole callable and
+            # would warn on every construction, including the correct one.
+            # What §D-DEP actually buys is applied by hand instead: the message
+            # now names a concrete removal version rather than the unfalsifiable
+            # "one minor release after Plan 008 lands" it carried before, so it
+            # is greppable alongside every removed_in= in the tree.
             warnings.warn(
                 "TenantProvisionConsumer(provisioner=..., catalog=...) is a "
                 "deprecated shim (Plan 008 RD-12) — pass "
-                "control_service=TenantControlService(...) instead. This "
-                "shim will be removed one minor release after Plan 008 lands.",
+                "control_service=TenantControlService(...) instead. This shim "
+                "is deprecated since 3.0.0 and will be removed in 4.0.0.",
                 DeprecationWarning,
                 stacklevel=2,
             )

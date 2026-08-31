@@ -9,6 +9,166 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### BREAKING — API-surface freeze audit (Plan 022, RL-8)
+
+Four accepted breaks out of twelve audited candidates. Each was decided at an
+explicit checkpoint recorded, with its reasoning and blast radius, in
+`design/api-freeze-and-standards/api-break-candidates.md`; the remaining eight
+candidates were verdicted `leave-and-document` and change nothing. Three of the
+four ship a deprecated alias that resolves to the **identical object**, so
+`isinstance` and `except` keep working; all three are removed in **4.0.0**.
+
+- **AB-5 — `CORSConfig.allow_origins` now defaults to `()` instead of `("*",)`.**
+  ⚠️ **The one break with a security consequence, and the only one with no
+  alias — read this even if you skip the rest.** The old default combined with
+  the (unchanged) `allow_credentials=True` default, and with
+  `create_varco_app()`'s unconditional `install_cors()` call, to ship a
+  reflect-any-origin-with-credentials policy to every app that set no
+  `VARCO_CORS_*` env var. Starlette does not reject that combination and
+  browsers do not block it: with credentials on, `CORSMiddleware` stops sending
+  the literal `*` and instead **reflects the request's own `Origin`** alongside
+  `access-control-allow-credentials: true`, which is valid to a browser. Verified
+  against Starlette 1.0.0 — `install_cors(app, CORSConfig())` answered a request
+  carrying `Origin: https://evil.example.com` with
+  `access-control-allow-origin: https://evil.example.com`. `CORSConfig.from_env()`
+  now falls back to `()` for an unset `VARCO_CORS_ORIGINS` too, since that is the
+  path most production apps take. **An alias is impossible for a default value,
+  so this is a silent behaviour change**: if you were relying on the permissive
+  default, cross-origin requests will now be refused — set `VARCO_CORS_ORIGINS`
+  or pass `allow_origins=` explicitly. Opting back in to `("*",)` still works and
+  is now a visible decision. (A docstring claiming the combination was "invalid
+  per the CORS spec" and that "Starlette will raise at app startup" was also
+  corrected — both claims were false.)
+- **AB-2 — schema migration's `MigrationError`/`MigrationPlan` renamed to
+  `SchemaMigrationError`/`SchemaMigrationPlan`.** They collided at the
+  `varco_core` top level with the older, unrelated `varco_core.migrator` (domain
+  data/field migration) pair of the same names, which forced two deliberate
+  re-export holes. **The whole schema-migration surface is now exported from
+  `varco_core` directly.** `varco_core.migration.MigrationError` / `.MigrationPlan`
+  still resolve there as deprecated aliases (removed in 4.0.0);
+  `varco_core.MigrationError`/`.MigrationPlan` still mean the *domain* pair and
+  are unchanged.
+- **AB-1 — `varco_sa.rls.enable_rls_ddl()` renamed to `render_rls_ddl()`.** It
+  reads as a member of the DI opt-in `enable_*` family while touching no
+  container, registering no binding and performing no I/O — it is a pure
+  DDL-string generator, which `render_*` states truthfully. `enable_rls_ddl`
+  remains as a deprecated alias (removed in 4.0.0).
+- **AB-4 — `varco_beanie.BeanieConfig` collapsed into `BeanieSettings`.** The two
+  were one concept under two names with identical fields, bridged by KI-10's
+  manual field-for-field remap, which is now deleted. `BeanieConfig` remains as a
+  deprecated alias — resolving to the identical `BeanieSettings` class — from
+  both `varco_beanie` and `varco_beanie.bootstrap` (removed in 4.0.0).
+  `BeanieFastrestApp(config=...)` now takes a `BeanieSettings`.
+
+**AB-3 (`install_*` vs providify's `container.install()`) was verdicted
+`leave-and-document`** — no code changed. The audit did fix the CLAUDE.md
+taxonomy row that described `install_*` as uniformly "container-free, a
+process-global side effect": that is false of `install_middleware_stack` and
+`install_cors`, which take and mutate an ASGI app. One verb, two shapes.
+
+### BREAKING — container teardown at shutdown (Plan 022, RL-8a)
+
+**The signature change is additive; the behaviour change is not.** `VarcoLifespan`
+gains one optional, keyword-only `shutdown: Callable[[], Awaitable[None]] | None
+= None` hook — symmetric to its existing `setup=` — and `create_varco_app()`
+fills it with `container.ashutdown()` whenever it was given a container. Every
+existing `VarcoLifespan(...)` call site compiles and behaves exactly as before;
+apps built through `create_varco_app()` do not. **They will newly run every
+`@PreDestroy` hook the DI container holds at ASGI shutdown**, including hooks
+that have never run before in the process's life. Audit yours before upgrading.
+
+Why this was worth a breaking behaviour change, measured rather than assumed
+(`design/api-freeze-and-standards/measurements/predestroy-vs-lifespan.md`):
+**6 of the 10 `@PreDestroy`-bearing singletons in the workspace were orphans** —
+`KafkaChannelManager`, `NatsStreamManager`, `RedisChannelManager`, `RedisCache`,
+`MemcachedCache`, `CasbinPolicyEngine`. `create_varco_app()` only ever registered
+four well-known interfaces as lifecycle components (`AbstractEventBus`,
+`AbstractJobRunner`, and the two `varco_ws` buses), so no `ChannelManager`,
+`CacheBackend` or `PolicyEngine` was ever torn down. Two of the six were leaking
+an **already-open connection**.
+
+Mechanics, all three deliberate:
+
+- **Order.** `_stop_all()` runs **first**, unchanged, so registered components
+  still stop in documented LIFO dependency order; the container sweep only mops
+  up afterwards. A component reachable by both paths therefore has `stop()`
+  called twice — all ten shipped implementations were read and confirmed
+  idempotent, and `VarcoLifespan.register()`'s docstring already required it.
+- **Failures are logged, never raised.** providify's aggregated `ShutdownError`
+  is unpacked into one ERROR line per `ShutdownFailure`, naming the component and
+  its exception; any other exception from the hook is contained the same way.
+  This matches `_stop_all()`'s pre-existing "logs errors but does not raise"
+  contract — two teardown paths with opposite failure semantics would be
+  indefensible — and avoids raising out of an `asynccontextmanager`'s `finally`
+  during ASGI shutdown, which masks the real cause. There is deliberately no
+  knob to make it raise.
+- **Container-free apps are unaffected.** `create_varco_app(container=None)`
+  passes `shutdown=None`, which is byte-identical to the previous behaviour.
+
+⚠️ **Known limitation:** `RedisCache` and `MemcachedCache` are *not* fixed by
+this. providify's teardown runs a `@Disposes` disposer for a provider-created
+binding and never reaches the `@PreDestroy` of the object the provider returned;
+both caches exist only as a `@Provider` return value. Pinned by a strict xfail in
+`varco_redis/tests/test_redis_cache_lifespan_shutdown_integration.py` and filed
+in BACKLOG.md rather than worked around in varco code.
+
+### Added
+
+- **`varco_core.deprecated` / `varco_core.deprecated_alias`** (Plan 022, §D-DEP)
+  — one deprecation mechanism for the workspace, replacing ad-hoc
+  `warnings.warn` calls. Both require `removed_in=` at authoring time, which is
+  the one discipline an ad-hoc warning cannot enforce and which makes every
+  scheduled removal greppable. `deprecated_alias()` builds a PEP 562 module
+  `__getattr__` returning the *identical* target object, never a subclass, so an
+  alias never breaks `except` or `isinstance`. PEP 702's `warnings.deprecated`
+  is the intended migration once the Python floor moves to 3.13 (it is stdlib
+  only from 3.13, and every package here is `requires-python = ">=3.12"`).
+- **`scripts/api_surface.py`** — a reproducible snapshot of every distribution
+  package's public `__all__` (471 exports across ten packages), with `--check`
+  to diff a live tree against the committed snapshot and fail on a removal or a
+  function-signature change. Not yet a CI gate; run it by hand after touching
+  any `__all__`.
+
+### Fixed
+
+- **`varco_redis.di.async_bootstrap()` raised `AttributeError` instead of
+  no-op'ing when providify is absent** (Plan 022, RIDER-2's sibling RIDER-1).
+  `bootstrap()` returns `None` on its own `except ImportError` path, and the
+  next line called `container.ainstall(...)` on it — so `setup_cache=True`
+  without providify installed crashed on exactly the path documented as a
+  graceful no-op. It now returns `None`, matching `bootstrap()`'s contract.
+- **Both admin-surface double-mount guards could silently skip mounting**
+  (Plan 022, RIDER-2). `varco_fastapi.tenancy.mount` and
+  `varco_fastapi.admin.mount` each kept a `set[int]` of `id(app)`. `id()` is
+  unique only among *live* objects, so a garbage-collected app released an
+  address that a new, unrelated `FastAPI` instance could reuse — matching a
+  stale entry and having its admin surface **silently not mounted**. Both are
+  now `weakref.WeakSet`, changed together so the two cannot drift.
+
+- **`varco_beanie`'s `BeanieUnitOfWork(transactional=True)` silently opened no
+  transaction at all.** A leftover motor→pymongo migration bug: pymongo's
+  `AsyncClientSession.start_transaction()` is a coroutine (motor's was sync),
+  and `_begin()` called it without `await`. The resulting never-awaited
+  coroutine was a no-op, so every "transactional" UoW ran uncommitted/
+  unprotected — `commit()`/`abort()` acted on a transaction that never
+  existed, with no error raised anywhere. Fixed by awaiting
+  `start_transaction()`. Anyone relying on `transactional=True` for
+  multi-document atomicity should treat prior runs as having received no
+  transactional guarantee.
+- **`varco_beanie.uow.BeanieUnitOfWork._begin()` raised `TypeError` against a
+  real MongoDB client.** `await self._client.start_session()` failed with
+  `TypeError: object AsyncClientSession can't be used in 'await' expression`
+  — pymongo's `AsyncMongoClient.start_session()` is a plain sync method,
+  unlike motor's coroutine of the same name. Fixed by removing the `await`.
+  Undetected by the existing unit tests because the mock client faked
+  `start_session` as an `AsyncMock`, which made the incorrect `await` pass;
+  the fakes and three regression tests now pin the real pymongo call shapes.
+- **`varco_beanie.tenancy.pool.BeanieTenantPool` leaked a connection pool on
+  every `client_per_tenant=True` tenant eviction.** `entry.owned_client.close()`
+  was called without `await` — pymongo's `AsyncMongoClient.close()` is a
+  coroutine (motor's was sync), so the call silently did nothing. Fixed by
+  awaiting `close()`.
+
 ### Internal / typing — mypy strictness ramp complete (Plan 021, RL-14/RL-14b/RL-14c/RL-14d)
 
 **Not a BREAKING change.** `[tool.mypy]`'s root config now carries `strict = true` (mypy 2.3.1's

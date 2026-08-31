@@ -16,9 +16,13 @@ Async safety:   ✅ Uses AsyncMock throughout
 
 from __future__ import annotations
 
+import inspect
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from pymongo import AsyncMongoClient
+from pymongo.asynchronous.client_session import AsyncClientSession
 from varco_beanie.uow import BeanieUnitOfWork
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -28,7 +32,8 @@ def _make_mongo_client(session: MagicMock | None = None) -> MagicMock:
     """
     Build a mock AsyncMongoClient.
 
-    start_session() is an AsyncMock returning the given (or a fresh) session.
+    start_session() is a sync MagicMock returning the given (or a fresh)
+    session — matching the real pymongo AsyncMongoClient.
 
     Args:
         session: The session object to return from start_session().
@@ -38,7 +43,12 @@ def _make_mongo_client(session: MagicMock | None = None) -> MagicMock:
     """
     client = MagicMock()
     mock_session = session or MagicMock()
-    client.start_session = AsyncMock(return_value=mock_session)
+    # start_session() is SYNC on the real pymongo AsyncMongoClient — a
+    # MagicMock, never an AsyncMock. Using an AsyncMock here previously made
+    # an erroneous `await` in _begin() pass every unit test while failing
+    # against a real client (TypeError: object AsyncClientSession can't be
+    # used in 'await' expression).
+    client.start_session = MagicMock(return_value=mock_session)
     return client
 
 
@@ -55,6 +65,8 @@ def _make_uow(
         (uow, mock_session) — the session is the one returned by start_session().
     """
     mock_session = session or MagicMock()
+    # start_transaction() is a coroutine on the real AsyncClientSession.
+    mock_session.start_transaction = AsyncMock()
     mock_session.commit_transaction = AsyncMock()
     mock_session.abort_transaction = AsyncMock()
     mock_session.end_session = AsyncMock()
@@ -285,3 +297,62 @@ async def test_context_manager_wires_repos_inside_block() -> None:
 
     async with uow:
         assert uow.items is mock_repo
+
+
+# ── Regression: real pymongo AsyncMongoClient contract ────────────────────────
+
+
+class TestRealPymongoSessionContract:
+    """
+    Regression guard against mocks that contradict the real pymongo API.
+
+    Every other test in this module fakes ``start_session`` with an
+    ``AsyncMock``, which made an erroneous ``await`` on a *sync* method look
+    correct. These tests use a real ``AsyncMongoClient(connect=False)`` —
+    no server, no Docker, no I/O — so the real sync/async shape is pinned.
+    """
+
+    def test_regression_start_session_is_not_a_coroutine_function(self) -> None:
+        # user reports: `TypeError: object AsyncClientSession can't be used in
+        # 'await' expression` from BeanieUnitOfWork._begin.
+        # correct behaviour is: AsyncMongoClient.start_session() is a plain sync
+        # method returning an AsyncClientSession, because pymongo's native async
+        # client (>=4.11, unlike motor) only makes the *session* awaitable, not
+        # its construction.
+        client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
+            "mongodb://localhost:27017", connect=False
+        )
+        assert not inspect.iscoroutinefunction(client.start_session)
+        # end_session / close ARE coroutines — the awaits on those are correct.
+        assert inspect.iscoroutinefunction(AsyncClientSession.end_session)
+        assert inspect.iscoroutinefunction(AsyncMongoClient.close)
+
+    def test_regression_transaction_methods_are_all_coroutines(self) -> None:
+        # user-visible symptom class: a bare (un-awaited) call to an async
+        # pymongo method silently does nothing. start_transaction() was called
+        # WITHOUT await, so `transactional=True` opened no transaction at all.
+        # correct behaviour is: all three transaction verbs are coroutines and
+        # must be awaited, because motor's sync equivalents no longer apply.
+        for name in ("start_transaction", "commit_transaction", "abort_transaction"):
+            assert inspect.iscoroutinefunction(getattr(AsyncClientSession, name)), name
+
+    async def test_regression_begin_opens_session_against_real_client(self) -> None:
+        # user reports: _begin() raises TypeError against a real client.
+        # correct behaviour is: _begin() completes and exposes a real
+        # AsyncClientSession, because start_session() must not be awaited.
+        client: AsyncMongoClient[dict[str, Any]] = AsyncMongoClient(
+            "mongodb://localhost:27017", connect=False
+        )
+        seen: list[object] = []
+        uow = BeanieUnitOfWork(
+            mongo_client=client,
+            repo_factories={"widgets": lambda s: seen.append(s) or "repo"},
+        )
+        try:
+            await uow._begin()
+            assert isinstance(uow._session, AsyncClientSession)
+            assert seen == [uow._session]
+            await uow.commit()
+            assert uow._session is None
+        finally:
+            await client.close()

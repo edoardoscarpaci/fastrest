@@ -116,6 +116,9 @@ from varco_core.context import (
     resolve_precedence,
 )
 
+# ── Deprecation mechanism (Plan 022 / §D-DEP) ─────────────────────────────────
+from varco_core.deprecation import deprecated, deprecated_alias
+
 # ── DTO layer ──────────────────────────────────────────────────────────────────
 from varco_core.dto import (
     CreateDTO,
@@ -235,14 +238,15 @@ from varco_core.jwt import (
 )
 from varco_core.mapper import AbstractMapper
 
-# NOTE: varco_core.migrator (DomainMigrator — data/field migration for
-# domain models) already owns the top-level names "MigrationError" and
-# "MigrationPlan" (imported above at line ~54) — an unrelated, pre-existing
-# concept from "schema migration" (this new varco_core.migration package).
-# To avoid a silent name collision at the package's top-level namespace,
-# schema-migration's MigrationError/MigrationPlan are NOT re-exported here;
-# import them explicitly from varco_core.migration instead:
-#     from varco_core.migration import MigrationError, MigrationPlan
+# NOTE: varco_core.migrator (DomainMigrator — data/field migration for domain
+# models) owns the top-level names "MigrationError" and "MigrationPlan". Until
+# 3.0.0 the *schema*-migration package owned those same two names, so they were
+# deliberately NOT re-exported here and had to be imported from
+# varco_core.migration explicitly. Plan 022 / AB-2 renamed the newer, narrower
+# schema pair to SchemaMigrationError / SchemaMigrationPlan, which closes that
+# hole: both concepts are now re-exported below and an import site says which
+# one it means. The old varco_core.migration names still resolve there as
+# deprecated aliases until 4.0.0.
 from varco_core.migration import (
     AbstractMigrator,
     InMemoryMigrator,
@@ -253,6 +257,8 @@ from varco_core.migration import (
     MigrationSettings,
     PendingMigrationsError,
     Revision,
+    SchemaMigrationError,
+    SchemaMigrationPlan,
 )
 from varco_core.migrator import (
     DomainMigrator,
@@ -414,6 +420,9 @@ __all__ = [
     "register",
     # ── Provider ABC ───────────────────────────────────────────────────────────
     "RepositoryProvider",
+    # ── Deprecation mechanism (Plan 022 / §D-DEP) ──────────────────────────────
+    "deprecated",
+    "deprecated_alias",
     # ── DTO layer ──────────────────────────────────────────────────────────────
     "CreateDTO",
     "ReadDTO",
@@ -629,8 +638,11 @@ __all__ = [
     "SaslConfig",
     "ConnectionSettings",
     # ── Schema migrations (varco_core.migration) ────────────────────────────────
-    # MigrationError/MigrationPlan are NOT re-exported here — see the NOTE
-    # above the `from varco_core.migration import (...)` block.
+    # Renamed from MigrationError/MigrationPlan in 3.0.0 (Plan 022 / AB-2) so
+    # they no longer collide with varco_core.migrator's domain pair — see the
+    # NOTE above the `from varco_core.migration import (...)` block.
+    "SchemaMigrationError",
+    "SchemaMigrationPlan",
     "AbstractMigrator",
     "MigrationReport",
     "Revision",

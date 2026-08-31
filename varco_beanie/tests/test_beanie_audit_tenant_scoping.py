@@ -77,7 +77,7 @@ class TestBeanieAuditRepositoryTenantFilterIntegration:
             yield BeanieAuditRepository()
         finally:
             await client.drop_database(db_name)
-            client.close()
+            await client.close()
 
     async def test_list_for_entity_filters_by_tenant_id(self, audit_repo) -> None:
         # Per-test namespacing (CLAUDE.md §shared containers): unique entity_type

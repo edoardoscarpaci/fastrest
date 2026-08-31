@@ -640,7 +640,7 @@ def downgrade() -> None:
     rls_downgrade(op, "orders")
 ```
 
-`rls_upgrade` renders exactly the statements `enable_rls_ddl()` produces — same single
+`rls_upgrade` renders exactly the statements `render_rls_ddl()` produces — same single
 source of truth for the `(SELECT current_setting(..., true))` InitPlan form. Both are
 no-ops with a logged WARNING on a non-Postgres dialect, so the same revision runs against
 SQLite in CI. See [Postgres RLS](postgres-rls.md).
@@ -725,7 +725,7 @@ indicates a defect in the shipped code:
   default role is a **superuser**, and PostgreSQL superusers bypass RLS regardless of
   `FORCE ROW LEVEL SECURITY`. An environment limitation of the fixture's role setup. The
   statement-level regression guard (`test_rls_migration_ops.py`, which asserts
-  `rls_upgrade` renders byte-identical DDL to `enable_rls_ddl`, InitPlan form included)
+  `rls_upgrade` renders byte-identical DDL to `render_rls_ddl`, InitPlan form included)
   passes.
 
 ## Pitfalls

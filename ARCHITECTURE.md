@@ -87,7 +87,7 @@ varco_sa/                — SQLAlchemy async ORM backend
 > `SAConfig` doubles as the DI settings object, avoiding a parallel `SASettings` class.
 
 varco_beanie/            — Beanie/MongoDB async ODM backend
-  ├── __init__.py        — BeanieConfig, BeanieModelFactory
+  ├── __init__.py        — BeanieSettings, BeanieModelFactory
   ├── outbox.py          — BeanieOutboxRepository (OutboxDocument)
   ├── inbox.py           — BeanieInboxRepository (InboxDocument, dedup via unique index)
   ├── job_store.py       — BeanieJobStore (JobDocument; at-most-once jobs collection: varco_jobs)
@@ -832,8 +832,8 @@ MigrationSettings (frozen dataclass) — varco_core.migration.settings
       (VARCO_MIGRATE_MODE / _ON_FAILURE / _LOCK_KEY / _LOCK_TIMEOUT / _TIMEOUT
        / _TARGET_REV / _DRY_RUN)
 
-MigrationError(Exception) — varco_core.migration.errors
-  ├── PendingMigrationsError(plan)              — carries the MigrationPlan
+SchemaMigrationError(Exception) — varco_core.migration.errors
+  ├── PendingMigrationsError(plan)              — carries the SchemaMigrationPlan
   ├── MigrationLockTimeout(lock_key, waited_s)
   ├── IrreversibleMigrationError                — Mongo migration with no down()
   └── MigrationBackendUnavailable               — message names the pip install line
@@ -853,9 +853,10 @@ Supporting surfaces
   └── varco_core.cli: `varco migrate …` (entry-point group "varco.commands")
 ```
 
-⚠️ `MigrationError` and `MigrationPlan` are **not** re-exported from `varco_core` — the
-pre-existing, unrelated `varco_core.migrator` (domain data/field migration) owns those
-top-level names. Import them from `varco_core.migration`.
+Renamed in 3.0.0 (Plan 022 / AB-2) from `MigrationError`/`MigrationPlan`, which collided at the
+`varco_core` top level with the unrelated `varco_core.migrator` (domain data/field migration)
+pair. Both schema names are now re-exported from `varco_core` directly; the old names still
+resolve from `varco_core.migration` as deprecated aliases to the identical objects until 4.0.0.
 
 See `technical_docs/features/schema-migrations.md`.
 
@@ -1226,7 +1227,7 @@ filtered_query = transformer.transform(base_query, params, User)
   (session-scoped — see `technical_docs/features/distributed-locks.md` for the transaction-pooler
   hazard); `SAXactAdvisoryLock` — transaction-scoped sibling, released at COMMIT/ROLLBACK
 - **Row-Level Security helpers**: `varco_sa.rls` (Plan 005 Phase 8 / U-5, helpers only, nothing
-  wired) — `enable_rls_ddl(table, ...)` returns DDL for the application's own Alembic revision,
+  wired) — `render_rls_ddl(table, ...)` returns DDL for the application's own Alembic revision,
   always emitting the `(SELECT current_setting(..., true))` InitPlan form (see the 150× cliff
   in `technical_docs/features/postgres-rls.md`); `set_tenant_local(session, tenant_id)` sets the
   RLS GUC via transaction-scoped `set_config(..., true)` — PgBouncer-transaction-mode safe, same

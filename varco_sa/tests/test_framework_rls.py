@@ -2,7 +2,7 @@
 Unit + integration tests for varco_sa.rls_framework — Plan 009, Phase 6 (R4).
 =================================================================================
 ``framework_rls_upgrade`` / ``framework_rls_downgrade`` wrap the existing
-``varco_sa.rls.enable_rls_ddl`` for the two framework tables
+``varco_sa.rls.render_rls_ddl`` for the two framework tables
 (``varco_audit_log``, ``varco_dead_letters``).
 
 RED until ``varco_sa/rls_framework.py`` lands.

@@ -2,7 +2,7 @@
 varco_sa.migration.ops
 =======================
 ``rls_upgrade``/``rls_downgrade`` — thin Alembic-``op`` wrappers around
-``varco_sa.rls.enable_rls_ddl``, so Row-Level Security lands as a reviewed
+``varco_sa.rls.render_rls_ddl``, so Row-Level Security lands as a reviewed
 migration revision instead of a startup hook (Plan 006 Phase 6).
 
 Nothing auto-enables RLS, ever — these functions must be called from inside
@@ -10,7 +10,7 @@ an application's own Alembic revision's ``upgrade()``/``downgrade()``.
 
 DESIGN: thin wrapper, reuse ``rls.py``'s statement construction
     ✅ ``rls_upgrade`` renders byte-identical statements to
-       ``enable_rls_ddl()`` — a single source of truth for the
+       ``render_rls_ddl()`` — a single source of truth for the
        ``(SELECT current_setting(..., true))`` InitPlan form (see
        ``varco_sa/rls.py``'s module docstring for the 150x-cliff this
        guards against).
@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from varco_sa.rls import enable_rls_ddl
+from varco_sa.rls import render_rls_ddl
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ def rls_upgrade(
         )
         return
 
-    for stmt in enable_rls_ddl(
+    for stmt in render_rls_ddl(
         table,
         tenant_column=tenant_column,
         setting=setting,

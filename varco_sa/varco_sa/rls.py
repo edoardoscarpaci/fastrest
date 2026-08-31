@@ -6,7 +6,7 @@ transaction-scoped tenant-setting primitive.
 
 Plan 005, Phase 8, Step 85 (U-5). **Helpers only — nothing is wired.** RLS
 policies are opt-in per table, applied by the *application's own* Alembic
-revisions using ``enable_rls_ddl()``; varco never applies RLS to a generated
+revisions using ``render_rls_ddl()``; varco never applies RLS to a generated
 table by default. See ``technical_docs/features/postgres-rls.md`` for the
 full report this module backs (the InitPlan finding, ``SET LOCAL`` vs
 ``SET``, the ``search_path`` hazard, and the fail-open note on
@@ -21,7 +21,7 @@ a scalar subquery — ``USING (tenant_id = (SELECT current_setting(...)))`` —
 gives the planner an **InitPlan**: evaluated once per query instead of
 (effectively) once per row, and the index is used normally. One documented
 production query went **8 100 ms → 94 ms** from this rewrite alone.
-``enable_rls_ddl()`` below emits ONLY the InitPlan form — this is
+``render_rls_ddl()`` below emits ONLY the InitPlan form — this is
 non-negotiable, and ``test_rls.py`` asserts the literal ``(SELECT`` substring
 is present in its output as a permanent regression test for the 150× cliff.
 
@@ -64,11 +64,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from varco_core.deprecation import deprecated
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
-def enable_rls_ddl(
+def render_rls_ddl(
     table: str,
     *,
     tenant_column: str = "tenant_id",
@@ -81,11 +83,13 @@ def enable_rls_ddl(
 
     Returns raw SQL strings for the caller to run inside its OWN Alembic
     revision (typically via ``op.execute(stmt)`` for each string, in order).
-    **Nothing is applied here** — this function performs no I/O. Despite the
-    ``enable_*`` name, this is unrelated to the DI opt-in ``enable_*`` family
-    (CLAUDE.md's "DI wiring verb taxonomy") — no container is touched, no
-    binding is registered; see ``varco_casbin.di.enable_policy_authorizer``
-    for that pattern.
+    **Nothing is applied here** — this function performs no I/O, which is
+    exactly what the ``render_*`` verb states.
+
+    Renamed from ``enable_rls_ddl()`` in 3.0.0 (Plan 022 / AB-1): the old name
+    read as a member of the DI opt-in ``enable_*`` family (CLAUDE.md's "DI
+    wiring verb taxonomy") when it touches no container and registers no
+    binding. ``enable_rls_ddl`` remains as a deprecated alias until 4.0.0.
 
     The generated policy uses the ``(SELECT current_setting(...))`` InitPlan
     form — see the module docstring's InitPlan finding. Do not hand-edit the
@@ -203,7 +207,7 @@ async def set_tenant_local(
         tenant_id: The tenant identifier to scope subsequent queries to.
                    Passed as a bound parameter — never interpolated into SQL.
         setting:   The Postgres GUC name to set. Must match the ``setting``
-                   passed to ``enable_rls_ddl()`` for the protected table(s).
+                   passed to ``render_rls_ddl()`` for the protected table(s).
                    Default: ``"rls.tenant_id"``.
 
     Edge cases:
@@ -227,4 +231,15 @@ async def set_tenant_local(
     )
 
 
-__all__ = ["enable_rls_ddl", "set_tenant_local"]
+#: AB-1's back-compat seam. Deliberately kept OUT of ``__all__`` — a
+#: deprecated name should keep resolving for anyone who imports it explicitly,
+#: but must not be advertised to ``from varco_sa.rls import *`` or to
+#: autocomplete. Removed in 4.0.0.
+enable_rls_ddl = deprecated(
+    since="3.0.0",
+    removed_in="4.0.0",
+    replacement="render_rls_ddl",
+    name="enable_rls_ddl",
+)(render_rls_ddl)
+
+__all__ = ["render_rls_ddl", "set_tenant_local"]

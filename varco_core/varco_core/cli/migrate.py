@@ -32,10 +32,10 @@ from typing import Any
 
 from varco_core.migration.base import (
     AbstractMigrator,
-    MigrationPlan,
     MigrationReport,
+    SchemaMigrationPlan,
 )
-from varco_core.migration.errors import MigrationError
+from varco_core.migration.errors import SchemaMigrationError
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -106,7 +106,7 @@ def _resolve_target(target: str) -> AbstractMigrator | None:
     return obj if isinstance(obj, AbstractMigrator) else None
 
 
-def _plan_to_json(plan: MigrationPlan) -> dict[str, Any]:
+def _plan_to_json(plan: SchemaMigrationPlan) -> dict[str, Any]:
     return {
         "current": list(plan.current),
         "pending": [{"id": r.id, "label": r.label, "branch": r.branch} for r in plan.pending],
@@ -207,7 +207,7 @@ async def _run_async(args: argparse.Namespace) -> int:
 
         print(f"Unknown verb: {args.verb!r}", file=sys.stderr)
         return 2
-    except MigrationError as exc:
+    except SchemaMigrationError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     except Exception as exc:  # noqa: BLE001 - CLI boundary: report, don't crash

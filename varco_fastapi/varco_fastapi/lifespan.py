@@ -61,6 +61,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import Any, Protocol, runtime_checkable
 
+from providify.exceptions import ShutdownError
+
 _logger = logging.getLogger(__name__)
 
 
@@ -113,6 +115,10 @@ class VarcoLifespan:
     Args:
         *components: Components to register at construction time (in order).
                      Each must have ``start()`` and ``stop()`` async methods.
+        setup:       Optional async hook awaited *before* any component starts.
+        shutdown:    Optional async hook awaited *after* every component has
+                     stopped.  ``create_varco_app()`` fills it with
+                     ``lambda: container.ashutdown()`` (Plan 022 / RL-8a).
 
     Thread safety:  ⚠️ ``register()`` must be called before the app starts.
     Async safety:   ✅ ``__call__`` is an async context manager.
@@ -122,6 +128,7 @@ class VarcoLifespan:
         self,
         *components: Any,
         setup: Callable[[], Awaitable[None]] | None = None,
+        shutdown: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         self._components: list[Any] = list(components)
         # Optional async hook called before any component is started.
@@ -133,6 +140,24 @@ class VarcoLifespan:
         #   ✅ Closure captures all outer-scope state naturally
         #   ❌ Caller must not forget to register components inside setup
         self._setup: Callable[[], Awaitable[None]] | None = setup
+        # Optional async teardown hook, awaited once after _stop_all().
+        # Plan 022 / §D-8a2(a) — the mirror image of setup=, and the seam
+        # through which create_varco_app() reaches container.ashutdown()
+        # so that @PreDestroy-bearing singletons which are NOT registered
+        # lifecycle components are torn down at all.  Six such orphans were
+        # measured out of ten (predestroy-vs-lifespan.md), two of them
+        # (RedisCache, MemcachedCache) holding an already-started pool.
+        # DESIGN: a callable hook over a `container=` kwarg
+        #   ✅ A callable is not DI knowledge — a container would be, and the
+        #      setup= DESIGN block above explicitly refuses that.
+        #   ✅ Additive: every existing VarcoLifespan(...) call site is unchanged,
+        #      and omitting it is byte-identical to pre-3.0.0 behaviour.
+        #   ✅ Testable with a bare coroutine factory — no providify needed.
+        #   ❌ A second optional kwarg on a class that already had one.  Accepted:
+        #      the symmetry with setup= is precisely the point.
+        #   Rejected: DIContainer.current() lookup inside _stop_all() — implicit
+        #      global state, untestable, and silently wrong in multi-container tests.
+        self._shutdown: Callable[[], Awaitable[None]] | None = shutdown
 
     def register(self, component: Any) -> None:
         """
@@ -178,45 +203,111 @@ class VarcoLifespan:
             - If a component's ``stop()`` raises during shutdown, the error is
               logged and subsequent stops still run — a failing stop must not
               block other components from cleaning up.
-            - ``VarcoLifespan`` does **not** call
-              ``container.shutdown()``/``container.ashutdown()`` — only the
-              explicitly registered lifecycle components in ``self._components``
-              are stopped, via ``_stop_all()`` above. A ``@PreDestroy`` hook on a
-              singleton that is not also a registered lifecycle component is
-              never run by this class today (Plan 016 / RL-3b — characterized,
-              not adopted; see ``test_lifespan_shutdown_characterization.py`` for
-              the locked shape of providify 2.0.0's aggregated ``ShutdownError``
-              a future adoption would need to handle, and BACKLOG.md's RL-8 row
-              for the adoption decision itself).
+            - ``VarcoLifespan`` calls the ``shutdown=`` hook, when one was
+              supplied, **after** ``_stop_all()`` — never instead of it.
+              Registered components therefore still stop in documented LIFO
+              dependency order, and only then does the hook (in practice
+              ``container.ashutdown()``) sweep whatever the DI container still
+              holds. A component reachable by both paths has ``stop()`` called
+              twice; all ten shipped ``@PreDestroy`` components were measured
+              idempotent, and ``register()``'s docstring already required it.
+            - With **no** ``shutdown=`` hook the behaviour is byte-identical to
+              pre-3.0.0: a ``@PreDestroy`` hook on a singleton that is not also
+              a registered lifecycle component is never run. Plan 022 / RL-8a
+              measured six such orphans out of ten and adopted the hook in
+              ``create_varco_app()``; see
+              ``design/api-freeze-and-standards/measurements/predestroy-vs-lifespan.md``
+              for the evidence and
+              ``test_lifespan_shutdown_characterization.py`` for the locked
+              shape of providify's aggregated ``ShutdownError``.
+            - The hook runs even when ``setup()`` or a component's ``start()``
+              raised — a half-built app is exactly the case where eagerly
+              constructed singletons would otherwise leak.
+            - The hook never raises out of the lifespan. Failures are logged at
+              ERROR, one line per ``ShutdownFailure``, consistent with
+              ``_stop_all()``'s own "logs errors but does not raise" contract.
         """
-        # Run async setup first so it can register additional components
-        # (e.g. DI resolution of bus/consumer/job_runner) before the start loop.
-        if self._setup is not None:
-            await self._setup()
-
-        # Start in registration order
         started: list[Any] = []
-        for component in self._components:
-            try:
-                await component.start()
-                started.append(component)
-                _logger.info("VarcoLifespan: started %s", type(component).__name__)
-            except Exception as exc:
-                _logger.error(
-                    "VarcoLifespan: failed to start %s: %s",
-                    type(component).__name__,
-                    exc,
-                    exc_info=True,
-                )
-                # Stop already-started components before re-raising
-                await self._stop_all(started)
-                raise
-
         try:
-            yield  # FastAPI handles requests here
+            # Run async setup first so it can register additional components
+            # (e.g. DI resolution of bus/consumer/job_runner) before the start loop.
+            # It lives INSIDE the shutdown-guarded region because an ainstall()
+            # that fails halfway can still have constructed eager singletons.
+            if self._setup is not None:
+                await self._setup()
+
+            # Start in registration order
+            for component in self._components:
+                try:
+                    await component.start()
+                    started.append(component)
+                    _logger.info("VarcoLifespan: started %s", type(component).__name__)
+                except Exception as exc:
+                    _logger.error(
+                        "VarcoLifespan: failed to start %s: %s",
+                        type(component).__name__,
+                        exc,
+                        exc_info=True,
+                    )
+                    # Stop already-started components before re-raising
+                    await self._stop_all(started)
+                    raise
+
+            try:
+                yield  # FastAPI handles requests here
+            finally:
+                # Stop in reverse order (LIFO)
+                await self._stop_all(list(reversed(started)))
         finally:
-            # Stop in reverse order (LIFO)
-            await self._stop_all(list(reversed(started)))
+            # Container sweep LAST — §D-8a2(b).  _stop_all() owns the documented
+            # dependency ordering; ashutdown() only mops up what it did not reach.
+            await self._run_shutdown_hook()
+
+    async def _run_shutdown_hook(self) -> None:
+        """
+        Await the optional ``shutdown=`` hook, containing every failure.
+
+        Returns:
+            None.
+
+        Raises:
+            Nothing — this is the whole point.  Raising out of an
+            ``asynccontextmanager``'s ``finally`` during ASGI shutdown produces
+            an unactionable traceback that can mask the real cause, and would
+            leave this class with two teardown paths having opposite failure
+            semantics (``_stop_all()`` already logs and continues).
+
+        Edge cases:
+            - No hook supplied → no-op, and nothing is logged.
+            - providify's aggregated ``ShutdownError`` → one ERROR line per
+              ``ShutdownFailure``, naming the owner and its exception, never a
+              single opaque line (§D-8a2(c)'s mitigation for "a genuine teardown
+              bug is now only visible in logs").
+            - Any other exception (the container itself blew up) → one ERROR
+              line, also contained.
+
+        Async safety:  ✅ awaited exactly once per lifespan cycle.
+        """
+        if self._shutdown is None:
+            return
+        try:
+            await self._shutdown()
+        except ShutdownError as exc:
+            # Enumerate, never aggregate: exc.failures is the only place the
+            # per-component owner survives, and str(exc) is not machine-parsable.
+            for failure in exc.failures:
+                _logger.error(
+                    "VarcoLifespan: container teardown failed for %s: %s",
+                    failure.owner,
+                    failure.exception,
+                    exc_info=failure.exception,
+                )
+        except Exception as exc:  # noqa: BLE001
+            _logger.error(
+                "VarcoLifespan: container shutdown hook failed: %s",
+                exc,
+                exc_info=True,
+            )
 
     async def _stop_all(self, components: list[Any]) -> None:
         """Stop all components, logging errors but not raising."""

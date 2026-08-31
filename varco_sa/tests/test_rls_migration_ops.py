@@ -3,7 +3,7 @@ Failing tests for varco_sa.migration.ops.rls_upgrade / rls_downgrade
 (Plan 006, Phase 6, step 57).
 
 ``rls_upgrade`` must render the exact same statements as
-``enable_rls_ddl`` does today (the regression guard that the
+``render_rls_ddl`` does today (the regression guard that the
 ``(SELECT current_setting(..., true))`` InitPlan form is preserved — see
 CLAUDE.md's pitfall table and ``varco_sa/rls.py``'s module docstring).
 """
@@ -14,7 +14,7 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
-from varco_sa.rls import enable_rls_ddl
+from varco_sa.rls import render_rls_ddl
 
 
 class _RecordingOp:
@@ -42,7 +42,7 @@ class _SqliteOp(_RecordingOp):
 async def test_rls_upgrade_renders_same_statements_as_enable_rls_ddl() -> None:
     from varco_sa.migration.ops import rls_upgrade
 
-    expected = enable_rls_ddl("orders")
+    expected = render_rls_ddl("orders")
 
     op = _RecordingOp()
     rls_upgrade(op, "orders")

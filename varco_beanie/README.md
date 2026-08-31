@@ -49,7 +49,7 @@ pip install varco-beanie
 | `repository.py` | `AsyncBeanieRepository` — Motor-backed CRUD + `exists()` + `stream_by_query()` |
 | `uow.py` | `BeanieUnitOfWork` — Motor session lifecycle (optional transactions) |
 | `provider.py` | `BeanieRepositoryProvider` — wires factory + repos + UoW + `init_beanie()` |
-| `bootstrap.py` | `BeanieConfig`, `BeanieFastrestApp` — one-liner app setup |
+| `bootstrap.py` | `BeanieFastrestApp` — one-liner app setup (takes a `BeanieSettings`; `BeanieConfig` is a deprecated alias, removed in 4.0.0) |
 
 ---
 
@@ -59,12 +59,12 @@ pip install varco-beanie
 
 ```python
 from motor.motor_asyncio import AsyncIOMotorClient
-from varco_beanie import BeanieConfig, BeanieFastrestApp
+from varco_beanie import BeanieFastrestApp, BeanieSettings
 
 client = AsyncIOMotorClient("mongodb://localhost:27017")
 
 app = BeanieFastrestApp(
-    BeanieConfig(
+    BeanieSettings(
         motor_client=client,
         db_name="myapp",
         entity_classes=(User, Post),

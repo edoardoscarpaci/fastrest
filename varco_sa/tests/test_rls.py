@@ -2,14 +2,14 @@
 Tests for varco_sa.rls — Postgres RLS DDL helpers (Plan 005, Phase 8, Step 86).
 ==================================================================================
 
-Unit tests (no DB): ``enable_rls_ddl()`` output shape — the non-negotiable
+Unit tests (no DB): ``render_rls_ddl()`` output shape — the non-negotiable
 regression test for the 150x InitPlan cliff (Risks section of
 ``plans/005-upstream-gaps.md``): the literal ``(SELECT `` substring MUST be
 present in the generated ``USING``/``WITH CHECK`` clauses, and the
 ``, true`` (``current_setting``'s missing-ok flag) must be present too.
 
 Integration tests (``-m integration``, real Postgres via testcontainers):
-with the policy applied via ``enable_rls_ddl()``, a session that never calls
+with the policy applied via ``render_rls_ddl()``, a session that never calls
 ``set_tenant_local()`` sees zero rows; after ``set_tenant_local(t)`` it sees
 exactly tenant ``t``'s rows; the setting does not survive the transaction.
 """
@@ -21,12 +21,12 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from varco_sa.rls import enable_rls_ddl, set_tenant_local
+from varco_sa.rls import render_rls_ddl, set_tenant_local
 
 from tests.conftest import provision_rls_app_url
 
 # ════════════════════════════════════════════════════════════════════════════════
-# Unit tests — enable_rls_ddl() output shape (no DB required)
+# Unit tests — render_rls_ddl() output shape (no DB required)
 # ════════════════════════════════════════════════════════════════════════════════
 
 
@@ -38,7 +38,7 @@ class TestEnableRlsDdlInitPlanForm:
         index-usage InitPlan optimisation. Every generated clause referencing
         ``current_setting`` MUST wrap it in ``(SELECT ...)``.
         """
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert "(SELECT " in joined
 
@@ -49,58 +49,58 @@ class TestEnableRlsDdlInitPlanForm:
         (returns NULL instead), which is what makes "unset session sees zero
         rows" the failure mode instead of a Postgres exception.
         """
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert ", true)" in joined
 
     def test_default_setting_name(self) -> None:
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert "rls.tenant_id" in joined
 
     def test_custom_setting_name(self) -> None:
-        ddl = enable_rls_ddl("orders", setting="rls.custom_tenant")
+        ddl = render_rls_ddl("orders", setting="rls.custom_tenant")
         joined = "\n".join(ddl)
         assert "rls.custom_tenant" in joined
         assert "rls.tenant_id" not in joined
 
     def test_default_tenant_column(self) -> None:
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert "tenant_id = " in joined
 
     def test_custom_tenant_column(self) -> None:
-        ddl = enable_rls_ddl("orders", tenant_column="org_id")
+        ddl = render_rls_ddl("orders", tenant_column="org_id")
         joined = "\n".join(ddl)
         assert "org_id = " in joined
         assert "tenant_id = " not in joined
 
     def test_enables_and_forces_row_level_security(self) -> None:
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert "ENABLE ROW LEVEL SECURITY" in joined
         assert "FORCE ROW LEVEL SECURITY" in joined
 
     def test_creates_policy_with_using_and_with_check(self) -> None:
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert "CREATE POLICY" in joined
         assert "USING (" in joined
         assert "WITH CHECK (" in joined
 
     def test_default_policy_name(self) -> None:
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         joined = "\n".join(ddl)
         assert "orders_tenant_isolation" in joined
 
     def test_custom_policy_name(self) -> None:
-        ddl = enable_rls_ddl("orders", policy_name="my_custom_policy")
+        ddl = render_rls_ddl("orders", policy_name="my_custom_policy")
         joined = "\n".join(ddl)
         assert "my_custom_policy" in joined
         assert "orders_tenant_isolation" not in joined
 
     def test_no_io_returns_plain_list_of_strings(self) -> None:
-        ddl = enable_rls_ddl("orders")
+        ddl = render_rls_ddl("orders")
         assert isinstance(ddl, list)
         assert all(isinstance(stmt, str) for stmt in ddl)
         assert len(ddl) == 3
@@ -149,7 +149,7 @@ async def rls_protected_table(engine):
     superusers/table owners unless FORCE is applied — testcontainers' default
     role IS the table owner, so FORCE ROW LEVEL SECURITY is what makes this
     fixture meaningful), inserts two tenants' rows, and applies the RLS
-    policy via ``enable_rls_ddl()``.
+    policy via ``render_rls_ddl()``.
     """
     import sqlalchemy as sa
 
@@ -171,7 +171,7 @@ async def rls_protected_table(engine):
             sa.text(f"INSERT INTO {table} (tenant_id, value) VALUES (:t, 'b-row')"),
             {"t": tenant_b},
         )
-        for stmt in enable_rls_ddl(table):
+        for stmt in render_rls_ddl(table):
             await conn.execute(sa.text(stmt))
 
     yield table, tenant_a, tenant_b

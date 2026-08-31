@@ -30,7 +30,12 @@ async def test_client_per_tenant_mode_closes_on_eviction() -> None:
     closed = []
 
     def _client_factory(tenant_id: str):
-        client = type("C", (), {"close": lambda self: closed.append(tenant_id)})()
+        # close() is async, mirroring the real pymongo AsyncMongoClient — a
+        # sync fake here previously hid an un-awaited close() in _close().
+        async def _close(self):
+            closed.append(tenant_id)
+
+        client = type("C", (), {"close": _close})()
         return client
 
     pool = BeanieTenantPool(client_factory=_client_factory, client_per_tenant=True, max_entries=1)

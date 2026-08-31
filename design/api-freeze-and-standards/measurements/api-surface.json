@@ -1,0 +1,1993 @@
+{
+  "packages": {
+    "varco_beanie": {
+      "AsyncBeanieRepository": {
+        "kind": "class",
+        "module": "varco_beanie.repository"
+      },
+      "BeanieAggregationApplicator": {
+        "kind": "class",
+        "module": "varco_beanie.query.aggregation"
+      },
+      "BeanieConversationStore": {
+        "kind": "class",
+        "module": "varco_beanie.conversation"
+      },
+      "BeanieDeadLetterQueue": {
+        "kind": "class",
+        "module": "varco_beanie.dlq"
+      },
+      "BeanieDeduplicator": {
+        "kind": "class",
+        "module": "varco_beanie.deduplication"
+      },
+      "BeanieDocRegistry": {
+        "kind": "class",
+        "module": "varco_beanie.factory"
+      },
+      "BeanieFastrestApp": {
+        "kind": "class",
+        "module": "varco_beanie.bootstrap"
+      },
+      "BeanieHealthCheck": {
+        "kind": "class",
+        "module": "varco_beanie.health"
+      },
+      "BeanieInboxRepository": {
+        "kind": "class",
+        "module": "varco_beanie.inbox"
+      },
+      "BeanieIndexGuard": {
+        "kind": "class",
+        "module": "varco_beanie.index_guard"
+      },
+      "BeanieJobStore": {
+        "kind": "class",
+        "module": "varco_beanie.job_store"
+      },
+      "BeanieMigrator": {
+        "kind": "class",
+        "module": "varco_beanie.migration.migrator"
+      },
+      "BeanieModelFactory": {
+        "kind": "class",
+        "module": "varco_beanie.factory"
+      },
+      "BeanieModule": {
+        "kind": "class",
+        "module": "varco_beanie.di"
+      },
+      "BeanieOutboxRepository": {
+        "kind": "class",
+        "module": "varco_beanie.outbox"
+      },
+      "BeanieRepositoryProvider": {
+        "kind": "class",
+        "module": "varco_beanie.provider"
+      },
+      "BeanieSagaRepository": {
+        "kind": "class",
+        "module": "varco_beanie.saga"
+      },
+      "BeanieSettings": {
+        "kind": "class",
+        "module": "varco_beanie.config"
+      },
+      "BeanieUnitOfWork": {
+        "kind": "class",
+        "module": "varco_beanie.uow"
+      },
+      "ConversationTurnDocument": {
+        "kind": "class",
+        "module": "varco_beanie.conversation"
+      },
+      "DeadLetterDocument": {
+        "kind": "class",
+        "module": "varco_beanie.dlq"
+      },
+      "DeduplicationDocument": {
+        "kind": "class",
+        "module": "varco_beanie.deduplication"
+      },
+      "InboxDocument": {
+        "kind": "class",
+        "module": "varco_beanie.inbox"
+      },
+      "IndexDrift": {
+        "kind": "class",
+        "module": "varco_beanie.index_guard"
+      },
+      "IndexDriftReport": {
+        "kind": "class",
+        "module": "varco_beanie.index_guard"
+      },
+      "IndexReconciler": {
+        "kind": "class",
+        "module": "varco_beanie.migration.indexes"
+      },
+      "JobDocument": {
+        "kind": "class",
+        "module": "varco_beanie.job_store"
+      },
+      "Migration": {
+        "kind": "class",
+        "module": "varco_beanie.migration.base"
+      },
+      "MigrationRegistry": {
+        "kind": "class",
+        "module": "varco_beanie.migration.base"
+      },
+      "OutboxDocument": {
+        "kind": "class",
+        "module": "varco_beanie.outbox"
+      },
+      "SagaDocument": {
+        "kind": "class",
+        "module": "varco_beanie.saga"
+      },
+      "bind_repositories": {
+        "kind": "function",
+        "module": "varco_beanie.di",
+        "signature": "(container: 'DIContainer', *entity_classes: 'type[DomainModel]') -> 'None'"
+      }
+    },
+    "varco_casbin": {
+      "BeanieAdapter": {
+        "kind": "class",
+        "module": "varco_casbin.beanie_adapter"
+      },
+      "CasbinPolicyEngine": {
+        "kind": "class",
+        "module": "varco_casbin.engine"
+      },
+      "CasbinRuleDocument": {
+        "kind": "class",
+        "module": "varco_casbin.beanie_adapter"
+      },
+      "CasbinSettings": {
+        "kind": "class",
+        "module": "varco_casbin.config"
+      },
+      "build_adapter": {
+        "kind": "function",
+        "module": "varco_casbin.adapter",
+        "signature": "(settings: 'CasbinSettings') -> 'Any | None'"
+      },
+      "build_policy_router": {
+        "kind": "function",
+        "module": "varco_casbin.router",
+        "signature": "(backend: 'PolicyManagement', *, server_auth: 'AbstractServerAuth', admin_role: 'str' = 'admin', prefix: 'str' = '/authz', tags: 'list[str] | None' = None) -> 'APIRouter'"
+      }
+    },
+    "varco_core": {
+      "AbstractDeadLetterQueue": {
+        "kind": "class",
+        "module": "varco_core.event.dlq"
+      },
+      "AbstractEventBus": {
+        "kind": "class",
+        "module": "varco_core.event.base"
+      },
+      "AbstractEventProducer": {
+        "kind": "class",
+        "module": "varco_core.event.producer"
+      },
+      "AbstractJobRunner": {
+        "kind": "class",
+        "module": "varco_core.job.base"
+      },
+      "AbstractJobStore": {
+        "kind": "class",
+        "module": "varco_core.job.base"
+      },
+      "AbstractMapper": {
+        "kind": "class",
+        "module": "varco_core.mapper"
+      },
+      "AbstractMigrator": {
+        "kind": "class",
+        "module": "varco_core.migration.base"
+      },
+      "AbstractTenantCatalog": {
+        "kind": "class",
+        "module": "varco_core.tenancy.catalog"
+      },
+      "AbstractTenantProvisioner": {
+        "kind": "class",
+        "module": "varco_core.tenancy.provisioner"
+      },
+      "AmbientVar": {
+        "kind": "class",
+        "module": "varco_core.context.ambient"
+      },
+      "AnyErrorCode": {
+        "kind": "constant",
+        "module": "varco_core.exception.http"
+      },
+      "Assembler": {
+        "kind": "constant",
+        "module": "varco_core.service.types"
+      },
+      "AsyncCache": {
+        "kind": "class",
+        "module": "varco_core.cache.base"
+      },
+      "AsyncRepository": {
+        "kind": "class",
+        "module": "varco_core.repository"
+      },
+      "AsyncUnitOfWork": {
+        "kind": "class",
+        "module": "varco_core.uow"
+      },
+      "AuditedDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "AuthorityError": {
+        "kind": "class",
+        "module": "varco_core.authority.exceptions"
+      },
+      "AuthoritySource": {
+        "kind": "class",
+        "module": "varco_core.authority.sources.authority"
+      },
+      "AuthorizationConfig": {
+        "kind": "class",
+        "module": "varco_core.authority.config"
+      },
+      "BasicAuthConfig": {
+        "kind": "class",
+        "module": "varco_core.connection.auth"
+      },
+      "BusEventProducer": {
+        "kind": "class",
+        "module": "varco_core.event.producer"
+      },
+      "CHANNEL_ALL": {
+        "kind": "constant",
+        "module": "varco_core.event"
+      },
+      "CHANNEL_DEFAULT": {
+        "kind": "constant",
+        "module": "varco_core.event"
+      },
+      "CacheBackend": {
+        "kind": "class",
+        "module": "varco_core.cache.base"
+      },
+      "CacheInvalidated": {
+        "kind": "class",
+        "module": "varco_core.cache.service"
+      },
+      "CacheInvalidationConsumer": {
+        "kind": "class",
+        "module": "varco_core.cache.consumer"
+      },
+      "CacheInvalidationEvent": {
+        "kind": "class",
+        "module": "varco_core.cache.service"
+      },
+      "CacheServiceMixin": {
+        "kind": "class",
+        "module": "varco_core.cache.mixin"
+      },
+      "CacheSettings": {
+        "kind": "class",
+        "module": "varco_core.cache.config"
+      },
+      "CachedService": {
+        "kind": "class",
+        "module": "varco_core.cache.service"
+      },
+      "CallTimeoutError": {
+        "kind": "class",
+        "module": "varco_core.resilience.timeout"
+      },
+      "CanonicalClaim": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.mapping"
+      },
+      "ChannelManager": {
+        "kind": "class",
+        "module": "varco_core.event.channel"
+      },
+      "CircuitBreaker": {
+        "kind": "class",
+        "module": "varco_core.resilience.circuit_breaker"
+      },
+      "CircuitBreakerConfig": {
+        "kind": "class",
+        "module": "varco_core.resilience.circuit_breaker"
+      },
+      "CircuitOpenError": {
+        "kind": "class",
+        "module": "varco_core.resilience.circuit_breaker"
+      },
+      "CircuitState": {
+        "kind": "class",
+        "module": "varco_core.resilience.circuit_breaker"
+      },
+      "ClaimMapping": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.mapping"
+      },
+      "ClaimPath": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.path"
+      },
+      "ClaimRule": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.mapping"
+      },
+      "ClaimTransformError": {
+        "kind": "class",
+        "module": "varco_core.jwt.exceptions"
+      },
+      "ClaimTransformer": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.protocol"
+      },
+      "CompositeHealthCheck": {
+        "kind": "class",
+        "module": "varco_core.health"
+      },
+      "CompositeStrategy": {
+        "kind": "class",
+        "module": "varco_core.cache.invalidation"
+      },
+      "CompositeValidator": {
+        "kind": "class",
+        "module": "varco_core.validation"
+      },
+      "ConnectionSettings": {
+        "kind": "class",
+        "module": "varco_core.connection.base"
+      },
+      "CorrelationIdFilter": {
+        "kind": "class",
+        "module": "varco_core.tracing"
+      },
+      "CounterConfig": {
+        "kind": "class",
+        "module": "varco_core.observability.metrics"
+      },
+      "CreateDTO": {
+        "kind": "class",
+        "module": "varco_core.dto.base"
+      },
+      "DTOSet": {
+        "kind": "class",
+        "module": "varco_core.dto.factory"
+      },
+      "DeadLetterEntry": {
+        "kind": "class",
+        "module": "varco_core.event.dlq"
+      },
+      "DestructiveOperationRefused": {
+        "kind": "class",
+        "module": "varco_core.tenancy.provisioner"
+      },
+      "DomainMigrator": {
+        "kind": "class",
+        "module": "varco_core.migrator"
+      },
+      "DomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "DomainModelRegistry": {
+        "kind": "class",
+        "module": "varco_core.registry"
+      },
+      "DomainModelValidator": {
+        "kind": "class",
+        "module": "varco_core.validation"
+      },
+      "DynamicTenantUoWProvider": {
+        "kind": "class",
+        "module": "varco_core.tenancy.provider"
+      },
+      "EntityCreatedEvent": {
+        "kind": "class",
+        "module": "varco_core.event.domain"
+      },
+      "EntityDeletedEvent": {
+        "kind": "class",
+        "module": "varco_core.event.domain"
+      },
+      "EntityEvent": {
+        "kind": "class",
+        "module": "varco_core.event.domain"
+      },
+      "EntityUpdatedEvent": {
+        "kind": "class",
+        "module": "varco_core.event.domain"
+      },
+      "ErrorCode": {
+        "kind": "class",
+        "module": "varco_core.exception.codes"
+      },
+      "ErrorEnvelopeSettings": {
+        "kind": "class",
+        "module": "varco_core.exception.settings"
+      },
+      "ErrorMessage": {
+        "kind": "class",
+        "module": "varco_core.exception.http"
+      },
+      "ErrorPolicy": {
+        "kind": "class",
+        "module": "varco_core.event.base"
+      },
+      "Event": {
+        "kind": "class",
+        "module": "varco_core.event.base"
+      },
+      "EventBusSettings": {
+        "kind": "class",
+        "module": "varco_core.event.config"
+      },
+      "EventConsumer": {
+        "kind": "class",
+        "module": "varco_core.event.consumer"
+      },
+      "EventMiddleware": {
+        "kind": "class",
+        "module": "varco_core.event.base"
+      },
+      "ExplicitStrategy": {
+        "kind": "class",
+        "module": "varco_core.cache.invalidation"
+      },
+      "ExternalTenantProvisioner": {
+        "kind": "class",
+        "module": "varco_core.tenancy.provisioner"
+      },
+      "FastrestErrorCodes": {
+        "kind": "class",
+        "module": "varco_core.exception.codes"
+      },
+      "FieldError": {
+        "kind": "class",
+        "module": "varco_core.exception.http"
+      },
+      "GrantBasedAuthorizer": {
+        "kind": "class",
+        "module": "varco_core.auth.helpers"
+      },
+      "HealthCheck": {
+        "kind": "class",
+        "module": "varco_core.health"
+      },
+      "HealthResult": {
+        "kind": "class",
+        "module": "varco_core.health"
+      },
+      "HealthStatus": {
+        "kind": "class",
+        "module": "varco_core.health"
+      },
+      "HistogramConfig": {
+        "kind": "class",
+        "module": "varco_core.observability.metrics"
+      },
+      "IDENTITY": {
+        "kind": "constant",
+        "module": "varco_core.jwt.transform.protocol"
+      },
+      "IdentityClaimTransformer": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.protocol"
+      },
+      "InMemoryCache": {
+        "kind": "class",
+        "module": "varco_core.cache.memory"
+      },
+      "InMemoryDeadLetterQueue": {
+        "kind": "class",
+        "module": "varco_core.event.dlq"
+      },
+      "InMemoryEventBus": {
+        "kind": "class",
+        "module": "varco_core.event.memory"
+      },
+      "InMemoryMigrator": {
+        "kind": "class",
+        "module": "varco_core.migration.inmemory"
+      },
+      "InvalidationStrategy": {
+        "kind": "class",
+        "module": "varco_core.cache.base"
+      },
+      "IrreversibleMigrationError": {
+        "kind": "class",
+        "module": "varco_core.migration.errors"
+      },
+      "IssuerNotFoundError": {
+        "kind": "class",
+        "module": "varco_core.authority.exceptions"
+      },
+      "Job": {
+        "kind": "class",
+        "module": "varco_core.job.base"
+      },
+      "JobStatus": {
+        "kind": "class",
+        "module": "varco_core.job.base"
+      },
+      "JsonEventSerializer": {
+        "kind": "class",
+        "module": "varco_core.event.serializer"
+      },
+      "JsonSerializer": {
+        "kind": "class",
+        "module": "varco_core.serialization"
+      },
+      "JsonWebKey": {
+        "kind": "class",
+        "module": "varco_core.jwk.model"
+      },
+      "JsonWebKeySet": {
+        "kind": "class",
+        "module": "varco_core.jwk.model"
+      },
+      "JsonWebToken": {
+        "kind": "class",
+        "module": "varco_core.jwt.model"
+      },
+      "JwkBuilder": {
+        "kind": "class",
+        "module": "varco_core.jwk.builder"
+      },
+      "JwtAuthority": {
+        "kind": "class",
+        "module": "varco_core.authority.jwt_authority"
+      },
+      "JwtBuilder": {
+        "kind": "class",
+        "module": "varco_core.jwt.builder"
+      },
+      "JwtException": {
+        "kind": "class",
+        "module": "varco_core.jwt.exceptions"
+      },
+      "JwtParser": {
+        "kind": "class",
+        "module": "varco_core.jwt.parser"
+      },
+      "JwtUtil": {
+        "kind": "class",
+        "module": "varco_core.jwt.util"
+      },
+      "JwtVerificationSettings": {
+        "kind": "class",
+        "module": "varco_core.jwt.config"
+      },
+      "KeyLoadError": {
+        "kind": "class",
+        "module": "varco_core.authority.exceptions"
+      },
+      "LayeredCache": {
+        "kind": "class",
+        "module": "varco_core.cache.layered"
+      },
+      "MappingClaimTransformer": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.mapper"
+      },
+      "MessageResolver": {
+        "kind": "constant",
+        "module": "collections.abc"
+      },
+      "Metric": {
+        "kind": "class",
+        "module": "varco_core.observability.metric"
+      },
+      "MetricKind": {
+        "kind": "constant",
+        "module": "varco_core.observability.metric"
+      },
+      "MigrationBackendUnavailable": {
+        "kind": "class",
+        "module": "varco_core.migration.errors"
+      },
+      "MigrationError": {
+        "kind": "class",
+        "module": "varco_core.migrator"
+      },
+      "MigrationLockTimeout": {
+        "kind": "class",
+        "module": "varco_core.migration.errors"
+      },
+      "MigrationReport": {
+        "kind": "class",
+        "module": "varco_core.migration.base"
+      },
+      "MigrationSettings": {
+        "kind": "class",
+        "module": "varco_core.migration.settings"
+      },
+      "MultiKeyAuthority": {
+        "kind": "class",
+        "module": "varco_core.authority.multi_key_authority"
+      },
+      "NoOpCache": {
+        "kind": "class",
+        "module": "varco_core.cache.memory"
+      },
+      "NoOpSerializer": {
+        "kind": "class",
+        "module": "varco_core.serialization"
+      },
+      "NoopEventProducer": {
+        "kind": "class",
+        "module": "varco_core.event.producer"
+      },
+      "NullTenantDefaults": {
+        "kind": "class",
+        "module": "varco_core.context.defaults"
+      },
+      "OAuth2Config": {
+        "kind": "class",
+        "module": "varco_core.connection.auth"
+      },
+      "Operation": {
+        "kind": "class",
+        "module": "varco_core.query.type"
+      },
+      "OtelConfig": {
+        "kind": "class",
+        "module": "varco_core.observability.config"
+      },
+      "OtelConfiguration": {
+        "kind": "class",
+        "module": "varco_core.observability.di"
+      },
+      "OwnershipAuthorizer": {
+        "kind": "class",
+        "module": "varco_core.auth.helpers"
+      },
+      "PROFILE_METADATA_KEY": {
+        "kind": "constant",
+        "module": "varco_core.jwt"
+      },
+      "PageCursor": {
+        "kind": "class",
+        "module": "varco_core.dto.pagination"
+      },
+      "PagedReadDTO": {
+        "kind": "class",
+        "module": "varco_core.dto.pagination"
+      },
+      "PendingMigrationsError": {
+        "kind": "class",
+        "module": "varco_core.migration.errors"
+      },
+      "QueryBuilder": {
+        "kind": "class",
+        "module": "varco_core.query.builder"
+      },
+      "QueryParams": {
+        "kind": "class",
+        "module": "varco_core.query.params"
+      },
+      "QueryParser": {
+        "kind": "class",
+        "module": "varco_core.query.parser"
+      },
+      "ReadDTO": {
+        "kind": "class",
+        "module": "varco_core.dto.base"
+      },
+      "RepositoryProvider": {
+        "kind": "class",
+        "module": "varco_core.providers"
+      },
+      "RequestContext": {
+        "kind": "class",
+        "module": "varco_core.context.request"
+      },
+      "Resolved": {
+        "kind": "class",
+        "module": "varco_core.context.precedence"
+      },
+      "RetryExhaustedError": {
+        "kind": "class",
+        "module": "varco_core.resilience.retry"
+      },
+      "RetryPolicy": {
+        "kind": "class",
+        "module": "varco_core.resilience.retry"
+      },
+      "Revision": {
+        "kind": "class",
+        "module": "varco_core.migration.base"
+      },
+      "RoleBasedAuthorizer": {
+        "kind": "class",
+        "module": "varco_core.auth.helpers"
+      },
+      "SSLConfig": {
+        "kind": "class",
+        "module": "varco_core.connection.ssl"
+      },
+      "SYSTEM_ISSUER": {
+        "kind": "constant",
+        "module": "varco_core.jwt"
+      },
+      "SaslConfig": {
+        "kind": "class",
+        "module": "varco_core.connection.auth"
+      },
+      "SchemaMigrationError": {
+        "kind": "class",
+        "module": "varco_core.migration.errors"
+      },
+      "SchemaMigrationPlan": {
+        "kind": "class",
+        "module": "varco_core.migration.base"
+      },
+      "Serializer": {
+        "kind": "class",
+        "module": "varco_core.serialization"
+      },
+      "ServiceProtocol": {
+        "kind": "class",
+        "module": "varco_core.service.types"
+      },
+      "SoftDeleteAuditedDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "SoftDeleteDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "SoftDeleteMixin": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "SoftDeleteService": {
+        "kind": "class",
+        "module": "varco_core.service.soft_delete"
+      },
+      "SortCursorField": {
+        "kind": "class",
+        "module": "varco_core.dto.pagination"
+      },
+      "SortField": {
+        "kind": "class",
+        "module": "varco_core.query.type"
+      },
+      "SortOrder": {
+        "kind": "class",
+        "module": "varco_core.query.type"
+      },
+      "SpanConfig": {
+        "kind": "class",
+        "module": "varco_core.observability.span"
+      },
+      "StaleEntityError": {
+        "kind": "class",
+        "module": "varco_core.exception.repository"
+      },
+      "StaticTenantCatalog": {
+        "kind": "class",
+        "module": "varco_core.tenancy.catalog"
+      },
+      "StaticTenantDefaults": {
+        "kind": "class",
+        "module": "varco_core.context.defaults"
+      },
+      "Subscription": {
+        "kind": "class",
+        "module": "varco_core.event.base"
+      },
+      "TCreateDTO": {
+        "kind": "constant",
+        "module": "varco_core.dto.base"
+      },
+      "TReadDTO": {
+        "kind": "constant",
+        "module": "varco_core.dto.base"
+      },
+      "TTLStrategy": {
+        "kind": "class",
+        "module": "varco_core.cache.invalidation"
+      },
+      "TUpdateDTO": {
+        "kind": "constant",
+        "module": "varco_core.dto.base"
+      },
+      "TaggedStrategy": {
+        "kind": "class",
+        "module": "varco_core.cache.invalidation"
+      },
+      "TenancySettings": {
+        "kind": "class",
+        "module": "varco_core.tenancy.settings"
+      },
+      "TenantAuditedDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "TenantAwareService": {
+        "kind": "class",
+        "module": "varco_core.service.tenant"
+      },
+      "TenantDefaultsProvider": {
+        "kind": "class",
+        "module": "varco_core.context.defaults"
+      },
+      "TenantDescriptor": {
+        "kind": "class",
+        "module": "varco_core.tenancy.catalog"
+      },
+      "TenantDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "TenantIsolation": {
+        "kind": "class",
+        "module": "varco_core.tenancy.settings"
+      },
+      "TenantIsolationError": {
+        "kind": "class",
+        "module": "varco_core.tenancy.catalog"
+      },
+      "TenantLocalizationDefaults": {
+        "kind": "class",
+        "module": "varco_core.context.defaults"
+      },
+      "TenantMixin": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "TenantNotFoundError": {
+        "kind": "class",
+        "module": "varco_core.tenancy.catalog"
+      },
+      "TenantResourcePool": {
+        "kind": "class",
+        "module": "varco_core.tenancy.pool"
+      },
+      "TenantScope": {
+        "kind": "class",
+        "module": "varco_core.tenancy.settings"
+      },
+      "TenantStatus": {
+        "kind": "class",
+        "module": "varco_core.tenancy.settings"
+      },
+      "TenantUoWProvider": {
+        "kind": "class",
+        "module": "varco_core.service.tenant"
+      },
+      "TenantVersionedDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "TokenProfile": {
+        "kind": "class",
+        "module": "varco_core.jwt.profile"
+      },
+      "TokenProfileError": {
+        "kind": "class",
+        "module": "varco_core.jwt.exceptions"
+      },
+      "TokenProfileRegistry": {
+        "kind": "class",
+        "module": "varco_core.jwt.profile"
+      },
+      "TracingServiceMixin": {
+        "kind": "class",
+        "module": "varco_core.observability.mixin"
+      },
+      "TrustedIssuerEntry": {
+        "kind": "class",
+        "module": "varco_core.authority.registry"
+      },
+      "TrustedIssuerRegistry": {
+        "kind": "class",
+        "module": "varco_core.authority.registry"
+      },
+      "UnknownKidError": {
+        "kind": "class",
+        "module": "varco_core.authority.exceptions"
+      },
+      "UpdateDTO": {
+        "kind": "class",
+        "module": "varco_core.dto.base"
+      },
+      "UpdateOperation": {
+        "kind": "class",
+        "module": "varco_core.dto.base"
+      },
+      "VALID": {
+        "kind": "constant",
+        "module": "varco_core.validation"
+      },
+      "ValidationError": {
+        "kind": "class",
+        "module": "varco_core.validation"
+      },
+      "ValidationResult": {
+        "kind": "class",
+        "module": "varco_core.validation"
+      },
+      "Validator": {
+        "kind": "class",
+        "module": "varco_core.validation"
+      },
+      "ValidatorServiceMixin": {
+        "kind": "class",
+        "module": "varco_core.service.validation"
+      },
+      "ValueShape": {
+        "kind": "class",
+        "module": "varco_core.jwt.transform.shape"
+      },
+      "VarcoErrorCodes": {
+        "kind": "class",
+        "module": "varco_core.exception.codes"
+      },
+      "VarcoSettings": {
+        "kind": "class",
+        "module": "varco_core.config"
+      },
+      "VersionedDomainModel": {
+        "kind": "class",
+        "module": "varco_core.model"
+      },
+      "auth_context_from_snapshot": {
+        "kind": "function",
+        "module": "varco_core.job.base",
+        "signature": "(snapshot: 'dict[str, Any]') -> 'AuthContext'"
+      },
+      "auth_context_to_snapshot": {
+        "kind": "function",
+        "module": "varco_core.job.base",
+        "signature": "(ctx: 'AuthContext') -> 'dict[str, Any]'"
+      },
+      "cached": {
+        "kind": "function",
+        "module": "varco_core.cache.decorator",
+        "signature": "(cache: 'CacheBackend | Callable[..., CacheBackend]', *, key: 'str | Callable[..., str] | None' = None, ttl: 'float | None' = None, namespace: 'str' = '', policy: 'CachePolicy | None' = None, singleflight: 'bool' = False) -> 'Callable[[F], F]'"
+      },
+      "cast_raw": {
+        "kind": "function",
+        "module": "varco_core.model",
+        "signature": "(entity: 'DomainModel', orm_type: 'type[OT]') -> 'OT'"
+      },
+      "circuit_breaker": {
+        "kind": "function",
+        "module": "varco_core.resilience.circuit_breaker",
+        "signature": "(config: 'CircuitBreakerConfig', *, name: 'str | None' = None) -> 'Callable[..., Any]'"
+      },
+      "configure_claim_transforms": {
+        "kind": "function",
+        "module": "varco_core.jwt.transform.runtime",
+        "signature": "(registry: 'ClaimTransformerRegistry | None' = None) -> 'None'"
+      },
+      "configure_token_profiles": {
+        "kind": "function",
+        "module": "varco_core.jwt.profile",
+        "signature": "(registry: 'TokenProfileRegistry | None' = None) -> 'None'"
+      },
+      "correlation_context": {
+        "kind": "function",
+        "module": "varco_core.tracing",
+        "signature": "(correlation_id: 'str') -> 'AsyncIterator[str]'"
+      },
+      "counter": {
+        "kind": "function",
+        "module": "varco_core.observability.metrics",
+        "signature": "(cfg: 'CounterConfig') -> 'Callable[[_F], _F]'"
+      },
+      "create_counter": {
+        "kind": "function",
+        "module": "varco_core.observability.helpers",
+        "signature": "(name: 'str', *, meter_name: 'str' = 'varco', description: 'str' = '', unit: 'str' = '1') -> 'Any'"
+      },
+      "create_histogram": {
+        "kind": "function",
+        "module": "varco_core.observability.helpers",
+        "signature": "(name: 'str', *, meter_name: 'str' = 'varco', description: 'str' = '', unit: 'str' = 's') -> 'Any'"
+      },
+      "create_span": {
+        "kind": "function",
+        "module": "varco_core.observability.helpers",
+        "signature": "(name: 'str', *, tracer_name: 'str' = 'varco', attributes: 'dict[str, str] | None' = None, record_exception: 'bool' = True, set_status_on_error: 'bool' = True, params: 'Mapping[str, Any] | None' = None) -> 'Generator[Span, None, None]'"
+      },
+      "current_correlation_id": {
+        "kind": "function",
+        "module": "varco_core.tracing",
+        "signature": "() -> 'str | None'"
+      },
+      "current_locale": {
+        "kind": "function",
+        "module": "varco_core.context.request",
+        "signature": "() -> 'str | None'"
+      },
+      "current_request_context": {
+        "kind": "function",
+        "module": "varco_core.context.request",
+        "signature": "() -> 'RequestContext'"
+      },
+      "current_tenant": {
+        "kind": "function",
+        "module": "varco_core.service.tenant",
+        "signature": "() -> 'str | None'"
+      },
+      "current_timezone": {
+        "kind": "function",
+        "module": "varco_core.context.request",
+        "signature": "() -> 'ZoneInfo | None'"
+      },
+      "deprecated": {
+        "kind": "function",
+        "module": "varco_core.deprecation",
+        "signature": "(*, since: 'str', removed_in: 'str', replacement: 'str | None' = None, name: 'str | None' = None) -> 'Callable[[_T], _T]'"
+      },
+      "deprecated_alias": {
+        "kind": "function",
+        "module": "varco_core.deprecation",
+        "signature": "(name: 'str', target: 'object', *, since: 'str', removed_in: 'str', fallback: 'Callable[[str], object] | None' = None) -> 'Callable[[str], object]'"
+      },
+      "error_code_for": {
+        "kind": "function",
+        "module": "varco_core.exception.http",
+        "signature": "(exc: 'ServiceException') -> 'AnyErrorCode'"
+      },
+      "error_message_for": {
+        "kind": "function",
+        "module": "varco_core.exception.http",
+        "signature": "(exc: 'ServiceException', *, translator: 'Callable[[str], str] | None' = None, message_resolver: 'MessageResolver | None' = None, envelope_settings: 'ErrorEnvelopeSettings | None' = None) -> 'ErrorMessage'"
+      },
+      "generate_correlation_id": {
+        "kind": "function",
+        "module": "varco_core.tracing",
+        "signature": "() -> 'str'"
+      },
+      "generate_dtos": {
+        "kind": "function",
+        "module": "varco_core.dto.factory",
+        "signature": "(domain_cls: 'type') -> 'DTOSet'"
+      },
+      "histogram": {
+        "kind": "function",
+        "module": "varco_core.observability.metrics",
+        "signature": "(cfg: 'HistogramConfig') -> 'Callable[[_F], _F]'"
+      },
+      "listen": {
+        "kind": "function",
+        "module": "varco_core.event.consumer",
+        "signature": "(*event_types: 'type[Event] | str', channel: 'str | Callable[[Any], str]' = '*', filter: 'Callable[[Event], bool] | None' = None, priority: 'int' = 0, retry_policy: 'RetryPolicy | None' = <varco_core.event.consumer._Unset object>, dlq: 'AbstractDeadLetterQueue | None' = <varco_core.event.consumer._Unset object>, deduplicator: 'AbstractDeduplicator | None' = None, inbox: 'InboxRepository | None' = None) -> 'Callable[..., Any]'"
+      },
+      "paged_response": {
+        "kind": "function",
+        "module": "varco_core.dto.pagination",
+        "signature": "(results: 'list[T]', *, params: 'QueryParams', total_count: 'int | None' = None, raw_query: 'str | None' = None) -> 'PagedReadDTO[T]'"
+      },
+      "read_claim": {
+        "kind": "function",
+        "module": "varco_core.jwt.transform.path",
+        "signature": "(claims: 'Mapping[str, Any]', spec: 'str', *, default: 'Any' = None, separator: 'str' = '.') -> 'Any'"
+      },
+      "register": {
+        "kind": "function",
+        "module": "varco_core.registry",
+        "signature": "(domain_cls: 'type[D]') -> 'type[D]'"
+      },
+      "register_error_code": {
+        "kind": "function",
+        "module": "varco_core.exception.http",
+        "signature": "(exception_cls: 'type[ServiceException]', error_code: 'ErrorCode') -> 'None'"
+      },
+      "register_gauge": {
+        "kind": "function",
+        "module": "varco_core.observability.metric",
+        "signature": "(name: 'str', callback: 'Any', *, meter_name: 'str' = 'varco', description: 'str' = '', unit: 'str' = '1', static_attributes: 'dict[str, str] | None' = None) -> 'None'"
+      },
+      "request_context": {
+        "kind": "function",
+        "module": "varco_core.context.request",
+        "signature": "(*, locale: 'str | None' = None, timezone: 'ZoneInfo | None' = None, extras: 'Mapping[str, str] | None' = None) -> 'Iterator[RequestContext]'"
+      },
+      "reset_claim_transforms": {
+        "kind": "function",
+        "module": "varco_core.jwt.transform.runtime",
+        "signature": "() -> 'None'"
+      },
+      "reset_token_profiles": {
+        "kind": "function",
+        "module": "varco_core.jwt.profile",
+        "signature": "() -> 'None'"
+      },
+      "resolve_claim_transformer": {
+        "kind": "function",
+        "module": "varco_core.jwt.transform.runtime",
+        "signature": "(iss: 'str | None') -> 'ClaimTransformer'"
+      },
+      "resolve_precedence": {
+        "kind": "function",
+        "module": "varco_core.context.precedence",
+        "signature": "(candidates: 'Sequence[tuple[str, T | None]]') -> 'Resolved[T] | None'"
+      },
+      "resolve_token_profile": {
+        "kind": "function",
+        "module": "varco_core.jwt.profile",
+        "signature": "(token: 'JsonWebToken', *, registry: 'TokenProfileRegistry | None' = None) -> 'JsonWebToken'"
+      },
+      "retry": {
+        "kind": "function",
+        "module": "varco_core.resilience.retry",
+        "signature": "(policy: 'RetryPolicy') -> 'Callable[..., Any]'"
+      },
+      "span": {
+        "kind": "function",
+        "module": "varco_core.observability.span",
+        "signature": "(func: '_F | SpanConfig | None' = None, config: 'SpanConfig | None' = None) -> '_F | Callable[[_F], _F]'"
+      },
+      "tenant_context": {
+        "kind": "function",
+        "module": "varco_core.service.tenant",
+        "signature": "(tenant_id: 'str') -> 'Generator[None, None, None]'"
+      },
+      "timeout": {
+        "kind": "function",
+        "module": "varco_core.resilience.timeout",
+        "signature": "(seconds: 'float') -> 'Callable[..., Any]'"
+      }
+    },
+    "varco_fastapi": {
+      "AbstractClientAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.client_auth"
+      },
+      "AbstractClientMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "AbstractServerAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.server_auth"
+      },
+      "AllRouteMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.presets"
+      },
+      "AnonymousAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.server_auth"
+      },
+      "ApiKeyAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.server_auth"
+      },
+      "AsyncModeParams": {
+        "kind": "class",
+        "module": "varco_fastapi.router.base"
+      },
+      "AsyncVarcoClient": {
+        "kind": "class",
+        "module": "varco_fastapi.client.base"
+      },
+      "AuthForwardMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "CORSConfig": {
+        "kind": "class",
+        "module": "varco_fastapi.middleware.cors"
+      },
+      "CRUDRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.presets"
+      },
+      "ClientConfigurator": {
+        "kind": "class",
+        "module": "varco_fastapi.client.configurator"
+      },
+      "ClientProfile": {
+        "kind": "class",
+        "module": "varco_fastapi.client.base"
+      },
+      "ClientProtocol": {
+        "kind": "class",
+        "module": "varco_fastapi.client.protocol"
+      },
+      "CompositeLifespan": {
+        "kind": "class",
+        "module": "varco_fastapi.composite"
+      },
+      "ConfigurationError": {
+        "kind": "class",
+        "module": "varco_fastapi.validation"
+      },
+      "CorrelationIdMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "CreateMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mixins"
+      },
+      "DeleteMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mixins"
+      },
+      "ErrorMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.middleware.error"
+      },
+      "GenericRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.base"
+      },
+      "HeadersMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "HealthRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.health"
+      },
+      "HttpQueryParams": {
+        "kind": "class",
+        "module": "varco_fastapi.router.base"
+      },
+      "InMemoryJobStore": {
+        "kind": "class",
+        "module": "varco_fastapi.job.store"
+      },
+      "JobAcceptedResponse": {
+        "kind": "class",
+        "module": "varco_fastapi.job.response"
+      },
+      "JobFailedError": {
+        "kind": "class",
+        "module": "varco_fastapi.client.handle"
+      },
+      "JobHandle": {
+        "kind": "class",
+        "module": "varco_fastapi.client.handle"
+      },
+      "JobPoller": {
+        "kind": "class",
+        "module": "varco_fastapi.job.poller"
+      },
+      "JobProgressEvent": {
+        "kind": "class",
+        "module": "varco_fastapi.job.response"
+      },
+      "JobRunner": {
+        "kind": "class",
+        "module": "varco_fastapi.job.runner"
+      },
+      "JobStatusResponse": {
+        "kind": "class",
+        "module": "varco_fastapi.job.response"
+      },
+      "JwtBearerAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.server_auth"
+      },
+      "JwtClientAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.client_auth"
+      },
+      "JwtContext": {
+        "kind": "class",
+        "module": "varco_fastapi.context"
+      },
+      "JwtMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "ListMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mixins"
+      },
+      "LoggingMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "MCPAdapter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mcp"
+      },
+      "MCPAuthMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mcp"
+      },
+      "MCPToolDefinition": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mcp"
+      },
+      "MetricsMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.middleware.metrics"
+      },
+      "MetricsRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.metrics"
+      },
+      "MigrationLifecycle": {
+        "kind": "class",
+        "module": "varco_fastapi.migrate"
+      },
+      "NoDeleteRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.presets"
+      },
+      "OTelClientMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "PagedReadDTO": {
+        "kind": "class",
+        "module": "varco_core.dto.pagination"
+      },
+      "PassthroughAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.server_auth"
+      },
+      "PatchMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mixins"
+      },
+      "PreparedRequest": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "ReadMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mixins"
+      },
+      "ReadOnlyRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.presets"
+      },
+      "RequestContext": {
+        "kind": "class",
+        "module": "varco_fastapi.context"
+      },
+      "RequestContextMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.middleware.request_context"
+      },
+      "RequestLoggingMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.middleware.logging"
+      },
+      "ResolvedRoute": {
+        "kind": "class",
+        "module": "varco_fastapi.router.introspection"
+      },
+      "RetryMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "RouteGuard": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.guard"
+      },
+      "RouterMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.base"
+      },
+      "ServiceMount": {
+        "kind": "class",
+        "module": "varco_fastapi.composite"
+      },
+      "SkillAdapter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.skill"
+      },
+      "SkillDefinition": {
+        "kind": "class",
+        "module": "varco_fastapi.router.a2a.source"
+      },
+      "SyncVarcoClient": {
+        "kind": "class",
+        "module": "varco_fastapi.client.sync"
+      },
+      "TimeoutMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.client.middleware"
+      },
+      "TracingMiddleware": {
+        "kind": "class",
+        "module": "varco_fastapi.middleware.tracing"
+      },
+      "TrustStore": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.trust_store"
+      },
+      "UpdateMixin": {
+        "kind": "class",
+        "module": "varco_fastapi.router.mixins"
+      },
+      "VarcoCRUDRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.crud"
+      },
+      "VarcoClient": {
+        "kind": "class",
+        "module": "varco_fastapi.client.base"
+      },
+      "VarcoFastAPIModule": {
+        "kind": "class",
+        "module": "varco_fastapi.di"
+      },
+      "VarcoLifespan": {
+        "kind": "class",
+        "module": "varco_fastapi.lifespan"
+      },
+      "VarcoRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.base"
+      },
+      "WebSocketAuth": {
+        "kind": "class",
+        "module": "varco_fastapi.auth.server_auth"
+      },
+      "WriteRouter": {
+        "kind": "class",
+        "module": "varco_fastapi.router.presets"
+      },
+      "add_exception_handlers": {
+        "kind": "function",
+        "module": "varco_fastapi.exceptions",
+        "signature": "(app: 'FastAPI', *, message_catalog: 'MessageCatalog | None' = None, set_content_language: 'bool' = True) -> 'None'"
+      },
+      "add_pagination_headers": {
+        "kind": "function",
+        "module": "varco_fastapi.router.pagination",
+        "signature": "(response: 'Response', page: 'PagedReadDTO[Any]', request: 'Request') -> 'None'"
+      },
+      "allow_anonymous": {
+        "kind": "function",
+        "module": "varco_fastapi.auth.guard",
+        "signature": "() -> 'RouteGuard'"
+      },
+      "auth_context_var": {
+        "kind": "constant",
+        "module": "varco_fastapi.context"
+      },
+      "bind_clients": {
+        "kind": "function",
+        "module": "varco_fastapi.di",
+        "signature": "(container: 'Any', *client_classes: 'type') -> 'None'"
+      },
+      "bind_clients_from": {
+        "kind": "function",
+        "module": "varco_fastapi.di",
+        "signature": "(container: 'Any', *router_classes: 'type') -> 'None'"
+      },
+      "bind_mcp_adapter": {
+        "kind": "function",
+        "module": "varco_fastapi.router.mcp",
+        "signature": "(container: 'Any', router_cls: 'type', *, client_cls: 'type | None' = None, base_url: 'str | None' = None, tool_name_prefix: 'str' = '', enabled_routes: 'set[str] | None' = None) -> 'None'"
+      },
+      "bind_skill_adapter": {
+        "kind": "function",
+        "module": "varco_fastapi.router.skill",
+        "signature": "(container: 'Any', router_cls: 'type', *, agent_name: 'str', agent_description: 'str', agent_version: 'str' = '1.0.0', client_cls: 'type | None' = None, base_url: 'str | None' = None, enabled_routes: 'set[str] | None' = None, job_runner_cls: 'type | None' = None, job_store_cls: 'type | None' = None, conversation_store_cls: 'type | None' = None) -> 'None'"
+      },
+      "build_service": {
+        "kind": "function",
+        "module": "varco_fastapi.composite",
+        "signature": "(prefix: 'str', factory: 'Callable[[], FastAPI]', *, env: 'Mapping[str, str] | None' = None, name: 'str | None' = None, health_path: 'str' = '/health') -> 'ServiceMount'"
+      },
+      "client_class_for": {
+        "kind": "function",
+        "module": "varco_fastapi.client.front_door",
+        "signature": "(router_cls: 'type') -> 'type[AsyncVarcoClient[Any]]'"
+      },
+      "client_for": {
+        "kind": "function",
+        "module": "varco_fastapi.client.front_door",
+        "signature": "(router_cls: 'type', base_url: 'str | None' = None, *, profile: 'ClientProfile | None' = None, timeout: 'float | None' = None, verify: 'bool | str' = True, middleware: 'tuple[Any, ...] | None' = None, headers: 'Any' = None) -> 'AsyncVarcoClient[Any]'"
+      },
+      "create_composite_app": {
+        "kind": "function",
+        "module": "varco_fastapi.composite",
+        "signature": "(services: 'list[ServiceMount]', *, title: 'str' = 'Varco Composite Deployment', version: 'str' = '0.1.0', description: 'str' = '', aggregate_health: 'bool' = True, health_path: 'str' = '/health', landing_page: 'bool' = True) -> 'FastAPI'"
+      },
+      "create_varco_app": {
+        "kind": "function",
+        "module": "varco_fastapi.app",
+        "signature": "(container: 'Any | None' = None, *, routers: 'list[type] | None' = None, scan_packages: 'list[str] | None' = None, title: 'str' = 'Varco API', version: 'str' = '0.1.0', description: 'str' = '', cors: 'Any | None' = None, enable_tracing: 'bool' = True, enable_logging: 'bool' = True, enable_error_middleware: 'bool' = True, enable_metrics: 'bool' = False, enable_profiling: 'bool' = False, mcp_adapter: 'MCPAdapter | None' = None, mcp_path: 'str' = '/mcp', skill_adapter: 'SkillAdapter | None' = None, skill_base_url: 'str' = '', skill_agent_card_path: 'str' = '/.well-known/agent.json', skill_tasks_prefix: 'str' = '/tasks', extra_middleware: 'list[Any] | None' = None, extra_lifespan_components: 'list[Any] | None' = None, migrations: 'AbstractMigrator | Sequence[AbstractMigrator] | None' = None, migration_settings: 'MigrationSettings | None' = None, tenancy: 'Any | None' = None, reliability: 'Any | None' = None, i18n: 'I18nSettings | None' = None, timezone: 'TimezoneSettings | None' = None, validate: 'bool' = True, strict_validation: 'bool' = False, openapi_url: 'str' = '/openapi.json', docs_url: 'str' = '/docs', configure_jwt: 'bool' = True, global_attributes: 'Mapping[str, str] | None' = None, capture_params: 'bool | None' = None) -> 'Any'"
+      },
+      "get_auth_context": {
+        "kind": "function",
+        "module": "varco_fastapi.context",
+        "signature": "() -> 'AuthContext'"
+      },
+      "get_auth_context_or_none": {
+        "kind": "function",
+        "module": "varco_fastapi.context",
+        "signature": "() -> 'AuthContext | None'"
+      },
+      "get_jwt_context": {
+        "kind": "function",
+        "module": "varco_fastapi.context",
+        "signature": "() -> 'JwtContext'"
+      },
+      "get_request_context": {
+        "kind": "function",
+        "module": "varco_fastapi.context",
+        "signature": "() -> 'RequestContext'"
+      },
+      "get_request_id": {
+        "kind": "function",
+        "module": "varco_fastapi.context",
+        "signature": "() -> 'str'"
+      },
+      "get_request_token": {
+        "kind": "function",
+        "module": "varco_fastapi.context",
+        "signature": "() -> 'str | None'"
+      },
+      "install_cors": {
+        "kind": "function",
+        "module": "varco_fastapi.middleware.cors",
+        "signature": "(app: 'FastAPI', config: 'CORSConfig | None' = None) -> 'None'"
+      },
+      "introspect_routes": {
+        "kind": "function",
+        "module": "varco_fastapi.router.introspection",
+        "signature": "(router_cls: 'type', *, enabled_routes: 'set[str] | None' = None, type_args: 'tuple[type, ...] | None' = None) -> 'list[ResolvedRoute]'"
+      },
+      "job_progress": {
+        "kind": "function",
+        "module": "varco_fastapi.job.runner",
+        "signature": "(progress: 'float', message: 'str | None' = None) -> 'None'"
+      },
+      "paged_response": {
+        "kind": "function",
+        "module": "varco_core.dto.pagination",
+        "signature": "(results: 'list[T]', *, params: 'QueryParams', total_count: 'int | None' = None, raw_query: 'str | None' = None) -> 'PagedReadDTO[T]'"
+      },
+      "request_id_var": {
+        "kind": "constant",
+        "module": "varco_fastapi.context"
+      },
+      "request_token_var": {
+        "kind": "constant",
+        "module": "varco_fastapi.context"
+      },
+      "require_grant": {
+        "kind": "function",
+        "module": "varco_fastapi.auth.guard",
+        "signature": "(action: 'Action', resource_key: 'str') -> 'RouteGuard'"
+      },
+      "require_predicate": {
+        "kind": "function",
+        "module": "varco_fastapi.auth.guard",
+        "signature": "(fn: 'Callable[[AuthContext], bool | Awaitable[bool]]') -> 'RouteGuard'"
+      },
+      "require_roles": {
+        "kind": "function",
+        "module": "varco_fastapi.auth.guard",
+        "signature": "(*roles: 'str', all: 'bool' = True) -> 'RouteGuard'"
+      },
+      "require_scopes": {
+        "kind": "function",
+        "module": "varco_fastapi.auth.guard",
+        "signature": "(*scopes: 'str', all: 'bool' = True) -> 'RouteGuard'"
+      },
+      "route": {
+        "kind": "function",
+        "module": "varco_fastapi.router.endpoint",
+        "signature": "(method: 'str', path: 'str', *, status_code: 'int' = 200, async_capable: 'bool' = True, route_order: 'int | None' = None, rate_limiter: 'Any | None' = None, rate_limit_key_fn: 'Callable[..., str] | None' = None, summary: 'str | None' = None, description: 'str | None' = None, response_description: 'str' = 'Successful Response', responses: 'dict[str | int, dict[str, Any]] | None' = None, dependencies: 'list[Any] | None' = None, tags: 'list[str] | None' = None, operation_id: 'str | None' = None, deprecated: 'bool' = False, include_in_schema: 'bool' = True, mcp: 'bool' = False, mcp_name: 'str | None' = None, mcp_description: 'str | None' = None, mcp_tags: 'list[str] | None' = None, skill: 'bool' = False, skill_id: 'str | None' = None, skill_name: 'str | None' = None, skill_description: 'str | None' = None, skill_input_modes: 'list[str] | None' = None, skill_output_modes: 'list[str] | None' = None, requires: 'RouteGuard | None' = None) -> 'Callable[..., Any]'"
+      },
+      "sse_route": {
+        "kind": "function",
+        "module": "varco_fastapi.router.endpoint",
+        "signature": "(path: 'str', *, route_order: 'int | None' = None, event_type: 'type | None' = None, channel: 'str' = '*', rate_limiter: 'Any | None' = None, rate_limit_key_fn: 'Callable[..., str] | None' = None, summary: 'str | None' = None, tags: 'list[str] | None' = None, include_in_schema: 'bool' = True) -> 'Callable[..., Any]'"
+      },
+      "validate_container_bindings": {
+        "kind": "function",
+        "module": "varco_fastapi.validation",
+        "signature": "(container: 'Any') -> 'None'"
+      },
+      "validate_router_class": {
+        "kind": "function",
+        "module": "varco_fastapi.validation",
+        "signature": "(router_cls: 'type', *, strict: 'bool' = False) -> 'None'"
+      },
+      "ws_route": {
+        "kind": "function",
+        "module": "varco_fastapi.router.endpoint",
+        "signature": "(path: 'str', *, route_order: 'int | None' = None, auth: 'Any | None' = None, summary: 'str | None' = None, tags: 'list[str] | None' = None, include_in_schema: 'bool' = True) -> 'Callable[..., Any]'"
+      }
+    },
+    "varco_kafka": {
+      "KafkaChannelManager": {
+        "kind": "class",
+        "module": "varco_kafka.channel"
+      },
+      "KafkaChannelManagerSettings": {
+        "kind": "class",
+        "module": "varco_kafka.channel"
+      },
+      "KafkaDLQ": {
+        "kind": "class",
+        "module": "varco_kafka.dlq"
+      },
+      "KafkaDLQConfiguration": {
+        "kind": "class",
+        "module": "varco_kafka.dlq"
+      },
+      "KafkaDeliverySemantics": {
+        "kind": "class",
+        "module": "varco_kafka.config"
+      },
+      "KafkaEventBus": {
+        "kind": "class",
+        "module": "varco_kafka.bus"
+      },
+      "KafkaEventBusSettings": {
+        "kind": "class",
+        "module": "varco_kafka.config"
+      }
+    },
+    "varco_memcached": {
+      "MemcachedCache": {
+        "kind": "class",
+        "module": "varco_memcached.cache"
+      },
+      "MemcachedCacheConfiguration": {
+        "kind": "class",
+        "module": "varco_memcached.cache"
+      },
+      "MemcachedCacheSettings": {
+        "kind": "class",
+        "module": "varco_memcached.cache"
+      },
+      "MemcachedHealthCheck": {
+        "kind": "class",
+        "module": "varco_memcached.health"
+      },
+      "async_bootstrap": {
+        "kind": "function",
+        "module": "varco_memcached.di",
+        "signature": "(container: 'Any' = None, *, setup_cache: 'bool' = True) -> 'Any'"
+      },
+      "bootstrap": {
+        "kind": "function",
+        "module": "varco_memcached.di",
+        "signature": "(container: 'Any' = None) -> 'Any'"
+      }
+    },
+    "varco_nats": {
+      "NatsChannelManagerSettings": {
+        "kind": "class",
+        "module": "varco_nats.channel"
+      },
+      "NatsConnectionSettings": {
+        "kind": "class",
+        "module": "varco_nats.connection"
+      },
+      "NatsDLQ": {
+        "kind": "class",
+        "module": "varco_nats.dlq"
+      },
+      "NatsDLQConfiguration": {
+        "kind": "class",
+        "module": "varco_nats.dlq"
+      },
+      "NatsDeliverySemantics": {
+        "kind": "class",
+        "module": "varco_nats.config"
+      },
+      "NatsEventBus": {
+        "kind": "class",
+        "module": "varco_nats.bus"
+      },
+      "NatsEventBusSettings": {
+        "kind": "class",
+        "module": "varco_nats.config"
+      },
+      "NatsHealthCheck": {
+        "kind": "class",
+        "module": "varco_nats.health"
+      },
+      "NatsStreamManager": {
+        "kind": "class",
+        "module": "varco_nats.channel"
+      }
+    },
+    "varco_redis": {
+      "RedisBulkhead": {
+        "kind": "class",
+        "module": "varco_redis.bulkhead"
+      },
+      "RedisBulkheadConfiguration": {
+        "kind": "class",
+        "module": "varco_redis.bulkhead"
+      },
+      "RedisCache": {
+        "kind": "class",
+        "module": "varco_redis.cache"
+      },
+      "RedisCacheConfiguration": {
+        "kind": "class",
+        "module": "varco_redis.cache"
+      },
+      "RedisCacheSettings": {
+        "kind": "class",
+        "module": "varco_redis.cache"
+      },
+      "RedisChannelManager": {
+        "kind": "class",
+        "module": "varco_redis.channel"
+      },
+      "RedisChannelManagerSettings": {
+        "kind": "class",
+        "module": "varco_redis.config"
+      },
+      "RedisConversationStore": {
+        "kind": "class",
+        "module": "varco_redis.conversation"
+      },
+      "RedisDLQ": {
+        "kind": "class",
+        "module": "varco_redis.dlq"
+      },
+      "RedisDLQConfiguration": {
+        "kind": "class",
+        "module": "varco_redis.dlq"
+      },
+      "RedisEventBus": {
+        "kind": "class",
+        "module": "varco_redis.bus"
+      },
+      "RedisEventBusSettings": {
+        "kind": "class",
+        "module": "varco_redis.config"
+      },
+      "RedisJobStore": {
+        "kind": "class",
+        "module": "varco_redis.job_store"
+      },
+      "RedisRateLimiter": {
+        "kind": "class",
+        "module": "varco_redis.rate_limit"
+      },
+      "RedisStreamDLQ": {
+        "kind": "class",
+        "module": "varco_redis.stream_dlq"
+      },
+      "RedisStreamDLQConfiguration": {
+        "kind": "class",
+        "module": "varco_redis.stream_dlq"
+      },
+      "RedisStreamEventBus": {
+        "kind": "class",
+        "module": "varco_redis.streams"
+      }
+    },
+    "varco_sa": {
+      "AsyncSQLAlchemyRepository": {
+        "kind": "class",
+        "module": "varco_sa.repository"
+      },
+      "BaseDatabaseModel": {
+        "kind": "class",
+        "module": "varco_sa.models"
+      },
+      "InboxEntryModel": {
+        "kind": "class",
+        "module": "varco_sa.inbox"
+      },
+      "OutboxEntryModel": {
+        "kind": "class",
+        "module": "varco_sa.outbox"
+      },
+      "SAAdvisoryLock": {
+        "kind": "class",
+        "module": "varco_sa.advisory_lock"
+      },
+      "SAConfig": {
+        "kind": "class",
+        "module": "varco_sa.config"
+      },
+      "SAConversationStore": {
+        "kind": "class",
+        "module": "varco_sa.conversation"
+      },
+      "SADedupConfig": {
+        "kind": "class",
+        "module": "varco_sa.deduplication"
+      },
+      "SADeduplicator": {
+        "kind": "class",
+        "module": "varco_sa.deduplication"
+      },
+      "SAFastrestApp": {
+        "kind": "class",
+        "module": "varco_sa.bootstrap"
+      },
+      "SAHealthCheck": {
+        "kind": "class",
+        "module": "varco_sa.health"
+      },
+      "SAInboxRepository": {
+        "kind": "class",
+        "module": "varco_sa.inbox"
+      },
+      "SAJobStore": {
+        "kind": "class",
+        "module": "varco_sa.job_store"
+      },
+      "SAModelFactory": {
+        "kind": "class",
+        "module": "varco_sa.factory"
+      },
+      "SAModelRegistry": {
+        "kind": "class",
+        "module": "varco_sa.factory"
+      },
+      "SAModule": {
+        "kind": "class",
+        "module": "varco_sa.di"
+      },
+      "SAOutboxRepository": {
+        "kind": "class",
+        "module": "varco_sa.outbox"
+      },
+      "SAPollerInboxRepository": {
+        "kind": "class",
+        "module": "varco_sa.inbox"
+      },
+      "SAPoolSaturationCheck": {
+        "kind": "class",
+        "module": "varco_sa.health"
+      },
+      "SARelayOutboxRepository": {
+        "kind": "class",
+        "module": "varco_sa.outbox"
+      },
+      "SASagaRepository": {
+        "kind": "class",
+        "module": "varco_sa.saga"
+      },
+      "SAXactAdvisoryLock": {
+        "kind": "class",
+        "module": "varco_sa.advisory_lock"
+      },
+      "SQLAlchemyQueryApplicator": {
+        "kind": "class",
+        "module": "varco_sa.query.applicator"
+      },
+      "SQLAlchemyRepositoryProvider": {
+        "kind": "class",
+        "module": "varco_sa.provider"
+      },
+      "SQLAlchemyUnitOfWork": {
+        "kind": "class",
+        "module": "varco_sa.uow"
+      },
+      "SchemaDrift": {
+        "kind": "class",
+        "module": "varco_sa.schema_guard"
+      },
+      "SchemaDriftReport": {
+        "kind": "class",
+        "module": "varco_sa.schema_guard"
+      },
+      "SchemaGuard": {
+        "kind": "class",
+        "module": "varco_sa.schema_guard"
+      },
+      "audit_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "bind_repositories": {
+        "kind": "function",
+        "module": "varco_sa.di",
+        "signature": "(container: 'DIContainer', *entity_classes: 'type[DomainModel]') -> 'None'"
+      },
+      "conversation_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "dead_letters_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "dedup_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "encryption_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "framework_metadata": {
+        "kind": "function",
+        "module": "varco_sa.metadata",
+        "signature": "() -> 'MetaData'"
+      },
+      "framework_table_names": {
+        "kind": "function",
+        "module": "varco_sa.metadata",
+        "signature": "() -> 'frozenset[str]'"
+      },
+      "get_target_metadata": {
+        "kind": "function",
+        "module": "varco_sa.alembic_helpers",
+        "signature": "(*domain_classes: 'type[DomainModel]', base: 'type[DeclarativeBase] | None' = None, include_framework: 'bool' = False) -> 'MetaData'"
+      },
+      "inbox_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "jobs_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "outbox_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      },
+      "print_create_ddl": {
+        "kind": "function",
+        "module": "varco_sa.alembic_helpers",
+        "signature": "(*domain_classes: 'type[DomainModel]', dialect: 'str' = 'postgresql') -> 'str'"
+      },
+      "register_framework_metadata": {
+        "kind": "function",
+        "module": "varco_sa.metadata",
+        "signature": "(name: 'str', md: 'MetaData') -> 'None'"
+      },
+      "registry_from_sa_model": {
+        "kind": "function",
+        "module": "varco_sa.type_coercion",
+        "signature": "(model: 'type[DeclarativeBase]', field_coercions: 'dict[str, Callable[[Any], Any]] | None' = None) -> 'TypeCoercionRegistry'"
+      },
+      "sagas_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
+      }
+    },
+    "varco_ws": {
+      "BackpressurePolicy": {
+        "kind": "class",
+        "module": "varco_ws.websocket"
+      },
+      "SSEConnection": {
+        "kind": "class",
+        "module": "varco_ws.sse"
+      },
+      "SSEEventBus": {
+        "kind": "class",
+        "module": "varco_ws.sse"
+      },
+      "WebSocketConnection": {
+        "kind": "class",
+        "module": "varco_ws.websocket"
+      },
+      "WebSocketEventBus": {
+        "kind": "class",
+        "module": "varco_ws.websocket"
+      },
+      "bind_sse_adapter": {
+        "kind": "function",
+        "module": "varco_ws.di",
+        "signature": "(container: 'Any', *, event_type: 'Any' = None, channel: 'str' = '*', max_queue_size: 'int' = 100) -> 'None'"
+      },
+      "bind_websocket_adapter": {
+        "kind": "function",
+        "module": "varco_ws.di",
+        "signature": "(container: 'Any', *, event_type: 'Any' = None, channel: 'str' = '*', max_queue_size: 'int' = 100, backpressure_policy: 'Any' = None) -> 'None'"
+      }
+    }
+  }
+}

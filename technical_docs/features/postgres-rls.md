@@ -58,8 +58,14 @@ the two forms. The regression only shows up against a production-sized table,
 which is exactly why it is dangerous: it ships clean and then costs an
 incident.
 
+> **Renamed in 3.0.0 (Plan 022 / AB-1):** this function was called
+> `enable_rls_ddl()` until 3.0.0. It was never a member of the DI opt-in
+> `enable_*` family — it touches no container, registers no binding and
+> performs no I/O — so it is now `render_rls_ddl()`, which says what it does.
+> `enable_rls_ddl` remains as a deprecated alias until 4.0.0.
+
 **Any varco RLS helper MUST emit the `(SELECT …)` form.**
-`varco_sa.rls.enable_rls_ddl()` does this unconditionally — it is not a
+`varco_sa.rls.render_rls_ddl()` does this unconditionally — it is not a
 configurable option, because there is no correct reason to emit the naive
 form. `varco_sa/tests/test_rls.py` asserts the literal substring `"(SELECT "`
 is present in the generated DDL as a permanent regression test; treat that
@@ -80,7 +86,7 @@ connection that previously ran a tenant-scoped transaction evaluates
 **raises** (`invalid input syntax for type uuid: ""`) instead of returning
 zero rows — the opposite of "no tenant set, hide everything" and, on a
 transaction-mode pooler, indistinguishable from a real outage the moment the
-next logical caller reuses that connection. `enable_rls_ddl()` therefore
+next logical caller reuses that connection. `render_rls_ddl()` therefore
 emits:
 
 ```sql
@@ -188,7 +194,7 @@ nothing below the service layer.
 
 Postgres RLS is the correct **defense-in-depth** answer to this specific
 fail-open surface under `TenantIsolation.SHARED` (± RLS): a policy applied
-via `enable_rls_ddl()` enforces tenant scoping at the database itself, so a
+via `render_rls_ddl()` enforces tenant scoping at the database itself, so a
 query that bypasses `TenantAwareService` still cannot see another tenant's
 rows — the isolation no longer depends on every code path remembering to
 filter correctly. RLS does not replace `TenantAwareService` (the mixin's
@@ -241,10 +247,10 @@ def downgrade() -> None:
 
 `rls_upgrade(op, table, *, tenant_column="tenant_id", policy_name=None,
 setting="rls.tenant_id")` issues `op.execute()` for each statement
-`enable_rls_ddl()` builds — it does not duplicate the SQL, so the
+`render_rls_ddl()` builds — it does not duplicate the SQL, so the
 InitPlan-form `(SELECT current_setting(..., true))` guarantee of §1 holds
 identically here. `varco_sa/tests/test_rls_migration_ops.py` asserts the
-rendered statements match `enable_rls_ddl()`'s output exactly; treat that
+rendered statements match `render_rls_ddl()`'s output exactly; treat that
 assertion as load-bearing.
 
 `rls_downgrade(op, table, *, policy_name=None)` issues the matching
@@ -266,13 +272,13 @@ in production.
 ## Using the helpers directly
 
 ```python
-from varco_sa.rls import enable_rls_ddl, set_tenant_local
+from varco_sa.rls import render_rls_ddl, set_tenant_local
 
 
 # The lower-level form — rls_upgrade() above wraps exactly this. Use it when
 # you need the raw statements (inspection, a non-Alembic migration tool):
 def upgrade() -> None:
-    for stmt in enable_rls_ddl("orders"):
+    for stmt in render_rls_ddl("orders"):
         op.execute(stmt)
 
 
@@ -282,7 +288,7 @@ async with session.begin():
     # ... queries within this transaction only see tenant_id's rows
 ```
 
-`enable_rls_ddl(table, *, tenant_column="tenant_id", setting="rls.tenant_id",
+`render_rls_ddl(table, *, tenant_column="tenant_id", setting="rls.tenant_id",
 policy_name=None, cast_type="uuid")` returns three DDL statements in order:
 `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY` (without `FORCE`,
 Postgres exempts the table owner — often the migration/ORM role — from the
@@ -300,7 +306,7 @@ theoretical footgun: varco's own two framework tables
 (`varco_audit_log`, `varco_dead_letters`) declare `tenant_id` as
 `String(255)` (`AuditEntry.tenant_id`/`DeadLetterEntry.tenant_id` are
 `str | None`, never `UUID`), so `varco_sa.rls_framework.framework_rls_upgrade()`
-defaults to `cast_type="text"` rather than inheriting `enable_rls_ddl()`'s
+defaults to `cast_type="text"` rather than inheriting `render_rls_ddl()`'s
 `"uuid"` default — see `varco_sa/varco_sa/rls_framework.py`. Before this
 parameter existed, `framework_rls_upgrade()` could not apply at all: every
 call aborted with the cast error above.
@@ -325,7 +331,7 @@ setting does not survive past that transaction (see §2), by design.
 ## What is opt-in and what is not
 
 Nothing in varco applies an RLS policy to any table it generates.
-`enable_rls_ddl()` is a pure DDL-string generator, and `rls_upgrade()` only
+`render_rls_ddl()` is a pure DDL-string generator, and `rls_upgrade()` only
 runs when an application's own revision calls it — a table has no RLS at
 all until an application writes a revision that does so and runs it. In
 particular, no `VARCO_MIGRATE_MODE` value enables RLS: `mode="upgrade"`
@@ -339,9 +345,9 @@ cross-tenant reads (e.g. an admin reporting table).
 
 | Pitfall | Symptom | Root Cause | Fix |
 |---|---|---|---|
-| **Hand-written RLS policy uses bare `current_setting(...)`** | A query on an RLS-protected table that flies at test data volumes goes from milliseconds to seconds in production (one documented case: 8 100 ms) | `current_setting()` is `VOLATILE` and not `LEAKPROOF` — without a scalar-subquery wrapper the Postgres planner cannot push the predicate below an index scan and falls back to a sequential scan | Always use `varco_sa.rls.enable_rls_ddl()`, which emits the `(SELECT current_setting(..., true))` InitPlan form; never hand-write `USING (tenant_id = current_setting(...)::uuid)` — see `technical_docs/features/postgres-rls.md` |
+| **Hand-written RLS policy uses bare `current_setting(...)`** | A query on an RLS-protected table that flies at test data volumes goes from milliseconds to seconds in production (one documented case: 8 100 ms) | `current_setting()` is `VOLATILE` and not `LEAKPROOF` — without a scalar-subquery wrapper the Postgres planner cannot push the predicate below an index scan and falls back to a sequential scan | Always use `varco_sa.rls.render_rls_ddl()`, which emits the `(SELECT current_setting(..., true))` InitPlan form; never hand-write `USING (tenant_id = current_setting(...)::uuid)` — see `technical_docs/features/postgres-rls.md` |
 | **RLS tenant GUC set with `SET` instead of `SET LOCAL`** | Under a transaction-mode pooler (PgBouncer), one tenant's queries leak into a session that was actually serving a different tenant's next transaction | Session-scoped `SET`/`set_config(..., false)` survives past the transaction on a pooled connection — same defect class as `SAAdvisoryLock`'s session-scoped release (U-16) | Use `varco_sa.rls.set_tenant_local(session, tenant_id)` — `set_config(..., true)` (`is_local`) scopes the setting to the current transaction only |
-| **`TenantAwareService._scoped_params` bypassed** | Cross-tenant rows returned from a query path that skipped the service mixin (e.g. a raw repository call, an ad-hoc script) | The mixin fails open by design — it only filters queries that actually go through it, there is no enforcement below the service layer | Enable Postgres RLS as defense-in-depth (`varco_sa.rls.enable_rls_ddl()`) on any table where a query bypassing the service layer would leak data across tenants |
-| **`enable_rls_ddl()` on a `VARCHAR`/`TEXT` tenant column** | Every migration using the policy aborts with `operator does not exist: character varying = uuid` — this is exactly what made `varco_sa.rls_framework.framework_rls_upgrade()` inapplicable before its fix | `enable_rls_ddl()`'s `cast_type` defaults to `"uuid"`, matching a real `UUID` tenant column; a `String`/`VARCHAR` column needs the GUC cast to match | Pass `cast_type="text"` (`enable_rls_ddl(..., cast_type="text")`); `framework_rls_upgrade()` already does this for the two framework tables, whose `tenant_id` is `String(255)` |
+| **`TenantAwareService._scoped_params` bypassed** | Cross-tenant rows returned from a query path that skipped the service mixin (e.g. a raw repository call, an ad-hoc script) | The mixin fails open by design — it only filters queries that actually go through it, there is no enforcement below the service layer | Enable Postgres RLS as defense-in-depth (`varco_sa.rls.render_rls_ddl()`) on any table where a query bypassing the service layer would leak data across tenants |
+| **`render_rls_ddl()` on a `VARCHAR`/`TEXT` tenant column** | Every migration using the policy aborts with `operator does not exist: character varying = uuid` — this is exactly what made `varco_sa.rls_framework.framework_rls_upgrade()` inapplicable before its fix | `render_rls_ddl()`'s `cast_type` defaults to `"uuid"`, matching a real `UUID` tenant column; a `String`/`VARCHAR` column needs the GUC cast to match | Pass `cast_type="text"` (`render_rls_ddl(..., cast_type="text")`); `framework_rls_upgrade()` already does this for the two framework tables, whose `tenant_id` is `String(255)` |
 | **RLS test/connection uses a superuser role** | RLS policies appear to do nothing — every row is visible regardless of the tenant GUC — even though `pg_class.relforcerowsecurity` is `True` and the policy is correctly applied | `FORCE ROW LEVEL SECURITY` only revokes the *table-owner* exemption; `rolbypassrls`/superuser connections bypass RLS **unconditionally**, `FORCE` or not — this is a hard Postgres rule, not a varco gap | Connect (and write RLS tests) as a dedicated non-superuser, non-`BYPASSRLS` application role — see `varco_sa/tests/test_rls.py`/`test_framework_rls.py`'s fixture |
 | **RLS enabled by a startup hook** | Policies appear/disappear depending on which process booted last; unreviewed DDL in production | RLS is schema DDL that must be ordered after table creation and reviewed like any other change | Put it in a reviewed revision with `varco_sa.migration.ops.rls_upgrade(op, "orders")` / `rls_downgrade`. Nothing in varco auto-enables RLS, and no `VARCO_MIGRATE_MODE` value does either |

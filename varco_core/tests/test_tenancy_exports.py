@@ -4,8 +4,8 @@ Failing tests for varco_core top-level re-exports of varco_core.tenancy
 
 Every new tenancy name must resolve, from the top-level package, to the
 exact same class object defined in varco_core.tenancy — and must not
-collide with any pre-existing top-level name (the MigrationError/
-MigrationPlan lesson from Plan 006).
+collide with any pre-existing top-level name (the SchemaMigrationError/
+SchemaMigrationPlan lesson from Plan 006).
 """
 
 from __future__ import annotations

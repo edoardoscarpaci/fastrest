@@ -16,18 +16,29 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Annotated
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import pytest
 from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
 from varco_beanie.repository import AsyncBeanieRepository
+from varco_core.meta import PKStrategy, PrimaryKey, pk_field
 from varco_core.model import DomainModel
 
 
 @dataclass
 class _Widget(DomainModel):
-    """Minimal domain entity for bootstrap testing."""
+    """
+    Minimal domain entity for bootstrap testing.
 
+    DomainModel's default PK is int + INT_AUTO (a SQL-oriented default);
+    MongoDB assigns an ObjectId, so a round-trip through a real Mongo would
+    fail pydantic validation on `nullable[int]`. UUID_AUTO is the Mongo-side
+    convention (see examples/10-beanie-mongo/models.py).
+    """
+
+    pk: Annotated[UUID, PrimaryKey(PKStrategy.UUID_AUTO)] = pk_field()
     name: str = ""
 
 
@@ -81,12 +92,16 @@ class TestBeanieFastrestAppIntegration:
             await app.init()
 
             async with app.uow_provider.make_uow() as uow:
-                repo = uow.get_repository(_Widget)
+                # A UoW exposes its pre-wired repos as ATTRIBUTES
+                # (_Widget -> `widgets`, see provider._repo_attr).
+                # get_repository() belongs to RepositoryProvider, never to a
+                # UoW — see app.uow_provider.get_repository() above.
+                repo = uow.widgets
                 saved = await repo.save(_Widget(name="hello"))
-                fetched = await repo.find_by_id(saved.id)
+                fetched = await repo.find_by_id(saved.pk)
 
             assert fetched is not None
             assert fetched.name == "hello"
         finally:
             await client.drop_database(db_name)
-            client.close()
+            await client.close()

@@ -22,7 +22,7 @@ is needed to give the migrator real work):
         the pair terminates (either by lock-wait-then-no-op or by a raised
         ``MigrationLockTimeout``).
 
-Imports ``MigrationError``/``MigrationPlan`` from ``varco_core.migration``,
+Imports ``SchemaMigrationError``/``SchemaMigrationPlan`` from ``varco_core.migration``,
 never from ``varco_core`` (CLAUDE.md's name-collision pitfall — those names
 are already owned by the unrelated ``varco_core.migrator`` domain-migration
 module).

@@ -244,7 +244,7 @@ async def provision_rls_app_url(container: Any) -> str:
         over that connection is silently never enforced and every "tenant A
         cannot see tenant B" assertion fails while the shipped DDL is correct.
         ✅ Tests now exercise the role shape a real application uses, so they
-           genuinely regress the ``FORCE`` clause in ``enable_rls_ddl``.
+           genuinely regress the ``FORCE`` clause in ``render_rls_ddl``.
         ✅ The role OWNS the tables it creates, which is precisely the
            owner-exemption case ``FORCE`` exists to close.
         ❌ Needs an explicit ``GRANT ... ON SCHEMA public`` (PostgreSQL 15

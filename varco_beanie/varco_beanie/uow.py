@@ -9,8 +9,26 @@ DESIGN: motor → pymongo async (beanie 2.x migration)
     beanie uses internally.
 
     ✅ No extra motor dependency — pymongo is already required by beanie 2.x
-    ✅ AsyncClientSession has the same API surface as AsyncIOMotorClientSession
     ❌ pymongo>=4.11 required — cannot run on older pymongo with this module
+    ❌ AsyncClientSession does NOT mirror AsyncIOMotorClientSession's
+       sync/async shape — a prior version of this docstring claimed it did,
+       which is exactly what caused a shipped bug (see below). The two
+       diverge on the calls that matter most to this module:
+
+       | Call                | motor (AsyncIOMotorClient*)     | pymongo (AsyncMongoClient / AsyncClientSession) |
+       |---------------------|----------------------------------|--------------------------------------------------|
+       | ``start_session()`` | coroutine — must ``await``      | plain sync method — must NOT ``await``          |
+       | ``start_transaction()`` | sync — returns a context manager | coroutine — must ``await``                 |
+       | ``end_session()`` / ``close()`` | sync                | coroutine — must ``await``               |
+
+       Getting the first two backwards previously shipped as a real bug:
+       ``await client.start_session()`` raised
+       ``TypeError: object AsyncClientSession can't be used in 'await'
+       expression``, and a bare (un-awaited) ``start_transaction()`` call
+       silently opened no transaction at all — ``transactional=True`` was a
+       no-op and commit/abort acted on a transaction that never existed.
+       Always check the real pymongo type, never assume motor's shape
+       carries over.
 """
 
 from __future__ import annotations
@@ -59,9 +77,20 @@ class BeanieUnitOfWork(AsyncUnitOfWork):
 
     async def _begin(self) -> None:
         if self._session is None:
-            self._session = await self._client.start_session()  # type: ignore[misc]
+            # NOT awaited: unlike motor's AsyncIOMotorClient (which this module
+            # was migrated off), pymongo's native async client makes only the
+            # *session's* operations awaitable — start_session() itself is a
+            # plain sync factory returning an AsyncClientSession. Awaiting it
+            # raises `TypeError: object AsyncClientSession can't be used in
+            # 'await' expression`. end_session()/close() ARE coroutines.
+            self._session = self._client.start_session()
         if self._transactional:
-            self._session.start_transaction()
+            # Awaited for the same reason: pymongo's AsyncClientSession makes
+            # start_transaction() a coroutine (motor's was a sync method
+            # returning a context manager). Calling it bare created a
+            # never-awaited coroutine, so NO transaction was ever opened and
+            # the subsequent commit/abort acted on a non-existent transaction.
+            await self._session.start_transaction()
         for attr, factory in self._repo_factories.items():
             setattr(self, attr, factory(self._session))
 

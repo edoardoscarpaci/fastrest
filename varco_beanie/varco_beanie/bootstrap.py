@@ -3,23 +3,27 @@ varco_beanie.bootstrap
 ==========================
 One-stop bootstrap for Beanie (pymongo / MongoDB) + varco applications.
 
-``BeanieConfig``
-    Frozen value object describing everything needed to create a working
-    ``BeanieRepositoryProvider``: pymongo async client, database name, entity
-    classes, and whether to use MongoDB transactions.
-
 ``BeanieFastrestApp``
-    Thin coordinator that wires ``BeanieConfig`` into the provider, exposes
-    the provider as ``uow_provider``, and provides an ``init()`` coroutine
-    that initialises Beanie with all registered Document classes.
+    Thin coordinator that wires a ``BeanieSettings`` into the provider,
+    exposes the provider as ``uow_provider``, and provides an ``init()``
+    coroutine that initialises Beanie with all registered Document classes.
+
+**Changed in 3.0.0 (Plan 022 / AB-4).** This module used to define its own
+``BeanieConfig`` frozen dataclass, field-for-field identical to
+``varco_beanie.config.BeanieSettings`` — one concept under two names, which
+KI-10 had to bridge with a manual remap. ``BeanieConfig`` is now a deprecated
+alias of ``BeanieSettings`` (the identical object, so ``isinstance`` is
+unaffected) exposed from the ``varco_beanie`` package root, and is removed in
+4.0.0. Construct ``BeanieSettings`` directly.
 
 Minimal usage::
 
     from pymongo import AsyncMongoClient
-    from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
+    from varco_beanie import BeanieSettings
+    from varco_beanie.bootstrap import BeanieFastrestApp
     from myapp.domain import Post, User
 
-    config = BeanieConfig(
+    config = BeanieSettings(
         mongo_client=AsyncMongoClient("mongodb://localhost:27017"),
         db_name="myapp",
         entity_classes=(User, Post),
@@ -47,68 +51,10 @@ Async safety:   ✅ ``init()`` is ``async def`` — safe to await.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any
-
-from varco_core.model import DomainModel
+from varco_core.deprecation import deprecated_alias
 
 from varco_beanie.config import BeanieSettings
 from varco_beanie.provider import BeanieRepositoryProvider
-
-# ── BeanieConfig ──────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class BeanieConfig:
-    """
-    Immutable configuration for a Beanie-backed varco application.
-
-    Attributes:
-        mongo_client:  Connected ``AsyncMongoClient`` instance (pymongo>=4.11).
-        db_name:       MongoDB database name (e.g. ``"myapp"``).
-        entity_classes: Domain model classes to register.  Each class is passed
-                        to ``BeanieModelFactory.build()`` which generates a
-                        Beanie ``Document`` subclass and a domain mapper.
-        transactional: Enable MongoDB multi-document transactions.  Requires
-                       a replica set or sharded cluster — single-node
-                       deployments will raise at runtime.
-
-    Thread safety:  ✅ frozen=True — immutable after construction.
-    Async safety:   ✅ Pure configuration value object; no I/O.
-
-    Edge cases:
-        - ``mongo_client`` must already be connected — no connection check is
-          performed at config construction time.
-        - Passing an empty ``entity_classes`` tuple is valid but results in
-          no repositories being available through the UoW.
-        - ``transactional=True`` on a standalone MongoDB node raises a
-          ``pymongo.errors.OperationFailure`` from the driver at transaction
-          start — not at construction time.
-
-    Example::
-
-        from pymongo import AsyncMongoClient
-
-        BeanieConfig(
-            mongo_client=AsyncMongoClient("mongodb://localhost:27017"),
-            db_name="myapp",
-            entity_classes=(User, Post, Comment),
-            transactional=False,
-        )
-    """
-
-    # Connected pymongo async client — the source of database operations
-    mongo_client: Any  # AsyncMongoClient; Any avoids hard pymongo submodule dep at type-check
-
-    # MongoDB database name
-    db_name: str
-
-    # Domain classes to register at startup
-    entity_classes: tuple[type[DomainModel], ...]
-
-    # Whether to use MongoDB multi-document transactions (requires replica set)
-    transactional: bool = False
-
 
 # ── BeanieFastrestApp ─────────────────────────────────────────────────────────
 
@@ -117,7 +63,7 @@ class BeanieFastrestApp:
     """
     Bootstrap coordinator for Beanie (Motor / MongoDB) + varco applications.
 
-    Wires ``BeanieConfig`` into ``BeanieRepositoryProvider``, registers all
+    Wires ``BeanieSettings`` into ``BeanieRepositoryProvider``, registers all
     entity classes, and exposes the provider as ``uow_provider`` for injection
     into services.
 
@@ -151,33 +97,25 @@ class BeanieFastrestApp:
         service = PostService(uow_provider=app.uow_provider, ...)
     """
 
-    def __init__(self, config: BeanieConfig) -> None:
+    def __init__(self, config: BeanieSettings) -> None:
         """
         Construct the app and register all entity classes.
 
         Does NOT call ``init_beanie()`` — that happens in ``await init()``.
 
         Args:
-            config: Fully specified ``BeanieConfig`` instance.
+            config: Fully specified ``BeanieSettings`` instance.
 
         Edge cases:
             - Registration calls ``BeanieModelFactory.build()`` for each
               entity class synchronously — O(n) at startup.
         """
-        # KI-9/KI-10 (Plan 020): BeanieRepositoryProvider's __init__ only
-        # accepts an injected `settings: Inject[BeanieSettings]`
-        # (varco_beanie/provider.py) — build one from BeanieConfig's
-        # field-for-field-compatible attributes and pass it through. This is
-        # the non-DI construction path's own way of reaching the exact same
-        # settings shape the DI path resolves via the container.
-        self._provider = BeanieRepositoryProvider(
-            settings=BeanieSettings(
-                mongo_client=config.mongo_client,
-                db_name=config.db_name,
-                entity_classes=config.entity_classes,
-                transactional=config.transactional,
-            ),
-        )
+        # Plan 022 / AB-4: ``BeanieConfig`` and ``BeanieSettings`` were one
+        # concept under two names, so KI-10 had to remap the former onto the
+        # latter field-for-field here. The duplicate is now collapsed and the
+        # settings object is passed straight through — the non-DI path and the
+        # DI path reach ``BeanieRepositoryProvider`` with the same object type.
+        self._provider = BeanieRepositoryProvider(settings=config)
         # No separate `self._provider.register(*config.entity_classes)` call
         # here — BeanieSettings.entity_classes is already registered by the
         # provider's own __init__ (varco_beanie/provider.py:70-71). A second
@@ -223,6 +161,18 @@ class BeanieFastrestApp:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 __all__ = [
-    "BeanieConfig",
     "BeanieFastrestApp",
 ]
+
+# AB-4's back-compat seam for this module specifically (Plan 022). The alias
+# also exists on the ``varco_beanie`` package root, but ``from
+# varco_beanie.bootstrap import BeanieConfig`` was this module's own documented
+# import path — so serving it only from the root would have been a hard break
+# for exactly the callers who followed the docstring. Resolves to the identical
+# ``BeanieSettings`` class; deliberately out of ``__all__``; removed in 4.0.0.
+__getattr__ = deprecated_alias(
+    "BeanieConfig",
+    BeanieSettings,
+    since="3.0.0",
+    removed_in="4.0.0",
+)

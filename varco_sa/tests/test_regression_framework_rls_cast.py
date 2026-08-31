@@ -16,7 +16,7 @@ against real Postgres died at a ``NameError`` before reaching the DDL.
 
 from __future__ import annotations
 
-from varco_sa.rls import enable_rls_ddl
+from varco_sa.rls import render_rls_ddl
 from varco_sa.rls_framework import FRAMEWORK_RLS_TABLES, framework_rls_upgrade
 
 
@@ -60,7 +60,7 @@ def test_regression_framework_rls_still_forces_row_level_security() -> None:
 
 def test_regression_enable_rls_ddl_default_cast_is_unchanged() -> None:
     """App tables keep the uuid default — this fix must not change them."""
-    stmts = enable_rls_ddl("orders")
+    stmts = render_rls_ddl("orders")
     policy = next(s for s in stmts if s.startswith("CREATE POLICY"))
     assert "::uuid" in policy
 
@@ -81,7 +81,7 @@ def test_regression_policy_tolerates_the_guc_reset_to_empty_string() -> None:
     in ``NULLIF(..., '')`` maps both "never set" and "reset after SET LOCAL" to
     NULL, which the comparison correctly evaluates to no rows.
     """
-    policy = next(s for s in enable_rls_ddl("orders") if s.startswith("CREATE POLICY"))
+    policy = next(s for s in render_rls_ddl("orders") if s.startswith("CREATE POLICY"))
     assert "NULLIF(" in policy, policy
     # The InitPlan wrapper must still be the outermost form.
     assert "(SELECT NULLIF(current_setting(" in policy, policy

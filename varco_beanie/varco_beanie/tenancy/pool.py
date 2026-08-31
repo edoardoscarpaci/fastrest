@@ -37,15 +37,20 @@ class BeanieTenantPool:
     Bounded per-tenant ``BeanieTenantBinding`` pool.
 
     Args:
-        client:            A shared Motor/pymongo async client, used by
-                           every tenant when ``client_per_tenant=False``.
+        client:            A shared pymongo ``AsyncMongoClient`` (beanie 2.x
+                           dropped motor — see ``varco_beanie.uow``'s
+                           module docstring for the sync/async shapes this
+                           implies), used by every tenant when
+                           ``client_per_tenant=False``.
         client_factory:    ``Callable[[tenant_id], client]`` — builds one
                            client per tenant. Required when
                            ``client_per_tenant=True``.
-        client_per_tenant: When ``True``, eviction disposes (``.close()``)
-                           the tenant's own client. When ``False``
-                           (default), eviction never closes the shared
-                           client — it outlives any single tenant's
+        client_per_tenant: When ``True``, eviction disposes (awaits
+                           ``.close()`` — a coroutine on pymongo's
+                           ``AsyncMongoClient``, unlike motor's sync
+                           ``close()``) the tenant's own client. When
+                           ``False`` (default), eviction never closes the
+                           shared client — it outlives any single tenant's
                            binding.
         isolation:         Must not be ``TenantIsolation.SCHEMA`` — MongoDB
                            has no schema-per-tenant equivalent.
@@ -122,7 +127,10 @@ class BeanieTenantPool:
         # A shared client (client_per_tenant=False) outlives any single
         # tenant's binding — never closed here.
         if entry.owned_client is not None:
-            entry.owned_client.close()
+            # Must be awaited: pymongo's AsyncMongoClient.close() is a
+            # coroutine (motor's was sync). An un-awaited call closed nothing
+            # and leaked the tenant's connection pool on every eviction.
+            await entry.owned_client.close()
 
     async def ensure(self, tenant_id: str) -> BeanieTenantBinding:
         entry = await self._pool.ensure(tenant_id)

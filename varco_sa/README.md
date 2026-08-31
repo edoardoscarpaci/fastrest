@@ -297,15 +297,15 @@ want `SAXactAdvisoryLock` to win the `AbstractDistributedLock` binding.
 ### Row-Level Security helpers (opt-in, nothing wired by default)
 
 `varco_sa.rls` (Plan 005 Phase 8 / U-5) ships two small helpers — no RLS policy is applied
-to any generated table unless your own Alembic revision calls `enable_rls_ddl()`:
+to any generated table unless your own Alembic revision calls `render_rls_ddl()`:
 
 ```python
-from varco_sa.rls import enable_rls_ddl, set_tenant_local
+from varco_sa.rls import render_rls_ddl, set_tenant_local
 
 
 # In your own Alembic revision:
 def upgrade() -> None:
-    for stmt in enable_rls_ddl("orders"):
+    for stmt in render_rls_ddl("orders"):
         op.execute(stmt)
 
 
@@ -315,7 +315,7 @@ async with session.begin():
     # ... queries in this transaction only see tenant_id's rows
 ```
 
-`enable_rls_ddl()` **always** emits the `(SELECT current_setting(..., true))` InitPlan form
+`render_rls_ddl()` **always** emits the `(SELECT current_setting(..., true))` InitPlan form
 — the naive `current_setting(...)` (no subquery) form defeats index usage and forces a
 sequential scan; one documented query went 8 100 ms → 94 ms from this rewrite alone.
 `set_tenant_local()` uses transaction-scoped `set_config(..., true)`, the same

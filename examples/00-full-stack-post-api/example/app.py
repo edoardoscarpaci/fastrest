@@ -27,7 +27,8 @@ Environment variables optional
     VARCO_JWT_PRIVATE_KEY_PEM  PEM-encoded RSA/EC private key for signing JWTs.
                                When absent, an ephemeral RSA-2048 key is generated
                                at startup (tokens invalidated on restart).
-    VARCO_CORS_ORIGINS         Comma-separated allowed origins (default: *)
+    VARCO_CORS_ORIGINS         Comma-separated allowed origins (default: none —
+                               unset means no cross-origin access, since 3.0.0)
 
 Quick start (with Docker Compose)::
 

@@ -35,11 +35,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from varco_core.migration.base import (
     AbstractMigrator,
-    MigrationPlan,
     MigrationReport,
     Revision,
+    SchemaMigrationPlan,
 )
-from varco_core.migration.errors import MigrationError
+from varco_core.migration.errors import SchemaMigrationError
 from varco_core.migration.settings import MigrationSettings
 
 from varco_beanie.migration.store import MigrationStore
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from varco_beanie.migration.base import Migration, MigrationRegistry
 
 
-class ChecksumMismatchError(MigrationError):
+class ChecksumMismatchError(SchemaMigrationError):
     """Raised when a recorded migration's source no longer matches its checksum."""
 
 
@@ -147,7 +147,7 @@ class BeanieMigrator(AbstractMigrator):
                 )
         return pending
 
-    async def plan(self) -> MigrationPlan:
+    async def plan(self) -> SchemaMigrationPlan:
         await self._verify_recorded_checksums()
 
         applied = await self._store.applied_versions()
@@ -155,7 +155,7 @@ class BeanieMigrator(AbstractMigrator):
         pending = [Revision(id=m.version, label=m.name) for m in pending_migrations]
         pending.extend(await self._index_pending())
 
-        return MigrationPlan(current=tuple(sorted(applied)), pending=tuple(pending))
+        return SchemaMigrationPlan(current=tuple(sorted(applied)), pending=tuple(pending))
 
     async def upgrade(self, target: str = "heads", *, dry_run: bool = False) -> MigrationReport:
         start = time.monotonic()

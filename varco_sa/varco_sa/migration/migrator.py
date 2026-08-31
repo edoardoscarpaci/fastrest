@@ -43,9 +43,9 @@ from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import Connection
 from varco_core.migration.base import (
     AbstractMigrator,
-    MigrationPlan,
     MigrationReport,
     Revision,
+    SchemaMigrationPlan,
 )
 from varco_core.migration.errors import MigrationLockTimeout
 from varco_core.migration.settings import MigrationSettings
@@ -310,12 +310,12 @@ class AlembicMigrator(AbstractMigrator):
 
     # ── AbstractMigrator ─────────────────────────────────────────────────────
 
-    async def plan(self) -> MigrationPlan:
+    async def plan(self) -> SchemaMigrationPlan:
         _config, script = self._build_config()
         async with self._engine.connect() as conn:
             current = await conn.run_sync(self._sync_current_heads)
         pending = self._pending_revisions(script, current)
-        return MigrationPlan(current=current, pending=pending)
+        return SchemaMigrationPlan(current=current, pending=pending)
 
     async def upgrade(self, target: str = "heads", *, dry_run: bool = False) -> MigrationReport:
         start = time.monotonic()

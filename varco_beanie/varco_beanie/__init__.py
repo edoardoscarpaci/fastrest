@@ -43,7 +43,9 @@ providify DI integration::
     repo = await container.aget(AsyncRepository[User])
 """
 
-from varco_beanie.bootstrap import BeanieConfig, BeanieFastrestApp
+from varco_core.deprecation import deprecated_alias
+
+from varco_beanie.bootstrap import BeanieFastrestApp
 from varco_beanie.conversation import BeanieConversationStore, ConversationTurnDocument
 from varco_beanie.deduplication import BeanieDeduplicator, DeduplicationDocument
 from varco_beanie.di import BeanieModule, BeanieSettings, bind_repositories
@@ -78,7 +80,6 @@ __all__ = [
     "BeanieModule",
     "bind_repositories",
     # Bootstrap
-    "BeanieConfig",
     "BeanieFastrestApp",
     # ── Conversation store (multi-turn A2A) ───────────────────────────────────
     "ConversationTurnDocument",
@@ -115,3 +116,15 @@ __all__ = [
     "BeanieMigrator",
     "IndexReconciler",
 ]
+
+# AB-4's back-compat seam (Plan 022). ``BeanieConfig`` was a second name for
+# ``BeanieSettings`` — the same four fields, bridged by KI-10's manual remap.
+# The alias resolves to the *identical* class, so `isinstance(x, BeanieConfig)`
+# and any existing construction keep working. Deliberately kept out of
+# ``__all__``: a deprecated name should not be advertised. Removed in 4.0.0.
+__getattr__ = deprecated_alias(
+    "BeanieConfig",
+    BeanieSettings,
+    since="3.0.0",
+    removed_in="4.0.0",
+)

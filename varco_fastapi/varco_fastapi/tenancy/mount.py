@@ -26,6 +26,7 @@ Three independent barriers against accidental bundling:
 from __future__ import annotations
 
 import logging
+import weakref
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -41,7 +42,15 @@ logger = logging.getLogger(__name__)
 
 # Tracks which FastAPI app instances already had the admin surface mounted
 # — refuses a second mount rather than silently duplicating routes.
-_MOUNTED_APPS: set[int] = set()
+#
+# A WeakSet, not a ``set[int]`` of ``id(app)`` (Plan 022 / RIDER-2): ``id()``
+# is unique only among *live* objects, so once an app was collected its
+# address could be reused by a new, unrelated FastAPI instance, which would
+# then match a stale entry and have its surface **silently not mounted**.
+# WeakSet entries vanish when the app is collected, so no stale identity can
+# ever be matched, and membership stays identity-based without keeping the
+# app alive.
+_MOUNTED_APPS: weakref.WeakSet[Any] = weakref.WeakSet()
 
 
 def mount_tenant_admin(
@@ -100,7 +109,7 @@ def mount_tenant_admin(
             "acknowledge_bundled_admin=True."
         )
 
-    if id(app) in _MOUNTED_APPS:
+    if app in _MOUNTED_APPS:
         raise ValueError(
             "mount_tenant_admin() was already called for this app — "
             "refusing to mount a second time (would duplicate routes)."
@@ -116,7 +125,7 @@ def mount_tenant_admin(
     )
 
     app.include_router(router, dependencies=list(dependencies))
-    _MOUNTED_APPS.add(id(app))
+    _MOUNTED_APPS.add(app)
 
     logger.warning(
         "mount_tenant_admin(): the tenant provisioning admin surface is "

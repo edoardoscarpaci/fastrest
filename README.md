@@ -1899,12 +1899,12 @@ pip install varco-beanie
 
 ```python
 from motor.motor_asyncio import AsyncIOMotorClient
-from varco_beanie import BeanieConfig, BeanieFastrestApp
+from varco_beanie import BeanieFastrestApp, BeanieSettings
 
 client = AsyncIOMotorClient("mongodb://localhost:27017")
 
 app = BeanieFastrestApp(
-    BeanieConfig(
+    BeanieSettings(
         motor_client=client,
         db_name="mydb",
         entity_classes=(User, Post),

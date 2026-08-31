@@ -6,7 +6,7 @@ helpers for the two framework tables (``varco_audit_log``,
 ``varco_dead_letters``) (Plan 009, Phase 6 / R4).
 
 These wrap ``varco_sa.migration.ops.rls_upgrade`` (itself a thin Alembic
-wrapper over ``varco_sa.rls.enable_rls_ddl``) so the correct
+wrapper over ``varco_sa.rls.render_rls_ddl``) so the correct
 ``(SELECT current_setting(..., true))`` InitPlan form is always used — the
 documented, non-negotiable performance regression this codebase guards
 against everywhere RLS is touched.
@@ -57,7 +57,7 @@ def framework_rls_upgrade(
                        ``"tenant_id"`` (matches both framework tables' schema
                        from Phase 6).
         cast_type:     Postgres type the ``rls.tenant_id`` GUC is cast to.
-                       Defaults to ``"text"`` — NOT ``enable_rls_ddl``'s
+                       Defaults to ``"text"`` — NOT ``render_rls_ddl``'s
                        ``"uuid"`` default — because both framework tables
                        declare ``tenant_id`` as ``String(255)``
                        (``DeadLetterEntry.tenant_id``/``AuditEntry.tenant_id``
@@ -74,10 +74,10 @@ def framework_rls_upgrade(
           Postgres' "policy already exists"; pair with
           ``framework_rls_downgrade`` for an idempotent revision.
     """
-    # DESIGN: call enable_rls_ddl() directly (not migration.ops.rls_upgrade)
+    # DESIGN: call render_rls_ddl() directly (not migration.ops.rls_upgrade)
     #   ✅ rls_upgrade()'s non-Postgres no-op guard needs op.get_bind() — a
     #      real Alembic Operations proxy, not the minimal execute()-only
-    #      shape this module documents accepting. Calling enable_rls_ddl()
+    #      shape this module documents accepting. Calling render_rls_ddl()
     #      directly keeps framework_rls_upgrade usable with any op-like
     #      object that can execute() a string, matching the docstring's own
     #      "any object exposing execute()" contract.
@@ -85,10 +85,10 @@ def framework_rls_upgrade(
     #      — callers targeting a non-Postgres dialect must guard themselves
     #      (this module is Postgres-only by construction: RLS doesn't exist
     #      anywhere else).
-    from varco_sa.rls import enable_rls_ddl
+    from varco_sa.rls import render_rls_ddl
 
     for table in tables:
-        for stmt in enable_rls_ddl(table, tenant_column=tenant_column, cast_type=cast_type):
+        for stmt in render_rls_ddl(table, tenant_column=tenant_column, cast_type=cast_type):
             op.execute(stmt)
 
 

@@ -83,7 +83,8 @@ def create_app() -> FastAPI:
         - Calling ``create_app()`` multiple times is safe — each call returns
           an independent app with its own container and in-memory store.
         - If ``VARCO_CORS_ORIGINS`` is not set, ``CORSConfig.from_env()``
-          defaults to allowing all origins.
+          allows **no** cross-origin requests (Plan 022 / AB-5 — it defaulted
+          to allowing all origins until 3.0.0). Set the env var to enable CORS.
 
     Thread safety:  ✅ Intended to be called once at startup.
     Async safety:   ✅ Synchronous — no async bootstrap needed.
