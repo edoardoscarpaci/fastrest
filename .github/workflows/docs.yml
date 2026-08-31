@@ -1,7 +1,7 @@
 # Versioned documentation via mike, deployed to the gh-pages branch.
 #
-# Plan 023 / Phase 6, §RL-12-docs. Two jobs in one file: `dev` tracks `main`,
-# `release` tracks a non-pre-release `v*` tag.
+# Plan 023 / Phase 6, §RL-12-docs. `dev` tracks `main`; `guard` classifies a
+# pushed `v*` tag and `release` deploys only for a final (non-pre-release) one.
 #
 # DESIGN: see mkdocs.yml's own DESIGN comment for why mike (not the Actions
 # artifact model) is the only mechanism available — not restated here.
@@ -11,9 +11,16 @@
 # `latest` (moves on each final release) and `dev` (tracks `main`). `stable`
 # is deliberately not used.
 #
-# Pre-release tags (`v3.0.0rc1`, matched by `rc|a|b|dev` in the tag) must
-# NEVER move `latest` — the `release` job's `if:` guard below skips entirely
-# rather than deploying a release candidate as the default version.
+# Pre-release tags (`v3.0.0rc1`, `v3.1.0b2`, …) must NEVER move `latest`, so
+# a `guard` job classifies the tag and `release` runs only for a final one.
+#
+# DESIGN: the classification is a bash regex in a job, not a `contains()`
+# chain in an `if:`. ✅ It anchors on the WHOLE tag (`^v\d+\.\d+\.\d+$`), so
+# only a real final release matches. ❌ It costs one extra ~5s runner job.
+# The rejected alternative — `!contains(github.ref, 'a') && …` — was actively
+# broken: `github.ref` is `refs/tags/v3.0.0`, and the literal `a` in `tags`
+# made the guard false for EVERY tag, so the release job could never run.
+# GitHub expressions have no regex, hence the job.
 #
 # `concurrency: docs-deploy` (shared across both jobs, `cancel-in-progress:
 # false`) serializes writes to `gh-pages` — a tag pushed while a `main` push
@@ -68,17 +75,36 @@ jobs:
       - name: mike deploy dev
         run: uv run mike deploy --push dev
 
+  guard:
+    name: Classify tag (final vs pre-release)
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      is_final: ${{ steps.classify.outputs.is_final }}
+      major_minor: ${{ steps.classify.outputs.major_minor }}
+    steps:
+      - name: Classify the pushed tag
+        id: classify
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Anchored on the whole tag: a final release is exactly vX.Y.Z.
+          # Anything else (v3.0.0rc1, v3.1.0b2, v4.0.0.dev1) is a pre-release
+          # and must not move `latest`.
+          if [[ "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+            echo "is_final=true" >> "$GITHUB_OUTPUT"
+            echo "major_minor=${BASH_REMATCH[1]}.${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+            echo "::notice::$TAG is a final release; deploying docs ${BASH_REMATCH[1]}.${BASH_REMATCH[2]} + latest"
+          else
+            echo "is_final=false" >> "$GITHUB_OUTPUT"
+            echo "major_minor=" >> "$GITHUB_OUTPUT"
+            echo "::notice::$TAG is a pre-release; skipping the docs release deploy"
+          fi
+
   release:
     name: Deploy release docs (tag)
-    # Skip pre-release tags (rc/a/b/dev suffixes) — they must never move
-    # `latest`. `v3.0.0rc1` publishes to PyPI (release.yml) but is invisible
-    # to the docs version switcher's default.
-    if: >
-      startsWith(github.ref, 'refs/tags/v') &&
-      !contains(github.ref, 'rc') &&
-      !contains(github.ref, 'a') &&
-      !contains(github.ref, 'b') &&
-      !contains(github.ref, 'dev')
+    needs: guard
+    if: needs.guard.outputs.is_final == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -101,13 +127,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
       - name: Fetch gh-pages if it exists
         run: git fetch origin gh-pages:gh-pages || true
-      - name: Derive <major>.<minor> from the tag
-        id: version
-        run: |
-          tag="${GITHUB_REF#refs/tags/v}"
-          major_minor="$(echo "$tag" | cut -d. -f1-2)"
-          echo "major_minor=$major_minor" >> "$GITHUB_OUTPUT"
       - name: mike deploy release + update latest alias
-        run: uv run mike deploy --push --update-aliases "${{ steps.version.outputs.major_minor }}" latest
+        run: uv run mike deploy --push --update-aliases "${{ needs.guard.outputs.major_minor }}" latest
       - name: mike set-default latest (idempotent)
         run: uv run mike set-default --push latest

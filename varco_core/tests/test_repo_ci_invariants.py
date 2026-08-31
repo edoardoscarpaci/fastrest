@@ -472,3 +472,84 @@ def test_git_blame_ignore_revs_exists_and_non_empty():
     path = REPO_ROOT / ".git-blame-ignore-revs"
     assert path.is_file(), ".git-blame-ignore-revs does not exist at repo root"
     assert path.read_text().strip(), ".git-blame-ignore-revs exists but is empty"
+
+
+# ---------------------------------------------------------------------------
+# Item 9 — docs.yml tag classification (Plan 023 / Phase 6, post-v3.0.0 fix)
+# ---------------------------------------------------------------------------
+
+DOCS_WORKFLOW = WORKFLOWS_DIR / "docs.yml"
+
+# Extracted from docs.yml's `guard` job so the test and the workflow cannot
+# drift: test_docs_workflow_guard_uses_this_exact_regex asserts the literal
+# appears in the file.
+_DOCS_TAG_BASH_RE = r"^v([0-9]+)\.([0-9]+)\.[0-9]+$"
+_DOCS_TAG_RE = re.compile(_DOCS_TAG_BASH_RE)
+
+
+def test_docs_workflow_guard_uses_this_exact_regex():
+    """The guard's bash regex must be byte-identical to the one this module
+    exercises below — otherwise the classification tests prove nothing."""
+    text = DOCS_WORKFLOW.read_text()
+    assert f'"$TAG" =~ {_DOCS_TAG_BASH_RE}' in text, (
+        "docs.yml's guard job no longer uses the regex this test exercises; "
+        "update _DOCS_TAG_BASH_RE and re-check the cases below"
+    )
+
+
+def test_docs_workflow_release_gate_never_substring_matches_the_full_ref():
+    """Regression: the original guard was `!contains(github.ref, 'a') && ...`.
+
+    `github.ref` for a tag is `refs/tags/v3.0.0` — the literal `a` in `tags`
+    made that expression false for EVERY tag, so the release job was skipped
+    on the real v3.0.0 push and no versioned docs were ever deployed.
+    """
+    # Comment lines are stripped: docs.yml's DESIGN block deliberately quotes
+    # the broken expression to explain why it was rejected.
+    live = "\n".join(
+        line for line in DOCS_WORKFLOW.read_text().splitlines() if not line.lstrip().startswith("#")
+    )
+    assert "contains(github.ref" not in live, (
+        "docs.yml gates on a substring of the full ref again — `refs/tags/...` "
+        "contains 'a', 'g', 's', 'r', 'e', 'f', 't' and will misfire"
+    )
+
+
+def test_docs_workflow_release_job_depends_on_guard():
+    """`release` must be gated on the guard's output, not on its own `if:`."""
+    text = DOCS_WORKFLOW.read_text()
+    assert "needs: guard" in text
+    assert "if: needs.guard.outputs.is_final == 'true'" in text
+    assert "needs.guard.outputs.major_minor" in text, (
+        "the mike deploy step must consume the guard's derived <major>.<minor>"
+    )
+
+
+def test_docs_tag_classification_accepts_final_releases():
+    """A final release tag deploys `<major>.<minor>` and moves `latest`."""
+    for tag, expected in [
+        ("v3.0.0", "3.0"),
+        ("v3.1.0", "3.1"),
+        ("v3.0.12", "3.0"),
+        ("v10.4.2", "10.4"),
+        ("v4.0.0", "4.0"),
+    ]:
+        m = _DOCS_TAG_RE.match(tag)
+        assert m is not None, f"{tag} must be classified as a final release"
+        assert f"{m.group(1)}.{m.group(2)}" == expected
+
+
+def test_docs_tag_classification_rejects_pre_releases():
+    """A pre-release tag must never move `latest` (it still hits PyPI via
+    release.yml, but is invisible to the docs version switcher's default)."""
+    for tag in [
+        "v3.0.0rc1",
+        "v3.1.0b2",
+        "v3.0.0a1",
+        "v4.0.0.dev1",
+        "v3.0.0-rc.1",
+        "v3.0",
+        "3.0.0",
+        "latest",
+    ]:
+        assert _DOCS_TAG_RE.match(tag) is None, f"{tag} must NOT be classified as a final release"

@@ -930,7 +930,7 @@ it in the same Settings session as Step 39 rather than making a second trip. Row
     PyPI pages cannot be linked from one field; Topics → `python`, `event-driven`, `kafka`,
     `redis`, `dependency-injection`, `framework`, `async`. Discoverability, not security — but free.
 
-8.4 [ ] **Settings → Actions → General** (rows 16–18):
+8.4 [X] **Settings → Actions → General** (rows 16–18):
     - *Workflow permissions* → "Read repository contents and packages permissions". **Verify only**
       — read-only has been the default since Feb 2023 (007 checklist row 16). `release.yml`
       escalates to `id-token: write` in its own job block and `docs.yml` to `contents: write` in
@@ -941,7 +941,7 @@ it in the same Settings session as Step 39 rather than making a second trip. Row
     - *Fork pull request workflows from outside collaborators* → "Require approval for first-time
       contributors who are new to GitHub" (007 row 18).
 
-8.5 [ ] **Settings → Code security** (rows 30–36), top to bottom:
+8.5 [X] **Settings → Code security** (rows 30–36), top to bottom:
     - Dependabot alerts → **Enable**
     - Dependabot security updates → **Enable**
     - Secret scanning → **Enable**
@@ -953,7 +953,7 @@ it in the same Settings session as Step 39 rather than making a second trip. Row
       channel (Step 21) real.
     Nothing to do for the dependency graph: automatic on public repos.
 
-8.6 [ ] ⚠️ **Verify CodeQL actually covers the ten packages** (007 Evidence Gap 1 — official docs
+8.6 [X] ⚠️ **Verify CodeQL actually covers the ten packages** (007 Evidence Gap 1 — official docs
     do not confirm default setup on a ten-member `uv` workspace). After the first CodeQL run
     completes, open Security → Code scanning and confirm findings/scanned paths span more than one
     `varco_*` directory. Record the observation in the release runbook. **Only on evidence of
@@ -961,7 +961,7 @@ it in the same Settings session as Step 39 rather than making a second trip. Row
     `paths-ignore: ["*/tests/**"]`. Do not pre-emptively narrow the scan — 007 §5 notes tests are
     legitimately scanned.
 
-8.7 [ ] **Expect push protection to flag test credentials; do not "fix" the fixtures.** varco
+8.7 [X] **Expect push protection to flag test credentials; do not "fix" the fixtures.** varco
     commits throwaway testcontainer credentials and JWT test PEM keys. 007 §6: the block offers
     three bypass reasons — choose **"It's used in tests"** (creates a closed, labelled alert). Do
     **not** delete or obfuscate a test fixture to appease a scanner, and do **not** add
