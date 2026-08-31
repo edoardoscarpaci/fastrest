@@ -1,5 +1,5 @@
 # varco-kafka
-
+[![PyPI version](https://img.shields.io/pypi/v/varco-kafka.svg)](https://pypi.org/project/varco-kafka/)
 Apache Kafka event bus backend for [varco](https://github.com/edoardoscarpaci/varco).
 
 `KafkaEventBus` implements `AbstractEventBus` from `varco_core` using

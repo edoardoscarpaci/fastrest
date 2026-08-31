@@ -36,6 +36,11 @@ dev = [
     # tomlkit powers scripts/bump.py's style-preserving TOML edits (Plan 023 /
     # §RL-9-bump) — a regex cannot distinguish a shipped [project].dependencies
     # sibling entry from a [dependency-groups].dev one that must NOT be pinned.
+    "mike>=2.2.0",
+    "mkdocs-gen-files>=0.6.1",
+    "mkdocs-literate-nav>=0.6.3",
+    "mkdocs-material>=9.7.6",
+    "pymdown-extensions>=10.21.3",
     "tomlkit>=0.13",
 ]
 # Documentation tooling — MkDocs Material + mkdocstrings (Google-style docstrings).

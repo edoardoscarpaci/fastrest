@@ -66,8 +66,24 @@ _SRC_DIRS := $(foreach p,$(_TARGETS),$(p)/$(p))
 # `[dependency-groups] lint`) — the previous ephemeral-resolve invocation
 # picked up whatever ruff release was newest at invocation time, so a local
 # green said nothing about CI.
-RUFF  := uv run ruff
-MYPY  := uv run mypy
+# `--all-packages --all-extras` is NOT optional here (see the mypy note below).
+RUFF  := uv run --all-packages --all-extras ruff
+MYPY  := uv run --all-packages --all-extras mypy
+
+# DESIGN: why both carry --all-packages --all-extras, even though ruff never
+# imports anything.  `uv run` syncs the environment before executing, and a
+# bare `uv run` syncs to the DEFAULT set — which UNINSTALLS optional extras a
+# previous `uv sync --all-extras` had put there.  With `mcp` and
+# `prometheus-client` gone, `ignore_missing_imports = true` silently degrades
+# their types to Any and mypy reports two errors that have nothing to do with
+# the code under check:
+#     router/mcp.py     no-any-unimported  (_MCPTool became Any)
+#     router/metrics.py unused-ignore      (a call on Any is not untyped)
+# So a bare `uv run ruff` immediately before `make type-check` was enough to
+# break it.  ✅ Both vars now request the same environment CI builds with
+# `uv sync --locked --all-packages --all-extras`, so no target can strip the
+# extras out from under another.  ❌ Each invocation re-checks the sync
+# (fast, and a no-op once the env matches).
 
 # ─────────────────────────────────────────────────────────────────────────────
 .PHONY: help
@@ -257,7 +273,7 @@ DOCS_ENV := NO_MKDOCS_2_WARNING=1 DISABLE_MKDOCS_2_WARNING=true
 
 .PHONY: docs-deps
 docs-deps:
-	uv sync --group docs
+	uv sync --all-packages --all-extras --group docs
 
 # Normal build — produces ./site even while docstring coverage is still improving.
 .PHONY: docs

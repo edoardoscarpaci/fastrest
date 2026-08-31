@@ -212,7 +212,10 @@ class MetricsRouter:
                 )
 
                 # prometheus_client ≥ 0.20 requires REGISTRY as first arg
-                # prometheus_client ships no py.typed marker — generate_latest() is untyped upstream.
+                # prometheus_client DOES ship py.typed, but generate_latest() itself
+                # carries no annotations, so calling it is still a no-untyped-call.
+                # NOTE: this ignore only resolves when the `prometheus` extra is
+                # installed; see the Makefile's RUFF/MYPY DESIGN note.
                 return Response(
                     content=openmetrics_generate(REGISTRY),  # type: ignore[no-untyped-call]
                     media_type=OPENMETRICS_CONTENT_TYPE,

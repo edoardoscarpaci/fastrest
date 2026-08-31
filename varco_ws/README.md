@@ -1,5 +1,5 @@
 # varco-ws
-
+[![PyPI version](https://img.shields.io/pypi/v/varco-ws.svg)](https://pypi.org/project/varco-ws/)
 WebSocket and Server-Sent Events (SSE) push adapters for the
 [varco](https://github.com/edoardoscarpaci/varco) event system.
 

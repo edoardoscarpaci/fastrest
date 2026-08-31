@@ -1,5 +1,5 @@
 # varco-redis
-
+[![PyPI version](https://img.shields.io/pypi/v/varco-redis.svg)](https://pypi.org/project/varco-redis/)
 Redis backend for [varco](https://github.com/edoardoscarpaci/varco).
 
 Provides two independent subsystems backed by Redis:

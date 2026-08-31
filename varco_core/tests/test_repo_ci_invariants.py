@@ -245,8 +245,11 @@ def test_makefile_uses_uv_run_ruff_not_uvx():
     only `uv run ruff` reads the pinned version from uv.lock."""
     makefile_text = MAKEFILE.read_text()
     assert "uvx" not in makefile_text, "Makefile must not invoke 'uvx' anywhere"
-    assert re.search(r"RUFF\s*:=\s*uv run ruff", makefile_text), (
-        "Makefile RUFF variable must be 'uv run ruff'"
+    # Flags between `uv run` and `ruff` are allowed (the extras contract — see
+    # test_makefile_lint_tools_request_all_extras); the invariant this test
+    # guards is `uv run`, never `uvx`.
+    assert re.search(r"RUFF\s*:=\s*uv run\b[^\n]*\bruff\b", makefile_text), (
+        "Makefile RUFF variable must invoke ruff via 'uv run'"
     )
 
 
@@ -407,11 +410,14 @@ def test_all_uses_lines_pinned_by_commit_sha():
     be a 40-hex commit SHA (a trailing '# vN' comment is fine, that's just a
     human-readable label)."""
     offenders: list[str] = []
-    for name in ("test.yml", "integration.yml"):
-        path = WORKFLOWS_DIR / name
-        if not path.is_file():
-            offenders.append(f"{name}: file missing")
-            continue
+    # Globbed, not a hard-coded pair: release.yml publishes to PyPI and
+    # docs.yml/scorecard.yml/codeql.yml all hold write scopes, so an unpinned
+    # action in any of them is a supply-chain hole AND drops Scorecard's
+    # Pinned-Dependencies score. A hard-coded list silently skips new files.
+    workflows = sorted(WORKFLOWS_DIR.glob("*.yml"))
+    assert workflows, "no workflow files found"
+    for path in workflows:
+        name = path.name
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):
             stripped = line.strip()
             if (
@@ -553,3 +559,25 @@ def test_docs_tag_classification_rejects_pre_releases():
         "latest",
     ]:
         assert _DOCS_TAG_RE.match(tag) is None, f"{tag} must NOT be classified as a final release"
+
+
+def test_makefile_lint_tools_request_all_extras():
+    """RUFF/MYPY must run under `--all-packages --all-extras`.
+
+    `uv run` syncs before executing, and a bare `uv run` syncs to the DEFAULT
+    set — uninstalling the `mcp` / `prometheus` extras. With those gone,
+    `ignore_missing_imports = true` degrades their types to Any and mypy
+    reports two errors unrelated to the code under check (no-any-unimported in
+    router/mcp.py, unused-ignore in router/metrics.py). CI never sees this
+    because it runs `uv sync --locked --all-packages --all-extras` first; these
+    flags give the Makefile the same environment contract.
+    """
+    text = MAKEFILE.read_text()
+    for var in ("RUFF", "MYPY"):
+        m = re.search(rf"^{var}\s*:=\s*(.+)$", text, re.MULTILINE)
+        assert m is not None, f"Makefile no longer defines {var}"
+        invocation = m.group(1)
+        assert "--all-packages" in invocation and "--all-extras" in invocation, (
+            f"{var} := {invocation!r} drops the extras contract; a bare `uv run` "
+            f"strips the mcp/prometheus extras and breaks `make type-check`"
+        )
