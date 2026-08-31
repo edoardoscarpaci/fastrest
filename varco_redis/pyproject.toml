@@ -28,7 +28,7 @@ dependencies = [
     "providify>=2.0.0",
     # pydantic-settings is used directly in varco_redis.config for SettingsConfigDict.
     # It is also a transitive dep via varco-core, but listed explicitly here.
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.14.2",
 ]
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
