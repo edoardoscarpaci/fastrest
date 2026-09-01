@@ -15,6 +15,13 @@ brokers via testcontainers (`.github/workflows/integration.yml`). See
 deprecation policy, [SECURITY.md](SECURITY.md) to report a vulnerability privately, and
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
 
+**Common pitfalls**: [technical_docs/common-pitfalls.md](technical_docs/common-pitfalls.md)
+collects the cross-cutting traps that have actually bitten someone using varco — per-call
+`CircuitBreaker`/`Bulkhead`/`Singleflight` instances that never do anything, cache keys missing
+a tenant namespace, DI binding annotations that silently drop every injection, and more. Worth a
+read before writing code against any of those primitives. Feature-specific operational pitfalls
+live in each feature's own page under [technical_docs/features/](technical_docs/features/).
+
 ---
 
 ## Packages
@@ -2054,8 +2061,8 @@ uv run pytest varco_redis/tests/ -m integration
 `make test` (`scripts/unit_tests.sh`) runs the same per-package suites as CI's `unit` job —
 all ten packages plus the `examples/00-full-stack-post-api` suite, one accumulated summary
 rather than aborting on the first red package. `make lint` / `make type-check` use the same
-`uv run ruff` / `uv run mypy` commands CI's `lint` job runs — never `uvx ruff` (see CLAUDE.md's
-Common Pitfalls table).
+`uv run ruff` / `uv run mypy` commands CI's `lint` job runs — never `uvx ruff` (see
+[technical_docs/common-pitfalls.md](technical_docs/common-pitfalls.md)).
 
 `make chaos-test` / `make chaos-test-clean` run the **chaos** suite — tests that kill, pause, or
 restart a real container mid-test to assert guarantees `make integration-test` cannot: outbox

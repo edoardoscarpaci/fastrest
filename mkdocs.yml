@@ -101,6 +101,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Common Pitfalls: common-pitfalls.md
   - Features:
       - RouteGuard: features/route-guard.md
       - Generic Router: features/generic-router.md

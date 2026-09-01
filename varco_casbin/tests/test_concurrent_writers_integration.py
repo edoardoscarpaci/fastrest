@@ -4,7 +4,7 @@ Concurrent-writer coverage for ``adapter="sqlalchemy"`` on real Postgres
 
 Seven real-Postgres persistence tests already exist
 (``test_persistence_integration.py``); the residual gap RT3 actually names
-is **concurrent writers**. CLAUDE.md's Common Pitfalls table recommends
+is **concurrent writers**. CLAUDE.md's Casbin authorization rules recommend
 ``adapter="sqlalchemy"`` over ``adapter="file"`` precisely because the
 latter *"is durable but single-process only (concurrent writers can corrupt
 the CSV)"* — yet nothing verified that the recommended adapter survives
