@@ -167,6 +167,18 @@ workflows that never gate a PR (Plan 023 / Phase 5):
   `needs:` and must **never** become a required check, on any schedule — unlike `integration`
   (whose eventual promotion is a possibility after a measured flake rate), `chaos` exists to find
   real bugs under deliberate container failure, not to gate merges.
+  Since Plan 024 the workflow also carries a `concurrency` group scoped by `github.event_name` as
+  well as `github.ref` (`${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}`,
+  `cancel-in-progress: true`) — several merges landing in quick succession leave only the newest
+  commit's run running, while the nightly `schedule` and any `workflow_dispatch` run sit in
+  separate groups and can never be cancelled by, or cancel, a merge (which would take the `chaos`
+  job down with it). It deliberately does **not** use `test.yml`'s simpler `${{ github.workflow
+  }}-${{ github.ref }}` group: this workflow has three triggers that all report `github.ref ==
+  refs/heads/main`, so a ref-only group would collide across them (`design/research/001-github-actions-concurrency-semantics.md`
+  §3). This is also a new, independent, mechanical reason `integration`/`chaos` must never become
+  a required check while `cancel-in-progress: true` is set — a cancelled run resolves as neither
+  success nor failure, so a required check that can be cancelled can leave a PR permanently stuck
+  "waiting for status to be reported" (research 001 §8).
 
 - **`release.yml`** — `push: tags: ["v*"]` + `workflow_dispatch` only. Three jobs: `packages`
   (derives the `{dir, name}` matrix from `scripts/packages.sh`, RL-18 compliance), `build` (one

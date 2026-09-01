@@ -9,6 +9,18 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: `integration.yml` now cancels stale runs on `main` (Plan 024).** A new workflow-level
+  `concurrency` stanza — `group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref
+  }}`, `cancel-in-progress: true` — means that when several PRs merge to `main` in quick
+  succession, only the newest merge commit's `integration` run reaches completion; earlier
+  in-flight/pending runs on the same trigger are cancelled. The nightly `schedule` run and any
+  `workflow_dispatch` run are scoped by `github.event_name` into *separate* groups and are never
+  cancelled by, or able to cancel, a merge run — deliberately distinct from `test.yml`'s simpler
+  ref-only group, which would otherwise let a merge cancel the nightly run (and its `chaos` job).
+  **Test-only release — no runtime package changed.**
+
 ### Fixed
 
 - **CI: the `Docs` workflow could never run `mike`.** Both the `dev` and `release` jobs installed
