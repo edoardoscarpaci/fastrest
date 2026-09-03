@@ -12817,6 +12817,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_nats.dlq.NatsDLQConfiguration.close_dlq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_dlq
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -15635,6 +15646,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_nats.dlq.NatsDLQConfiguration.close_dlq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_dlq
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -17620,6 +17642,125 @@ already-registered <code>NatsEventBusSettings</code> singleton instead.</p>
 <a id="__codelineno-0-775" name="__codelineno-0-775"></a>    <span class="n">dlq</span> <span class="o">=</span> <span class="n">NatsDLQ</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
 <a id="__codelineno-0-776" name="__codelineno-0-776"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 <a id="__codelineno-0-777" name="__codelineno-0-777"></a>    <span class="k">return</span> <span class="n">dlq</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="varco_nats.dlq.NatsDLQConfiguration.close_dlq" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">close_dlq</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#varco_nats.dlq.NatsDLQConfiguration.close_dlq" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">close_dlq</span><span class="p">(</span><span class="n">dlq</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="NatsDLQ (varco_nats.dlq.NatsDLQ)" href="#varco_nats.dlq.NatsDLQ">NatsDLQ</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Stop the <code>NatsDLQ</code> produced by <code>nats_dlq</code> on shutdown.</p>
+
+
+<details class="design" open>
+  <summary><code>@Disposes</code> over relying on <code>@PreDestroy</code></summary>
+  <p>✅ Providify never invokes <code>@PreDestroy</code> on a <code>@Provider</code>-produced
+   instance — <code>@Disposes</code> is upstream's own supported teardown
+   mechanism (Plan 024 / C2). Tier B — <code>NatsDLQ</code> carries no
+   <code>@PreDestroy</code>, so this leak was invisible to providify's
+   <code>UNREACHABLE_PRE_DESTROY</code> detector before the fix.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dlq</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="NatsDLQ (varco_nats.dlq.NatsDLQ)" href="#varco_nats.dlq.NatsDLQ">NatsDLQ</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>NatsDLQ</code> instance this configuration produced. Typed
+concretely (not <code>AbstractDeadLetterQueue</code>) because
+<code>stop()</code> is not part of the ABC — see
+<code>RedisDLQConfiguration.close_dlq</code> for the same note.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="async-safety" open>
+  <summary>✅ Awaited by providify's <code>_adispose</code> during</summary>
+  <p><code>container.ashutdown()</code>.</p>
+</details>
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>varco_nats/varco_nats/dlq.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-779">779</a></span>
+<span class="normal"><a href="#__codelineno-0-780">780</a></span>
+<span class="normal"><a href="#__codelineno-0-781">781</a></span>
+<span class="normal"><a href="#__codelineno-0-782">782</a></span>
+<span class="normal"><a href="#__codelineno-0-783">783</a></span>
+<span class="normal"><a href="#__codelineno-0-784">784</a></span>
+<span class="normal"><a href="#__codelineno-0-785">785</a></span>
+<span class="normal"><a href="#__codelineno-0-786">786</a></span>
+<span class="normal"><a href="#__codelineno-0-787">787</a></span>
+<span class="normal"><a href="#__codelineno-0-788">788</a></span>
+<span class="normal"><a href="#__codelineno-0-789">789</a></span>
+<span class="normal"><a href="#__codelineno-0-790">790</a></span>
+<span class="normal"><a href="#__codelineno-0-791">791</a></span>
+<span class="normal"><a href="#__codelineno-0-792">792</a></span>
+<span class="normal"><a href="#__codelineno-0-793">793</a></span>
+<span class="normal"><a href="#__codelineno-0-794">794</a></span>
+<span class="normal"><a href="#__codelineno-0-795">795</a></span>
+<span class="normal"><a href="#__codelineno-0-796">796</a></span>
+<span class="normal"><a href="#__codelineno-0-797">797</a></span>
+<span class="normal"><a href="#__codelineno-0-798">798</a></span>
+<span class="normal"><a href="#__codelineno-0-799">799</a></span>
+<span class="normal"><a href="#__codelineno-0-800">800</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-779" name="__codelineno-0-779"></a><span class="nd">@Disposes</span><span class="p">(</span><span class="n">AbstractDeadLetterQueue</span><span class="p">)</span>
+<a id="__codelineno-0-780" name="__codelineno-0-780"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close_dlq</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dlq</span><span class="p">:</span> <span class="n">NatsDLQ</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-781" name="__codelineno-0-781"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-782" name="__codelineno-0-782"></a><span class="sd">    Stop the ``NatsDLQ`` produced by ``nats_dlq`` on shutdown.</span>
+<a id="__codelineno-0-783" name="__codelineno-0-783"></a>
+<a id="__codelineno-0-784" name="__codelineno-0-784"></a><span class="sd">    DESIGN: ``@Disposes`` over relying on ``@PreDestroy``</span>
+<a id="__codelineno-0-785" name="__codelineno-0-785"></a><span class="sd">        ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced</span>
+<a id="__codelineno-0-786" name="__codelineno-0-786"></a><span class="sd">           instance — ``@Disposes`` is upstream&#39;s own supported teardown</span>
+<a id="__codelineno-0-787" name="__codelineno-0-787"></a><span class="sd">           mechanism (Plan 024 / C2). Tier B — ``NatsDLQ`` carries no</span>
+<a id="__codelineno-0-788" name="__codelineno-0-788"></a><span class="sd">           ``@PreDestroy``, so this leak was invisible to providify&#39;s</span>
+<a id="__codelineno-0-789" name="__codelineno-0-789"></a><span class="sd">           ``UNREACHABLE_PRE_DESTROY`` detector before the fix.</span>
+<a id="__codelineno-0-790" name="__codelineno-0-790"></a>
+<a id="__codelineno-0-791" name="__codelineno-0-791"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-792" name="__codelineno-0-792"></a><span class="sd">        dlq: The ``NatsDLQ`` instance this configuration produced. Typed</span>
+<a id="__codelineno-0-793" name="__codelineno-0-793"></a><span class="sd">            concretely (not ``AbstractDeadLetterQueue``) because</span>
+<a id="__codelineno-0-794" name="__codelineno-0-794"></a><span class="sd">            ``stop()`` is not part of the ABC — see</span>
+<a id="__codelineno-0-795" name="__codelineno-0-795"></a><span class="sd">            ``RedisDLQConfiguration.close_dlq`` for the same note.</span>
+<a id="__codelineno-0-796" name="__codelineno-0-796"></a>
+<a id="__codelineno-0-797" name="__codelineno-0-797"></a><span class="sd">    Async safety: ✅ Awaited by providify&#39;s ``_adispose`` during</span>
+<a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">        ``container.ashutdown()``.</span>
+<a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-800" name="__codelineno-0-800"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

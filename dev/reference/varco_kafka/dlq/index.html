@@ -12385,6 +12385,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_kafka.dlq.KafkaDLQConfiguration.close_dlq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_dlq
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -15635,6 +15646,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_kafka.dlq.KafkaDLQConfiguration.close_dlq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_dlq
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -17593,6 +17615,125 @@ singleton instead of this provider.</p>
 <a id="__codelineno-0-788" name="__codelineno-0-788"></a>    <span class="n">dlq</span> <span class="o">=</span> <span class="n">KafkaDLQ</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
 <a id="__codelineno-0-789" name="__codelineno-0-789"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 <a id="__codelineno-0-790" name="__codelineno-0-790"></a>    <span class="k">return</span> <span class="n">dlq</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="varco_kafka.dlq.KafkaDLQConfiguration.close_dlq" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">close_dlq</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#varco_kafka.dlq.KafkaDLQConfiguration.close_dlq" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">close_dlq</span><span class="p">(</span><span class="n">dlq</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="KafkaDLQ (varco_kafka.dlq.KafkaDLQ)" href="#varco_kafka.dlq.KafkaDLQ">KafkaDLQ</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Stop the <code>KafkaDLQ</code> produced by <code>kafka_dlq</code> on shutdown.</p>
+
+
+<details class="design" open>
+  <summary><code>@Disposes</code> over relying on <code>@PreDestroy</code></summary>
+  <p>✅ Providify never invokes <code>@PreDestroy</code> on a <code>@Provider</code>-produced
+   instance — <code>@Disposes</code> is upstream's own supported teardown
+   mechanism (Plan 024 / C2). Tier B — <code>KafkaDLQ</code> carries no
+   <code>@PreDestroy</code>, so this leak was invisible to providify's
+   <code>UNREACHABLE_PRE_DESTROY</code> detector before the fix.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dlq</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="KafkaDLQ (varco_kafka.dlq.KafkaDLQ)" href="#varco_kafka.dlq.KafkaDLQ">KafkaDLQ</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>KafkaDLQ</code> instance this configuration produced.
+Typed concretely (not <code>AbstractDeadLetterQueue</code>) because
+<code>stop()</code> is not part of the ABC — see
+<code>RedisDLQConfiguration.close_dlq</code> for the same note.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="async-safety" open>
+  <summary>✅ Awaited by providify's <code>_adispose</code> during</summary>
+  <p><code>container.ashutdown()</code>.</p>
+</details>
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>varco_kafka/varco_kafka/dlq.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-792">792</a></span>
+<span class="normal"><a href="#__codelineno-0-793">793</a></span>
+<span class="normal"><a href="#__codelineno-0-794">794</a></span>
+<span class="normal"><a href="#__codelineno-0-795">795</a></span>
+<span class="normal"><a href="#__codelineno-0-796">796</a></span>
+<span class="normal"><a href="#__codelineno-0-797">797</a></span>
+<span class="normal"><a href="#__codelineno-0-798">798</a></span>
+<span class="normal"><a href="#__codelineno-0-799">799</a></span>
+<span class="normal"><a href="#__codelineno-0-800">800</a></span>
+<span class="normal"><a href="#__codelineno-0-801">801</a></span>
+<span class="normal"><a href="#__codelineno-0-802">802</a></span>
+<span class="normal"><a href="#__codelineno-0-803">803</a></span>
+<span class="normal"><a href="#__codelineno-0-804">804</a></span>
+<span class="normal"><a href="#__codelineno-0-805">805</a></span>
+<span class="normal"><a href="#__codelineno-0-806">806</a></span>
+<span class="normal"><a href="#__codelineno-0-807">807</a></span>
+<span class="normal"><a href="#__codelineno-0-808">808</a></span>
+<span class="normal"><a href="#__codelineno-0-809">809</a></span>
+<span class="normal"><a href="#__codelineno-0-810">810</a></span>
+<span class="normal"><a href="#__codelineno-0-811">811</a></span>
+<span class="normal"><a href="#__codelineno-0-812">812</a></span>
+<span class="normal"><a href="#__codelineno-0-813">813</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-792" name="__codelineno-0-792"></a><span class="nd">@Disposes</span><span class="p">(</span><span class="n">AbstractDeadLetterQueue</span><span class="p">)</span>
+<a id="__codelineno-0-793" name="__codelineno-0-793"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close_dlq</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dlq</span><span class="p">:</span> <span class="n">KafkaDLQ</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-794" name="__codelineno-0-794"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-795" name="__codelineno-0-795"></a><span class="sd">    Stop the ``KafkaDLQ`` produced by ``kafka_dlq`` on shutdown.</span>
+<a id="__codelineno-0-796" name="__codelineno-0-796"></a>
+<a id="__codelineno-0-797" name="__codelineno-0-797"></a><span class="sd">    DESIGN: ``@Disposes`` over relying on ``@PreDestroy``</span>
+<a id="__codelineno-0-798" name="__codelineno-0-798"></a><span class="sd">        ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced</span>
+<a id="__codelineno-0-799" name="__codelineno-0-799"></a><span class="sd">           instance — ``@Disposes`` is upstream&#39;s own supported teardown</span>
+<a id="__codelineno-0-800" name="__codelineno-0-800"></a><span class="sd">           mechanism (Plan 024 / C2). Tier B — ``KafkaDLQ`` carries no</span>
+<a id="__codelineno-0-801" name="__codelineno-0-801"></a><span class="sd">           ``@PreDestroy``, so this leak was invisible to providify&#39;s</span>
+<a id="__codelineno-0-802" name="__codelineno-0-802"></a><span class="sd">           ``UNREACHABLE_PRE_DESTROY`` detector before the fix.</span>
+<a id="__codelineno-0-803" name="__codelineno-0-803"></a>
+<a id="__codelineno-0-804" name="__codelineno-0-804"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-805" name="__codelineno-0-805"></a><span class="sd">        dlq: The ``KafkaDLQ`` instance this configuration produced.</span>
+<a id="__codelineno-0-806" name="__codelineno-0-806"></a><span class="sd">            Typed concretely (not ``AbstractDeadLetterQueue``) because</span>
+<a id="__codelineno-0-807" name="__codelineno-0-807"></a><span class="sd">            ``stop()`` is not part of the ABC — see</span>
+<a id="__codelineno-0-808" name="__codelineno-0-808"></a><span class="sd">            ``RedisDLQConfiguration.close_dlq`` for the same note.</span>
+<a id="__codelineno-0-809" name="__codelineno-0-809"></a>
+<a id="__codelineno-0-810" name="__codelineno-0-810"></a><span class="sd">    Async safety: ✅ Awaited by providify&#39;s ``_adispose`` during</span>
+<a id="__codelineno-0-811" name="__codelineno-0-811"></a><span class="sd">        ``container.ashutdown()``.</span>
+<a id="__codelineno-0-812" name="__codelineno-0-812"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-813" name="__codelineno-0-813"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

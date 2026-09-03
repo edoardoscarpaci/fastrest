@@ -12618,6 +12618,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_memcached.cache.MemcachedCacheConfiguration.close_cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_cache
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -15845,6 +15856,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_memcached.cache.MemcachedCacheConfiguration.close_cache" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_cache
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -18044,8 +18066,12 @@ that this evicts ALL data on the server, affecting every client.</p>
 <details class="lifecycle" open>
   <summary>Lifecycle</summary>
   <p>The cache is started inside the provider and stopped automatically by
-<code>@PreDestroy</code> on <code>MemcachedCache.stop()</code> when
-<code>await container.ashutdown()</code> is called.</p>
+this configuration's <code>@Disposes(CacheBackend)</code> method
+(<code>close_cache</code>) when <code>await container.ashutdown()</code> is called.
+<code>@PreDestroy</code> on <code>MemcachedCache</code> itself is unreachable —
+providify never invokes <code>@PreDestroy</code> on a <code>@Provider</code>-produced
+instance (Plan 024 / C2, closes
+<code>design/upstream-gaps/providify-provider-predestroy.md</code>).</p>
 </details>        <p>Thread safety:  ✅  Providify singletons are created once and cached.
 Async safety:   ✅  Provider is <code>async def</code> — safe to <code>await</code>.</p>
 <p>Example::</p>
@@ -18133,25 +18159,25 @@ await container.ainstall(MemcachedCacheConfiguration)
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_memcached/varco_memcached/cache.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-632">632</a></span>
-<span class="normal"><a href="#__codelineno-0-633">633</a></span>
-<span class="normal"><a href="#__codelineno-0-634">634</a></span>
-<span class="normal"><a href="#__codelineno-0-635">635</a></span>
-<span class="normal"><a href="#__codelineno-0-636">636</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-636">636</a></span>
 <span class="normal"><a href="#__codelineno-0-637">637</a></span>
 <span class="normal"><a href="#__codelineno-0-638">638</a></span>
 <span class="normal"><a href="#__codelineno-0-639">639</a></span>
 <span class="normal"><a href="#__codelineno-0-640">640</a></span>
-<span class="normal"><a href="#__codelineno-0-641">641</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-632" name="__codelineno-0-632"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-0-633" name="__codelineno-0-633"></a><span class="k">def</span><span class="w"> </span><span class="nf">memcached_cache_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MemcachedCacheSettings</span><span class="p">:</span>
-<a id="__codelineno-0-634" name="__codelineno-0-634"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-635" name="__codelineno-0-635"></a><span class="sd">    Default ``MemcachedCacheSettings`` pointing at ``localhost:11211``.</span>
-<a id="__codelineno-0-636" name="__codelineno-0-636"></a>
-<a id="__codelineno-0-637" name="__codelineno-0-637"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-638" name="__codelineno-0-638"></a><span class="sd">        A ``MemcachedCacheSettings`` with development-friendly defaults.</span>
-<a id="__codelineno-0-639" name="__codelineno-0-639"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-640" name="__codelineno-0-640"></a>    <span class="c1"># Reads from VARCO_MEMCACHED_CACHE_* env vars if set.</span>
-<a id="__codelineno-0-641" name="__codelineno-0-641"></a>    <span class="k">return</span> <span class="n">MemcachedCacheSettings</span><span class="o">.</span><span class="n">from_env</span><span class="p">()</span>
+<span class="normal"><a href="#__codelineno-0-641">641</a></span>
+<span class="normal"><a href="#__codelineno-0-642">642</a></span>
+<span class="normal"><a href="#__codelineno-0-643">643</a></span>
+<span class="normal"><a href="#__codelineno-0-644">644</a></span>
+<span class="normal"><a href="#__codelineno-0-645">645</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-636" name="__codelineno-0-636"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-0-637" name="__codelineno-0-637"></a><span class="k">def</span><span class="w"> </span><span class="nf">memcached_cache_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MemcachedCacheSettings</span><span class="p">:</span>
+<a id="__codelineno-0-638" name="__codelineno-0-638"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-639" name="__codelineno-0-639"></a><span class="sd">    Default ``MemcachedCacheSettings`` pointing at ``localhost:11211``.</span>
+<a id="__codelineno-0-640" name="__codelineno-0-640"></a>
+<a id="__codelineno-0-641" name="__codelineno-0-641"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-642" name="__codelineno-0-642"></a><span class="sd">        A ``MemcachedCacheSettings`` with development-friendly defaults.</span>
+<a id="__codelineno-0-643" name="__codelineno-0-643"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-644" name="__codelineno-0-644"></a>    <span class="c1"># Reads from VARCO_MEMCACHED_CACHE_* env vars if set.</span>
+<a id="__codelineno-0-645" name="__codelineno-0-645"></a>    <span class="k">return</span> <span class="n">MemcachedCacheSettings</span><span class="o">.</span><span class="n">from_env</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -18261,11 +18287,7 @@ await container.ainstall(MemcachedCacheConfiguration)
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_memcached/varco_memcached/cache.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-643">643</a></span>
-<span class="normal"><a href="#__codelineno-0-644">644</a></span>
-<span class="normal"><a href="#__codelineno-0-645">645</a></span>
-<span class="normal"><a href="#__codelineno-0-646">646</a></span>
-<span class="normal"><a href="#__codelineno-0-647">647</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-647">647</a></span>
 <span class="normal"><a href="#__codelineno-0-648">648</a></span>
 <span class="normal"><a href="#__codelineno-0-649">649</a></span>
 <span class="normal"><a href="#__codelineno-0-650">650</a></span>
@@ -18288,34 +18310,166 @@ await container.ainstall(MemcachedCacheConfiguration)
 <span class="normal"><a href="#__codelineno-0-667">667</a></span>
 <span class="normal"><a href="#__codelineno-0-668">668</a></span>
 <span class="normal"><a href="#__codelineno-0-669">669</a></span>
-<span class="normal"><a href="#__codelineno-0-670">670</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-643" name="__codelineno-0-643"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-0-644" name="__codelineno-0-644"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">memcached_cache</span><span class="p">(</span>
-<a id="__codelineno-0-645" name="__codelineno-0-645"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-646" name="__codelineno-0-646"></a>    <span class="n">settings</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">MemcachedCacheSettings</span><span class="p">],</span>
-<a id="__codelineno-0-647" name="__codelineno-0-647"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CacheBackend</span><span class="p">:</span>
-<a id="__codelineno-0-648" name="__codelineno-0-648"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-649" name="__codelineno-0-649"></a><span class="sd">    Create, start, and return the ``MemcachedCache`` singleton.</span>
-<a id="__codelineno-0-650" name="__codelineno-0-650"></a>
-<a id="__codelineno-0-651" name="__codelineno-0-651"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-652" name="__codelineno-0-652"></a><span class="sd">        settings: ``MemcachedCacheSettings`` — injected from the container.</span>
-<a id="__codelineno-0-653" name="__codelineno-0-653"></a>
-<a id="__codelineno-0-654" name="__codelineno-0-654"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-655" name="__codelineno-0-655"></a><span class="sd">        A started ``MemcachedCache`` bound to ``CacheBackend``.</span>
-<a id="__codelineno-0-656" name="__codelineno-0-656"></a>
-<a id="__codelineno-0-657" name="__codelineno-0-657"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-658" name="__codelineno-0-658"></a><span class="sd">        ConnectionError: If Memcached is unreachable at first use (aiomcache</span>
-<a id="__codelineno-0-659" name="__codelineno-0-659"></a><span class="sd">                         connects lazily — errors surface on the first operation,</span>
-<a id="__codelineno-0-660" name="__codelineno-0-660"></a><span class="sd">                         not on ``start()``).</span>
-<a id="__codelineno-0-661" name="__codelineno-0-661"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-662" name="__codelineno-0-662"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-<a id="__codelineno-0-663" name="__codelineno-0-663"></a>        <span class="s2">&quot;MemcachedCacheConfiguration: starting MemcachedCache (host=</span><span class="si">%s</span><span class="s2">, port=</span><span class="si">%s</span><span class="s2">, prefix=</span><span class="si">%r</span><span class="s2">).&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-664" name="__codelineno-0-664"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
-<a id="__codelineno-0-665" name="__codelineno-0-665"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
-<a id="__codelineno-0-666" name="__codelineno-0-666"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">key_prefix</span><span class="p">,</span>
-<a id="__codelineno-0-667" name="__codelineno-0-667"></a>    <span class="p">)</span>
-<a id="__codelineno-0-668" name="__codelineno-0-668"></a>    <span class="n">cache</span> <span class="o">=</span> <span class="n">MemcachedCache</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
-<a id="__codelineno-0-669" name="__codelineno-0-669"></a>    <span class="k">await</span> <span class="n">cache</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
-<a id="__codelineno-0-670" name="__codelineno-0-670"></a>    <span class="k">return</span> <span class="n">cache</span>
+<span class="normal"><a href="#__codelineno-0-670">670</a></span>
+<span class="normal"><a href="#__codelineno-0-671">671</a></span>
+<span class="normal"><a href="#__codelineno-0-672">672</a></span>
+<span class="normal"><a href="#__codelineno-0-673">673</a></span>
+<span class="normal"><a href="#__codelineno-0-674">674</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-647" name="__codelineno-0-647"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-0-648" name="__codelineno-0-648"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">memcached_cache</span><span class="p">(</span>
+<a id="__codelineno-0-649" name="__codelineno-0-649"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-650" name="__codelineno-0-650"></a>    <span class="n">settings</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">MemcachedCacheSettings</span><span class="p">],</span>
+<a id="__codelineno-0-651" name="__codelineno-0-651"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CacheBackend</span><span class="p">:</span>
+<a id="__codelineno-0-652" name="__codelineno-0-652"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-653" name="__codelineno-0-653"></a><span class="sd">    Create, start, and return the ``MemcachedCache`` singleton.</span>
+<a id="__codelineno-0-654" name="__codelineno-0-654"></a>
+<a id="__codelineno-0-655" name="__codelineno-0-655"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-656" name="__codelineno-0-656"></a><span class="sd">        settings: ``MemcachedCacheSettings`` — injected from the container.</span>
+<a id="__codelineno-0-657" name="__codelineno-0-657"></a>
+<a id="__codelineno-0-658" name="__codelineno-0-658"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-659" name="__codelineno-0-659"></a><span class="sd">        A started ``MemcachedCache`` bound to ``CacheBackend``.</span>
+<a id="__codelineno-0-660" name="__codelineno-0-660"></a>
+<a id="__codelineno-0-661" name="__codelineno-0-661"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-662" name="__codelineno-0-662"></a><span class="sd">        ConnectionError: If Memcached is unreachable at first use (aiomcache</span>
+<a id="__codelineno-0-663" name="__codelineno-0-663"></a><span class="sd">                         connects lazily — errors surface on the first operation,</span>
+<a id="__codelineno-0-664" name="__codelineno-0-664"></a><span class="sd">                         not on ``start()``).</span>
+<a id="__codelineno-0-665" name="__codelineno-0-665"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-666" name="__codelineno-0-666"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+<a id="__codelineno-0-667" name="__codelineno-0-667"></a>        <span class="s2">&quot;MemcachedCacheConfiguration: starting MemcachedCache (host=</span><span class="si">%s</span><span class="s2">, port=</span><span class="si">%s</span><span class="s2">, prefix=</span><span class="si">%r</span><span class="s2">).&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-668" name="__codelineno-0-668"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+<a id="__codelineno-0-669" name="__codelineno-0-669"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">port</span><span class="p">,</span>
+<a id="__codelineno-0-670" name="__codelineno-0-670"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">key_prefix</span><span class="p">,</span>
+<a id="__codelineno-0-671" name="__codelineno-0-671"></a>    <span class="p">)</span>
+<a id="__codelineno-0-672" name="__codelineno-0-672"></a>    <span class="n">cache</span> <span class="o">=</span> <span class="n">MemcachedCache</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+<a id="__codelineno-0-673" name="__codelineno-0-673"></a>    <span class="k">await</span> <span class="n">cache</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
+<a id="__codelineno-0-674" name="__codelineno-0-674"></a>    <span class="k">return</span> <span class="n">cache</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="varco_memcached.cache.MemcachedCacheConfiguration.close_cache" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">close_cache</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#varco_memcached.cache.MemcachedCacheConfiguration.close_cache" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">close_cache</span><span class="p">(</span><span class="n">cache</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="CacheBackend (varco_core.cache.base.CacheBackend)" href="../../varco_core/cache/base/#varco_core.cache.base.CacheBackend">CacheBackend</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Stop the <code>MemcachedCache</code> produced by <code>memcached_cache</code> on shutdown.</p>
+
+
+<details class="design" open>
+  <summary><code>@Disposes</code> over relying on <code>@PreDestroy</code></summary>
+  <p>✅ Providify never invokes <code>@PreDestroy</code> on a <code>@Provider</code>-produced
+   instance (Jakarta CDI producer-method rule, confirmed intentional
+   in providify 2.0.1's changelog) — <code>@Disposes</code> is upstream's own
+   supported teardown mechanism for exactly this shape.
+❌ If a second <code>@Configuration</code> also binds <code>CacheBackend</code> with
+   its own <code>@Disposes</code> in the same container, providify's
+   first-match wiring loop can attach the wrong disposer to this
+   binding (<code>design/upstream-gaps/providify-disposes-first-match.md</code>,
+   P24-DISPOSES-FIRSTMATCH) — not applicable to
+   <code>MemcachedCacheConfiguration</code> alone, since varco ships no
+   sibling Memcached cache configuration to collide with.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>cache</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="CacheBackend (varco_core.cache.base.CacheBackend)" href="../../varco_core/cache/base/#varco_core.cache.base.CacheBackend">CacheBackend</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>CacheBackend</code> instance this configuration produced.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="async-safety" open>
+  <summary>✅ Awaited by providify's <code>_adispose</code> during</summary>
+  <p><code>container.ashutdown()</code>.</p>
+</details>
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>varco_memcached/varco_memcached/cache.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-676">676</a></span>
+<span class="normal"><a href="#__codelineno-0-677">677</a></span>
+<span class="normal"><a href="#__codelineno-0-678">678</a></span>
+<span class="normal"><a href="#__codelineno-0-679">679</a></span>
+<span class="normal"><a href="#__codelineno-0-680">680</a></span>
+<span class="normal"><a href="#__codelineno-0-681">681</a></span>
+<span class="normal"><a href="#__codelineno-0-682">682</a></span>
+<span class="normal"><a href="#__codelineno-0-683">683</a></span>
+<span class="normal"><a href="#__codelineno-0-684">684</a></span>
+<span class="normal"><a href="#__codelineno-0-685">685</a></span>
+<span class="normal"><a href="#__codelineno-0-686">686</a></span>
+<span class="normal"><a href="#__codelineno-0-687">687</a></span>
+<span class="normal"><a href="#__codelineno-0-688">688</a></span>
+<span class="normal"><a href="#__codelineno-0-689">689</a></span>
+<span class="normal"><a href="#__codelineno-0-690">690</a></span>
+<span class="normal"><a href="#__codelineno-0-691">691</a></span>
+<span class="normal"><a href="#__codelineno-0-692">692</a></span>
+<span class="normal"><a href="#__codelineno-0-693">693</a></span>
+<span class="normal"><a href="#__codelineno-0-694">694</a></span>
+<span class="normal"><a href="#__codelineno-0-695">695</a></span>
+<span class="normal"><a href="#__codelineno-0-696">696</a></span>
+<span class="normal"><a href="#__codelineno-0-697">697</a></span>
+<span class="normal"><a href="#__codelineno-0-698">698</a></span>
+<span class="normal"><a href="#__codelineno-0-699">699</a></span>
+<span class="normal"><a href="#__codelineno-0-700">700</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-676" name="__codelineno-0-676"></a><span class="nd">@Disposes</span><span class="p">(</span><span class="n">CacheBackend</span><span class="p">)</span>
+<a id="__codelineno-0-677" name="__codelineno-0-677"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close_cache</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="n">CacheBackend</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-678" name="__codelineno-0-678"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-679" name="__codelineno-0-679"></a><span class="sd">    Stop the ``MemcachedCache`` produced by ``memcached_cache`` on shutdown.</span>
+<a id="__codelineno-0-680" name="__codelineno-0-680"></a>
+<a id="__codelineno-0-681" name="__codelineno-0-681"></a><span class="sd">    DESIGN: ``@Disposes`` over relying on ``@PreDestroy``</span>
+<a id="__codelineno-0-682" name="__codelineno-0-682"></a><span class="sd">        ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced</span>
+<a id="__codelineno-0-683" name="__codelineno-0-683"></a><span class="sd">           instance (Jakarta CDI producer-method rule, confirmed intentional</span>
+<a id="__codelineno-0-684" name="__codelineno-0-684"></a><span class="sd">           in providify 2.0.1&#39;s changelog) — ``@Disposes`` is upstream&#39;s own</span>
+<a id="__codelineno-0-685" name="__codelineno-0-685"></a><span class="sd">           supported teardown mechanism for exactly this shape.</span>
+<a id="__codelineno-0-686" name="__codelineno-0-686"></a><span class="sd">        ❌ If a second ``@Configuration`` also binds ``CacheBackend`` with</span>
+<a id="__codelineno-0-687" name="__codelineno-0-687"></a><span class="sd">           its own ``@Disposes`` in the same container, providify&#39;s</span>
+<a id="__codelineno-0-688" name="__codelineno-0-688"></a><span class="sd">           first-match wiring loop can attach the wrong disposer to this</span>
+<a id="__codelineno-0-689" name="__codelineno-0-689"></a><span class="sd">           binding (`design/upstream-gaps/providify-disposes-first-match.md`,</span>
+<a id="__codelineno-0-690" name="__codelineno-0-690"></a><span class="sd">           P24-DISPOSES-FIRSTMATCH) — not applicable to</span>
+<a id="__codelineno-0-691" name="__codelineno-0-691"></a><span class="sd">           ``MemcachedCacheConfiguration`` alone, since varco ships no</span>
+<a id="__codelineno-0-692" name="__codelineno-0-692"></a><span class="sd">           sibling Memcached cache configuration to collide with.</span>
+<a id="__codelineno-0-693" name="__codelineno-0-693"></a>
+<a id="__codelineno-0-694" name="__codelineno-0-694"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-695" name="__codelineno-0-695"></a><span class="sd">        cache: The ``CacheBackend`` instance this configuration produced.</span>
+<a id="__codelineno-0-696" name="__codelineno-0-696"></a>
+<a id="__codelineno-0-697" name="__codelineno-0-697"></a><span class="sd">    Async safety: ✅ Awaited by providify&#39;s ``_adispose`` during</span>
+<a id="__codelineno-0-698" name="__codelineno-0-698"></a><span class="sd">        ``container.ashutdown()``.</span>
+<a id="__codelineno-0-699" name="__codelineno-0-699"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-700" name="__codelineno-0-700"></a>    <span class="k">await</span> <span class="n">cache</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

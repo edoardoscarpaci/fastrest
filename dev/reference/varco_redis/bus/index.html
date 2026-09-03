@@ -12976,6 +12976,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_redis.bus.RedisEventBusSelectorConfiguration.close_bus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_bus
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -15525,6 +15536,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_redis.bus.RedisEventBusSelectorConfiguration.close_bus" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_bus
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -15862,13 +15884,7 @@ async with RedisEventBus(config) as bus:
 
                   <details class="mkdocstrings-source">
                     <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
-                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-134">134</a></span>
-<span class="normal"><a href="#__codelineno-0-135">135</a></span>
-<span class="normal"><a href="#__codelineno-0-136">136</a></span>
-<span class="normal"><a href="#__codelineno-0-137">137</a></span>
-<span class="normal"><a href="#__codelineno-0-138">138</a></span>
-<span class="normal"><a href="#__codelineno-0-139">139</a></span>
-<span class="normal"><a href="#__codelineno-0-140">140</a></span>
+                    <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-140">140</a></span>
 <span class="normal"><a href="#__codelineno-0-141">141</a></span>
 <span class="normal"><a href="#__codelineno-0-142">142</a></span>
 <span class="normal"><a href="#__codelineno-0-143">143</a></span>
@@ -15907,52 +15923,58 @@ async with RedisEventBus(config) as bus:
 <span class="normal"><a href="#__codelineno-0-176">176</a></span>
 <span class="normal"><a href="#__codelineno-0-177">177</a></span>
 <span class="normal"><a href="#__codelineno-0-178">178</a></span>
-<span class="normal"><a href="#__codelineno-0-179">179</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
-<a id="__codelineno-0-135" name="__codelineno-0-135"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-136" name="__codelineno-0-136"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">RedisEventBusSettings</span><span class="p">],</span>
-<a id="__codelineno-0-137" name="__codelineno-0-137"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-138" name="__codelineno-0-138"></a>    <span class="n">error_policy</span><span class="p">:</span> <span class="n">ErrorPolicy</span> <span class="o">=</span> <span class="n">ErrorPolicy</span><span class="o">.</span><span class="n">COLLECT_ALL</span><span class="p">,</span>
-<a id="__codelineno-0-139" name="__codelineno-0-139"></a>    <span class="n">middleware</span><span class="p">:</span> <span class="n">Instance</span><span class="p">[</span><span class="n">EventMiddleware</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">EventMiddleware</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-140" name="__codelineno-0-140"></a>    <span class="n">serializer</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Serializer</span><span class="p">[</span><span class="n">Event</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">InjectMeta</span><span class="p">(</span><span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-141" name="__codelineno-0-141"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-142" name="__codelineno-0-142"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-143" name="__codelineno-0-143"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-144" name="__codelineno-0-144"></a><span class="sd">        config:       Redis settings injected from the container.</span>
-<a id="__codelineno-0-145" name="__codelineno-0-145"></a><span class="sd">        error_policy: Handler error policy.</span>
-<a id="__codelineno-0-146" name="__codelineno-0-146"></a><span class="sd">        middleware:   DI instance handle for ``EventMiddleware`` bindings.</span>
-<a id="__codelineno-0-147" name="__codelineno-0-147"></a><span class="sd">                      All registered middlewares are resolved via</span>
-<a id="__codelineno-0-148" name="__codelineno-0-148"></a><span class="sd">                      ``middleware.get_all()`` when provided.</span>
-<a id="__codelineno-0-149" name="__codelineno-0-149"></a><span class="sd">        serializer:   Pluggable event serializer.  Injected optionally;</span>
-<a id="__codelineno-0-150" name="__codelineno-0-150"></a><span class="sd">                      defaults to ``JsonEventSerializer()`` when absent.</span>
-<a id="__codelineno-0-151" name="__codelineno-0-151"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-152" name="__codelineno-0-152"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_config</span> <span class="o">=</span> <span class="n">config</span>
-<a id="__codelineno-0-153" name="__codelineno-0-153"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_error_policy</span> <span class="o">=</span> <span class="n">error_policy</span>
-<a id="__codelineno-0-154" name="__codelineno-0-154"></a>    <span class="c1"># Support both DI-injected Instance[EventMiddleware] and direct list</span>
-<a id="__codelineno-0-155" name="__codelineno-0-155"></a>    <span class="c1"># construction (used in tests and non-DI usage patterns).</span>
-<a id="__codelineno-0-156" name="__codelineno-0-156"></a>    <span class="k">if</span> <span class="n">middleware</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-157" name="__codelineno-0-157"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_middleware</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">EventMiddleware</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-<a id="__codelineno-0-158" name="__codelineno-0-158"></a>    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">middleware</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-<a id="__codelineno-0-159" name="__codelineno-0-159"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_middleware</span> <span class="o">=</span> <span class="n">middleware</span>
-<a id="__codelineno-0-160" name="__codelineno-0-160"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-0-161" name="__codelineno-0-161"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_middleware</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">middleware</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span> <span class="k">if</span> <span class="n">middleware</span><span class="o">.</span><span class="n">resolvable</span><span class="p">()</span> <span class="k">else</span> <span class="p">[]</span>
-<a id="__codelineno-0-162" name="__codelineno-0-162"></a>
-<a id="__codelineno-0-163" name="__codelineno-0-163"></a>    <span class="c1"># Use provided serializer or fall back to JSON.</span>
-<a id="__codelineno-0-164" name="__codelineno-0-164"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_serializer</span><span class="p">:</span> <span class="n">Serializer</span><span class="p">[</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="n">serializer</span> <span class="ow">or</span> <span class="n">JsonEventSerializer</span><span class="p">()</span>
-<a id="__codelineno-0-165" name="__codelineno-0-165"></a>
-<a id="__codelineno-0-166" name="__codelineno-0-166"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_subscriptions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">_SubscriptionEntry</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-<a id="__codelineno-0-167" name="__codelineno-0-167"></a>
-<a id="__codelineno-0-168" name="__codelineno-0-168"></a>    <span class="c1"># Tracks the set of Redis channels actively subscribed by the pubsub</span>
-<a id="__codelineno-0-169" name="__codelineno-0-169"></a>    <span class="c1"># client.  Updated whenever subscribe() adds a new channel.</span>
-<a id="__codelineno-0-170" name="__codelineno-0-170"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-<a id="__codelineno-0-171" name="__codelineno-0-171"></a>    <span class="c1"># True if a CHANNEL_ALL subscription was added — requires psubscribe(&quot;*&quot;)</span>
-<a id="__codelineno-0-172" name="__codelineno-0-172"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="normal"><a href="#__codelineno-0-179">179</a></span>
+<span class="normal"><a href="#__codelineno-0-180">180</a></span>
+<span class="normal"><a href="#__codelineno-0-181">181</a></span>
+<span class="normal"><a href="#__codelineno-0-182">182</a></span>
+<span class="normal"><a href="#__codelineno-0-183">183</a></span>
+<span class="normal"><a href="#__codelineno-0-184">184</a></span>
+<span class="normal"><a href="#__codelineno-0-185">185</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-140" name="__codelineno-0-140"></a><span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+<a id="__codelineno-0-141" name="__codelineno-0-141"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-142" name="__codelineno-0-142"></a>    <span class="n">config</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">RedisEventBusSettings</span><span class="p">],</span>
+<a id="__codelineno-0-143" name="__codelineno-0-143"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-144" name="__codelineno-0-144"></a>    <span class="n">error_policy</span><span class="p">:</span> <span class="n">ErrorPolicy</span> <span class="o">=</span> <span class="n">ErrorPolicy</span><span class="o">.</span><span class="n">COLLECT_ALL</span><span class="p">,</span>
+<a id="__codelineno-0-145" name="__codelineno-0-145"></a>    <span class="n">middleware</span><span class="p">:</span> <span class="n">Instance</span><span class="p">[</span><span class="n">EventMiddleware</span><span class="p">]</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">EventMiddleware</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146"></a>    <span class="n">serializer</span><span class="p">:</span> <span class="n">Annotated</span><span class="p">[</span><span class="n">Serializer</span><span class="p">[</span><span class="n">Event</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">InjectMeta</span><span class="p">(</span><span class="n">optional</span><span class="o">=</span><span class="kc">True</span><span class="p">)]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-148" name="__codelineno-0-148"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-149" name="__codelineno-0-149"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-150" name="__codelineno-0-150"></a><span class="sd">        config:       Redis settings injected from the container.</span>
+<a id="__codelineno-0-151" name="__codelineno-0-151"></a><span class="sd">        error_policy: Handler error policy.</span>
+<a id="__codelineno-0-152" name="__codelineno-0-152"></a><span class="sd">        middleware:   DI instance handle for ``EventMiddleware`` bindings.</span>
+<a id="__codelineno-0-153" name="__codelineno-0-153"></a><span class="sd">                      All registered middlewares are resolved via</span>
+<a id="__codelineno-0-154" name="__codelineno-0-154"></a><span class="sd">                      ``middleware.get_all()`` when provided.</span>
+<a id="__codelineno-0-155" name="__codelineno-0-155"></a><span class="sd">        serializer:   Pluggable event serializer.  Injected optionally;</span>
+<a id="__codelineno-0-156" name="__codelineno-0-156"></a><span class="sd">                      defaults to ``JsonEventSerializer()`` when absent.</span>
+<a id="__codelineno-0-157" name="__codelineno-0-157"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-158" name="__codelineno-0-158"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_config</span> <span class="o">=</span> <span class="n">config</span>
+<a id="__codelineno-0-159" name="__codelineno-0-159"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_error_policy</span> <span class="o">=</span> <span class="n">error_policy</span>
+<a id="__codelineno-0-160" name="__codelineno-0-160"></a>    <span class="c1"># Support both DI-injected Instance[EventMiddleware] and direct list</span>
+<a id="__codelineno-0-161" name="__codelineno-0-161"></a>    <span class="c1"># construction (used in tests and non-DI usage patterns).</span>
+<a id="__codelineno-0-162" name="__codelineno-0-162"></a>    <span class="k">if</span> <span class="n">middleware</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-163" name="__codelineno-0-163"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_middleware</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">EventMiddleware</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+<a id="__codelineno-0-164" name="__codelineno-0-164"></a>    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">middleware</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+<a id="__codelineno-0-165" name="__codelineno-0-165"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_middleware</span> <span class="o">=</span> <span class="n">middleware</span>
+<a id="__codelineno-0-166" name="__codelineno-0-166"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-167" name="__codelineno-0-167"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_middleware</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">middleware</span><span class="o">.</span><span class="n">get_all</span><span class="p">())</span> <span class="k">if</span> <span class="n">middleware</span><span class="o">.</span><span class="n">resolvable</span><span class="p">()</span> <span class="k">else</span> <span class="p">[]</span>
+<a id="__codelineno-0-168" name="__codelineno-0-168"></a>
+<a id="__codelineno-0-169" name="__codelineno-0-169"></a>    <span class="c1"># Use provided serializer or fall back to JSON.</span>
+<a id="__codelineno-0-170" name="__codelineno-0-170"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_serializer</span><span class="p">:</span> <span class="n">Serializer</span><span class="p">[</span><span class="n">Event</span><span class="p">]</span> <span class="o">=</span> <span class="n">serializer</span> <span class="ow">or</span> <span class="n">JsonEventSerializer</span><span class="p">()</span>
+<a id="__codelineno-0-171" name="__codelineno-0-171"></a>
+<a id="__codelineno-0-172" name="__codelineno-0-172"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_subscriptions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">_SubscriptionEntry</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 <a id="__codelineno-0-173" name="__codelineno-0-173"></a>
-<a id="__codelineno-0-174" name="__codelineno-0-174"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-175" name="__codelineno-0-175"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-176" name="__codelineno-0-176"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-<a id="__codelineno-0-177" name="__codelineno-0-177"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_started</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-0-178" name="__codelineno-0-178"></a>
-<a id="__codelineno-0-179" name="__codelineno-0-179"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_chain</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Event</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">Coroutine</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_chain</span><span class="p">()</span>
+<a id="__codelineno-0-174" name="__codelineno-0-174"></a>    <span class="c1"># Tracks the set of Redis channels actively subscribed by the pubsub</span>
+<a id="__codelineno-0-175" name="__codelineno-0-175"></a>    <span class="c1"># client.  Updated whenever subscribe() adds a new channel.</span>
+<a id="__codelineno-0-176" name="__codelineno-0-176"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+<a id="__codelineno-0-177" name="__codelineno-0-177"></a>    <span class="c1"># True if a CHANNEL_ALL subscription was added — requires psubscribe(&quot;*&quot;)</span>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-0-179" name="__codelineno-0-179"></a>
+<a id="__codelineno-0-180" name="__codelineno-0-180"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span><span class="p">:</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_started</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_chain</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Event</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="n">Coroutine</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_chain</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
                   </details>
 
@@ -16015,13 +16037,7 @@ async with RedisEventBus(config) as bus:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-183">183</a></span>
-<span class="normal"><a href="#__codelineno-0-184">184</a></span>
-<span class="normal"><a href="#__codelineno-0-185">185</a></span>
-<span class="normal"><a href="#__codelineno-0-186">186</a></span>
-<span class="normal"><a href="#__codelineno-0-187">187</a></span>
-<span class="normal"><a href="#__codelineno-0-188">188</a></span>
-<span class="normal"><a href="#__codelineno-0-189">189</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-189">189</a></span>
 <span class="normal"><a href="#__codelineno-0-190">190</a></span>
 <span class="normal"><a href="#__codelineno-0-191">191</a></span>
 <span class="normal"><a href="#__codelineno-0-192">192</a></span>
@@ -16047,39 +16063,45 @@ async with RedisEventBus(config) as bus:
 <span class="normal"><a href="#__codelineno-0-212">212</a></span>
 <span class="normal"><a href="#__codelineno-0-213">213</a></span>
 <span class="normal"><a href="#__codelineno-0-214">214</a></span>
-<span class="normal"><a href="#__codelineno-0-215">215</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="nd">@PostConstruct</span>
-<a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-185" name="__codelineno-0-185"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-186" name="__codelineno-0-186"></a><span class="sd">    Connect to Redis and start the background Pub/Sub listener task.</span>
-<a id="__codelineno-0-187" name="__codelineno-0-187"></a>
-<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="sd">    Must be called before ``publish()``.  Idempotent.</span>
-<a id="__codelineno-0-189" name="__codelineno-0-189"></a>
-<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">        ConnectionError: If Redis is unreachable (raised by redis.asyncio).</span>
-<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-193" name="__codelineno-0-193"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_started</span><span class="p">:</span>
-<a id="__codelineno-0-194" name="__codelineno-0-194"></a>        <span class="k">return</span>
+<span class="normal"><a href="#__codelineno-0-215">215</a></span>
+<span class="normal"><a href="#__codelineno-0-216">216</a></span>
+<span class="normal"><a href="#__codelineno-0-217">217</a></span>
+<span class="normal"><a href="#__codelineno-0-218">218</a></span>
+<span class="normal"><a href="#__codelineno-0-219">219</a></span>
+<span class="normal"><a href="#__codelineno-0-220">220</a></span>
+<span class="normal"><a href="#__codelineno-0-221">221</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-189" name="__codelineno-0-189"></a><span class="nd">@PostConstruct</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">start</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">    Connect to Redis and start the background Pub/Sub listener task.</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">    Must be called before ``publish()``.  Idempotent.</span>
 <a id="__codelineno-0-195" name="__codelineno-0-195"></a>
-<a id="__codelineno-0-196" name="__codelineno-0-196"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span> <span class="o">=</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span>
-<a id="__codelineno-0-197" name="__codelineno-0-197"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
-<a id="__codelineno-0-198" name="__codelineno-0-198"></a>        <span class="n">decode_responses</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">decode_responses</span><span class="p">,</span>
-<a id="__codelineno-0-199" name="__codelineno-0-199"></a>        <span class="n">socket_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">socket_timeout</span><span class="p">,</span>
-<a id="__codelineno-0-200" name="__codelineno-0-200"></a>        <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">redis_kwargs</span><span class="p">,</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a>    <span class="p">)</span>
-<a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">pubsub</span><span class="p">()</span>
-<a id="__codelineno-0-203" name="__codelineno-0-203"></a>
-<a id="__codelineno-0-204" name="__codelineno-0-204"></a>    <span class="c1"># Subscribe to channels already registered before start()</span>
-<a id="__codelineno-0-205" name="__codelineno-0-205"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span><span class="p">:</span>
-<a id="__codelineno-0-206" name="__codelineno-0-206"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">psubscribe</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-207" name="__codelineno-0-207"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">:</span>
-<a id="__codelineno-0-208" name="__codelineno-0-208"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">)</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">        ConnectionError: If Redis is unreachable (raised by redis.asyncio).</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_started</span><span class="p">:</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a>        <span class="k">return</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span> <span class="o">=</span> <span class="n">aioredis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a>        <span class="n">decode_responses</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">decode_responses</span><span class="p">,</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a>        <span class="n">socket_timeout</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">socket_timeout</span><span class="p">,</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a>        <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">redis_kwargs</span><span class="p">,</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>    <span class="p">)</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">pubsub</span><span class="p">()</span>
 <a id="__codelineno-0-209" name="__codelineno-0-209"></a>
-<a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span>
-<a id="__codelineno-0-211" name="__codelineno-0-211"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_listen_loop</span><span class="p">(),</span>
-<a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;redis-pubsub-listener&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="p">)</span>
-<a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_started</span> <span class="o">=</span> <span class="kc">True</span>
-<a id="__codelineno-0-215" name="__codelineno-0-215"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;RedisEventBus started (url=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a>    <span class="c1"># Subscribe to channels already registered before start()</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span><span class="p">:</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">psubscribe</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">:</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">)</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span> <span class="o">=</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">create_task</span><span class="p">(</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_listen_loop</span><span class="p">(),</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;redis-pubsub-listener&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>    <span class="p">)</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_started</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;RedisEventBus started (url=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">url</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -16108,13 +16130,7 @@ async with RedisEventBus(config) as bus:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-217">217</a></span>
-<span class="normal"><a href="#__codelineno-0-218">218</a></span>
-<span class="normal"><a href="#__codelineno-0-219">219</a></span>
-<span class="normal"><a href="#__codelineno-0-220">220</a></span>
-<span class="normal"><a href="#__codelineno-0-221">221</a></span>
-<span class="normal"><a href="#__codelineno-0-222">222</a></span>
-<span class="normal"><a href="#__codelineno-0-223">223</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-223">223</a></span>
 <span class="normal"><a href="#__codelineno-0-224">224</a></span>
 <span class="normal"><a href="#__codelineno-0-225">225</a></span>
 <span class="normal"><a href="#__codelineno-0-226">226</a></span>
@@ -16130,29 +16146,35 @@ async with RedisEventBus(config) as bus:
 <span class="normal"><a href="#__codelineno-0-236">236</a></span>
 <span class="normal"><a href="#__codelineno-0-237">237</a></span>
 <span class="normal"><a href="#__codelineno-0-238">238</a></span>
-<span class="normal"><a href="#__codelineno-0-239">239</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-217" name="__codelineno-0-217"></a><span class="nd">@PreDestroy</span>
-<a id="__codelineno-0-218" name="__codelineno-0-218"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-219" name="__codelineno-0-219"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a><span class="sd">    Cancel the listener task and close the Redis connection.  Idempotent.</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_started</span><span class="p">:</span>
-<a id="__codelineno-0-223" name="__codelineno-0-223"></a>        <span class="k">return</span>
-<a id="__codelineno-0-224" name="__codelineno-0-224"></a>
-<a id="__codelineno-0-225" name="__codelineno-0-225"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-226" name="__codelineno-0-226"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
-<a id="__codelineno-0-227" name="__codelineno-0-227"></a>        <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-228" name="__codelineno-0-228"></a>            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span>
-<a id="__codelineno-0-229" name="__codelineno-0-229"></a>        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
-<a id="__codelineno-0-230" name="__codelineno-0-230"></a>            <span class="k">pass</span>
-<a id="__codelineno-0-231" name="__codelineno-0-231"></a>
-<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-233" name="__codelineno-0-233"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
-<a id="__codelineno-0-234" name="__codelineno-0-234"></a>
-<a id="__codelineno-0-235" name="__codelineno-0-235"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-236" name="__codelineno-0-236"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span>
+<span class="normal"><a href="#__codelineno-0-241">241</a></span>
+<span class="normal"><a href="#__codelineno-0-242">242</a></span>
+<span class="normal"><a href="#__codelineno-0-243">243</a></span>
+<span class="normal"><a href="#__codelineno-0-244">244</a></span>
+<span class="normal"><a href="#__codelineno-0-245">245</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-223" name="__codelineno-0-223"></a><span class="nd">@PreDestroy</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">stop</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a><span class="sd">    Cancel the listener task and close the Redis connection.  Idempotent.</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_started</span><span class="p">:</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>        <span class="k">return</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span><span class="o">.</span><span class="n">cancel</span><span class="p">()</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>        <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-234" name="__codelineno-0-234"></a>            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_listener_task</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a>        <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>            <span class="k">pass</span>
 <a id="__codelineno-0-237" name="__codelineno-0-237"></a>
-<a id="__codelineno-0-238" name="__codelineno-0-238"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_started</span> <span class="o">=</span> <span class="kc">False</span>
-<a id="__codelineno-0-239" name="__codelineno-0-239"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;RedisEventBus stopped.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>
+<a id="__codelineno-0-241" name="__codelineno-0-241"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-242" name="__codelineno-0-242"></a>        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">aclose</span><span class="p">()</span>
+<a id="__codelineno-0-243" name="__codelineno-0-243"></a>
+<a id="__codelineno-0-244" name="__codelineno-0-244"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_started</span> <span class="o">=</span> <span class="kc">False</span>
+<a id="__codelineno-0-245" name="__codelineno-0-245"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;RedisEventBus stopped.&quot;</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -16277,13 +16299,7 @@ async with RedisEventBus(config) as bus:
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-250">250</a></span>
-<span class="normal"><a href="#__codelineno-0-251">251</a></span>
-<span class="normal"><a href="#__codelineno-0-252">252</a></span>
-<span class="normal"><a href="#__codelineno-0-253">253</a></span>
-<span class="normal"><a href="#__codelineno-0-254">254</a></span>
-<span class="normal"><a href="#__codelineno-0-255">255</a></span>
-<span class="normal"><a href="#__codelineno-0-256">256</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-256">256</a></span>
 <span class="normal"><a href="#__codelineno-0-257">257</a></span>
 <span class="normal"><a href="#__codelineno-0-258">258</a></span>
 <span class="normal"><a href="#__codelineno-0-259">259</a></span>
@@ -16307,37 +16323,43 @@ async with RedisEventBus(config) as bus:
 <span class="normal"><a href="#__codelineno-0-277">277</a></span>
 <span class="normal"><a href="#__codelineno-0-278">278</a></span>
 <span class="normal"><a href="#__codelineno-0-279">279</a></span>
-<span class="normal"><a href="#__codelineno-0-280">280</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-250" name="__codelineno-0-250"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span>
-<a id="__codelineno-0-251" name="__codelineno-0-251"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-252" name="__codelineno-0-252"></a>    <span class="n">event</span><span class="p">:</span> <span class="n">Event</span><span class="p">,</span>
-<a id="__codelineno-0-253" name="__codelineno-0-253"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-254" name="__codelineno-0-254"></a>    <span class="n">channel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CHANNEL_DEFAULT</span><span class="p">,</span>
-<a id="__codelineno-0-255" name="__codelineno-0-255"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="sd">    Serialize ``event`` and publish it to the Redis Pub/Sub channel.</span>
-<a id="__codelineno-0-258" name="__codelineno-0-258"></a>
-<a id="__codelineno-0-259" name="__codelineno-0-259"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">        event:   The event to publish.</span>
-<a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="sd">        channel: Target channel.  Maps to a Redis channel via</span>
-<a id="__codelineno-0-262" name="__codelineno-0-262"></a><span class="sd">                 ``RedisEventBusSettings.channel_name(channel)``.</span>
-<a id="__codelineno-0-263" name="__codelineno-0-263"></a>
-<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="sd">        ``None`` — Redis Pub/Sub is always asynchronous (no local task).</span>
-<a id="__codelineno-0-266" name="__codelineno-0-266"></a>
-<a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-268" name="__codelineno-0-268"></a><span class="sd">        RuntimeError: If called before ``start()``.</span>
-<a id="__codelineno-0-269" name="__codelineno-0-269"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-270" name="__codelineno-0-270"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-271" name="__codelineno-0-271"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-<a id="__codelineno-0-272" name="__codelineno-0-272"></a>            <span class="s2">&quot;RedisEventBus.publish() called before start(). &quot;</span>
-<a id="__codelineno-0-273" name="__codelineno-0-273"></a>            <span class="s2">&quot;Call await bus.start() or use &#39;async with bus&#39; first.&quot;</span>
-<a id="__codelineno-0-274" name="__codelineno-0-274"></a>        <span class="p">)</span>
-<a id="__codelineno-0-275" name="__codelineno-0-275"></a>
-<a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="n">redis_channel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">channel_name</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
-<a id="__codelineno-0-277" name="__codelineno-0-277"></a>    <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_serializer</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
-<a id="__codelineno-0-278" name="__codelineno-0-278"></a>    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">redis_channel</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
-<a id="__codelineno-0-279" name="__codelineno-0-279"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Published </span><span class="si">%s</span><span class="s2"> to Redis channel </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">event</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">redis_channel</span><span class="p">)</span>
-<a id="__codelineno-0-280" name="__codelineno-0-280"></a>    <span class="k">return</span> <span class="kc">None</span>
+<span class="normal"><a href="#__codelineno-0-280">280</a></span>
+<span class="normal"><a href="#__codelineno-0-281">281</a></span>
+<span class="normal"><a href="#__codelineno-0-282">282</a></span>
+<span class="normal"><a href="#__codelineno-0-283">283</a></span>
+<span class="normal"><a href="#__codelineno-0-284">284</a></span>
+<span class="normal"><a href="#__codelineno-0-285">285</a></span>
+<span class="normal"><a href="#__codelineno-0-286">286</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-256" name="__codelineno-0-256"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a>    <span class="n">event</span><span class="p">:</span> <span class="n">Event</span><span class="p">,</span>
+<a id="__codelineno-0-259" name="__codelineno-0-259"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-260" name="__codelineno-0-260"></a>    <span class="n">channel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CHANNEL_DEFAULT</span><span class="p">,</span>
+<a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">Task</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-262" name="__codelineno-0-262"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">    Serialize ``event`` and publish it to the Redis Pub/Sub channel.</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a>
+<a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="sd">        event:   The event to publish.</span>
+<a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="sd">        channel: Target channel.  Maps to a Redis channel via</span>
+<a id="__codelineno-0-268" name="__codelineno-0-268"></a><span class="sd">                 ``RedisEventBusSettings.channel_name(channel)``.</span>
+<a id="__codelineno-0-269" name="__codelineno-0-269"></a>
+<a id="__codelineno-0-270" name="__codelineno-0-270"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-271" name="__codelineno-0-271"></a><span class="sd">        ``None`` — Redis Pub/Sub is always asynchronous (no local task).</span>
+<a id="__codelineno-0-272" name="__codelineno-0-272"></a>
+<a id="__codelineno-0-273" name="__codelineno-0-273"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-274" name="__codelineno-0-274"></a><span class="sd">        RuntimeError: If called before ``start()``.</span>
+<a id="__codelineno-0-275" name="__codelineno-0-275"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-276" name="__codelineno-0-276"></a>    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-277" name="__codelineno-0-277"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+<a id="__codelineno-0-278" name="__codelineno-0-278"></a>            <span class="s2">&quot;RedisEventBus.publish() called before start(). &quot;</span>
+<a id="__codelineno-0-279" name="__codelineno-0-279"></a>            <span class="s2">&quot;Call await bus.start() or use &#39;async with bus&#39; first.&quot;</span>
+<a id="__codelineno-0-280" name="__codelineno-0-280"></a>        <span class="p">)</span>
+<a id="__codelineno-0-281" name="__codelineno-0-281"></a>
+<a id="__codelineno-0-282" name="__codelineno-0-282"></a>    <span class="n">redis_channel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">channel_name</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
+<a id="__codelineno-0-283" name="__codelineno-0-283"></a>    <span class="n">value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_serializer</span><span class="o">.</span><span class="n">serialize</span><span class="p">(</span><span class="n">event</span><span class="p">)</span>
+<a id="__codelineno-0-284" name="__codelineno-0-284"></a>    <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">redis_channel</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
+<a id="__codelineno-0-285" name="__codelineno-0-285"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Published </span><span class="si">%s</span><span class="s2"> to Redis channel </span><span class="si">%s</span><span class="s2">&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">event</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">redis_channel</span><span class="p">)</span>
+<a id="__codelineno-0-286" name="__codelineno-0-286"></a>    <span class="k">return</span> <span class="kc">None</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -16498,13 +16520,7 @@ Redis channel is added to the Pub/Sub subscription.  If
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-282">282</a></span>
-<span class="normal"><a href="#__codelineno-0-283">283</a></span>
-<span class="normal"><a href="#__codelineno-0-284">284</a></span>
-<span class="normal"><a href="#__codelineno-0-285">285</a></span>
-<span class="normal"><a href="#__codelineno-0-286">286</a></span>
-<span class="normal"><a href="#__codelineno-0-287">287</a></span>
-<span class="normal"><a href="#__codelineno-0-288">288</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-288">288</a></span>
 <span class="normal"><a href="#__codelineno-0-289">289</a></span>
 <span class="normal"><a href="#__codelineno-0-290">290</a></span>
 <span class="normal"><a href="#__codelineno-0-291">291</a></span>
@@ -16551,60 +16567,66 @@ Redis channel is added to the Pub/Sub subscription.  If
 <span class="normal"><a href="#__codelineno-0-332">332</a></span>
 <span class="normal"><a href="#__codelineno-0-333">333</a></span>
 <span class="normal"><a href="#__codelineno-0-334">334</a></span>
-<span class="normal"><a href="#__codelineno-0-335">335</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-282" name="__codelineno-0-282"></a><span class="k">def</span><span class="w"> </span><span class="nf">subscribe</span><span class="p">(</span>
-<a id="__codelineno-0-283" name="__codelineno-0-283"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-284" name="__codelineno-0-284"></a>    <span class="n">event_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">Event</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
-<a id="__codelineno-0-285" name="__codelineno-0-285"></a>    <span class="n">handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Event</span><span class="p">],</span> <span class="n">Awaitable</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span>
-<a id="__codelineno-0-286" name="__codelineno-0-286"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-287" name="__codelineno-0-287"></a>    <span class="n">channel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CHANNEL_ALL</span><span class="p">,</span>
-<a id="__codelineno-0-288" name="__codelineno-0-288"></a>    <span class="nb">filter</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Event</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: A002</span>
-<a id="__codelineno-0-289" name="__codelineno-0-289"></a>    <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
-<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Subscription</span><span class="p">:</span>
-<a id="__codelineno-0-291" name="__codelineno-0-291"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-292" name="__codelineno-0-292"></a><span class="sd">    Register a local handler for matching events arriving from Redis.</span>
-<a id="__codelineno-0-293" name="__codelineno-0-293"></a>
-<a id="__codelineno-0-294" name="__codelineno-0-294"></a><span class="sd">    If ``channel`` is specific (not ``CHANNEL_ALL``), the corresponding</span>
-<a id="__codelineno-0-295" name="__codelineno-0-295"></a><span class="sd">    Redis channel is added to the Pub/Sub subscription.  If</span>
-<a id="__codelineno-0-296" name="__codelineno-0-296"></a><span class="sd">    ``CHANNEL_ALL`` is used, a pattern subscription ``&quot;*&quot;`` is added.</span>
-<a id="__codelineno-0-297" name="__codelineno-0-297"></a>
-<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-299" name="__codelineno-0-299"></a><span class="sd">        event_type: ``Event`` subclass or ``__event_type__`` string.</span>
-<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">        handler:    Async or sync callable invoked on matching events.</span>
-<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">        channel:    Channel filter.  ``CHANNEL_ALL`` → receive from all channels.</span>
-<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">        filter:     Optional predicate for fine-grained filtering.</span>
-<a id="__codelineno-0-303" name="__codelineno-0-303"></a><span class="sd">        priority:   Dispatch order — higher runs first.</span>
-<a id="__codelineno-0-304" name="__codelineno-0-304"></a>
-<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-306" name="__codelineno-0-306"></a><span class="sd">        A ``Subscription`` handle.</span>
-<a id="__codelineno-0-307" name="__codelineno-0-307"></a>
-<a id="__codelineno-0-308" name="__codelineno-0-308"></a><span class="sd">    Edge cases:</span>
-<a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="sd">        - ``subscribe()`` after ``start()`` is safe — the Pub/Sub</span>
-<a id="__codelineno-0-310" name="__codelineno-0-310"></a><span class="sd">          subscription is updated immediately.</span>
-<a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-312" name="__codelineno-0-312"></a>    <span class="n">entry</span> <span class="o">=</span> <span class="n">_SubscriptionEntry</span><span class="p">(</span>
-<a id="__codelineno-0-313" name="__codelineno-0-313"></a>        <span class="n">event_type</span><span class="o">=</span><span class="n">event_type</span><span class="p">,</span>
-<a id="__codelineno-0-314" name="__codelineno-0-314"></a>        <span class="n">channel</span><span class="o">=</span><span class="n">channel</span><span class="p">,</span>
-<a id="__codelineno-0-315" name="__codelineno-0-315"></a>        <span class="n">handler</span><span class="o">=</span><span class="n">handler</span><span class="p">,</span>
-<a id="__codelineno-0-316" name="__codelineno-0-316"></a>        <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
-<a id="__codelineno-0-317" name="__codelineno-0-317"></a>        <span class="n">priority</span><span class="o">=</span><span class="n">priority</span><span class="p">,</span>
-<a id="__codelineno-0-318" name="__codelineno-0-318"></a>    <span class="p">)</span>
-<a id="__codelineno-0-319" name="__codelineno-0-319"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_subscriptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
-<a id="__codelineno-0-320" name="__codelineno-0-320"></a>
-<a id="__codelineno-0-321" name="__codelineno-0-321"></a>    <span class="k">if</span> <span class="n">channel</span> <span class="o">==</span> <span class="n">CHANNEL_ALL</span><span class="p">:</span>
-<a id="__codelineno-0-322" name="__codelineno-0-322"></a>        <span class="c1"># Pattern subscribe — matches ALL channels published to this Redis</span>
-<a id="__codelineno-0-323" name="__codelineno-0-323"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span><span class="p">:</span>
-<a id="__codelineno-0-324" name="__codelineno-0-324"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span> <span class="o">=</span> <span class="kc">True</span>
-<a id="__codelineno-0-325" name="__codelineno-0-325"></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-326" name="__codelineno-0-326"></a>                <span class="c1"># Already started — subscribe immediately</span>
-<a id="__codelineno-0-327" name="__codelineno-0-327"></a>                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">psubscribe</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">))</span>
-<a id="__codelineno-0-328" name="__codelineno-0-328"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-0-329" name="__codelineno-0-329"></a>        <span class="n">redis_channel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">channel_name</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
-<a id="__codelineno-0-330" name="__codelineno-0-330"></a>        <span class="k">if</span> <span class="n">redis_channel</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">:</span>
-<a id="__codelineno-0-331" name="__codelineno-0-331"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">redis_channel</span><span class="p">)</span>
-<a id="__codelineno-0-332" name="__codelineno-0-332"></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-333" name="__codelineno-0-333"></a>                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">redis_channel</span><span class="p">))</span>
-<a id="__codelineno-0-334" name="__codelineno-0-334"></a>
-<a id="__codelineno-0-335" name="__codelineno-0-335"></a>    <span class="k">return</span> <span class="n">Subscription</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-335">335</a></span>
+<span class="normal"><a href="#__codelineno-0-336">336</a></span>
+<span class="normal"><a href="#__codelineno-0-337">337</a></span>
+<span class="normal"><a href="#__codelineno-0-338">338</a></span>
+<span class="normal"><a href="#__codelineno-0-339">339</a></span>
+<span class="normal"><a href="#__codelineno-0-340">340</a></span>
+<span class="normal"><a href="#__codelineno-0-341">341</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="k">def</span><span class="w"> </span><span class="nf">subscribe</span><span class="p">(</span>
+<a id="__codelineno-0-289" name="__codelineno-0-289"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a>    <span class="n">event_type</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">Event</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+<a id="__codelineno-0-291" name="__codelineno-0-291"></a>    <span class="n">handler</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Event</span><span class="p">],</span> <span class="n">Awaitable</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">],</span>
+<a id="__codelineno-0-292" name="__codelineno-0-292"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-293" name="__codelineno-0-293"></a>    <span class="n">channel</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">CHANNEL_ALL</span><span class="p">,</span>
+<a id="__codelineno-0-294" name="__codelineno-0-294"></a>    <span class="nb">filter</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Event</span><span class="p">],</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>  <span class="c1"># noqa: A002</span>
+<a id="__codelineno-0-295" name="__codelineno-0-295"></a>    <span class="n">priority</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+<a id="__codelineno-0-296" name="__codelineno-0-296"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Subscription</span><span class="p">:</span>
+<a id="__codelineno-0-297" name="__codelineno-0-297"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-298" name="__codelineno-0-298"></a><span class="sd">    Register a local handler for matching events arriving from Redis.</span>
+<a id="__codelineno-0-299" name="__codelineno-0-299"></a>
+<a id="__codelineno-0-300" name="__codelineno-0-300"></a><span class="sd">    If ``channel`` is specific (not ``CHANNEL_ALL``), the corresponding</span>
+<a id="__codelineno-0-301" name="__codelineno-0-301"></a><span class="sd">    Redis channel is added to the Pub/Sub subscription.  If</span>
+<a id="__codelineno-0-302" name="__codelineno-0-302"></a><span class="sd">    ``CHANNEL_ALL`` is used, a pattern subscription ``&quot;*&quot;`` is added.</span>
+<a id="__codelineno-0-303" name="__codelineno-0-303"></a>
+<a id="__codelineno-0-304" name="__codelineno-0-304"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-305" name="__codelineno-0-305"></a><span class="sd">        event_type: ``Event`` subclass or ``__event_type__`` string.</span>
+<a id="__codelineno-0-306" name="__codelineno-0-306"></a><span class="sd">        handler:    Async or sync callable invoked on matching events.</span>
+<a id="__codelineno-0-307" name="__codelineno-0-307"></a><span class="sd">        channel:    Channel filter.  ``CHANNEL_ALL`` → receive from all channels.</span>
+<a id="__codelineno-0-308" name="__codelineno-0-308"></a><span class="sd">        filter:     Optional predicate for fine-grained filtering.</span>
+<a id="__codelineno-0-309" name="__codelineno-0-309"></a><span class="sd">        priority:   Dispatch order — higher runs first.</span>
+<a id="__codelineno-0-310" name="__codelineno-0-310"></a>
+<a id="__codelineno-0-311" name="__codelineno-0-311"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-312" name="__codelineno-0-312"></a><span class="sd">        A ``Subscription`` handle.</span>
+<a id="__codelineno-0-313" name="__codelineno-0-313"></a>
+<a id="__codelineno-0-314" name="__codelineno-0-314"></a><span class="sd">    Edge cases:</span>
+<a id="__codelineno-0-315" name="__codelineno-0-315"></a><span class="sd">        - ``subscribe()`` after ``start()`` is safe — the Pub/Sub</span>
+<a id="__codelineno-0-316" name="__codelineno-0-316"></a><span class="sd">          subscription is updated immediately.</span>
+<a id="__codelineno-0-317" name="__codelineno-0-317"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-318" name="__codelineno-0-318"></a>    <span class="n">entry</span> <span class="o">=</span> <span class="n">_SubscriptionEntry</span><span class="p">(</span>
+<a id="__codelineno-0-319" name="__codelineno-0-319"></a>        <span class="n">event_type</span><span class="o">=</span><span class="n">event_type</span><span class="p">,</span>
+<a id="__codelineno-0-320" name="__codelineno-0-320"></a>        <span class="n">channel</span><span class="o">=</span><span class="n">channel</span><span class="p">,</span>
+<a id="__codelineno-0-321" name="__codelineno-0-321"></a>        <span class="n">handler</span><span class="o">=</span><span class="n">handler</span><span class="p">,</span>
+<a id="__codelineno-0-322" name="__codelineno-0-322"></a>        <span class="nb">filter</span><span class="o">=</span><span class="nb">filter</span><span class="p">,</span>
+<a id="__codelineno-0-323" name="__codelineno-0-323"></a>        <span class="n">priority</span><span class="o">=</span><span class="n">priority</span><span class="p">,</span>
+<a id="__codelineno-0-324" name="__codelineno-0-324"></a>    <span class="p">)</span>
+<a id="__codelineno-0-325" name="__codelineno-0-325"></a>    <span class="bp">self</span><span class="o">.</span><span class="n">_subscriptions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
+<a id="__codelineno-0-326" name="__codelineno-0-326"></a>
+<a id="__codelineno-0-327" name="__codelineno-0-327"></a>    <span class="k">if</span> <span class="n">channel</span> <span class="o">==</span> <span class="n">CHANNEL_ALL</span><span class="p">:</span>
+<a id="__codelineno-0-328" name="__codelineno-0-328"></a>        <span class="c1"># Pattern subscribe — matches ALL channels published to this Redis</span>
+<a id="__codelineno-0-329" name="__codelineno-0-329"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span><span class="p">:</span>
+<a id="__codelineno-0-330" name="__codelineno-0-330"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_has_wildcard</span> <span class="o">=</span> <span class="kc">True</span>
+<a id="__codelineno-0-331" name="__codelineno-0-331"></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-332" name="__codelineno-0-332"></a>                <span class="c1"># Already started — subscribe immediately</span>
+<a id="__codelineno-0-333" name="__codelineno-0-333"></a>                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">psubscribe</span><span class="p">(</span><span class="s2">&quot;*&quot;</span><span class="p">))</span>
+<a id="__codelineno-0-334" name="__codelineno-0-334"></a>    <span class="k">else</span><span class="p">:</span>
+<a id="__codelineno-0-335" name="__codelineno-0-335"></a>        <span class="n">redis_channel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_config</span><span class="o">.</span><span class="n">channel_name</span><span class="p">(</span><span class="n">channel</span><span class="p">)</span>
+<a id="__codelineno-0-336" name="__codelineno-0-336"></a>        <span class="k">if</span> <span class="n">redis_channel</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="p">:</span>
+<a id="__codelineno-0-337" name="__codelineno-0-337"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_subscribed_channels</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">redis_channel</span><span class="p">)</span>
+<a id="__codelineno-0-338" name="__codelineno-0-338"></a>            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-339" name="__codelineno-0-339"></a>                <span class="n">asyncio</span><span class="o">.</span><span class="n">ensure_future</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_pubsub</span><span class="o">.</span><span class="n">subscribe</span><span class="p">(</span><span class="n">redis_channel</span><span class="p">))</span>
+<a id="__codelineno-0-340" name="__codelineno-0-340"></a>
+<a id="__codelineno-0-341" name="__codelineno-0-341"></a>    <span class="k">return</span> <span class="n">Subscription</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -16752,13 +16774,7 @@ Async safety:   ✅ No I/O at construction time.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-526">526</a></span>
-<span class="normal"><a href="#__codelineno-0-527">527</a></span>
-<span class="normal"><a href="#__codelineno-0-528">528</a></span>
-<span class="normal"><a href="#__codelineno-0-529">529</a></span>
-<span class="normal"><a href="#__codelineno-0-530">530</a></span>
-<span class="normal"><a href="#__codelineno-0-531">531</a></span>
-<span class="normal"><a href="#__codelineno-0-532">532</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-532">532</a></span>
 <span class="normal"><a href="#__codelineno-0-533">533</a></span>
 <span class="normal"><a href="#__codelineno-0-534">534</a></span>
 <span class="normal"><a href="#__codelineno-0-535">535</a></span>
@@ -16784,39 +16800,188 @@ Async safety:   ✅ No I/O at construction time.</p>
 <span class="normal"><a href="#__codelineno-0-555">555</a></span>
 <span class="normal"><a href="#__codelineno-0-556">556</a></span>
 <span class="normal"><a href="#__codelineno-0-557">557</a></span>
-<span class="normal"><a href="#__codelineno-0-558">558</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-526" name="__codelineno-0-526"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-0-527" name="__codelineno-0-527"></a><span class="k">def</span><span class="w"> </span><span class="nf">bus</span><span class="p">(</span>
-<a id="__codelineno-0-528" name="__codelineno-0-528"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-529" name="__codelineno-0-529"></a>    <span class="n">settings</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">RedisEventBusSettings</span><span class="p">],</span>
-<a id="__codelineno-0-530" name="__codelineno-0-530"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AbstractEventBus</span><span class="p">:</span>
-<a id="__codelineno-0-531" name="__codelineno-0-531"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-532" name="__codelineno-0-532"></a><span class="sd">    Select and construct the active Redis event bus implementation.</span>
-<a id="__codelineno-0-533" name="__codelineno-0-533"></a>
-<a id="__codelineno-0-534" name="__codelineno-0-534"></a><span class="sd">    Returns ``RedisStreamEventBus`` when ``settings.use_streams`` is ``True``</span>
-<a id="__codelineno-0-535" name="__codelineno-0-535"></a><span class="sd">    (i.e. ``VARCO_REDIS_USE_STREAMS=true``), otherwise ``RedisEventBus``.</span>
-<a id="__codelineno-0-536" name="__codelineno-0-536"></a>
-<a id="__codelineno-0-537" name="__codelineno-0-537"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-538" name="__codelineno-0-538"></a><span class="sd">        settings: ``RedisEventBusSettings`` singleton injected from the container.</span>
+<span class="normal"><a href="#__codelineno-0-558">558</a></span>
+<span class="normal"><a href="#__codelineno-0-559">559</a></span>
+<span class="normal"><a href="#__codelineno-0-560">560</a></span>
+<span class="normal"><a href="#__codelineno-0-561">561</a></span>
+<span class="normal"><a href="#__codelineno-0-562">562</a></span>
+<span class="normal"><a href="#__codelineno-0-563">563</a></span>
+<span class="normal"><a href="#__codelineno-0-564">564</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-532" name="__codelineno-0-532"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-0-533" name="__codelineno-0-533"></a><span class="k">def</span><span class="w"> </span><span class="nf">bus</span><span class="p">(</span>
+<a id="__codelineno-0-534" name="__codelineno-0-534"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-535" name="__codelineno-0-535"></a>    <span class="n">settings</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">RedisEventBusSettings</span><span class="p">],</span>
+<a id="__codelineno-0-536" name="__codelineno-0-536"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AbstractEventBus</span><span class="p">:</span>
+<a id="__codelineno-0-537" name="__codelineno-0-537"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-538" name="__codelineno-0-538"></a><span class="sd">    Select and construct the active Redis event bus implementation.</span>
 <a id="__codelineno-0-539" name="__codelineno-0-539"></a>
-<a id="__codelineno-0-540" name="__codelineno-0-540"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-541" name="__codelineno-0-541"></a><span class="sd">        The appropriate bus implementation as ``AbstractEventBus``.</span>
+<a id="__codelineno-0-540" name="__codelineno-0-540"></a><span class="sd">    Returns ``RedisStreamEventBus`` when ``settings.use_streams`` is ``True``</span>
+<a id="__codelineno-0-541" name="__codelineno-0-541"></a><span class="sd">    (i.e. ``VARCO_REDIS_USE_STREAMS=true``), otherwise ``RedisEventBus``.</span>
 <a id="__codelineno-0-542" name="__codelineno-0-542"></a>
-<a id="__codelineno-0-543" name="__codelineno-0-543"></a><span class="sd">    Edge cases:</span>
-<a id="__codelineno-0-544" name="__codelineno-0-544"></a><span class="sd">        - Switching ``use_streams`` requires a process restart — the singleton</span>
-<a id="__codelineno-0-545" name="__codelineno-0-545"></a><span class="sd">          is resolved once at warm-up and cached for the container&#39;s lifetime.</span>
-<a id="__codelineno-0-546" name="__codelineno-0-546"></a><span class="sd">        - Both implementations share the same ``RedisEventBusSettings`` object —</span>
-<a id="__codelineno-0-547" name="__codelineno-0-547"></a><span class="sd">          ``url``, ``channel_prefix``, etc. apply to whichever is active.</span>
+<a id="__codelineno-0-543" name="__codelineno-0-543"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-544" name="__codelineno-0-544"></a><span class="sd">        settings: ``RedisEventBusSettings`` singleton injected from the container.</span>
+<a id="__codelineno-0-545" name="__codelineno-0-545"></a>
+<a id="__codelineno-0-546" name="__codelineno-0-546"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-547" name="__codelineno-0-547"></a><span class="sd">        The appropriate bus implementation as ``AbstractEventBus``.</span>
 <a id="__codelineno-0-548" name="__codelineno-0-548"></a>
-<a id="__codelineno-0-549" name="__codelineno-0-549"></a><span class="sd">    Thread safety:  ✅ Called once; result is a shared singleton.</span>
-<a id="__codelineno-0-550" name="__codelineno-0-550"></a><span class="sd">    Async safety:   ✅ No I/O at construction time.</span>
-<a id="__codelineno-0-551" name="__codelineno-0-551"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-552" name="__codelineno-0-552"></a>    <span class="c1"># Import here to break the potential circular dependency:</span>
-<a id="__codelineno-0-553" name="__codelineno-0-553"></a>    <span class="c1"># bus.py → streams.py → bus.py (both import from varco_redis.config).</span>
-<a id="__codelineno-0-554" name="__codelineno-0-554"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">varco_redis.streams</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisStreamEventBus</span>  <span class="c1"># noqa: PLC0415</span>
-<a id="__codelineno-0-555" name="__codelineno-0-555"></a>
-<a id="__codelineno-0-556" name="__codelineno-0-556"></a>    <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">use_streams</span><span class="p">:</span>
-<a id="__codelineno-0-557" name="__codelineno-0-557"></a>        <span class="k">return</span> <span class="n">RedisStreamEventBus</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">settings</span><span class="p">)</span>
-<a id="__codelineno-0-558" name="__codelineno-0-558"></a>    <span class="k">return</span> <span class="n">RedisEventBus</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">settings</span><span class="p">)</span>
+<a id="__codelineno-0-549" name="__codelineno-0-549"></a><span class="sd">    Edge cases:</span>
+<a id="__codelineno-0-550" name="__codelineno-0-550"></a><span class="sd">        - Switching ``use_streams`` requires a process restart — the singleton</span>
+<a id="__codelineno-0-551" name="__codelineno-0-551"></a><span class="sd">          is resolved once at warm-up and cached for the container&#39;s lifetime.</span>
+<a id="__codelineno-0-552" name="__codelineno-0-552"></a><span class="sd">        - Both implementations share the same ``RedisEventBusSettings`` object —</span>
+<a id="__codelineno-0-553" name="__codelineno-0-553"></a><span class="sd">          ``url``, ``channel_prefix``, etc. apply to whichever is active.</span>
+<a id="__codelineno-0-554" name="__codelineno-0-554"></a>
+<a id="__codelineno-0-555" name="__codelineno-0-555"></a><span class="sd">    Thread safety:  ✅ Called once; result is a shared singleton.</span>
+<a id="__codelineno-0-556" name="__codelineno-0-556"></a><span class="sd">    Async safety:   ✅ No I/O at construction time.</span>
+<a id="__codelineno-0-557" name="__codelineno-0-557"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-558" name="__codelineno-0-558"></a>    <span class="c1"># Import here to break the potential circular dependency:</span>
+<a id="__codelineno-0-559" name="__codelineno-0-559"></a>    <span class="c1"># bus.py → streams.py → bus.py (both import from varco_redis.config).</span>
+<a id="__codelineno-0-560" name="__codelineno-0-560"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">varco_redis.streams</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisStreamEventBus</span>  <span class="c1"># noqa: PLC0415</span>
+<a id="__codelineno-0-561" name="__codelineno-0-561"></a>
+<a id="__codelineno-0-562" name="__codelineno-0-562"></a>    <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">use_streams</span><span class="p">:</span>
+<a id="__codelineno-0-563" name="__codelineno-0-563"></a>        <span class="k">return</span> <span class="n">RedisStreamEventBus</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">settings</span><span class="p">)</span>
+<a id="__codelineno-0-564" name="__codelineno-0-564"></a>    <span class="k">return</span> <span class="n">RedisEventBus</span><span class="p">(</span><span class="n">config</span><span class="o">=</span><span class="n">settings</span><span class="p">)</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="varco_redis.bus.RedisEventBusSelectorConfiguration.close_bus" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">close_bus</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#varco_redis.bus.RedisEventBusSelectorConfiguration.close_bus" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">close_bus</span><span class="p">(</span><span class="n">bus</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="RedisEventBus (varco_redis.bus.RedisEventBus)" href="#varco_redis.bus.RedisEventBus">RedisEventBus</a></span> <span class="o">|</span> <span class="n"><a class="autorefs autorefs-internal" title="RedisStreamEventBus (varco_redis.streams.RedisStreamEventBus)" href="../streams/#varco_redis.streams.RedisStreamEventBus">RedisStreamEventBus</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Stop the active Redis event bus produced by <code>bus</code> on shutdown.</p>
+
+
+<details class="design" open>
+  <summary><code>@Disposes</code> over relying on <code>@PreDestroy</code></summary>
+  <p>✅ Providify never invokes <code>@PreDestroy</code> on a <code>@Provider</code>-produced
+   instance — <code>@Disposes</code> is upstream's own supported teardown
+   mechanism for this shape (Plan 024 / C2).
+✅ Double-stop safe: both <code>RedisEventBus.stop()</code> (<code>bus.py:217-219</code>)
+   and <code>RedisStreamEventBus.stop()</code> (<code>streams.py:318</code>) are
+   documented idempotent, and <code>varco_fastapi</code>'s lifespan already
+   stops the bus explicitly before <code>ashutdown()</code> runs this
+   disposer a second time (<code>varco_fastapi/varco_fastapi/lifespan.py:212-213</code>)
+   — proven, not merely asserted, by
+   <code>test_redis_bus_disposes.py::test_redis_bus_stop_is_idempotent_across_manual_stop_and_ashutdown</code>.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>bus</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="RedisEventBus (varco_redis.bus.RedisEventBus)" href="#varco_redis.bus.RedisEventBus">RedisEventBus</a> | <a class="autorefs autorefs-internal" title="RedisStreamEventBus (varco_redis.streams.RedisStreamEventBus)" href="../streams/#varco_redis.streams.RedisStreamEventBus">RedisStreamEventBus</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>RedisEventBus</code> or <code>RedisStreamEventBus</code> instance
+this configuration produced (depending on
+<code>VARCO_REDIS_USE_STREAMS</code>). Typed as the concrete union
+(not <code>AbstractEventBus</code>) because <code>stop()</code> is not part of
+the ABC — <code>@Disposes(AbstractEventBus)</code> above is the
+<em>dispatch key</em> providify matches against the bound interface,
+independent of this parameter's static type.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="async-safety" open>
+  <summary>✅ Awaited by providify's <code>_adispose</code> during</summary>
+  <p><code>container.ashutdown()</code>.</p>
+</details>
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>varco_redis/varco_redis/bus.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-566">566</a></span>
+<span class="normal"><a href="#__codelineno-0-567">567</a></span>
+<span class="normal"><a href="#__codelineno-0-568">568</a></span>
+<span class="normal"><a href="#__codelineno-0-569">569</a></span>
+<span class="normal"><a href="#__codelineno-0-570">570</a></span>
+<span class="normal"><a href="#__codelineno-0-571">571</a></span>
+<span class="normal"><a href="#__codelineno-0-572">572</a></span>
+<span class="normal"><a href="#__codelineno-0-573">573</a></span>
+<span class="normal"><a href="#__codelineno-0-574">574</a></span>
+<span class="normal"><a href="#__codelineno-0-575">575</a></span>
+<span class="normal"><a href="#__codelineno-0-576">576</a></span>
+<span class="normal"><a href="#__codelineno-0-577">577</a></span>
+<span class="normal"><a href="#__codelineno-0-578">578</a></span>
+<span class="normal"><a href="#__codelineno-0-579">579</a></span>
+<span class="normal"><a href="#__codelineno-0-580">580</a></span>
+<span class="normal"><a href="#__codelineno-0-581">581</a></span>
+<span class="normal"><a href="#__codelineno-0-582">582</a></span>
+<span class="normal"><a href="#__codelineno-0-583">583</a></span>
+<span class="normal"><a href="#__codelineno-0-584">584</a></span>
+<span class="normal"><a href="#__codelineno-0-585">585</a></span>
+<span class="normal"><a href="#__codelineno-0-586">586</a></span>
+<span class="normal"><a href="#__codelineno-0-587">587</a></span>
+<span class="normal"><a href="#__codelineno-0-588">588</a></span>
+<span class="normal"><a href="#__codelineno-0-589">589</a></span>
+<span class="normal"><a href="#__codelineno-0-590">590</a></span>
+<span class="normal"><a href="#__codelineno-0-591">591</a></span>
+<span class="normal"><a href="#__codelineno-0-592">592</a></span>
+<span class="normal"><a href="#__codelineno-0-593">593</a></span>
+<span class="normal"><a href="#__codelineno-0-594">594</a></span>
+<span class="normal"><a href="#__codelineno-0-595">595</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-566" name="__codelineno-0-566"></a><span class="nd">@Disposes</span><span class="p">(</span><span class="n">AbstractEventBus</span><span class="p">)</span>
+<a id="__codelineno-0-567" name="__codelineno-0-567"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close_bus</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bus</span><span class="p">:</span> <span class="n">RedisEventBus</span> <span class="o">|</span> <span class="n">RedisStreamEventBus</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-568" name="__codelineno-0-568"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-569" name="__codelineno-0-569"></a><span class="sd">    Stop the active Redis event bus produced by ``bus`` on shutdown.</span>
+<a id="__codelineno-0-570" name="__codelineno-0-570"></a>
+<a id="__codelineno-0-571" name="__codelineno-0-571"></a><span class="sd">    DESIGN: ``@Disposes`` over relying on ``@PreDestroy``</span>
+<a id="__codelineno-0-572" name="__codelineno-0-572"></a><span class="sd">        ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced</span>
+<a id="__codelineno-0-573" name="__codelineno-0-573"></a><span class="sd">           instance — ``@Disposes`` is upstream&#39;s own supported teardown</span>
+<a id="__codelineno-0-574" name="__codelineno-0-574"></a><span class="sd">           mechanism for this shape (Plan 024 / C2).</span>
+<a id="__codelineno-0-575" name="__codelineno-0-575"></a><span class="sd">        ✅ Double-stop safe: both ``RedisEventBus.stop()`` (`bus.py:217-219`)</span>
+<a id="__codelineno-0-576" name="__codelineno-0-576"></a><span class="sd">           and ``RedisStreamEventBus.stop()`` (`streams.py:318`) are</span>
+<a id="__codelineno-0-577" name="__codelineno-0-577"></a><span class="sd">           documented idempotent, and `varco_fastapi`&#39;s lifespan already</span>
+<a id="__codelineno-0-578" name="__codelineno-0-578"></a><span class="sd">           stops the bus explicitly before ``ashutdown()`` runs this</span>
+<a id="__codelineno-0-579" name="__codelineno-0-579"></a><span class="sd">           disposer a second time (`varco_fastapi/varco_fastapi/lifespan.py:212-213`)</span>
+<a id="__codelineno-0-580" name="__codelineno-0-580"></a><span class="sd">           — proven, not merely asserted, by</span>
+<a id="__codelineno-0-581" name="__codelineno-0-581"></a><span class="sd">           `test_redis_bus_disposes.py::test_redis_bus_stop_is_idempotent_across_manual_stop_and_ashutdown`.</span>
+<a id="__codelineno-0-582" name="__codelineno-0-582"></a>
+<a id="__codelineno-0-583" name="__codelineno-0-583"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-584" name="__codelineno-0-584"></a><span class="sd">        bus: The ``RedisEventBus`` or ``RedisStreamEventBus`` instance</span>
+<a id="__codelineno-0-585" name="__codelineno-0-585"></a><span class="sd">            this configuration produced (depending on</span>
+<a id="__codelineno-0-586" name="__codelineno-0-586"></a><span class="sd">            ``VARCO_REDIS_USE_STREAMS``). Typed as the concrete union</span>
+<a id="__codelineno-0-587" name="__codelineno-0-587"></a><span class="sd">            (not ``AbstractEventBus``) because ``stop()`` is not part of</span>
+<a id="__codelineno-0-588" name="__codelineno-0-588"></a><span class="sd">            the ABC — ``@Disposes(AbstractEventBus)`` above is the</span>
+<a id="__codelineno-0-589" name="__codelineno-0-589"></a><span class="sd">            *dispatch key* providify matches against the bound interface,</span>
+<a id="__codelineno-0-590" name="__codelineno-0-590"></a><span class="sd">            independent of this parameter&#39;s static type.</span>
+<a id="__codelineno-0-591" name="__codelineno-0-591"></a>
+<a id="__codelineno-0-592" name="__codelineno-0-592"></a><span class="sd">    Async safety: ✅ Awaited by providify&#39;s ``_adispose`` during</span>
+<a id="__codelineno-0-593" name="__codelineno-0-593"></a><span class="sd">        ``container.ashutdown()``.</span>
+<a id="__codelineno-0-594" name="__codelineno-0-594"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-595" name="__codelineno-0-595"></a>    <span class="k">await</span> <span class="n">bus</span><span class="o">.</span><span class="n">stop</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

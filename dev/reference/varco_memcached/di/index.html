@@ -15902,9 +15902,12 @@ the connection pool to Memcached has been opened.</p>
   <code>setup_cache</code> branch, so no <code>AttributeError</code> is possible
   either way.</li>
 <li><code>await container.ashutdown()</code> must be called at process exit to
-  close the aiomcache connection pool via the <code>@PreDestroy</code> hook
-  on <code>MemcachedCacheConfiguration</code> (only relevant when
-  <code>setup_cache=True</code> was used at some point).</li>
+  close the aiomcache connection pool via
+  <code>MemcachedCacheConfiguration</code>'s <code>@Disposes(CacheBackend)</code>
+  method (only relevant when <code>setup_cache=True</code> was used at some
+  point). Not <code>@PreDestroy</code> — providify never invokes
+  <code>@PreDestroy</code> on a <code>@Provider</code>-produced instance; <code>@Disposes</code>
+  is the supported teardown path for provider output (Plan 024 / C2).</li>
 </ul>
 </details>        <p>Cross-reference — why the <em>defaults</em> differ from <code>varco_redis</code>:
     <code>varco_redis.di.async_bootstrap()</code> defaults <code>setup_cache=False</code>
@@ -16013,7 +16016,10 @@ Async safety:   ✅ <code>async def</code> — safe to <code>await</code>.</p>
 <span class="normal"><a href="#__codelineno-0-227">227</a></span>
 <span class="normal"><a href="#__codelineno-0-228">228</a></span>
 <span class="normal"><a href="#__codelineno-0-229">229</a></span>
-<span class="normal"><a href="#__codelineno-0-230">230</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-140" name="__codelineno-0-140"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_bootstrap</span><span class="p">(</span><span class="n">container</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">setup_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="normal"><a href="#__codelineno-0-230">230</a></span>
+<span class="normal"><a href="#__codelineno-0-231">231</a></span>
+<span class="normal"><a href="#__codelineno-0-232">232</a></span>
+<span class="normal"><a href="#__codelineno-0-233">233</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-140" name="__codelineno-0-140"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_bootstrap</span><span class="p">(</span><span class="n">container</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">setup_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <a id="__codelineno-0-141" name="__codelineno-0-141"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <a id="__codelineno-0-142" name="__codelineno-0-142"></a><span class="sd">    Bootstrap ``varco_memcached`` and activate the Memcached cache (async).</span>
 <a id="__codelineno-0-143" name="__codelineno-0-143"></a>
@@ -16067,43 +16073,46 @@ Async safety:   ✅ <code>async def</code> — safe to <code>await</code>.</p>
 <a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">          ``setup_cache`` branch, so no ``AttributeError`` is possible</span>
 <a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">          either way.</span>
 <a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">        - ``await container.ashutdown()`` must be called at process exit to</span>
-<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">          close the aiomcache connection pool via the ``@PreDestroy`` hook</span>
-<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">          on ``MemcachedCacheConfiguration`` (only relevant when</span>
-<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">          ``setup_cache=True`` was used at some point).</span>
-<a id="__codelineno-0-197" name="__codelineno-0-197"></a>
-<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">    Cross-reference — why the *defaults* differ from ``varco_redis``:</span>
-<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">        ``varco_redis.di.async_bootstrap()`` defaults ``setup_cache=False``</span>
-<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">        because it also serves a streams/event-bus bootstrap path where no</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">        cache is wanted at all — defaulting to install one there would</span>
-<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">        silently open a Redis connection pool for callers who only use</span>
-<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">        Redis as an event bus. ``varco_memcached`` has no such second use</span>
-<a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="sd">        case: a Memcached connection is its *only* reason to exist, so</span>
-<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="sd">        ``setup_cache=True`` here reproduces this function&#39;s</span>
-<a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="sd">        pre-existing, unconditional-install behaviour exactly — no</span>
-<a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="sd">        existing ``await async_bootstrap(container)`` call site changes</span>
-<a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="sd">        behaviour.</span>
-<a id="__codelineno-0-209" name="__codelineno-0-209"></a>
-<a id="__codelineno-0-210" name="__codelineno-0-210"></a><span class="sd">    Thread safety:  ✅ Intended for single-threaded startup only.</span>
-<a id="__codelineno-0-211" name="__codelineno-0-211"></a><span class="sd">    Async safety:   ✅ ``async def`` — safe to ``await``.</span>
-<a id="__codelineno-0-212" name="__codelineno-0-212"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-213" name="__codelineno-0-213"></a>    <span class="n">container</span> <span class="o">=</span> <span class="n">bootstrap</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
-<a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-215" name="__codelineno-0-215"></a>        <span class="c1"># providify is absent — bootstrap() returned None; nothing to install</span>
-<a id="__codelineno-0-216" name="__codelineno-0-216"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;providify not installed; varco_memcached DI helpers are no-ops&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-217" name="__codelineno-0-217"></a>        <span class="k">return</span> <span class="kc">None</span>
-<a id="__codelineno-0-218" name="__codelineno-0-218"></a>
-<a id="__codelineno-0-219" name="__codelineno-0-219"></a>    <span class="k">if</span> <span class="n">setup_cache</span><span class="p">:</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a>        <span class="c1"># ainstall runs MemcachedCacheConfiguration.setup(), which constructs</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>        <span class="c1"># MemcachedCache, calls cache.start() to open the aiomcache pool, and</span>
-<a id="__codelineno-0-222" name="__codelineno-0-222"></a>        <span class="c1"># binds the instance as CacheBackend in the container.</span>
-<a id="__codelineno-0-223" name="__codelineno-0-223"></a>        <span class="c1"># This is intentionally separate from bootstrap() — the async step cannot</span>
-<a id="__codelineno-0-224" name="__codelineno-0-224"></a>        <span class="c1"># run in a sync context, and some apps need the sync scan before the event</span>
-<a id="__codelineno-0-225" name="__codelineno-0-225"></a>        <span class="c1"># loop is started (e.g. framework introspection at import time).</span>
-<a id="__codelineno-0-226" name="__codelineno-0-226"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">varco_memcached.cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">MemcachedCacheConfiguration</span>  <span class="c1"># noqa: PLC0415</span>
-<a id="__codelineno-0-227" name="__codelineno-0-227"></a>
-<a id="__codelineno-0-228" name="__codelineno-0-228"></a>        <span class="k">await</span> <span class="n">container</span><span class="o">.</span><span class="n">ainstall</span><span class="p">(</span><span class="n">MemcachedCacheConfiguration</span><span class="p">)</span>
-<a id="__codelineno-0-229" name="__codelineno-0-229"></a>
-<a id="__codelineno-0-230" name="__codelineno-0-230"></a>    <span class="k">return</span> <span class="n">container</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">          close the aiomcache connection pool via</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">          ``MemcachedCacheConfiguration``&#39;s ``@Disposes(CacheBackend)``</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">          method (only relevant when ``setup_cache=True`` was used at some</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">          point). Not ``@PreDestroy`` — providify never invokes</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">          ``@PreDestroy`` on a ``@Provider``-produced instance; ``@Disposes``</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">          is the supported teardown path for provider output (Plan 024 / C2).</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">    Cross-reference — why the *defaults* differ from ``varco_redis``:</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">        ``varco_redis.di.async_bootstrap()`` defaults ``setup_cache=False``</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">        because it also serves a streams/event-bus bootstrap path where no</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="sd">        cache is wanted at all — defaulting to install one there would</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="sd">        silently open a Redis connection pool for callers who only use</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="sd">        Redis as an event bus. ``varco_memcached`` has no such second use</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="sd">        case: a Memcached connection is its *only* reason to exist, so</span>
+<a id="__codelineno-0-208" name="__codelineno-0-208"></a><span class="sd">        ``setup_cache=True`` here reproduces this function&#39;s</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="sd">        pre-existing, unconditional-install behaviour exactly — no</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a><span class="sd">        existing ``await async_bootstrap(container)`` call site changes</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a><span class="sd">        behaviour.</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a><span class="sd">    Thread safety:  ✅ Intended for single-threaded startup only.</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="sd">    Async safety:   ✅ ``async def`` — safe to ``await``.</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>    <span class="n">container</span> <span class="o">=</span> <span class="n">bootstrap</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a>    <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a>        <span class="c1"># providify is absent — bootstrap() returned None; nothing to install</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a>        <span class="n">_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;providify not installed; varco_memcached DI helpers are no-ops&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>        <span class="k">return</span> <span class="kc">None</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a>    <span class="k">if</span> <span class="n">setup_cache</span><span class="p">:</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a>        <span class="c1"># ainstall runs MemcachedCacheConfiguration.setup(), which constructs</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>        <span class="c1"># MemcachedCache, calls cache.start() to open the aiomcache pool, and</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>        <span class="c1"># binds the instance as CacheBackend in the container.</span>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>        <span class="c1"># This is intentionally separate from bootstrap() — the async step cannot</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>        <span class="c1"># run in a sync context, and some apps need the sync scan before the event</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>        <span class="c1"># loop is started (e.g. framework introspection at import time).</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">varco_memcached.cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">MemcachedCacheConfiguration</span>  <span class="c1"># noqa: PLC0415</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>        <span class="k">await</span> <span class="n">container</span><span class="o">.</span><span class="n">ainstall</span><span class="p">(</span><span class="n">MemcachedCacheConfiguration</span><span class="p">)</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>    <span class="k">return</span> <span class="n">container</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

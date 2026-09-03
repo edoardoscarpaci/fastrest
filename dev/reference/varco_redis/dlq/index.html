@@ -13277,6 +13277,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_redis.dlq.RedisDLQConfiguration.close_dlq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_dlq
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -15679,6 +15690,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#varco_redis.dlq.RedisDLQConfiguration.close_dlq" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        close_dlq
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -17346,9 +17368,12 @@ an admin/CLI browse surface; not intended for hot-path use.</p>
 
 <details class="lifecycle" open>
   <summary>Lifecycle</summary>
-  <p>The DLQ is connected inside the provider.  Call
-<code>await container.ashutdown()</code> or call <code>await dlq.disconnect()</code>
-explicitly when the app shuts down.</p>
+  <p>The DLQ is connected inside the provider and disconnected
+automatically by this configuration's <code>@Disposes(AbstractDeadLetterQueue)</code>
+method (<code>close_dlq</code>) when <code>await container.ashutdown()</code> is called
+— not <code>@PreDestroy</code>, which providify never invokes on a
+<code>@Provider</code>-produced instance (Plan 024 / C2). Calling
+<code>await dlq.disconnect()</code> explicitly beforehand is also safe.</p>
 </details>        <p>Thread safety:  ✅  Providify singletons are created once and cached.
 Async safety:   ✅  Provider is <code>async def</code>.</p>
 <p>Example (bus + DLQ)::</p>
@@ -17439,10 +17464,7 @@ singleton instead of this provider.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/dlq.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-710">710</a></span>
-<span class="normal"><a href="#__codelineno-0-711">711</a></span>
-<span class="normal"><a href="#__codelineno-0-712">712</a></span>
-<span class="normal"><a href="#__codelineno-0-713">713</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-713">713</a></span>
 <span class="normal"><a href="#__codelineno-0-714">714</a></span>
 <span class="normal"><a href="#__codelineno-0-715">715</a></span>
 <span class="normal"><a href="#__codelineno-0-716">716</a></span>
@@ -17452,20 +17474,23 @@ singleton instead of this provider.</p>
 <span class="normal"><a href="#__codelineno-0-720">720</a></span>
 <span class="normal"><a href="#__codelineno-0-721">721</a></span>
 <span class="normal"><a href="#__codelineno-0-722">722</a></span>
-<span class="normal"><a href="#__codelineno-0-723">723</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-710" name="__codelineno-0-710"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
-<a id="__codelineno-0-711" name="__codelineno-0-711"></a><span class="k">def</span><span class="w"> </span><span class="nf">redis_dlq_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RedisEventBusSettings</span><span class="p">:</span>
-<a id="__codelineno-0-712" name="__codelineno-0-712"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-713" name="__codelineno-0-713"></a><span class="sd">    Default ``RedisEventBusSettings`` for the DLQ.</span>
-<a id="__codelineno-0-714" name="__codelineno-0-714"></a>
-<a id="__codelineno-0-715" name="__codelineno-0-715"></a><span class="sd">    If the bus was registered via ``scan()`` / ``bootstrap()`` first, the</span>
-<a id="__codelineno-0-716" name="__codelineno-0-716"></a><span class="sd">    container resolves the already-registered ``RedisEventBusSettings``</span>
-<a id="__codelineno-0-717" name="__codelineno-0-717"></a><span class="sd">    singleton instead of this provider.</span>
-<a id="__codelineno-0-718" name="__codelineno-0-718"></a>
-<a id="__codelineno-0-719" name="__codelineno-0-719"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-720" name="__codelineno-0-720"></a><span class="sd">        ``RedisEventBusSettings`` with development-friendly defaults.</span>
-<a id="__codelineno-0-721" name="__codelineno-0-721"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-722" name="__codelineno-0-722"></a>    <span class="c1"># Reads from VARCO_REDIS_* env vars if set.</span>
-<a id="__codelineno-0-723" name="__codelineno-0-723"></a>    <span class="k">return</span> <span class="n">RedisEventBusSettings</span><span class="o">.</span><span class="n">from_env</span><span class="p">()</span>
+<span class="normal"><a href="#__codelineno-0-723">723</a></span>
+<span class="normal"><a href="#__codelineno-0-724">724</a></span>
+<span class="normal"><a href="#__codelineno-0-725">725</a></span>
+<span class="normal"><a href="#__codelineno-0-726">726</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-713" name="__codelineno-0-713"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">priority</span><span class="o">=-</span><span class="n">sys</span><span class="o">.</span><span class="n">maxsize</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+<a id="__codelineno-0-714" name="__codelineno-0-714"></a><span class="k">def</span><span class="w"> </span><span class="nf">redis_dlq_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RedisEventBusSettings</span><span class="p">:</span>
+<a id="__codelineno-0-715" name="__codelineno-0-715"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-716" name="__codelineno-0-716"></a><span class="sd">    Default ``RedisEventBusSettings`` for the DLQ.</span>
+<a id="__codelineno-0-717" name="__codelineno-0-717"></a>
+<a id="__codelineno-0-718" name="__codelineno-0-718"></a><span class="sd">    If the bus was registered via ``scan()`` / ``bootstrap()`` first, the</span>
+<a id="__codelineno-0-719" name="__codelineno-0-719"></a><span class="sd">    container resolves the already-registered ``RedisEventBusSettings``</span>
+<a id="__codelineno-0-720" name="__codelineno-0-720"></a><span class="sd">    singleton instead of this provider.</span>
+<a id="__codelineno-0-721" name="__codelineno-0-721"></a>
+<a id="__codelineno-0-722" name="__codelineno-0-722"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-723" name="__codelineno-0-723"></a><span class="sd">        ``RedisEventBusSettings`` with development-friendly defaults.</span>
+<a id="__codelineno-0-724" name="__codelineno-0-724"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-725" name="__codelineno-0-725"></a>    <span class="c1"># Reads from VARCO_REDIS_* env vars if set.</span>
+<a id="__codelineno-0-726" name="__codelineno-0-726"></a>    <span class="k">return</span> <span class="n">RedisEventBusSettings</span><span class="o">.</span><span class="n">from_env</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -17573,10 +17598,7 @@ singleton instead of this provider.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/dlq.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-725">725</a></span>
-<span class="normal"><a href="#__codelineno-0-726">726</a></span>
-<span class="normal"><a href="#__codelineno-0-727">727</a></span>
-<span class="normal"><a href="#__codelineno-0-728">728</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-728">728</a></span>
 <span class="normal"><a href="#__codelineno-0-729">729</a></span>
 <span class="normal"><a href="#__codelineno-0-730">730</a></span>
 <span class="normal"><a href="#__codelineno-0-731">731</a></span>
@@ -17596,30 +17618,161 @@ singleton instead of this provider.</p>
 <span class="normal"><a href="#__codelineno-0-745">745</a></span>
 <span class="normal"><a href="#__codelineno-0-746">746</a></span>
 <span class="normal"><a href="#__codelineno-0-747">747</a></span>
-<span class="normal"><a href="#__codelineno-0-748">748</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-725" name="__codelineno-0-725"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-0-726" name="__codelineno-0-726"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">redis_dlq</span><span class="p">(</span>
-<a id="__codelineno-0-727" name="__codelineno-0-727"></a>    <span class="bp">self</span><span class="p">,</span>
-<a id="__codelineno-0-728" name="__codelineno-0-728"></a>    <span class="n">settings</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">RedisEventBusSettings</span><span class="p">],</span>
-<a id="__codelineno-0-729" name="__codelineno-0-729"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AbstractDeadLetterQueue</span><span class="p">:</span>
-<a id="__codelineno-0-730" name="__codelineno-0-730"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-731" name="__codelineno-0-731"></a><span class="sd">    Create, connect, and return the ``RedisDLQ`` singleton.</span>
-<a id="__codelineno-0-732" name="__codelineno-0-732"></a>
-<a id="__codelineno-0-733" name="__codelineno-0-733"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-734" name="__codelineno-0-734"></a><span class="sd">        settings: ``RedisEventBusSettings`` — injected from the container.</span>
+<span class="normal"><a href="#__codelineno-0-748">748</a></span>
+<span class="normal"><a href="#__codelineno-0-749">749</a></span>
+<span class="normal"><a href="#__codelineno-0-750">750</a></span>
+<span class="normal"><a href="#__codelineno-0-751">751</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-728" name="__codelineno-0-728"></a><span class="nd">@Provider</span><span class="p">(</span><span class="n">singleton</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-0-729" name="__codelineno-0-729"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">redis_dlq</span><span class="p">(</span>
+<a id="__codelineno-0-730" name="__codelineno-0-730"></a>    <span class="bp">self</span><span class="p">,</span>
+<a id="__codelineno-0-731" name="__codelineno-0-731"></a>    <span class="n">settings</span><span class="p">:</span> <span class="n">Inject</span><span class="p">[</span><span class="n">RedisEventBusSettings</span><span class="p">],</span>
+<a id="__codelineno-0-732" name="__codelineno-0-732"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AbstractDeadLetterQueue</span><span class="p">:</span>
+<a id="__codelineno-0-733" name="__codelineno-0-733"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-734" name="__codelineno-0-734"></a><span class="sd">    Create, connect, and return the ``RedisDLQ`` singleton.</span>
 <a id="__codelineno-0-735" name="__codelineno-0-735"></a>
-<a id="__codelineno-0-736" name="__codelineno-0-736"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-737" name="__codelineno-0-737"></a><span class="sd">        A connected ``RedisDLQ`` bound to ``AbstractDeadLetterQueue``.</span>
+<a id="__codelineno-0-736" name="__codelineno-0-736"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-737" name="__codelineno-0-737"></a><span class="sd">        settings: ``RedisEventBusSettings`` — injected from the container.</span>
 <a id="__codelineno-0-738" name="__codelineno-0-738"></a>
-<a id="__codelineno-0-739" name="__codelineno-0-739"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-740" name="__codelineno-0-740"></a><span class="sd">        ConnectionError: (redis.asyncio) If Redis is unreachable at startup.</span>
-<a id="__codelineno-0-741" name="__codelineno-0-741"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-742" name="__codelineno-0-742"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-<a id="__codelineno-0-743" name="__codelineno-0-743"></a>        <span class="s2">&quot;RedisDLQConfiguration: connecting RedisDLQ (url=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
-<a id="__codelineno-0-744" name="__codelineno-0-744"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
-<a id="__codelineno-0-745" name="__codelineno-0-745"></a>    <span class="p">)</span>
-<a id="__codelineno-0-746" name="__codelineno-0-746"></a>    <span class="n">dlq</span> <span class="o">=</span> <span class="n">RedisDLQ</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
-<a id="__codelineno-0-747" name="__codelineno-0-747"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
-<a id="__codelineno-0-748" name="__codelineno-0-748"></a>    <span class="k">return</span> <span class="n">dlq</span>
+<a id="__codelineno-0-739" name="__codelineno-0-739"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-740" name="__codelineno-0-740"></a><span class="sd">        A connected ``RedisDLQ`` bound to ``AbstractDeadLetterQueue``.</span>
+<a id="__codelineno-0-741" name="__codelineno-0-741"></a>
+<a id="__codelineno-0-742" name="__codelineno-0-742"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-743" name="__codelineno-0-743"></a><span class="sd">        ConnectionError: (redis.asyncio) If Redis is unreachable at startup.</span>
+<a id="__codelineno-0-744" name="__codelineno-0-744"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-745" name="__codelineno-0-745"></a>    <span class="n">_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+<a id="__codelineno-0-746" name="__codelineno-0-746"></a>        <span class="s2">&quot;RedisDLQConfiguration: connecting RedisDLQ (url=</span><span class="si">%s</span><span class="s2">)&quot;</span><span class="p">,</span>
+<a id="__codelineno-0-747" name="__codelineno-0-747"></a>        <span class="n">settings</span><span class="o">.</span><span class="n">url</span><span class="p">,</span>
+<a id="__codelineno-0-748" name="__codelineno-0-748"></a>    <span class="p">)</span>
+<a id="__codelineno-0-749" name="__codelineno-0-749"></a>    <span class="n">dlq</span> <span class="o">=</span> <span class="n">RedisDLQ</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+<a id="__codelineno-0-750" name="__codelineno-0-750"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">connect</span><span class="p">()</span>
+<a id="__codelineno-0-751" name="__codelineno-0-751"></a>    <span class="k">return</span> <span class="n">dlq</span>
+</code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="varco_redis.dlq.RedisDLQConfiguration.close_dlq" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">close_dlq</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#varco_redis.dlq.RedisDLQConfiguration.close_dlq" class="headerlink" title="Permanent link">&para;</a></h4>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">close_dlq</span><span class="p">(</span><span class="n">dlq</span><span class="p">:</span> <span class="n"><a class="autorefs autorefs-internal" title="RedisDLQ (varco_redis.dlq.RedisDLQ)" href="#varco_redis.dlq.RedisDLQ">RedisDLQ</a></span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Disconnect the <code>RedisDLQ</code> produced by <code>redis_dlq</code> on shutdown.</p>
+
+
+<details class="design" open>
+  <summary><code>@Disposes</code> over relying on <code>@PreDestroy</code></summary>
+  <p>✅ Providify never invokes <code>@PreDestroy</code> on a <code>@Provider</code>-produced
+   instance — <code>@Disposes</code> is upstream's own supported teardown
+   mechanism (Plan 024 / C2). <code>RedisDLQ</code> carries no
+   <code>@PreDestroy</code> at all (Tier B — invisible to providify's
+   <code>UNREACHABLE_PRE_DESTROY</code> detector), so only this behavioural
+   disposer test can catch a regression here.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dlq</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="RedisDLQ (varco_redis.dlq.RedisDLQ)" href="#varco_redis.dlq.RedisDLQ">RedisDLQ</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>RedisDLQ</code> instance this configuration produced.
+Typed concretely (not <code>AbstractDeadLetterQueue</code>) because
+<code>disconnect()</code> is a <code>RedisDLQ</code>-specific method, not part of
+the ABC — <code>@Disposes(AbstractDeadLetterQueue)</code> above is the
+<em>dispatch key</em> providify matches against the bound interface;
+it is independent of this parameter's static type.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="async-safety" open>
+  <summary>✅ Awaited by providify's <code>_adispose</code> during</summary>
+  <p><code>container.ashutdown()</code>.</p>
+</details>
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>varco_redis/varco_redis/dlq.py</code></summary>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-753">753</a></span>
+<span class="normal"><a href="#__codelineno-0-754">754</a></span>
+<span class="normal"><a href="#__codelineno-0-755">755</a></span>
+<span class="normal"><a href="#__codelineno-0-756">756</a></span>
+<span class="normal"><a href="#__codelineno-0-757">757</a></span>
+<span class="normal"><a href="#__codelineno-0-758">758</a></span>
+<span class="normal"><a href="#__codelineno-0-759">759</a></span>
+<span class="normal"><a href="#__codelineno-0-760">760</a></span>
+<span class="normal"><a href="#__codelineno-0-761">761</a></span>
+<span class="normal"><a href="#__codelineno-0-762">762</a></span>
+<span class="normal"><a href="#__codelineno-0-763">763</a></span>
+<span class="normal"><a href="#__codelineno-0-764">764</a></span>
+<span class="normal"><a href="#__codelineno-0-765">765</a></span>
+<span class="normal"><a href="#__codelineno-0-766">766</a></span>
+<span class="normal"><a href="#__codelineno-0-767">767</a></span>
+<span class="normal"><a href="#__codelineno-0-768">768</a></span>
+<span class="normal"><a href="#__codelineno-0-769">769</a></span>
+<span class="normal"><a href="#__codelineno-0-770">770</a></span>
+<span class="normal"><a href="#__codelineno-0-771">771</a></span>
+<span class="normal"><a href="#__codelineno-0-772">772</a></span>
+<span class="normal"><a href="#__codelineno-0-773">773</a></span>
+<span class="normal"><a href="#__codelineno-0-774">774</a></span>
+<span class="normal"><a href="#__codelineno-0-775">775</a></span>
+<span class="normal"><a href="#__codelineno-0-776">776</a></span>
+<span class="normal"><a href="#__codelineno-0-777">777</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-753" name="__codelineno-0-753"></a><span class="nd">@Disposes</span><span class="p">(</span><span class="n">AbstractDeadLetterQueue</span><span class="p">)</span>
+<a id="__codelineno-0-754" name="__codelineno-0-754"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">close_dlq</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dlq</span><span class="p">:</span> <span class="n">RedisDLQ</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-755" name="__codelineno-0-755"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-756" name="__codelineno-0-756"></a><span class="sd">    Disconnect the ``RedisDLQ`` produced by ``redis_dlq`` on shutdown.</span>
+<a id="__codelineno-0-757" name="__codelineno-0-757"></a>
+<a id="__codelineno-0-758" name="__codelineno-0-758"></a><span class="sd">    DESIGN: ``@Disposes`` over relying on ``@PreDestroy``</span>
+<a id="__codelineno-0-759" name="__codelineno-0-759"></a><span class="sd">        ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced</span>
+<a id="__codelineno-0-760" name="__codelineno-0-760"></a><span class="sd">           instance — ``@Disposes`` is upstream&#39;s own supported teardown</span>
+<a id="__codelineno-0-761" name="__codelineno-0-761"></a><span class="sd">           mechanism (Plan 024 / C2). ``RedisDLQ`` carries no</span>
+<a id="__codelineno-0-762" name="__codelineno-0-762"></a><span class="sd">           ``@PreDestroy`` at all (Tier B — invisible to providify&#39;s</span>
+<a id="__codelineno-0-763" name="__codelineno-0-763"></a><span class="sd">           ``UNREACHABLE_PRE_DESTROY`` detector), so only this behavioural</span>
+<a id="__codelineno-0-764" name="__codelineno-0-764"></a><span class="sd">           disposer test can catch a regression here.</span>
+<a id="__codelineno-0-765" name="__codelineno-0-765"></a>
+<a id="__codelineno-0-766" name="__codelineno-0-766"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-767" name="__codelineno-0-767"></a><span class="sd">        dlq: The ``RedisDLQ`` instance this configuration produced.</span>
+<a id="__codelineno-0-768" name="__codelineno-0-768"></a><span class="sd">            Typed concretely (not ``AbstractDeadLetterQueue``) because</span>
+<a id="__codelineno-0-769" name="__codelineno-0-769"></a><span class="sd">            ``disconnect()`` is a `RedisDLQ`-specific method, not part of</span>
+<a id="__codelineno-0-770" name="__codelineno-0-770"></a><span class="sd">            the ABC — ``@Disposes(AbstractDeadLetterQueue)`` above is the</span>
+<a id="__codelineno-0-771" name="__codelineno-0-771"></a><span class="sd">            *dispatch key* providify matches against the bound interface;</span>
+<a id="__codelineno-0-772" name="__codelineno-0-772"></a><span class="sd">            it is independent of this parameter&#39;s static type.</span>
+<a id="__codelineno-0-773" name="__codelineno-0-773"></a>
+<a id="__codelineno-0-774" name="__codelineno-0-774"></a><span class="sd">    Async safety: ✅ Awaited by providify&#39;s ``_adispose`` during</span>
+<a id="__codelineno-0-775" name="__codelineno-0-775"></a><span class="sd">        ``container.ashutdown()``.</span>
+<a id="__codelineno-0-776" name="__codelineno-0-776"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-777" name="__codelineno-0-777"></a>    <span class="k">await</span> <span class="n">dlq</span><span class="o">.</span><span class="n">disconnect</span><span class="p">()</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>

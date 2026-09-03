@@ -16544,7 +16544,20 @@ startup hook by default would be the single most dangerous thing in this feature
   <code>Revision(id="index:&lt;collection&gt;:&lt;label&gt;", branch="index")</code>, so <code>mode="check"</code> reports
   migrations and indexes uniformly.</li>
 <li><code>index_mode="create"</code> — applies <strong>missing</strong> indexes only. It never drops
-  <code>unexpected_indexes</code>: dropping an index someone added deliberately is destructive.</li>
+  <code>unexpected_indexes</code>: dropping an index someone added deliberately is destructive.
+  ✅ <strong>Fixed (Plan 024 / C3, RT9)</strong>: <code>upgrade()</code> reconciles indexes <strong>whether or
+  not</strong> migration revisions are pending — not only when the migration
+  registry has pending work. Before this fix, an empty (or fully-applied)
+  registry made <code>upgrade()</code> return before ever reaching the index block, so
+  <code>plan()</code> (which always reports index drift independently) and <code>upgrade()</code>
+  silently disagreed. Index reconciliation happens <strong>under the migration
+  lock</strong> — same lock, same serialization guarantee as a hand-written
+  migration — so <code>createIndex</code>'s own idempotency (MongoDB 4.4+) is a
+  performance property, not a substitute for the lock's cross-process
+  exclusion. The common no-drift startup path (no pending migrations, no
+  index drift) still takes <strong>no lock at all</strong> — one extra <code>listIndexes</code>
+  round-trip is paid only when the migration registry is empty, which is
+  exactly the case that needs it to detect drift.</li>
 <li><code>index_mode="off"</code> — skip reconciliation entirely.</li>
 </ul>
 <p>Run index creation from the CLI as a pre-deploy job instead:</p>

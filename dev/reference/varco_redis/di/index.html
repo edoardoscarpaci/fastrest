@@ -15632,7 +15632,10 @@ bootstrap(container)
   <ul>
 <li>Calling twice is safe — scanning is idempotent.</li>
 <li><code>container.ashutdown()</code> must be awaited at process exit to call
-  the bus <code>stop()</code> via its <code>@PreDestroy</code> hook.</li>
+  the bus <code>stop()</code> via <code>RedisEventBusSelectorConfiguration</code>'s
+  <code>@Disposes(AbstractEventBus)</code> method — not <code>@PreDestroy</code>, which
+  providify never invokes on a <code>@Provider</code>-produced instance
+  (Plan 024 / C2).</li>
 <li><code>streams=True</code> mutates <code>os.environ["VARCO_REDIS_USE_STREAMS"]</code>.
   This affects all subsequent <code>RedisEventBusSettings()</code> constructions
   in the same process.</li>
@@ -15733,7 +15736,10 @@ Async safety:   ✅ Scanning is synchronous.</p>
 <span class="normal"><a href="#__codelineno-0-159">159</a></span>
 <span class="normal"><a href="#__codelineno-0-160">160</a></span>
 <span class="normal"><a href="#__codelineno-0-161">161</a></span>
-<span class="normal"><a href="#__codelineno-0-162">162</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="k">def</span><span class="w"> </span><span class="nf">bootstrap</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-162">162</a></span>
+<span class="normal"><a href="#__codelineno-0-163">163</a></span>
+<span class="normal"><a href="#__codelineno-0-164">164</a></span>
+<span class="normal"><a href="#__codelineno-0-165">165</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-72" name="__codelineno-0-72"></a><span class="k">def</span><span class="w"> </span><span class="nf">bootstrap</span><span class="p">(</span>
 <a id="__codelineno-0-73" name="__codelineno-0-73"></a>    <span class="n">container</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-74" name="__codelineno-0-74"></a>    <span class="o">*</span><span class="p">,</span>
 <a id="__codelineno-0-75" name="__codelineno-0-75"></a>    <span class="n">streams</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -15791,39 +15797,42 @@ Async safety:   ✅ Scanning is synchronous.</p>
 <a id="__codelineno-0-127" name="__codelineno-0-127"></a><span class="sd">    Edge cases:</span>
 <a id="__codelineno-0-128" name="__codelineno-0-128"></a><span class="sd">        - Calling twice is safe — scanning is idempotent.</span>
 <a id="__codelineno-0-129" name="__codelineno-0-129"></a><span class="sd">        - ``container.ashutdown()`` must be awaited at process exit to call</span>
-<a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">          the bus ``stop()`` via its ``@PreDestroy`` hook.</span>
-<a id="__codelineno-0-131" name="__codelineno-0-131"></a><span class="sd">        - ``streams=True`` mutates ``os.environ[&quot;VARCO_REDIS_USE_STREAMS&quot;]``.</span>
-<a id="__codelineno-0-132" name="__codelineno-0-132"></a><span class="sd">          This affects all subsequent ``RedisEventBusSettings()`` constructions</span>
-<a id="__codelineno-0-133" name="__codelineno-0-133"></a><span class="sd">          in the same process.</span>
-<a id="__codelineno-0-134" name="__codelineno-0-134"></a>
-<a id="__codelineno-0-135" name="__codelineno-0-135"></a><span class="sd">    Thread safety:  ✅ Bootstrap is intended for single-threaded startup only.</span>
-<a id="__codelineno-0-136" name="__codelineno-0-136"></a><span class="sd">    Async safety:   ✅ Scanning is synchronous.</span>
-<a id="__codelineno-0-137" name="__codelineno-0-137"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-138" name="__codelineno-0-138"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>  <span class="c1"># noqa: PLC0415</span>
-<a id="__codelineno-0-139" name="__codelineno-0-139"></a>
-<a id="__codelineno-0-140" name="__codelineno-0-140"></a>    <span class="k">try</span><span class="p">:</span>
-<a id="__codelineno-0-141" name="__codelineno-0-141"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">providify</span><span class="w"> </span><span class="kn">import</span> <span class="n">DIContainer</span>  <span class="c1"># noqa: PLC0415</span>
-<a id="__codelineno-0-142" name="__codelineno-0-142"></a>    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
-<a id="__codelineno-0-143" name="__codelineno-0-143"></a>        <span class="k">return</span> <span class="kc">None</span>
-<a id="__codelineno-0-144" name="__codelineno-0-144"></a>
-<a id="__codelineno-0-145" name="__codelineno-0-145"></a>    <span class="k">if</span> <span class="n">streams</span><span class="p">:</span>
-<a id="__codelineno-0-146" name="__codelineno-0-146"></a>        <span class="c1"># Set env var before scan so RedisEventBusSettings() picks it up.</span>
-<a id="__codelineno-0-147" name="__codelineno-0-147"></a>        <span class="c1"># The @Singleton is constructed once during warm-up; changing the env</span>
-<a id="__codelineno-0-148" name="__codelineno-0-148"></a>        <span class="c1"># var afterwards has no effect.</span>
-<a id="__codelineno-0-149" name="__codelineno-0-149"></a>        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;VARCO_REDIS_USE_STREAMS&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-150" name="__codelineno-0-150"></a>
-<a id="__codelineno-0-151" name="__codelineno-0-151"></a>    <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-152" name="__codelineno-0-152"></a>        <span class="n">container</span> <span class="o">=</span> <span class="n">DIContainer</span><span class="o">.</span><span class="n">current</span><span class="p">()</span>
+<a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">          the bus ``stop()`` via ``RedisEventBusSelectorConfiguration``&#39;s</span>
+<a id="__codelineno-0-131" name="__codelineno-0-131"></a><span class="sd">          ``@Disposes(AbstractEventBus)`` method — not ``@PreDestroy``, which</span>
+<a id="__codelineno-0-132" name="__codelineno-0-132"></a><span class="sd">          providify never invokes on a ``@Provider``-produced instance</span>
+<a id="__codelineno-0-133" name="__codelineno-0-133"></a><span class="sd">          (Plan 024 / C2).</span>
+<a id="__codelineno-0-134" name="__codelineno-0-134"></a><span class="sd">        - ``streams=True`` mutates ``os.environ[&quot;VARCO_REDIS_USE_STREAMS&quot;]``.</span>
+<a id="__codelineno-0-135" name="__codelineno-0-135"></a><span class="sd">          This affects all subsequent ``RedisEventBusSettings()`` constructions</span>
+<a id="__codelineno-0-136" name="__codelineno-0-136"></a><span class="sd">          in the same process.</span>
+<a id="__codelineno-0-137" name="__codelineno-0-137"></a>
+<a id="__codelineno-0-138" name="__codelineno-0-138"></a><span class="sd">    Thread safety:  ✅ Bootstrap is intended for single-threaded startup only.</span>
+<a id="__codelineno-0-139" name="__codelineno-0-139"></a><span class="sd">    Async safety:   ✅ Scanning is synchronous.</span>
+<a id="__codelineno-0-140" name="__codelineno-0-140"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-141" name="__codelineno-0-141"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>  <span class="c1"># noqa: PLC0415</span>
+<a id="__codelineno-0-142" name="__codelineno-0-142"></a>
+<a id="__codelineno-0-143" name="__codelineno-0-143"></a>    <span class="k">try</span><span class="p">:</span>
+<a id="__codelineno-0-144" name="__codelineno-0-144"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">providify</span><span class="w"> </span><span class="kn">import</span> <span class="n">DIContainer</span>  <span class="c1"># noqa: PLC0415</span>
+<a id="__codelineno-0-145" name="__codelineno-0-145"></a>    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146"></a>        <span class="k">return</span> <span class="kc">None</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a>
+<a id="__codelineno-0-148" name="__codelineno-0-148"></a>    <span class="k">if</span> <span class="n">streams</span><span class="p">:</span>
+<a id="__codelineno-0-149" name="__codelineno-0-149"></a>        <span class="c1"># Set env var before scan so RedisEventBusSettings() picks it up.</span>
+<a id="__codelineno-0-150" name="__codelineno-0-150"></a>        <span class="c1"># The @Singleton is constructed once during warm-up; changing the env</span>
+<a id="__codelineno-0-151" name="__codelineno-0-151"></a>        <span class="c1"># var afterwards has no effect.</span>
+<a id="__codelineno-0-152" name="__codelineno-0-152"></a>        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">&quot;VARCO_REDIS_USE_STREAMS&quot;</span><span class="p">,</span> <span class="s2">&quot;true&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-153" name="__codelineno-0-153"></a>
-<a id="__codelineno-0-154" name="__codelineno-0-154"></a>    <span class="c1"># Discover all @Singleton/@Component classes and module-level @Provider</span>
-<a id="__codelineno-0-155" name="__codelineno-0-155"></a>    <span class="c1"># functions in varco_redis recursively.  This includes:</span>
-<a id="__codelineno-0-156" name="__codelineno-0-156"></a>    <span class="c1">#   - RedisEventBusSettings (@Singleton, reads VARCO_REDIS_* env vars)</span>
-<a id="__codelineno-0-157" name="__codelineno-0-157"></a>    <span class="c1">#   - _redis_active_bus (@Provider, selects Pub/Sub or Streams)</span>
-<a id="__codelineno-0-158" name="__codelineno-0-158"></a>    <span class="c1">#   - RedisHealthCheck, RedisChannelManager (@Singleton)</span>
-<a id="__codelineno-0-159" name="__codelineno-0-159"></a>    <span class="c1">#   - RedisCache and related classes (@Singleton)</span>
-<a id="__codelineno-0-160" name="__codelineno-0-160"></a>    <span class="n">container</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="s2">&quot;varco_redis&quot;</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<a id="__codelineno-0-161" name="__codelineno-0-161"></a>
-<a id="__codelineno-0-162" name="__codelineno-0-162"></a>    <span class="k">return</span> <span class="n">container</span>
+<a id="__codelineno-0-154" name="__codelineno-0-154"></a>    <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-155" name="__codelineno-0-155"></a>        <span class="n">container</span> <span class="o">=</span> <span class="n">DIContainer</span><span class="o">.</span><span class="n">current</span><span class="p">()</span>
+<a id="__codelineno-0-156" name="__codelineno-0-156"></a>
+<a id="__codelineno-0-157" name="__codelineno-0-157"></a>    <span class="c1"># Discover all @Singleton/@Component classes and module-level @Provider</span>
+<a id="__codelineno-0-158" name="__codelineno-0-158"></a>    <span class="c1"># functions in varco_redis recursively.  This includes:</span>
+<a id="__codelineno-0-159" name="__codelineno-0-159"></a>    <span class="c1">#   - RedisEventBusSettings (@Singleton, reads VARCO_REDIS_* env vars)</span>
+<a id="__codelineno-0-160" name="__codelineno-0-160"></a>    <span class="c1">#   - _redis_active_bus (@Provider, selects Pub/Sub or Streams)</span>
+<a id="__codelineno-0-161" name="__codelineno-0-161"></a>    <span class="c1">#   - RedisHealthCheck, RedisChannelManager (@Singleton)</span>
+<a id="__codelineno-0-162" name="__codelineno-0-162"></a>    <span class="c1">#   - RedisCache and related classes (@Singleton)</span>
+<a id="__codelineno-0-163" name="__codelineno-0-163"></a>    <span class="n">container</span><span class="o">.</span><span class="n">scan</span><span class="p">(</span><span class="s2">&quot;varco_redis&quot;</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<a id="__codelineno-0-164" name="__codelineno-0-164"></a>
+<a id="__codelineno-0-165" name="__codelineno-0-165"></a>    <span class="k">return</span> <span class="n">container</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -16028,10 +16037,7 @@ Async safety:   ✅ <code>async def</code> — safe to <code>await</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>varco_redis/varco_redis/di.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-168">168</a></span>
-<span class="normal"><a href="#__codelineno-0-169">169</a></span>
-<span class="normal"><a href="#__codelineno-0-170">170</a></span>
-<span class="normal"><a href="#__codelineno-0-171">171</a></span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-171">171</a></span>
 <span class="normal"><a href="#__codelineno-0-172">172</a></span>
 <span class="normal"><a href="#__codelineno-0-173">173</a></span>
 <span class="normal"><a href="#__codelineno-0-174">174</a></span>
@@ -16097,76 +16103,79 @@ Async safety:   ✅ <code>async def</code> — safe to <code>await</code>.</p>
 <span class="normal"><a href="#__codelineno-0-234">234</a></span>
 <span class="normal"><a href="#__codelineno-0-235">235</a></span>
 <span class="normal"><a href="#__codelineno-0-236">236</a></span>
-<span class="normal"><a href="#__codelineno-0-237">237</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-168" name="__codelineno-0-168"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_bootstrap</span><span class="p">(</span>
-<a id="__codelineno-0-169" name="__codelineno-0-169"></a>    <span class="n">container</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<a id="__codelineno-0-170" name="__codelineno-0-170"></a>    <span class="o">*</span><span class="p">,</span>
-<a id="__codelineno-0-171" name="__codelineno-0-171"></a>    <span class="n">streams</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<a id="__codelineno-0-172" name="__codelineno-0-172"></a>    <span class="n">setup_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-<a id="__codelineno-0-173" name="__codelineno-0-173"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<a id="__codelineno-0-174" name="__codelineno-0-174"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<a id="__codelineno-0-175" name="__codelineno-0-175"></a><span class="sd">    Async version of :func:`bootstrap` that optionally starts the Redis cache.</span>
-<a id="__codelineno-0-176" name="__codelineno-0-176"></a>
-<a id="__codelineno-0-177" name="__codelineno-0-177"></a><span class="sd">    Combines the synchronous scan step with an optional async cache installation</span>
-<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    so the app&#39;s ``_bootstrap`` function doesn&#39;t need a separate</span>
-<a id="__codelineno-0-179" name="__codelineno-0-179"></a><span class="sd">    ``await container.ainstall(RedisCacheConfiguration)`` call::</span>
-<a id="__codelineno-0-180" name="__codelineno-0-180"></a>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="sd">        async def _bootstrap() -&gt; None:</span>
-<a id="__codelineno-0-182" name="__codelineno-0-182"></a><span class="sd">            await redis_async_bootstrap(container, streams=True, setup_cache=True)</span>
-<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">            # ↑ one call instead of two</span>
-<a id="__codelineno-0-184" name="__codelineno-0-184"></a>
-<a id="__codelineno-0-185" name="__codelineno-0-185"></a><span class="sd">        # Equivalent to:</span>
-<a id="__codelineno-0-186" name="__codelineno-0-186"></a><span class="sd">        async def _bootstrap() -&gt; None:</span>
-<a id="__codelineno-0-187" name="__codelineno-0-187"></a><span class="sd">            redis_bootstrap(container, streams=True)</span>
-<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="sd">            await container.ainstall(RedisCacheConfiguration)</span>
-<a id="__codelineno-0-189" name="__codelineno-0-189"></a>
-<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">    Args:</span>
-<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">        container:   An existing ``DIContainer`` to scan into.</span>
-<a id="__codelineno-0-192" name="__codelineno-0-192"></a><span class="sd">                     When ``None``, ``DIContainer.current()`` is used.</span>
-<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">        streams:     When ``True``, activates ``RedisStreamEventBus`` — same</span>
-<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">                     as passing ``streams=True`` to :func:`bootstrap`.</span>
-<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">        setup_cache: When ``True``, installs ``RedisCacheConfiguration`` after</span>
-<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">                     scanning, which constructs and starts ``RedisCache``.</span>
-<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">                     The cache is bound as ``CacheBackend`` in the container.</span>
-<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">                     When ``False`` (default), no cache is installed.</span>
-<a id="__codelineno-0-199" name="__codelineno-0-199"></a>
-<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">    Returns:</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">        The ``DIContainer`` after scanning and optional cache installation, or</span>
-<a id="__codelineno-0-202" name="__codelineno-0-202"></a><span class="sd">        ``None`` when providify is not installed — mirroring</span>
-<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">        :func:`bootstrap`&#39;s own contract. Prior to 3.0.0 this path raised</span>
-<a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="sd">        ``AttributeError`` instead (Plan 022 / RIDER-1).</span>
-<a id="__codelineno-0-205" name="__codelineno-0-205"></a>
-<a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="sd">    Raises:</span>
-<a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="sd">        ConnectionError: If ``setup_cache=True`` and Redis is unreachable.</span>
+<span class="normal"><a href="#__codelineno-0-237">237</a></span>
+<span class="normal"><a href="#__codelineno-0-238">238</a></span>
+<span class="normal"><a href="#__codelineno-0-239">239</a></span>
+<span class="normal"><a href="#__codelineno-0-240">240</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-171" name="__codelineno-0-171"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">async_bootstrap</span><span class="p">(</span>
+<a id="__codelineno-0-172" name="__codelineno-0-172"></a>    <span class="n">container</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<a id="__codelineno-0-173" name="__codelineno-0-173"></a>    <span class="o">*</span><span class="p">,</span>
+<a id="__codelineno-0-174" name="__codelineno-0-174"></a>    <span class="n">streams</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-0-175" name="__codelineno-0-175"></a>    <span class="n">setup_cache</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<a id="__codelineno-0-176" name="__codelineno-0-176"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<a id="__codelineno-0-177" name="__codelineno-0-177"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="sd">    Async version of :func:`bootstrap` that optionally starts the Redis cache.</span>
+<a id="__codelineno-0-179" name="__codelineno-0-179"></a>
+<a id="__codelineno-0-180" name="__codelineno-0-180"></a><span class="sd">    Combines the synchronous scan step with an optional async cache installation</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="sd">    so the app&#39;s ``_bootstrap`` function doesn&#39;t need a separate</span>
+<a id="__codelineno-0-182" name="__codelineno-0-182"></a><span class="sd">    ``await container.ainstall(RedisCacheConfiguration)`` call::</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a>
+<a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">        async def _bootstrap() -&gt; None:</span>
+<a id="__codelineno-0-185" name="__codelineno-0-185"></a><span class="sd">            await redis_async_bootstrap(container, streams=True, setup_cache=True)</span>
+<a id="__codelineno-0-186" name="__codelineno-0-186"></a><span class="sd">            # ↑ one call instead of two</span>
+<a id="__codelineno-0-187" name="__codelineno-0-187"></a>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="sd">        # Equivalent to:</span>
+<a id="__codelineno-0-189" name="__codelineno-0-189"></a><span class="sd">        async def _bootstrap() -&gt; None:</span>
+<a id="__codelineno-0-190" name="__codelineno-0-190"></a><span class="sd">            redis_bootstrap(container, streams=True)</span>
+<a id="__codelineno-0-191" name="__codelineno-0-191"></a><span class="sd">            await container.ainstall(RedisCacheConfiguration)</span>
+<a id="__codelineno-0-192" name="__codelineno-0-192"></a>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="sd">    Args:</span>
+<a id="__codelineno-0-194" name="__codelineno-0-194"></a><span class="sd">        container:   An existing ``DIContainer`` to scan into.</span>
+<a id="__codelineno-0-195" name="__codelineno-0-195"></a><span class="sd">                     When ``None``, ``DIContainer.current()`` is used.</span>
+<a id="__codelineno-0-196" name="__codelineno-0-196"></a><span class="sd">        streams:     When ``True``, activates ``RedisStreamEventBus`` — same</span>
+<a id="__codelineno-0-197" name="__codelineno-0-197"></a><span class="sd">                     as passing ``streams=True`` to :func:`bootstrap`.</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">        setup_cache: When ``True``, installs ``RedisCacheConfiguration`` after</span>
+<a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">                     scanning, which constructs and starts ``RedisCache``.</span>
+<a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">                     The cache is bound as ``CacheBackend`` in the container.</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">                     When ``False`` (default), no cache is installed.</span>
+<a id="__codelineno-0-202" name="__codelineno-0-202"></a>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="sd">    Returns:</span>
+<a id="__codelineno-0-204" name="__codelineno-0-204"></a><span class="sd">        The ``DIContainer`` after scanning and optional cache installation, or</span>
+<a id="__codelineno-0-205" name="__codelineno-0-205"></a><span class="sd">        ``None`` when providify is not installed — mirroring</span>
+<a id="__codelineno-0-206" name="__codelineno-0-206"></a><span class="sd">        :func:`bootstrap`&#39;s own contract. Prior to 3.0.0 this path raised</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a><span class="sd">        ``AttributeError`` instead (Plan 022 / RIDER-1).</span>
 <a id="__codelineno-0-208" name="__codelineno-0-208"></a>
-<a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="sd">    Edge cases:</span>
-<a id="__codelineno-0-210" name="__codelineno-0-210"></a><span class="sd">        - ``setup_cache=False`` is the same as calling :func:`bootstrap` — no</span>
-<a id="__codelineno-0-211" name="__codelineno-0-211"></a><span class="sd">          async work is done.</span>
-<a id="__codelineno-0-212" name="__codelineno-0-212"></a><span class="sd">        - When providify is absent, ``None`` is returned and no cache is</span>
-<a id="__codelineno-0-213" name="__codelineno-0-213"></a><span class="sd">          installed, regardless of ``setup_cache``.</span>
-<a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="sd">        - The cache URL is read from ``VARCO_REDIS_CACHE_URL`` (via</span>
-<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="sd">          ``RedisCacheSettings.from_env()``), not from ``VARCO_REDIS_URL``.</span>
-<a id="__codelineno-0-216" name="__codelineno-0-216"></a><span class="sd">          Both can point at the same Redis instance.</span>
-<a id="__codelineno-0-217" name="__codelineno-0-217"></a>
-<a id="__codelineno-0-218" name="__codelineno-0-218"></a><span class="sd">    Thread safety:  ✅ Intended for single-threaded startup only.</span>
-<a id="__codelineno-0-219" name="__codelineno-0-219"></a><span class="sd">    Async safety:   ✅ ``async def`` — safe to ``await``.</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a><span class="sd">    &quot;&quot;&quot;</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>    <span class="n">container</span> <span class="o">=</span> <span class="n">bootstrap</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">streams</span><span class="o">=</span><span class="n">streams</span><span class="p">)</span>
-<a id="__codelineno-0-222" name="__codelineno-0-222"></a>
-<a id="__codelineno-0-223" name="__codelineno-0-223"></a>    <span class="c1"># RIDER-1 (Plan 022 / Phase 3). ``bootstrap()`` returns ``None`` when</span>
-<a id="__codelineno-0-224" name="__codelineno-0-224"></a>    <span class="c1"># providify is absent (its own ``except ImportError: return None`` path),</span>
-<a id="__codelineno-0-225" name="__codelineno-0-225"></a>    <span class="c1"># so without this guard the next line raised</span>
-<a id="__codelineno-0-226" name="__codelineno-0-226"></a>    <span class="c1"># ``AttributeError: &#39;NoneType&#39; object has no attribute &#39;ainstall&#39;`` —</span>
-<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="c1"># a crash on exactly the path documented as a graceful no-op. Returning</span>
-<a id="__codelineno-0-228" name="__codelineno-0-228"></a>    <span class="c1"># ``None`` here makes this function&#39;s contract match ``bootstrap()``&#39;s.</span>
-<a id="__codelineno-0-229" name="__codelineno-0-229"></a>    <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-230" name="__codelineno-0-230"></a>        <span class="k">return</span> <span class="kc">None</span>
-<a id="__codelineno-0-231" name="__codelineno-0-231"></a>
-<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="k">if</span> <span class="n">setup_cache</span><span class="p">:</span>
-<a id="__codelineno-0-233" name="__codelineno-0-233"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">varco_redis.cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisCacheConfiguration</span>  <span class="c1"># noqa: PLC0415</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a><span class="sd">    Raises:</span>
+<a id="__codelineno-0-210" name="__codelineno-0-210"></a><span class="sd">        ConnectionError: If ``setup_cache=True`` and Redis is unreachable.</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a><span class="sd">    Edge cases:</span>
+<a id="__codelineno-0-213" name="__codelineno-0-213"></a><span class="sd">        - ``setup_cache=False`` is the same as calling :func:`bootstrap` — no</span>
+<a id="__codelineno-0-214" name="__codelineno-0-214"></a><span class="sd">          async work is done.</span>
+<a id="__codelineno-0-215" name="__codelineno-0-215"></a><span class="sd">        - When providify is absent, ``None`` is returned and no cache is</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a><span class="sd">          installed, regardless of ``setup_cache``.</span>
+<a id="__codelineno-0-217" name="__codelineno-0-217"></a><span class="sd">        - The cache URL is read from ``VARCO_REDIS_CACHE_URL`` (via</span>
+<a id="__codelineno-0-218" name="__codelineno-0-218"></a><span class="sd">          ``RedisCacheSettings.from_env()``), not from ``VARCO_REDIS_URL``.</span>
+<a id="__codelineno-0-219" name="__codelineno-0-219"></a><span class="sd">          Both can point at the same Redis instance.</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a><span class="sd">    Thread safety:  ✅ Intended for single-threaded startup only.</span>
+<a id="__codelineno-0-222" name="__codelineno-0-222"></a><span class="sd">    Async safety:   ✅ ``async def`` — safe to ``await``.</span>
+<a id="__codelineno-0-223" name="__codelineno-0-223"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-224" name="__codelineno-0-224"></a>    <span class="n">container</span> <span class="o">=</span> <span class="n">bootstrap</span><span class="p">(</span><span class="n">container</span><span class="p">,</span> <span class="n">streams</span><span class="o">=</span><span class="n">streams</span><span class="p">)</span>
+<a id="__codelineno-0-225" name="__codelineno-0-225"></a>
+<a id="__codelineno-0-226" name="__codelineno-0-226"></a>    <span class="c1"># RIDER-1 (Plan 022 / Phase 3). ``bootstrap()`` returns ``None`` when</span>
+<a id="__codelineno-0-227" name="__codelineno-0-227"></a>    <span class="c1"># providify is absent (its own ``except ImportError: return None`` path),</span>
+<a id="__codelineno-0-228" name="__codelineno-0-228"></a>    <span class="c1"># so without this guard the next line raised</span>
+<a id="__codelineno-0-229" name="__codelineno-0-229"></a>    <span class="c1"># ``AttributeError: &#39;NoneType&#39; object has no attribute &#39;ainstall&#39;`` —</span>
+<a id="__codelineno-0-230" name="__codelineno-0-230"></a>    <span class="c1"># a crash on exactly the path documented as a graceful no-op. Returning</span>
+<a id="__codelineno-0-231" name="__codelineno-0-231"></a>    <span class="c1"># ``None`` here makes this function&#39;s contract match ``bootstrap()``&#39;s.</span>
+<a id="__codelineno-0-232" name="__codelineno-0-232"></a>    <span class="k">if</span> <span class="n">container</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+<a id="__codelineno-0-233" name="__codelineno-0-233"></a>        <span class="k">return</span> <span class="kc">None</span>
 <a id="__codelineno-0-234" name="__codelineno-0-234"></a>
-<a id="__codelineno-0-235" name="__codelineno-0-235"></a>        <span class="k">await</span> <span class="n">container</span><span class="o">.</span><span class="n">ainstall</span><span class="p">(</span><span class="n">RedisCacheConfiguration</span><span class="p">)</span>
-<a id="__codelineno-0-236" name="__codelineno-0-236"></a>
-<a id="__codelineno-0-237" name="__codelineno-0-237"></a>    <span class="k">return</span> <span class="n">container</span>
+<a id="__codelineno-0-235" name="__codelineno-0-235"></a>    <span class="k">if</span> <span class="n">setup_cache</span><span class="p">:</span>
+<a id="__codelineno-0-236" name="__codelineno-0-236"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">varco_redis.cache</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisCacheConfiguration</span>  <span class="c1"># noqa: PLC0415</span>
+<a id="__codelineno-0-237" name="__codelineno-0-237"></a>
+<a id="__codelineno-0-238" name="__codelineno-0-238"></a>        <span class="k">await</span> <span class="n">container</span><span class="o">.</span><span class="n">ainstall</span><span class="p">(</span><span class="n">RedisCacheConfiguration</span><span class="p">)</span>
+<a id="__codelineno-0-239" name="__codelineno-0-239"></a>
+<a id="__codelineno-0-240" name="__codelineno-0-240"></a>    <span class="k">return</span> <span class="n">container</span>
 </code></pre></div></td></tr></table></div>
             </details>
     </div>
