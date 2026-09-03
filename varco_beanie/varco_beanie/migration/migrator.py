@@ -164,10 +164,34 @@ class BeanieMigrator(AbstractMigrator):
         pending_migrations = await self._pending_migrations()
 
         if dry_run:
+            # Include index-drift revisions so upgrade(dry_run=True) agrees
+            # with plan() — both report the same pending work, never a
+            # subset (Plan 024 / C3, §D-C3 item 1). Report-only: no DDL runs.
             applied = tuple(Revision(id=m.version, label=m.name) for m in pending_migrations)
+            applied += tuple(await self._index_pending())
             return MigrationReport(applied=applied, duration_s=time.monotonic() - start)
 
-        if not pending_migrations:
+        # DESIGN: the zero-pending-migrations early return also checks for
+        # index drift (RT9 fix, Plan 024 / C3).
+        #   ✅ plan() already reports index drift independently via
+        #      _index_pending() — an early return here that ignored it made
+        #      plan() and upgrade() silently disagree: the documented defect
+        #      this restructure closes.
+        #   ✅ The extra listIndexes round-trip is paid ONLY when the
+        #      migration registry is empty (the common no-drift startup case
+        #      stays a single _pending_migrations() query, still lock-free).
+        #   ❌ A second _index_pending() call happens below on the locked
+        #      path too (:228) — acceptable duplication; the alternative
+        #      (threading a computed-once flag through the lock/heartbeat
+        #      machinery) obscures more than it saves for one extra query.
+        index_work = False
+        if (
+            not pending_migrations
+            and self._index_mode == "create"
+            and self._index_guard is not None
+        ):
+            index_work = bool(await self._index_pending())
+        if not pending_migrations and not index_work:
             return MigrationReport(applied=(), duration_s=time.monotonic() - start)
 
         # DESIGN: poll acquire() up to lock_timeout, mirroring the SA D2
@@ -198,13 +222,21 @@ class BeanieMigrator(AbstractMigrator):
         # (contended-and-then-acquired is still "another instance did the
         # work while we waited" — report it as skipped_locked=True rather
         # than a normal empty-report, since we started with non-empty
-        # pending at function entry).
+        # pending at function entry, OR because index work is what brought
+        # us here).
+        #
+        # DESIGN: fall through instead of returning early (Plan 024 / C3).
+        #   ✅ Before this fix, an unconditional `return` here skipped the
+        #      index-reconciliation block entirely whenever the migration
+        #      registry was empty — exactly the RT9 defect this restructure
+        #      closes, just reached via the lock-holder path instead of the
+        #      pre-lock early return above.
+        #   ✅ The migration `for` loop over an empty `pending_migrations`
+        #      is a no-op, so falling through costs nothing extra when there
+        #      really is no migration work — only the index block below (if
+        #      index_mode == "create") gets a chance to run.
         pending_migrations = await self._pending_migrations()
-        if not pending_migrations:
-            await self._store.release(self._owner_id)
-            return MigrationReport(
-                applied=(), duration_s=time.monotonic() - start, skipped_locked=True
-            )
+        skipped_locked = not pending_migrations
 
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         applied_revisions: list[Revision] = []
@@ -238,7 +270,9 @@ class BeanieMigrator(AbstractMigrator):
             await self._store.release(self._owner_id)
 
         return MigrationReport(
-            applied=tuple(applied_revisions), duration_s=time.monotonic() - start
+            applied=tuple(applied_revisions),
+            duration_s=time.monotonic() - start,
+            skipped_locked=skipped_locked,
         )
 
     async def _heartbeat_loop(self) -> None:

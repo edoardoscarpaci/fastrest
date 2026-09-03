@@ -45,7 +45,7 @@ import sys
 from typing import Any
 
 import redis.asyncio as aioredis
-from providify import Configuration, Inject, PreDestroy, Provider
+from providify import Configuration, Disposes, Inject, PreDestroy, Provider
 from pydantic import Field
 from pydantic_settings import SettingsConfigDict
 from varco_core.cache.base import CacheBackend, InvalidationStrategy
@@ -529,8 +529,13 @@ class RedisCacheConfiguration:
 
     Lifecycle:
         The cache is started inside the provider and stopped automatically by
-        ``@PreDestroy`` on ``RedisCache.stop()`` when
-        ``await container.ashutdown()`` is called.
+        this configuration's ``@Disposes(CacheBackend)`` method
+        (``close_cache``) when ``await container.ashutdown()`` is called.
+        ``@PreDestroy`` on ``RedisCache`` itself is unreachable — providify
+        never invokes ``@PreDestroy`` on a ``@Provider``-produced instance
+        (`providify/README.md:945-949`); ``@Disposes`` is the only teardown
+        path for provider output (Plan 024 / C2, closes
+        `design/upstream-gaps/providify-provider-predestroy.md`).
 
     Thread safety:  ✅  Providify singletons are created once and cached.
     Async safety:   ✅  Provider is ``async def`` — safe to ``await``.
@@ -595,6 +600,32 @@ class RedisCacheConfiguration:
         cache = RedisCache(settings)
         await cache.start()
         return cache
+
+    @Disposes(CacheBackend)
+    async def close_cache(self, cache: CacheBackend) -> None:
+        """
+        Stop the ``RedisCache`` produced by ``redis_cache`` on container shutdown.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance (Jakarta CDI producer-method rule, confirmed intentional
+               in providify 2.0.1's changelog) — ``@Disposes`` is upstream's own
+               supported teardown mechanism for exactly this shape.
+            ❌ A recursive ``scan()`` that installs both ``RedisCacheConfiguration``
+               and ``RedisLayeredCacheConfiguration`` (both bind ``CacheBackend``)
+               attaches a disposer to only the *first*-registered binding
+               (`providify/container.py:6202-6214`) — benign here because both
+               disposers call the same ``CacheBackend.stop()`` contract, proven
+               by `varco_redis/tests/test_redis_cache_disposes.py`'s
+               both-configurations test, not merely assumed.
+
+        Args:
+            cache: The ``CacheBackend`` instance this configuration produced.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await cache.stop()
 
 
 # ── LayeredCacheSettings ──────────────────────────────────────────────────────
@@ -707,9 +738,12 @@ class RedisLayeredCacheConfiguration:
     where the same keys are accessed repeatedly in a short window.
 
     Lifecycle:
-        The ``LayeredCache.start()`` starts both the L1 and L2 backends.
-        ``@PreDestroy`` on each backend's ``stop()`` is called automatically
-        when ``await container.ashutdown()`` is called.
+        ``LayeredCache.start()`` starts both the L1 and L2 backends. This
+        configuration's ``@Disposes(CacheBackend)`` method (``close_cache``)
+        calls ``LayeredCache.stop()`` (which stops both layers) automatically
+        when ``await container.ashutdown()`` is called — not ``@PreDestroy``,
+        which providify never invokes on a ``@Provider``-produced instance
+        (Plan 024 / C2).
 
     DESIGN: builds both L1 and L2 internally over exposing them as separate
     bindings
@@ -823,6 +857,24 @@ class RedisLayeredCacheConfiguration:
         )
         await cache.start()
         return cache
+
+    @Disposes(CacheBackend)
+    async def close_cache(self, cache: CacheBackend) -> None:
+        """
+        Stop the ``LayeredCache`` produced by ``layered_cache`` on shutdown.
+
+        Args:
+            cache: The ``CacheBackend`` instance this configuration produced.
+
+        See ``RedisCacheConfiguration.close_cache`` for the full
+        ``@Disposes``-over-``@PreDestroy`` DESIGN rationale, including the
+        first-match sharp edge when both cache configurations are installed
+        into the same container.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await cache.stop()
 
 
 __all__ = [

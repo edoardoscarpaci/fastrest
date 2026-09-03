@@ -56,17 +56,24 @@ Full workflow, including when *not* to file: CLAUDE.md's
 
 | ID | Library | Gap | Report | Guard |
 |---|---|---|---|---|
-| **P22-PROVIDER-PREDESTROY** | `providify` 2.0.0 | `container.ashutdown()` silently never runs the `@PreDestroy` hook of an instance produced by a `@Provider` — `_adispose()` (`providify/container.py:4550-4582`) returns early for a `ProviderBinding` whose `@Disposes` is unset, so `binding.pre_destroy` is consulted only for a `ClassBinding`. Contradicts `@PreDestroy`'s own docstring (`providify/decorator/lifecycle.py:161-170`, "called on shutdown or scope teardown", no binding-kind caveat), and no `IssueKind` covers it so `container.validate()` reports clean. ⚠️ **Partly ours** — varco can close its own leak today with a `@Disposes`, no upstream change needed; see the report's §5 | [providify-provider-predestroy.md](design/upstream-gaps/providify-provider-predestroy.md) | `varco_core/tests/test_providify_provider_predestroy.py` (strict xfail, no Docker, every `make test`) · `varco_redis/tests/test_redis_cache_lifespan_shutdown_integration.py` (strict xfail, real container) |
+| **P24-DISPOSES-FIRSTMATCH** | `providify` 2.0.1 | `DIContainer.install()`'s `@Disposes` wiring loop (`providify/container.py:6201-6214`) attaches a disposer to the **first** matching `ProviderBinding` across the **whole container**, not the installing module's own binding — when two `@Configuration`s both bind the same interface via `@Provider`, each with its own `@Disposes`, the second `install()` overwrites the first binding's disposer and leaves the second binding's own instance with no teardown path at all | [providify-disposes-first-match.md](design/upstream-gaps/providify-disposes-first-match.md) | `varco_redis/tests/test_redis_cache_disposes.py::test_both_cache_configurations_installed_together_both_get_stopped` (strict xfail, no Docker, every `make test`) |
 
 ## Recently closed
 
 *(Kept only until the next clearing — a closed row's evidence lives in its report
 file and in the CHANGELOG, not here.)*
 
-None.
+- **P22-PROVIDER-PREDESTROY** — resolved 2026-09-02 (Plan 024 / C2). providify
+  2.0.1 declared the leaked-teardown behaviour intentional (Jakarta CDI
+  producer-method rule) and shipped only a `WARNING`-severity detector
+  (`IssueKind.UNREACHABLE_PRE_DESTROY`); varco adopted `@Disposes` — upstream's
+  own supported teardown mechanism — at all nine affected sites. See
+  [providify-provider-predestroy.md](design/upstream-gaps/providify-provider-predestroy.md)
+  §8 for the full resolution.
 
 ---
 
-**Last updated:** 2026-08-31 · Recreated after the `cae7f33` deletion, as a thin
+**Last updated:** 2026-09-02 · Recreated after the `cae7f33` deletion, as a thin
 index over `design/upstream-gaps/` rather than the inline-body document it used
-to be (Plan 022 closeout). Opened with **P22-PROVIDER-PREDESTROY**.
+to be (Plan 022 closeout). P22-PROVIDER-PREDESTROY closed by Plan 024; opened
+with **P24-DISPOSES-FIRSTMATCH**.

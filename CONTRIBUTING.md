@@ -26,7 +26,7 @@ make test PKG=varco_redis                # narrow to one package
 
 | Command | What it checks |
 |---|---|
-| `make lint` | `ruff check .` **+** `ruff format --check .` (the formatter is a CI gate, Plan 020 / RL-17) |
+| `make lint` | `ruff check .` **+** `ruff format --check .` (the formatter is a CI gate, Plan 020 / RL-17) **+** `scripts/api_surface.py --check` (a CI gate as of Plan 024 / C5 — regenerate and commit the snapshot alongside any `__all__`/exported-function-signature change: `uv run python scripts/api_surface.py`) |
 | `make type-check` | `mypy` over the ten source dirs, `strict = true` |
 | `make test` | all eleven unit-test suites |
 

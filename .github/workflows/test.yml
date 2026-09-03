@@ -61,6 +61,8 @@ jobs:
           varco_redis/varco_redis varco_sa/varco_sa varco_beanie/varco_beanie
           varco_memcached/varco_memcached varco_ws/varco_ws
           varco_fastapi/varco_fastapi varco_casbin/varco_casbin
+      - name: api surface --check
+        run: uv run python scripts/api_surface.py --check
   unit:
     name: Unit tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

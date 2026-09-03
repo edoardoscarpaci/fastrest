@@ -91,7 +91,7 @@ from nats import connect
 from nats.errors import TimeoutError as NatsTimeoutError
 from nats.js.api import RetentionPolicy
 from nats.js.errors import NotFoundError
-from providify import Configuration, Inject, Provider
+from providify import Configuration, Disposes, Inject, Provider
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
@@ -775,6 +775,29 @@ class NatsDLQConfiguration:
         dlq = NatsDLQ(settings)
         await dlq.start()
         return dlq
+
+    @Disposes(AbstractDeadLetterQueue)
+    async def close_dlq(self, dlq: NatsDLQ) -> None:
+        """
+        Stop the ``NatsDLQ`` produced by ``nats_dlq`` on shutdown.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance — ``@Disposes`` is upstream's own supported teardown
+               mechanism (Plan 024 / C2). Tier B — ``NatsDLQ`` carries no
+               ``@PreDestroy``, so this leak was invisible to providify's
+               ``UNREACHABLE_PRE_DESTROY`` detector before the fix.
+
+        Args:
+            dlq: The ``NatsDLQ`` instance this configuration produced. Typed
+                concretely (not ``AbstractDeadLetterQueue``) because
+                ``stop()`` is not part of the ABC — see
+                ``RedisDLQConfiguration.close_dlq`` for the same note.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await dlq.stop()
 
 
 __all__ = [

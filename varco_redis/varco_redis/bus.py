@@ -55,7 +55,7 @@ import asyncio
 import logging
 import sys
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 # redis is a hard dependency of this package — imported at module level so
 # unit tests can patch varco_redis.bus.aioredis without reaching into the
@@ -63,6 +63,7 @@ from typing import Annotated, Any
 import redis.asyncio as aioredis
 from providify import (
     Configuration,
+    Disposes,
     Inject,
     InjectMeta,
     Instance,
@@ -85,6 +86,11 @@ from varco_core.event.serializer import JsonEventSerializer
 from varco_core.serialization import Serializer
 
 from varco_redis.config import RedisEventBusSettings
+
+if TYPE_CHECKING:
+    # Type-checking-only import — the runtime import lives inside `bus()`
+    # to break the circular dependency bus.py -> streams.py -> bus.py.
+    from varco_redis.streams import RedisStreamEventBus
 
 _logger = logging.getLogger(__name__)
 
@@ -556,3 +562,34 @@ class RedisEventBusSelectorConfiguration:
         if settings.use_streams:
             return RedisStreamEventBus(config=settings)
         return RedisEventBus(config=settings)
+
+    @Disposes(AbstractEventBus)
+    async def close_bus(self, bus: RedisEventBus | RedisStreamEventBus) -> None:
+        """
+        Stop the active Redis event bus produced by ``bus`` on shutdown.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance — ``@Disposes`` is upstream's own supported teardown
+               mechanism for this shape (Plan 024 / C2).
+            ✅ Double-stop safe: both ``RedisEventBus.stop()`` (`bus.py:217-219`)
+               and ``RedisStreamEventBus.stop()`` (`streams.py:318`) are
+               documented idempotent, and `varco_fastapi`'s lifespan already
+               stops the bus explicitly before ``ashutdown()`` runs this
+               disposer a second time (`varco_fastapi/varco_fastapi/lifespan.py:212-213`)
+               — proven, not merely asserted, by
+               `test_redis_bus_disposes.py::test_redis_bus_stop_is_idempotent_across_manual_stop_and_ashutdown`.
+
+        Args:
+            bus: The ``RedisEventBus`` or ``RedisStreamEventBus`` instance
+                this configuration produced (depending on
+                ``VARCO_REDIS_USE_STREAMS``). Typed as the concrete union
+                (not ``AbstractEventBus``) because ``stop()`` is not part of
+                the ABC — ``@Disposes(AbstractEventBus)`` above is the
+                *dispatch key* providify matches against the bound interface,
+                independent of this parameter's static type.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await bus.stop()

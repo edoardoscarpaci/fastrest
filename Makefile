@@ -94,8 +94,9 @@ help:
 	@echo "  make install                 sync all workspace deps"
 	@echo "  make sync                    alias for install"
 	@echo "  make print-packages          print the derived package list (RL-18)"
-	@echo "  make lint                    ruff check (whole repo)"
-	@echo "  make lint PKG=varco_redis    ruff check (one package's source dirs)"
+	@echo "  make lint                    ruff check + format --check + api-check (whole repo)"
+	@echo "  make lint PKG=varco_redis    ruff check (one package's source dirs; no api-check)"
+	@echo "  make api-check               api_surface.py --check (removals + fn signature changes)"
 	@echo "  make format                  ruff format + fix (whole repo)"
 	@echo "  make format PKG=varco_redis  ruff format + fix (one package's source dirs)"
 	@echo "  make type-check              mypy (all ten source dirs)"
@@ -152,6 +153,20 @@ _LINT_TARGET := $(if $(PKG),$(_SRC_DIRS),.)
 lint:
 	$(RUFF) check $(_LINT_TARGET)
 	$(RUFF) format --check $(_LINT_TARGET)
+ifeq ($(strip $(PKG)),)
+	$(MAKE) api-check
+endif
+
+# ── API surface gate ──────────────────────────────────────────────────────────
+# §D-C5 (Plan 024 / C5): `--check` diffs the live tree against the committed
+# `design/api-freeze-and-standards/measurements/api-surface.json` snapshot and
+# exits non-zero on a removal or a *function* signature change (never a class
+# `__init__` narrowing — see CLAUDE.md's "Public API surface snapshot" section
+# for the documented scope). Runs `uv run python` directly (not through $(RUFF)/
+# $(MYPY)) because it imports every package live, same as `make type-check`.
+.PHONY: api-check
+api-check:
+	uv run --all-packages --all-extras python scripts/api_surface.py --check
 
 # ── Format ────────────────────────────────────────────────────────────────────
 .PHONY: format

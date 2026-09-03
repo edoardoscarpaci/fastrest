@@ -15,25 +15,24 @@ asserts the *effect*, against a real Redis container.
 ``async_bootstrap(setup_cache=True)`` leaves a *started* connection pool bound
 as ``CacheBackend`` that no lifespan path ever closed.
 
-⛔ **And the RL-8a adoption does not fix it** — measured, not assumed.  providify
-teardown dispatches per *binding kind* (``providify/container.py:4567-4576``,
-``_adispose``): a ``ProviderBinding`` runs its ``@Disposes`` disposer and
-**returns**, so the ``@PreDestroy`` on the *instance a provider returned* is
-never reached; only a ``ClassBinding`` consults ``binding.pre_destroy``.
-``RedisCache`` carries no ``@Singleton`` of its own (``cache.py:133``) — it
-exists solely as the return value of the ``@Provider`` above — and therefore
-stays orphaned after ``container.ashutdown()``.  Same shape for
-``MemcachedCache``.
+✅ **Fixed (Plan 024 / C2)** — resolved by adopting ``@Disposes``, not by an
+upstream change. providify 2.0.1 (2026-09-01) settles the underlying dispatch
+as **intentional** (Jakarta CDI producer-method rule): a ``ProviderBinding``
+runs its ``@Disposes`` disposer and returns — the ``@PreDestroy`` on the
+*instance a provider returned* is never reached, by design, and providify
+2.0.1 documents this explicitly (`providify/README.md:945-949`) rather than
+changing it. ``RedisCacheConfiguration`` now carries its own
+``@Disposes(CacheBackend)`` method (``close_cache``, `varco_redis/cache.py`)
+that calls ``RedisCache.stop()`` on ``ashutdown()`` — the assertions below
+are now real, passing proof that the pool is actually closed. Same fix
+shipped for ``MemcachedCache``
+(`varco_memcached/tests/test_memcached_cache_disposes.py`).
 
-This test is kept as a **strict xfail** rather than deleted or "fixed": per
-CLAUDE.md's conformance rule, a genuine upstream contract gap becomes a strict
-xfail plus a BACKLOG row, never an in-place workaround.  ``strict=True`` means
-it fails loudly the day providify (or a varco-side ``@Disposes``) closes the
-gap.  See BACKLOG.md's "Findings from Plan 022 (Phase 4 / RL-8a)" row.  The
-*positive* proof that the adoption works lives in
+See BACKLOG.md's C2 row and `plans/024-3-0-1-cleanup.md` §D-C2 for the full
+resolution. The *positive* proof for a ``@Singleton``-bound (``ClassBinding``)
+orphan — a structurally different shape — lives in
 ``varco_nats/tests/test_nats_lifespan_shutdown_integration.py``, against
-``NatsStreamManager`` — a ``@Singleton`` (``ClassBinding``) orphan holding a
-real connection.
+``NatsStreamManager``, holding a real connection.
 
 ⚠️ Cross-package direction.  ``varco_redis`` does not (and must not) depend on
 ``varco_fastapi``; the import below is guarded by ``importorskip`` and the test
@@ -58,15 +57,6 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.xfail(
-    reason=(
-        "BUG(upstream, providify 2.0.0): container.ashutdown() runs @Disposes for a "
-        "ProviderBinding and never the @PreDestroy of the instance the provider "
-        "returned (container.py:4567-4576), so the RedisCache orphan survives the "
-        "Plan 022 / RL-8a adoption. See BACKLOG.md."
-    ),
-    strict=True,
-)
 async def test_container_shutdown_closes_orphaned_redis_cache_pool(
     redis_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:

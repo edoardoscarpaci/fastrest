@@ -23,6 +23,17 @@ justifies a dev-group-only edge (`varco_fastapi` -> `varco_sa`): a
 dev-group entry is not a package dependency and never reaches the wheel.
 This must be called out explicitly to the implementer, since it is easy to
 mistake for a layer-rule violation.
+
+⚠️ ``NoopEventBus`` (``varco_core.event.memory.py:639``) does **not** get its
+own conformance test class here, deliberately (Plan 024 / C7 coverage audit —
+full matrix in ``testkit/varco_conformance/COVERAGE.md``). It is a Null
+Object: ``publish()`` discards and ``subscribe()`` returns a
+**pre-cancelled** ``Subscription`` (``memory.py:665-691``), so it
+intentionally violates ``EventBusConformance``'s deliver-what-you-publish
+contract by design — subclassing the suite for it would mean xfail-ing most
+of it, which teaches nothing and rots. See ``COVERAGE.md``'s "Stated
+absences" section for the full reasoning and for every other package's
+absence (`varco_ws`, `varco_memcached`, `varco_casbin`).
 """
 
 from __future__ import annotations

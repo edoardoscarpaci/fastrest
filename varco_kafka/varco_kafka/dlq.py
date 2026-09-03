@@ -111,7 +111,7 @@ from uuid import UUID
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.structs import TopicPartition
-from providify import Configuration, Inject, Provider
+from providify import Configuration, Disposes, Inject, Provider
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
@@ -788,6 +788,29 @@ class KafkaDLQConfiguration:
         dlq = KafkaDLQ(settings)
         await dlq.start()
         return dlq
+
+    @Disposes(AbstractDeadLetterQueue)
+    async def close_dlq(self, dlq: KafkaDLQ) -> None:
+        """
+        Stop the ``KafkaDLQ`` produced by ``kafka_dlq`` on shutdown.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance — ``@Disposes`` is upstream's own supported teardown
+               mechanism (Plan 024 / C2). Tier B — ``KafkaDLQ`` carries no
+               ``@PreDestroy``, so this leak was invisible to providify's
+               ``UNREACHABLE_PRE_DESTROY`` detector before the fix.
+
+        Args:
+            dlq: The ``KafkaDLQ`` instance this configuration produced.
+                Typed concretely (not ``AbstractDeadLetterQueue``) because
+                ``stop()`` is not part of the ABC — see
+                ``RedisDLQConfiguration.close_dlq`` for the same note.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await dlq.stop()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

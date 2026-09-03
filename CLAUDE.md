@@ -137,10 +137,12 @@ Outputs `design/api-freeze-and-standards/measurements/api-surface.json` (machine
 `--check` diffs) and a sibling `.md` (sorted, human-diffable in a PR). `--snapshot PATH` and
 `--packages PKG…` narrow the run.
 
-⚠️ **This is not a gate today.** `--check` is deliberately *not* wired into `make lint` or any CI
-job — the plan schedules that for Phase 7 (§D-AA4's snapshot-plus-`--check` precedent). Until then
-it is a tool a contributor must know to re-run **by hand** after touching any `__all__` or any
-exported function's signature, and to commit the regenerated snapshot alongside the change.
+✅ **This is a gate, as of Plan 024 / C5.** `--check` is wired into `make lint`'s no-`PKG` path
+(`make lint PKG=<one package>` stays narrow and fast, deliberately skipping it — §D-C5), a
+standalone `make api-check`, and CI's `lint` job (`.github/workflows/test.yml`, a step after
+`mypy`) — so removing a name from any `__all__`, or narrowing an exported function's signature,
+now fails CI. Regenerating and committing the snapshot alongside the change is now a **hard
+requirement**, not a courtesy — `--check` will fail the very next `make lint`/CI run otherwise.
 
 ⚠️ **Known limitation, deliberate:** class signatures are **not** recorded. They are synthesised
 from `__init__`/`__new__` and, for pydantic models and dataclasses, from generated code whose
@@ -224,20 +226,24 @@ workflows that never gate a PR (Plan 023 / Phase 5):
 - **`docs.yml`** — versioned docs via `mike`, see the "Versioned documentation" section below.
   Never a required check.
 
-**Branch protection (repository setting, not in the repo tree — apply manually):** Settings →
-Branches → rule for `main` → Require status checks to pass → select **only** `Tests / All tests
-passed` (the `all-green` job). This has not yet been applied to this repository as of Plan 017 —
-Plan 023's Phase 9 + Appendix A now specify it in full (branch ruleset `main-branch-protection` +
-tag ruleset `release-tags`, both with an admin bypass actor, applied only after the `v3.0.0` tag
-has shipped) — apply it before relying on it. The required check is still, and will remain, only
-`Tests / All tests passed` — `release`, `docs`, `scorecard`, and `chaos` must never be selected.
+**Branch protection (repository setting, not in the repo tree) — APPLIED.** Plan 023's Phase 9 +
+Appendix A ruleset shape is live: branch ruleset `main-branch-protection` (Settings → Branches →
+rule for `main` → Require status checks to pass → select **only** `Tests / All tests passed`, the
+`all-green` job) plus tag ruleset `release-tags`, both with an admin bypass actor, applied after
+the `v3.0.0` tag shipped (Plan 024 / C1, reported complete by the operator). The required check is
+still, and will remain, only `Tests / All tests passed` — `release`, `docs`, `scorecard`, and
+`chaos` must never be selected. `design/varco-1-0-release/release-runbook.md` remains the
+step-by-step reference for re-applying this shape (e.g. onto a future ruleset target), not a
+to-do list.
 
 **Manual, out-of-repo operator steps for `release.yml`** (cannot be performed by any file in this
-repo — full detail in `design/varco-1-0-release/release-runbook.md`): ten GitHub Environments
-(`pypi-varco-core` … `pypi-varco-casbin`, no deployment-branch restriction), ten PyPI
+repo — full detail in `design/varco-1-0-release/release-runbook.md`) — DONE. Ten GitHub
+Environments (`pypi-varco-core` … `pypi-varco-casbin`, no deployment-branch restriction), ten PyPI
 trusted-publisher configs (owner `edoardoscarpaci`, repo `varco`, workflow `release.yml`,
-environment `pypi-<name>`), and the GitHub Pages publishing source for `docs.yml`. None of these
-are scriptable with `gh` today, and `gh` is not installed on the maintainer's machine.
+environment `pypi-<name>`), and the GitHub Pages publishing source for `docs.yml` are all
+configured (Plan 024 / C1, reported complete by the operator). None of these were scriptable with
+`gh` (not installed on the maintainer's machine), so the runbook is the durable record of how they
+were done and how to redo them (e.g. for an eleventh package).
 
 ---
 
@@ -837,6 +843,14 @@ an unimplemented fixture fails loudly (`NotImplementedError`) instead of silentl
 feedback loop. `channel_manager.py` has no in-process implementation to run there (there is no
 `InMemoryChannelManager` — `ChannelManager` is inherently a broker-admin concern) and is
 subclassed only by the three real-broker backends (`varco_kafka`, `varco_redis`, `varco_nats`).
+
+**`testkit/varco_conformance/COVERAGE.md`** (Plan 024 / C7) is the authoritative, audited coverage
+matrix — for every implementation of one of the five ABCs, whether it subclasses the matching
+suite and, if not, the written reason (`NoopEventBus`'s Null Object shape, `varco_ws`'s push-adapter
+resolution, `varco_memcached`/`varco_casbin`'s legitimate partial/zero-ABC surface,
+`channel_manager`'s lack of an in-process implementation). **Rule**: a new implementation of one of
+the five ABCs either subclasses its suite or gets a row in `COVERAGE.md` explaining why not — a
+future absence must be argued against a written record, not rediscovered.
 
 **A conformance failure that reveals a genuine backend ABC-contract violation becomes
 `@pytest.mark.xfail(reason="BUG: ...", strict=True)` plus a one-line BACKLOG.md entry — never an
