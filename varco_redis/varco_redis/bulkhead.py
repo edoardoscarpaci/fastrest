@@ -86,7 +86,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, TypeVar
 
 import redis.asyncio as aioredis
-from providify import Configuration, Inject, Provider
+from providify import Configuration, Disposes, Inject, Provider
 from varco_core.resilience.bulkhead import BulkheadConfig, BulkheadFullError
 
 from varco_redis.config import RedisEventBusSettings
@@ -455,8 +455,13 @@ class RedisBulkheadConfiguration:
                             ``BulkheadConfig(max_concurrent=10)`` (fail-fast).
 
     Lifecycle:
-        Connected inside the provider; disconnected automatically by
-        ``await container.ashutdown()``.
+        Connected inside the provider; disconnected automatically by this
+        configuration's ``@Disposes(RedisBulkhead)`` method
+        (``close_bulkhead``) when ``await container.ashutdown()`` is called —
+        not ``@PreDestroy``, which providify never invokes on a
+        ``@Provider``-produced instance (Plan 024 / C2). ``RedisBulkhead``
+        carries no ``@PreDestroy`` at all, so this leak was invisible to
+        providify's ``UNREACHABLE_PRE_DESTROY`` detector before the fix.
 
     Example::
 
@@ -494,6 +499,28 @@ class RedisBulkheadConfiguration:
             instance.config.max_concurrent,
         )
         return instance
+
+    @Disposes(RedisBulkhead)
+    async def close_bulkhead(self, bulkhead: RedisBulkhead) -> None:
+        """
+        Disconnect the ``RedisBulkhead`` produced by ``redis_bulkhead``.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance — ``@Disposes`` is upstream's own supported teardown
+               mechanism (Plan 024 / C2). Tier B — ``RedisBulkhead`` carries
+               no ``@PreDestroy``, so this leak is invisible to providify's
+               ``UNREACHABLE_PRE_DESTROY`` detector; only this behavioural
+               test can catch a regression.
+
+        Args:
+            bulkhead: The ``RedisBulkhead`` instance this configuration
+                produced.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await bulkhead.disconnect()
 
 
 __all__ = ["RedisBulkhead", "RedisBulkheadConfiguration"]

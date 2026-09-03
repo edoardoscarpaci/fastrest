@@ -4,7 +4,7 @@
 **Raised by**: varco, Plan 022 Phase 4 (RL-8a — `container.ashutdown()` adoption)
 **Date**: 2026-08-31
 **providify version**: 2.0.0 (as resolved in `uv.lock`)
-**Status**: ⛔ Open — filed, not worked around
+**Status**: ✅ Resolved (2026-09-02, Plan 024 / C2) — see §8
 **Priority**: 🟡 should. Not a crash; a silent resource leak on a path a
 framework is likely to take. Two varco caches leak a live connection pool
 because of it.
@@ -198,6 +198,47 @@ cannot land untested:
 - `varco_redis/tests/test_redis_cache_lifespan_shutdown_integration.py` — real
   Redis container, `@pytest.mark.integration`, asserts the actual pool is closed.
   Nightly only, and it proves the *effect* rather than the mechanism.
+
+## 8. Resolution (2026-09-02)
+
+providify 2.0.1 shipped 2026-09-01 (`providify/CHANGELOG.md:12-32`) and
+**declares the behaviour intentional** — the Jakarta CDI producer-method rule
+this report's §5 already suspected: a producer method's output is torn down
+only by an explicit disposer, never by a lifecycle hook declared on the
+produced class. 2.0.1 adds `IssueKind.UNREACHABLE_PRE_DESTROY` (a `WARNING`
+severity, so it never reaches `container.validate()`'s `report.errors`) to
+*detect* this shape, plus docstring corrections
+(`providify/README.md:945-949`, `SKILL.md:287`, `PROVIDERS.md:133-138`)
+stating `@Disposes` is the *only* teardown path for provider-produced
+instances. The "Unreleased" section carries no further lifecycle work
+planned.
+
+**varco adopted `@Disposes` — exactly this report's §5 proposal.** Not a
+workaround: it is upstream's own supported mechanism for this shape, just
+never exercised in varco before this plan. The full-repo audit that Plan 024
+mandated found **nine** live sites of the identical defect class, not the
+two this report named — three visible to the new `UNREACHABLE_PRE_DESTROY`
+detector (`RedisCache`, `RedisEventBus`/`RedisStreamEventBus`,
+`MemcachedCache`) and six invisible to it (`LayeredCache`, `RedisDLQ`,
+`RedisStreamDLQ`, `RedisBulkhead`, `KafkaDLQ`, `NatsDLQ` — none of these
+carry a `@PreDestroy` at all, so the detector has nothing to flag). All nine
+now carry a `@Disposes` method on their producing `@Configuration`. See
+`plans/024-3-0-1-cleanup.md` §D-C2 / §D-C2-audit for the full site table and
+`UPSTREAM-GAPS.md`'s "Recently closed" section for the ledger entry.
+
+Both guard tests in §7 above are no longer `strict=True` xfails — they now
+assert the passing, adopted-fix contract directly (see each file's own
+docstring for the rewritten characterization).
+
+⚠️ **A second, distinct defect surfaced while proving the fix**: providify's
+`@Disposes` wiring loop attaches a disposer to the *first* matching binding
+across the whole container, not the installing module's own — filed
+separately as
+[providify-disposes-first-match.md](providify-disposes-first-match.md)
+(P24-DISPOSES-FIRSTMATCH). It does not block this resolution; it affects
+only the (currently unused-in-production) case of installing both
+`RedisCacheConfiguration` and `RedisLayeredCacheConfiguration` into the same
+container.
 
 ---
 

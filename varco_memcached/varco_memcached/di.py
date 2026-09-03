@@ -191,9 +191,12 @@ async def async_bootstrap(container: Any = None, *, setup_cache: bool = True) ->
           ``setup_cache`` branch, so no ``AttributeError`` is possible
           either way.
         - ``await container.ashutdown()`` must be called at process exit to
-          close the aiomcache connection pool via the ``@PreDestroy`` hook
-          on ``MemcachedCacheConfiguration`` (only relevant when
-          ``setup_cache=True`` was used at some point).
+          close the aiomcache connection pool via
+          ``MemcachedCacheConfiguration``'s ``@Disposes(CacheBackend)``
+          method (only relevant when ``setup_cache=True`` was used at some
+          point). Not ``@PreDestroy`` — providify never invokes
+          ``@PreDestroy`` on a ``@Provider``-produced instance; ``@Disposes``
+          is the supported teardown path for provider output (Plan 024 / C2).
 
     Cross-reference — why the *defaults* differ from ``varco_redis``:
         ``varco_redis.di.async_bootstrap()`` defaults ``setup_cache=False``

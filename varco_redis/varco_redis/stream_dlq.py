@@ -127,7 +127,7 @@ from typing import Any
 from uuid import UUID
 
 import redis.asyncio as aioredis
-from providify import Configuration, Inject, Provider
+from providify import Configuration, Disposes, Inject, Provider
 from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
 from varco_core.event.serializer import JsonEventSerializer
 
@@ -722,9 +722,12 @@ class RedisStreamDLQConfiguration:
     ``RedisEventBusSettings.from_env()``.
 
     Lifecycle:
-        The DLQ is connected inside the provider.  Call
-        ``await container.ashutdown()`` or call ``await dlq.disconnect()``
-        explicitly when the app shuts down.
+        The DLQ is connected inside the provider and disconnected
+        automatically by this configuration's ``@Disposes(AbstractDeadLetterQueue)``
+        method (``close_dlq``) when ``await container.ashutdown()`` is called
+        — not ``@PreDestroy``, which providify never invokes on a
+        ``@Provider``-produced instance (Plan 024 / C2). Calling
+        ``await dlq.disconnect()`` explicitly beforehand is also safe.
 
     Thread safety:  ✅  Providify singletons are created once and cached.
     Async safety:   ✅  Provider is ``async def``.
@@ -786,6 +789,29 @@ class RedisStreamDLQConfiguration:
         dlq = RedisStreamDLQ(settings)
         await dlq.connect()
         return dlq
+
+    @Disposes(AbstractDeadLetterQueue)
+    async def close_dlq(self, dlq: RedisStreamDLQ) -> None:
+        """
+        Disconnect the ``RedisStreamDLQ`` produced by ``redis_stream_dlq``.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance — ``@Disposes`` is upstream's own supported teardown
+               mechanism (Plan 024 / C2). ``RedisStreamDLQ`` carries no
+               ``@PreDestroy`` (Tier B — invisible to providify's
+               ``UNREACHABLE_PRE_DESTROY`` detector).
+
+        Args:
+            dlq: The ``RedisStreamDLQ`` instance this configuration produced.
+                Typed concretely (not ``AbstractDeadLetterQueue``) because
+                ``disconnect()`` is not part of the ABC — see the sibling
+                note in ``RedisDLQConfiguration.close_dlq``.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await dlq.disconnect()
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

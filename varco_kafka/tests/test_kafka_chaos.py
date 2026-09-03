@@ -59,6 +59,26 @@ restart instead of never recovering. This is a container-image/test-fixture
 choice, not a ``varco_kafka`` production code change — the KRaft broker
 speaks the identical wire protocol the production ``KafkaEventBus``
 already talks to.
+
+⚠️ **Known flake (Plan 024 / C8, Decision 2 pre-authorised downgrade)** —
+``test_outbox_entries_survive_a_broker_restart_and_are_republished`` fails
+reliably (2/2 runs, 2026-09-02, Docker 27.5.1/WSL2), always with
+``NodeNotReadyError``/``Heartbeat session expired — marking coordinator
+dead`` from the consumer-side ``KafkaEventBus``, even at the already-widened
+``_DRAIN_TIMEOUT = 240.0`` above — the failure is not a slow recovery that a
+longer timeout would fix, it is the consumer's group-coordinator connection
+never re-establishing within that window. This is the same root cause
+BACKLOG's `RT7b-kafka-restart-recovery` row already characterized during
+Plan 019 verification (multi-client Kafka consumer-group recovery timing
+under this Docker/WSL2 environment, orthogonal to the port-pinning and KRaft
+fixes above) — Plan 024's two runs reproduce it identically, not a new
+finding. Per Decision 2, this is a pre-authorised downgrade, not a phase
+failure: chaos tests are never a required check and never gate a merge
+(CLAUDE.md). The sibling ``test_relay_does_not_dead_letter_on_a_transient_broker_outage``
+(single relay bus, no consumer) passed both runs — the defect is specific to
+the consumer-group-recovery path, not to broker-restart recovery in general.
+Next real evidence point: the nightly `chaos` job on GitHub Actions'
+native-Linux dockerd, per BACKLOG's existing row.
 """
 
 from __future__ import annotations

@@ -40,6 +40,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import pytest
+from varco_core.meta import FieldHint
+from varco_core.model import DomainModel
 
 pytestmark = [
     pytest.mark.integration,
@@ -69,32 +71,16 @@ async def db(mongo_url: str):
 # ── (1) index-mode lifecycle: upgrade, assert, upgrade again, idempotent ─────
 
 
-_INDEX_CREATE_SKIPPED_WITHOUT_PENDING_MIGRATIONS_REASON = (
-    "BUG: BeanieMigrator.upgrade() (migration/migrator.py) computes "
-    "`pending_migrations` (hand-written Migration subclasses only) and "
-    "returns early via `if not pending_migrations: return ...` BEFORE the "
-    "lock is ever acquired and BEFORE the `index_mode == 'create'` block is "
-    "reached — so an index_mode='create' migrator with an empty/fully-"
-    "applied MigrationRegistry never creates a missing index, even though "
-    "plan() independently reports index drift via `_index_pending()`. "
-    "This is a genuine BeanieMigrator/MigrationStore defect discovered "
-    "while writing RT9-beanie coverage (Plan 019 Phase 5), not a design "
-    "row — the licence to patch production code in this plan covers only "
-    "the four named RT2-B/RT2-C/RT7a/RT7b-port rows, so per the standing "
-    "'a conformance/coverage failure that reveals a genuine defect becomes "
-    "xfail(strict=True) + a BACKLOG row, never an in-place fix' rule, this "
-    "is xfail'd rather than fixed. See BACKLOG.md's RT9-beanie-index-mode-"
-    "no-pending-migrations row."
-)
-
-
-@pytest.mark.xfail(reason=_INDEX_CREATE_SKIPPED_WITHOUT_PENDING_MIGRATIONS_REASON, strict=True)
 async def test_index_mode_upgrade_creates_indexes_and_is_idempotent(db) -> None:
+    # Plan 024 / Phase 2, Step 23: strict=True xfail deleted — this must now
+    # PASS for the real reason (the §D-C3 restructure at migrator.py:160-242),
+    # not be waived. RED MODE today: BeanieMigrator.upgrade() still returns
+    # early at `if not pending_migrations: return ...` (migrator.py:170-171)
+    # BEFORE the index_mode=="create" block ever runs, so no index is ever
+    # created and `len(first_indexes) == 3` fails (only `_id_` exists).
     from varco_beanie.index_guard import BeanieIndexGuard
     from varco_beanie.migration.base import MigrationRegistry
     from varco_beanie.migration.migrator import BeanieMigrator
-    from varco_core.meta import FieldHint
-    from varco_core.model import DomainModel
 
     @dataclass
     class _Widget(DomainModel):
@@ -119,6 +105,107 @@ async def test_index_mode_upgrade_creates_indexes_and_is_idempotent(db) -> None:
     await migrator.upgrade()
     second_indexes = await db["widgets_migint"].index_information()
     assert second_indexes.keys() == first_indexes.keys()
+
+
+async def test_index_mode_create_with_nonpending_registry_still_creates_indexes(db) -> None:
+    """
+    Regression guard on the §D-C3 restructure (Plan 024 Step 23a): a
+    migrator whose ``MigrationRegistry`` has migrations, but none of them
+    are pending (already applied), must still reconcile indexes when
+    ``index_mode="create"`` — this is the case the original bug hid, now
+    with a *non-empty* registry rather than an entirely empty one.
+
+    RED MODE: fails today for the same underlying reason as sibling (1) —
+    the early return at migrator.py:170-171 only looks at
+    ``pending_migrations``, so a registry with zero *pending* (but
+    non-empty) migrations still short-circuits before the index block.
+    """
+    from varco_beanie.index_guard import BeanieIndexGuard
+    from varco_beanie.migration.base import Migration, MigrationRegistry
+    from varco_beanie.migration.migrator import BeanieMigrator
+
+    @dataclass
+    class _Gadget(DomainModel):
+        name: Annotated[str, FieldHint(index=True)]
+
+        class Meta:
+            table = "gadgets_migint"
+
+    class _AlreadyApplied(Migration):
+        version = "0001"
+        name = "already_applied"
+
+        async def up(self, db) -> None:
+            pass
+
+        async def down(self, db) -> None:
+            pass
+
+    guard = BeanieIndexGuard(_Gadget)
+    registry = MigrationRegistry()
+    registry.register(_AlreadyApplied)
+
+    # Apply the one migration first with index_mode="off" so the registry
+    # is non-empty but has zero PENDING migrations from here on.
+    setup_migrator = BeanieMigrator(db, registry, index_guard=None, index_mode="off")
+    await setup_migrator.upgrade()
+
+    migrator = BeanieMigrator(db, registry, index_guard=guard, index_mode="create")
+    await migrator.upgrade()
+
+    indexes = await db["gadgets_migint"].index_information()
+    # _id_ + the one declared index.
+    assert len(indexes) == 2
+
+
+async def test_second_upgrade_with_no_drift_acquires_no_lock(db, monkeypatch) -> None:
+    """
+    Edge case from Plan 024's Edge cases section: "Second upgrade() with no
+    drift -> no lock is taken." A no-op ``MigrationStore.acquire`` spy
+    proves the common, cheap startup path stays lock-free.
+
+    RED MODE: today's early return (`if not pending_migrations: return`,
+    migrator.py:170-171) IS lock-free already for an empty registry with no
+    index guard — so this specific assertion can already pass for that
+    narrow shape. It is written here, red-first, against the shape the plan
+    actually specifies: index_mode="create" with a guard that reports zero
+    drift on the second call. Today that goes through the *same* early
+    return without ever calling `_index_pending()`, so this test cannot
+    distinguish "lock-free because index-aware" from "lock-free because the
+    bug never even looks" — that distinction is exactly what Step 24 must
+    fix, and `test_index_mode_upgrade_creates_indexes_and_is_idempotent`
+    above is the test that forces the fix to happen at all.
+    """
+    from varco_beanie.index_guard import BeanieIndexGuard
+    from varco_beanie.migration.base import MigrationRegistry
+    from varco_beanie.migration.migrator import BeanieMigrator
+    from varco_beanie.migration.store import MigrationStore
+
+    @dataclass
+    class _Doohickey(DomainModel):
+        name: Annotated[str, FieldHint(index=True)]
+
+        class Meta:
+            table = "doohickeys_migint"
+
+    guard = BeanieIndexGuard(_Doohickey)
+    registry = MigrationRegistry()
+
+    migrator = BeanieMigrator(db, registry, index_guard=guard, index_mode="create")
+    await migrator.upgrade()  # first call — creates the index (drift -> lock)
+
+    acquire_calls: list[str] = []
+    original_acquire = MigrationStore.acquire
+
+    async def _spy_acquire(self, owner: str, ttl: float) -> bool:
+        acquire_calls.append(owner)
+        return await original_acquire(self, owner, ttl)
+
+    monkeypatch.setattr(MigrationStore, "acquire", _spy_acquire)
+
+    await migrator.upgrade()  # second call — no drift, must not acquire
+
+    assert acquire_calls == []
 
 
 # ── (2) two concurrent migrators serialize; exactly one applies ─────────────

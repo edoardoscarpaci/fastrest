@@ -27,6 +27,7 @@ from varco_redis.cache import RedisCache, RedisCacheSettings
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.dlq import RedisDLQ
 from varco_redis.job_store import RedisJobStore
+from varco_redis.stream_dlq import RedisStreamDLQ
 from varco_redis.streams import RedisStreamEventBus
 
 pytestmark = pytest.mark.integration
@@ -67,6 +68,22 @@ class TestRedisDLQConformance(DeadLetterQueueConformance):
     @pytest.fixture
     async def dlq(self, redis_url: str):
         async with RedisDLQ(RedisEventBusSettings(url=redis_url)) as dlq:
+            yield dlq
+
+
+class TestRedisStreamDLQConformance(DeadLetterQueueConformance):
+    """
+    ``RedisStreamDLQ`` conformance (Plan 024 / C7, Step 32).
+
+    Fills the one real DLQ-suite gap the coverage audit found
+    (`testkit/varco_conformance/COVERAGE.md`): a real, durable DLQ
+    implementation with a real transport had no less reason to be proven
+    than ``RedisDLQ`` above.
+    """
+
+    @pytest.fixture
+    async def dlq(self, redis_url: str):
+        async with RedisStreamDLQ(RedisEventBusSettings(url=redis_url)) as dlq:
             yield dlq
 
 

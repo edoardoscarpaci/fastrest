@@ -127,7 +127,10 @@ def bootstrap(
     Edge cases:
         - Calling twice is safe — scanning is idempotent.
         - ``container.ashutdown()`` must be awaited at process exit to call
-          the bus ``stop()`` via its ``@PreDestroy`` hook.
+          the bus ``stop()`` via ``RedisEventBusSelectorConfiguration``'s
+          ``@Disposes(AbstractEventBus)`` method — not ``@PreDestroy``, which
+          providify never invokes on a ``@Provider``-produced instance
+          (Plan 024 / C2).
         - ``streams=True`` mutates ``os.environ["VARCO_REDIS_USE_STREAMS"]``.
           This affects all subsequent ``RedisEventBusSettings()`` constructions
           in the same process.

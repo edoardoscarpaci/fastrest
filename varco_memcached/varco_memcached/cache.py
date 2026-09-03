@@ -58,7 +58,7 @@ import sys
 from typing import Any
 
 import aiomcache
-from providify import Configuration, Inject, PreDestroy, Provider
+from providify import Configuration, Disposes, Inject, PreDestroy, Provider
 from pydantic_settings import SettingsConfigDict
 from varco_core.cache.base import CacheBackend, InvalidationStrategy
 from varco_core.cache.config import CacheSettings
@@ -598,8 +598,12 @@ class MemcachedCacheConfiguration:
 
     Lifecycle:
         The cache is started inside the provider and stopped automatically by
-        ``@PreDestroy`` on ``MemcachedCache.stop()`` when
-        ``await container.ashutdown()`` is called.
+        this configuration's ``@Disposes(CacheBackend)`` method
+        (``close_cache``) when ``await container.ashutdown()`` is called.
+        ``@PreDestroy`` on ``MemcachedCache`` itself is unreachable —
+        providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+        instance (Plan 024 / C2, closes
+        `design/upstream-gaps/providify-provider-predestroy.md`).
 
     Thread safety:  ✅  Providify singletons are created once and cached.
     Async safety:   ✅  Provider is ``async def`` — safe to ``await``.
@@ -668,6 +672,32 @@ class MemcachedCacheConfiguration:
         cache = MemcachedCache(settings)
         await cache.start()
         return cache
+
+    @Disposes(CacheBackend)
+    async def close_cache(self, cache: CacheBackend) -> None:
+        """
+        Stop the ``MemcachedCache`` produced by ``memcached_cache`` on shutdown.
+
+        DESIGN: ``@Disposes`` over relying on ``@PreDestroy``
+            ✅ Providify never invokes ``@PreDestroy`` on a ``@Provider``-produced
+               instance (Jakarta CDI producer-method rule, confirmed intentional
+               in providify 2.0.1's changelog) — ``@Disposes`` is upstream's own
+               supported teardown mechanism for exactly this shape.
+            ❌ If a second ``@Configuration`` also binds ``CacheBackend`` with
+               its own ``@Disposes`` in the same container, providify's
+               first-match wiring loop can attach the wrong disposer to this
+               binding (`design/upstream-gaps/providify-disposes-first-match.md`,
+               P24-DISPOSES-FIRSTMATCH) — not applicable to
+               ``MemcachedCacheConfiguration`` alone, since varco ships no
+               sibling Memcached cache configuration to collide with.
+
+        Args:
+            cache: The ``CacheBackend`` instance this configuration produced.
+
+        Async safety: ✅ Awaited by providify's ``_adispose`` during
+            ``container.ashutdown()``.
+        """
+        await cache.stop()
 
 
 __all__ = [

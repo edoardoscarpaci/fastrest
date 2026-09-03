@@ -1,5 +1,10 @@
 # Release runbook — v3.0.0
 
+✅ **Applied (2026-09-02, Plan 024 / C1).** Every operator step below — the ten Environments, the
+ten trusted-publisher configs, the Pages source, and the Phase 9 `main`/tag rulesets — is reported
+complete by the operator. This document is kept as the **reference for re-running these steps**
+(e.g. onto an eleventh package or a rotated key), not as a pending checklist.
+
 Plan 023 / Phase 5 Step 30, §RL-10-publish. The operator steps this repository's files cannot
 perform (no `gh` CLI installed, no PyPI/GitHub API credentials in this execution context) — walk
 this document top to bottom before pushing the release tag.
@@ -9,7 +14,7 @@ decision). Every URL, every publisher `repo:` field, and the docs `site_url` bel
 The pre-rename `fastrest` slug still resolves as a GitHub redirect but must **never** be used in a
 publisher config, because OIDC matches the repository's *current* name, not a redirect.
 
-## 1. Ten GitHub Environments
+## 1. Ten GitHub Environments — ✅ Applied
 
 Settings → Environments → New environment, ten times:
 
@@ -24,7 +29,7 @@ Settings → Environments → New environment, ten times:
 
 Not scriptable with `gh` today (brief 007 §1), and `gh` is not installed on this machine.
 
-## 2. Ten PyPI trusted-publisher configs
+## 2. Ten PyPI trusted-publisher configs — ✅ Applied
 
 For each of the ten `https://pypi.org/manage/project/<name>/settings/publishing/` pages (or the
 "add a pending publisher" flow at `https://pypi.org/manage/account/publishing/` for a name not yet
@@ -43,7 +48,7 @@ Check each name at `https://pypi.org/project/<name>/` before configuring: a name
 project needs the **pending publisher** flow (PyPI creates the project on the first successful
 run); a name that already exists gets a normal publisher added under its own project settings.
 
-## 3. GitHub Pages source
+## 3. GitHub Pages source — ✅ Applied
 
 Settings → Pages → Build and deployment → Source: **Deploy from a branch** → branch `gh-pages` /
 `root`. This can only be set **after** `docs.yml`'s `dev` job has run at least once (it creates the
@@ -53,11 +58,12 @@ Settings → Pages → Build and deployment → Source: **Deploy from a branch**
 pushes" breaks `mike deploy --push`, which force-pushes by design. See Phase 9's ruleset target
 invariant — it is the literal string `main`, never a wildcard that could also catch `gh-pages`.
 
-## 4. `main` branch ruleset (Phase 9, after the release tag — not now)
+## 4. `main` branch ruleset (Phase 9, after the release tag) — ✅ Applied
 
 Specified in full in `plans/023-release-version-freeze-and-supply-chain.md`'s Phase 9 and
-Appendix A. Do **not** apply before the `v3.0.0` tag has shipped (§RL-SEC-hardening's ordering
-fact 2 — this repository's first-ever tags are the rc1/final release tags themselves).
+Appendix A. Applied after the `v3.0.0` tag shipped (§RL-SEC-hardening's ordering fact 2 — this
+repository's first-ever tags were the rc1/final release tags themselves), per the operator's
+report (Plan 024 / C1).
 
 ## 5. Rehearsal: `v3.0.0rc1`
 
@@ -78,7 +84,7 @@ configs exist yet; this is an operator action, see §1–2 above)_.
 If a leg fails: fix the root cause and re-rehearse as `v3.0.0rc2`. **Never patch during the real
 release tag** — that is what the rc exists to de-risk.
 
-## 6. Release: `v3.0.0`
+## 6. Release: `v3.0.0` — ✅ Released
 
 ```bash
 git tag -s v3.0.0 -m "Release v3.0.0"

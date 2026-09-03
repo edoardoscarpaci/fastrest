@@ -11,12 +11,40 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`BeanieMigrator.upgrade()` never reached its `index_mode="create"` block when the migration
+  registry had no pending revisions** (RT9). It returned early before the index-reconciliation
+  block, silently disagreeing with `plan()`, which always reports index drift independently. Fixed
+  by conditioning the early return on index drift too (a bounded extra `listIndexes` round-trip,
+  paid only when the migration registry is empty) and reconciling indexes under the migration lock
+  even on the zero-pending-migrations path. `upgrade(dry_run=True)` now also reports index
+  revisions, agreeing with `plan()`.
+- **`container.ashutdown()` orphaned nine started/connected resources produced by a `@Provider`**
+  (`P22-PROVIDER-PREDESTROY`). providify never invokes `@PreDestroy` on a `@Provider`-produced
+  instance (confirmed intentional upstream — providify 2.0.1's changelog, Jakarta CDI
+  producer-method rule) — `@Disposes` is the supported teardown mechanism instead. All nine
+  affected sites now carry a `@Disposes` method on their producing `@Configuration`:
+  `RedisCache`, `LayeredCache`, `RedisEventBus`/`RedisStreamEventBus`, `RedisDLQ`,
+  `RedisStreamDLQ`, `RedisBulkhead`, `KafkaDLQ`, `NatsDLQ`, `MemcachedCache`. `providify>=2.0.1`
+  is now the floor across all ten packages. See `design/upstream-gaps/providify-provider-predestroy.md`
+  §8 for the full resolution.
 - **CI: the `Docs` workflow could never run `mike`.** Both the `dev` and `release` jobs installed
   the workspace with `uv sync --locked --all-packages --all-extras`, which resolves *extras* but
   not PEP 735 *dependency groups* — and `mike`/`mkdocs`/`mkdocstrings` live in the non-default
   `docs` group, so every docs deploy died with `error: Failed to spawn: mike`. Both jobs now pass
   `--group docs` as well (the CI equivalent of `make docs-deps`), keeping `--all-packages
   --all-extras` because mkdocstrings imports the packages live to render the API reference.
+
+### Changed
+
+- **`scripts/api_surface.py --check` is now a CI gate**, not a tool a contributor had to remember
+  to run by hand. Wired into `make lint`'s no-`PKG` path (`make lint PKG=<one package>` stays
+  narrow and skips it, deliberately), a standalone `make api-check`, and CI's `lint` job (a step
+  after `mypy`). Scope is unchanged and stated honestly in CLAUDE.md: catches removals and
+  *function* signature changes only — a narrowed class `__init__` stays invisible; additions and
+  module moves remain notes, never failures.
+- **`testkit/varco_conformance/COVERAGE.md`** (new) records the conformance-suite coverage audit
+  for all five shared ABCs (`event_bus`, `cache`, `job_store`, `dlq`, `channel_manager`) and every
+  implementation's subclass-or-stated-reason status — test-surface only, no production change.
 
 ## [3.0.0] — 2026-08-31
 
