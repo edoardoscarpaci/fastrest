@@ -57,6 +57,58 @@
 #      genuine race conditions (port remap on restart, black-holed sockets)
 #      that are expected to occasionally need operator triage rather than a
 #      blocked PR.
+#
+# ── `concurrency` (Plan 024 / §CONC — design/research/001-github-actions- ──
+#    concurrency-semantics.md) ────────────────────────────────────────────
+# Newest-merge-wins: when several PRs merge to `main` in quick succession,
+# only the newest merge commit's `integration` run reaches completion —
+# earlier in-flight/pending runs on the same trigger are cancelled — while
+# the nightly `schedule` run and any `workflow_dispatch` run are isolated in
+# their own groups and can never be cancelled by, or cancel, a merge.
+#
+#   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+#
+# | Trigger              | event_name         | ref                  | group |
+# |-----------------------|--------------------|-----------------------|-------|
+# | merge to `main`        | `push`              | `refs/heads/main`      | `Integration Tests-push-refs/heads/main` |
+# | nightly cron            | `schedule`          | `refs/heads/main`      | `Integration Tests-schedule-refs/heads/main` |
+# | manual run               | `workflow_dispatch` | selected branch (usually `refs/heads/main`) | `Integration Tests-workflow_dispatch-refs/heads/main` |
+#
+#   ⚠️ Do NOT copy `test.yml`'s simpler `${{ github.workflow }}-${{ github.ref
+#      }}` form here. Research 001 §3: on `push`/`schedule`/`workflow_dispatch`
+#      `github.ref` evaluates to `refs/heads/main` for **all three** — a
+#      ref-only group would collide across triggers, so a merge landing at
+#      05:02 would cancel the nightly run that started at 05:00 *and, with
+#      it, the `chaos` job* (the only trigger chaos runs on at all), and
+#      symmetrically the nightly cron would cancel an in-flight merge run.
+#      `test.yml`'s form is correct *there* only because that workflow has no
+#      `schedule`/`workflow_dispatch` trigger to collide with — do not
+#      harmonize the two files.
+#   ✅ Guarantee (research 001 §2, both readings of an internally
+#      inconsistent brief agree on this outcome): the newest merge commit's
+#      run is the one that completes; intermediate merge commits inside the
+#      same ~45-minute window do NOT get a completed integration run.
+#   ❌ A commit whose run was cancelled is never individually retested by
+#      this workflow — widens an already-accepted hole (Plan 017
+#      §RL-5-triggers: PRs get no integration coverage at all) rather than
+#      opening a new one. `main` is still verified at the tip on every merge,
+#      plus in full every night; a regression is attributable by bisect, just
+#      not automatically.
+#   ✅/❌ No cleanup step for containers leaked by a cancelled run (research
+#      001 §6/§7: cancellation may not propagate SIGINT/SIGTERM to
+#      testcontainers' child processes). Deliberate — both jobs run on
+#      GitHub-hosted, ephemeral `ubuntu-latest` runners, which are destroyed
+#      (containers and all) at the end of every run regardless of outcome, so
+#      there is nothing to leak into. **Reversal trigger:** if this workflow
+#      ever moves to a self-hosted or persistent runner, an `if: always()`
+#      cleanup step becomes mandatory at that same change.
+#   ⚠️ **Couples to any future required-check promotion.** Research 001 §8: a
+#      cancelled run's conclusion is neither success nor failure, so a
+#      required check that can be cancelled can leave a PR stuck "waiting for
+#      status to be reported". `integration`/`chaos` must stay non-required
+#      (already repo policy, `:26-28` above) — whoever promotes either job
+#      must, in the same change, either drop `cancel-in-progress: true` or
+#      accept this failure mode (see BACKLOG.md's RL-16 row).
 
 name: Integration Tests
 
@@ -66,6 +118,10 @@ on:
   schedule:
     - cron: "0 5 * * *"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

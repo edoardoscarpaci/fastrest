@@ -30,7 +30,7 @@ dependencies = [
     # providify for DI wiring (@Configuration, @Provider, Inject[], DIContainer)
     "providify>=2.0.1",
     # python-multipart is required for FastAPI form data parsing (file uploads, etc.)
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.31",
     # typing-extensions provides PEP 696 TypeVar(default=...) on Python 3.12
     # (native only from 3.13) — used for VarcoCRUDRouter's 6th `S` TypeVar.
     "typing-extensions>=4.12",

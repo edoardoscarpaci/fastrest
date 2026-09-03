@@ -9,7 +9,20 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **CI: `integration.yml` now cancels stale runs on `main` (Plan 024).** A new workflow-level
+  `concurrency` stanza — `group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref
+  }}`, `cancel-in-progress: true` — means that when several PRs merge to `main` in quick
+  succession, only the newest merge commit's `integration` run reaches completion; earlier
+  in-flight/pending runs on the same trigger are cancelled. The nightly `schedule` run and any
+  `workflow_dispatch` run are scoped by `github.event_name` into *separate* groups and are never
+  cancelled by, or able to cancel, a merge run — deliberately distinct from `test.yml`'s simpler
+  ref-only group, which would otherwise let a merge cancel the nightly run (and its `chaos` job).
+  **Test-only release — no runtime package changed.**
+
 ### Fixed
+
 
 - **`BeanieMigrator.upgrade()` never reached its `index_mode="create"` block when the migration
   registry had no pending revisions** (RT9). It returned early before the index-reconciliation
@@ -27,6 +40,20 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `RedisStreamDLQ`, `RedisBulkhead`, `KafkaDLQ`, `NatsDLQ`, `MemcachedCache`. `providify>=2.0.1`
   is now the floor across all ten packages. See `design/upstream-gaps/providify-provider-predestroy.md`
   §8 for the full resolution.
+
+- **`varco_beanie`: a Mongo-backed `older_than` retention sweep could report "done" while a
+  matching entry remained.** BSON `UTCDateTime` is millisecond-precision, and pymongo floors
+  *both* the stored value and the query operand — so a raw `$lt` cutoff was actually evaluated
+  as `stored_ms < floor_ms(cutoff)`, silently excluding every entry stored in the cutoff's own
+  millisecond even though its own reported timestamp was genuinely strictly before the cutoff.
+  Affected `BeanieDeadLetterQueue.delete_where(older_than=)`/`.list_entries(older_than=)` and
+  `BeanieJobStore.delete_where(completed_before=/expires_before=)`. Fixed by widening only the
+  exclusive-upper-bound operand to the next whole BSON millisecond
+  (`varco_beanie._bson_time.ceil_to_bson_millisecond`) before it reaches pymongo — `newer_than`'s
+  `$gt` and the job store's `$lte` lease/`run_at` predicates are untouched, since pymongo's floor
+  is already correct there. Not a contract change: `<` semantics are unchanged and still match
+  every sibling backend (`InMemoryDeadLetterQueue`, `SADeadLetterQueue`, `RedisDLQ`).
+
 - **CI: the `Docs` workflow could never run `mike`.** Both the `dev` and `release` jobs installed
   the workspace with `uv sync --locked --all-packages --all-extras`, which resolves *extras* but
   not PEP 735 *dependency groups* — and `mike`/`mkdocs`/`mkdocstrings` live in the non-default

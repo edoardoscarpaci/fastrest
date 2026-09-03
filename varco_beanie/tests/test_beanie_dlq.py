@@ -15,7 +15,7 @@ integration``.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from varco_core.event import Event
@@ -161,6 +161,54 @@ class TestBeanieDeadLetterQueueIntegration:
             if deleted == 0:
                 break
         assert total == 5
+
+    async def test_regression_delete_where_sub_millisecond_cutoff(self, dlq) -> None:
+        """User reports a chunked sweep of 5 entries totalling 4; correct
+        behaviour is 5, because every entry's ``last_failed_at`` is strictly
+        before the cutoff and ``delete_where(older_than=)`` promises to delete
+        every such entry (ABC docstring + InMemory reference impl).
+
+        Deterministic form of ``test_delete_where_chunked_sweep``: the newest
+        entry is pinned to the same BSON millisecond as the cutoff but a
+        sub-millisecond earlier, which is the exact boundary the timing-
+        dependent version only sometimes hits.
+        """
+        base = datetime(2026, 1, 1, 12, 0, 0, 0, tzinfo=UTC)
+        for micros in (0, 1_000, 2_000, 3_000, 3_100):
+            stamp = base + timedelta(microseconds=micros)
+            await dlq.push(_entry(first_failed_at=stamp, last_failed_at=stamp))
+
+        # 3_900µs truncates to the same BSON millisecond (3ms) as the newest
+        # entry's 3_100µs, yet is strictly later than it.
+        cutoff = base + timedelta(microseconds=3_900)
+
+        total = 0
+        while True:
+            deleted = await dlq.delete_where(older_than=cutoff, limit=2)
+            total += deleted
+            if deleted == 0:
+                break
+        assert total == 5
+        assert await dlq.count() == 0
+
+    async def test_regression_list_entries_sub_millisecond_older_than(self, dlq) -> None:
+        """Same boundary, read path: ``list_entries(older_than=)`` shares the
+        ``$lt`` predicate and must agree with ``delete_where``."""
+        base = datetime(2026, 1, 1, 12, 0, 0, 0, tzinfo=UTC)
+        stamp = base + timedelta(microseconds=3_100)
+        await dlq.push(_entry(first_failed_at=stamp, last_failed_at=stamp))
+
+        found = await dlq.list_entries(older_than=base + timedelta(microseconds=3_900))
+        assert len(found) == 1
+
+    async def test_regression_newer_than_boundary_is_unaffected(self, dlq) -> None:
+        """The ``$gt`` side must NOT be widened — an entry in the same BSON
+        millisecond as ``newer_than`` is not strictly newer than it."""
+        base = datetime(2026, 1, 1, 12, 0, 0, 0, tzinfo=UTC)
+        stamp = base + timedelta(microseconds=3_100)
+        await dlq.push(_entry(first_failed_at=stamp, last_failed_at=stamp))
+
+        assert await dlq.list_entries(newer_than=base + timedelta(microseconds=3_900)) == []
 
     async def test_duplicate_push_is_idempotent(self, dlq) -> None:
         entry = _entry()
