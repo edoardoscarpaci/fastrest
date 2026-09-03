@@ -51,6 +51,17 @@ These are legitimate, permanent absences — not TODOs, not backlog rows.
   all — the only package of the ten deliberately without one. Confirmed present in all nine
   others.
 
+## New ABC outside the five (Plan 025)
+
+- **`AbstractPathWatcher`** (`varco_core.watch.base`, Plan 025 / T1) is a **new ABC that is not
+  one of the five** this page audits. Both implementations (`StatPollWatcher`,
+  `WatchfilesWatcher`) live in `varco_core` itself, so its shared contract base —
+  `varco_core/tests/watch_contract.py::PathWatcherContract` — lives next to them rather than in
+  `testkit/varco_conformance`, which exists specifically to reach *across* packages. If a future
+  backend package ever ships a third implementation, promote the contract module into
+  `testkit/varco_conformance` at that point. This row pre-empts the "why is there no suite for
+  this?" audit question this page exists to answer.
+
 ## What Plan 024 filled
 
 - **`RedisStreamDLQ` → subclassed.** `varco_redis/tests/test_redis_conformance.py` gained

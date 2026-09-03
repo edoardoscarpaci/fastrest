@@ -1,13 +1,104 @@
 # BACKLOG
 
-> **Two cycles live in this file.** The **3.0.1 cleanup** cycle is immediately below.
-> Everything from `## 3.0.0 — release cycle (historical record)` onward is the **completed
-> 3.0.0 backlog**, kept verbatim as the record of what shipped and what was decided. Do not
-> delete it — its Parked and "do not relitigate" sections are the reason decisions are not
-> re-argued each cycle, and this repo has already lost one ledger to a wholesale rewrite
-> (`cae7f33`, see UPSTREAM-GAPS.md's header).
+> **Three cycles live in this file.** The **3.1 trust-store / hot-reload / performance** cycle is
+> immediately below. The  cycle follows it. Everything from **3.0.1 cleanup** is already completed and 
+> `# 3.0.0 — release cycle (historical record)` onward is the **completed 3.0.0 backlog**, kept
+> verbatim as the record of what shipped and what was decided. Do not delete any of it — the
+> Parked and "do not relitigate" sections are the reason decisions are not re-argued each cycle,
+> and this repo has already lost one ledger to a wholesale rewrite (`cae7f33`, see
+> UPSTREAM-GAPS.md's header).
 
 ---
+
+# 3.1 — trust store, hot reload & performance
+
+Produced by `/discover` (focus: **"a FileWatcher for certificate renewal and hot reload of files;
+a TrustStore that optionally uses the filewatcher/dirwatcher for certificates + automatic
+injection for popular libraries (requests, urllib3, httpx, aiohttp); and, if not too big already,
+performance work so the library paths don't burn memory/CPU"**).
+
+⚠️ **This cycle does not replace the `N1`–`N5` rows** in the 3.0.1 section's "3.1 — scoped, not
+worked this cycle" table below (MCP v2, CloudEvents, AsyncAPI, NATS→DLQ, BeanieConfig collapse).
+Those remain scoped to 3.1 and are not re-litigated here; this cycle adds to them.
+
+## Locked decisions (this session)
+
+| Decision | Choice | Consequence |
+|---|---|---|
+| **Direction** | **Outbound only** — varco services *calling out* (broker TLS, peer HTTP clients, JWKS) | Server-side TLS termination and per-handshake cert rotation via `sni_callback` are **out of scope** and parked. This removes the single largest (L) item from the cycle |
+| **Release scope** | **3.1, strictly additive** | `varco_fastapi.auth.TrustStore` is *exported* and sits in the frozen API snapshot, so it cannot move. New home is `varco_core.tls`; the old name stays as a deprecated re-export alias until 4.0.0 — the pattern `render_rls_ddl` (AB-1) and `SchemaMigrationError` (AB-2) already established. `scripts/api_surface.py --check` therefore stays green |
+| **Cert search** | **Recursive by default — on the new type only** | Flipping the *existing* `SSLConfig.ca_folder` to recursive would silently widen what an existing deployment trusts. Existing field keeps flat semantics and gains an opt-in flag; only `varco_core.tls.TrustStore` is recursive by default |
+| **`ca_folder` multiplicity** | **One path or many** | Widening the annotation is additive, and `api_surface.py --check` does not record class signatures, so no gate churn |
+| **System CAs** | **On by default** — already correct, do not "fix" | Both existing impls already do `create_default_context()` then *additive* `load_verify_locations`. Neither has the `create_default_context(cafile=...)` replacement bug. This ask is **already satisfied**; the work is unification, not correction |
+| **Reload strategy** | **Both, selectable** — mutate in place on additions, swap the context on removal/replacement | `ssl.SSLContext` can gain trust via `load_verify_locations()` on a live context but has **no unload API**. Mutation is free (every client holding the context sees the rotation, no rebuild) but cannot revoke; swapping revokes but forces pooled-client teardown. The watcher already diffs folder contents, so it can pick per event. Renewal — the 6-day-cert common path — takes the cheap branch |
+| **Watch strategy** | `StatPollWatcher` **default, zero-dep**; `watchfiles` opt-in extra | Not a fallback-grade compromise: inotify does not fire on NFS/Docker bind mounts, and Kubernetes Secret/ConfigMap updates are a `..data` **symlink swap** that watchers see as `IN_DELETE_SELF`, not a content change. Certs on K8s arrive exactly that way |
+| **Platform** | **Linux only** this cycle | Cross-platform (macOS Keychain / Windows CryptoAPI) parked with an explicit audit of every implementation for Linux-only assumptions. See Parked |
+| **`truststore` dependency** | **Cut** | Investigated and rejected on evidence, not assumption — see Parked for the full finding. On Linux its verifier is a documented no-op, so it would add a dependency and a code path for zero behavioural gain |
+| **HTTP client adapters** | httpx, aiohttp, urllib3, requests — **function-body imports, no hard deps** | Matches the existing local-import pattern at `varco_fastapi/varco_fastapi/connection.py:333`. An adapter for an uninstalled library raises a clear `ImportError` when *called* and costs nothing at import time — which matters given P1 |
+| **Auto-injection** | **Explicit, opt-in, never implicit** | `truststore`'s own docs instruct that *libraries must not* call `inject_into_ssl()`; they construct a context and pass it. varco documents the app-level call but never makes it on the user's behalf |
+| **Performance scope** | **Harness + the one measured win** | `slots` and reflection-caching are currently *unmeasured guesses*. Filed as P3/P4, explicitly unblocked by P1. This is U-8 evidence discipline applied to our own perf claims |
+| **Ordering** | Default: severity, then complexity ascending | No override requested this cycle |
+
+**Research briefs backing this cycle:**
+
+- `design/research-output/001-tls-certificate-hotreload-and-file-watching-2026.md` — file watching
+  (watchfiles vs watchdog vs polling; inotify/NFS/K8s-symlink pitfalls), cert rotation in
+  comparable systems (SPIFFE/SPIRE, cert-manager, Envoy SDS), trust stores (`certifi` vs
+  `truststore`, `SSL_CERT_FILE`/`SSL_CERT_DIR`), SSL-context injection per client, mTLS/PKCS#12.
+- `design/async-performance-patterns/research/001-async-framework-performance-memory-2026.md` —
+  lazy imports (PEP 562/649/690/810), `slots=True` savings, reflection caching, middleware and
+  `contextvars` cost, benchmarking infrastructure (CodSpeed/pytest-benchmark/asv), free-threaded
+  Python status.
+
+**Measurement taken this session (the basis for P1):** `uv run python -X importtime -c "import
+varco_core"` → **419 ms**, against a **7 ms** interpreter baseline. No single hot leaf (largest
+self-time is `varco_core.mapper` at 9.6 ms); the cost is ~700 modules pulled eagerly by
+`varco_core/__init__.py`. Third-party contributors measured individually: providify 75 ms,
+pydantic 48 ms, PyJWT 45 ms, lark 32 ms, psutil 17 ms — all unconditional today.
+
+## 3.1 — the work
+
+| ID | Feature | Severity | Complexity | Rationale | Evidence |
+|----|---------|----------|------------|-----------|----------|
+| T1 | ✅ **done (Plan 025).** **`varco_core.watch` — `AbstractPathWatcher` ABC + pluggable strategies.** `StatPollWatcher` (default, zero-dep) and `WatchfilesWatcher` (opt-in `watch` extra). Debounce; correct under atomic-rename and K8s `..data` symlink swap. Structurally satisfies `AbstractLifecycle` start/stop | 🔴 must | M | The primitive T2/T3 are built on, and nothing like it exists. `PemFolderSource._has_changes()` already hand-rolls a pull-driven mtime-diff directory watcher that nothing else can reuse — this extracts and generalises code the repo has already written once | brief 001 §1; `varco_core/varco_core/authority/sources/pem_folder.py:179-199` |
+| T2 | ✅ **done (Plan 025).** **`ReloadableResource[T]` — load → swap under lock → notify subscribers, with keep-last-good on parse failure** | 🔴 must | M | Makes T1 reusable rather than cert-only. **Last-good semantics are the point**: a truncated or half-written file must never take down a live service, and a cert folder mid-rotation is exactly that. Three in-repo consumers already exist beyond certs — `varco_casbin`'s file adapter, i18n `.mo` catalogs, and JWKS PEM folders | `intuition` (shape), consumers verified in-repo |
+| T3 | **`varco_core.tls.TrustStore` — unify the two TLS models and make the result reloadable.** Recursive multi-folder search, `SSL_CERT_FILE`/`SSL_CERT_DIR`, `ReloadingTrustStore` on T1/T2, both reload strategies | 🔴 must | L | **There are two overlapping TLS models in different layers today and neither is a superset of the other.** `TrustStore` (`varco_fastapi.auth`) has `include_system_cas` and in-memory `bytes` CAs; `SSLConfig` (`varco_core.connection`) has the `verify=False` escape hatch and `check_hostname`. The `to_trust_store()` bridge is one-directional and **silently drops `verify=False`**. Also: TLS trust is neither FastAPI- nor authz-specific, so the broker backends can never share it where it currently sits | `varco_fastapi/varco_fastapi/connection.py:310-337` (lossy bridge, caveat documented at :326); `varco_core/varco_core/connection/ssl.py:218-276`; `varco_fastapi/varco_fastapi/auth/trust_store.py:190-249` |
+| T4 | **Client injection adapters** — `to_httpx()`, `to_aiohttp_connector()`, `to_urllib3_poolmanager()`, `to_requests_adapter()`, plus a documented app-level `install_system_trust()` | 🟡 should | M | The "automatic injection" half of the ask, minus the footgun. All four clients accept a custom `ssl.SSLContext` on current releases; the adapters are thin, and function-body imports keep every one of them optional | brief 001 §4 (per-client APIs + versions); §3 (library-must-not-inject caveat) |
+| T5 | **Give `JwksUrl` / `OidcDiscovery` an SSL context** | 🟡 should | S | They fetch through bare `urllib.request.urlopen` with **no SSL context parameter at all**. A JWKS endpoint behind an internal PKI or a corporate TLS-intercepting proxy is currently unverifiable — the only workarounds are process-wide env vars or disabling verification. Smallest row in the cycle and the first real consumer of T3 | `varco_core/varco_core/authority/sources/jwks_url.py:199`; `varco_core/varco_core/authority/sources/oidc.py:189` |
+| T6 | **mTLS hardening — encrypted private keys (password callback) and PKCS#12 / `.pfx`** | 🟡 should | S–M | Brief 001 names PKCS#12 as *the* standard gap, normally requiring third-party shims (`httpx-pkcs12`, `requests-pkcs12`). varco can close it with **zero new dependencies** — `cryptography>=50.0.0` is already a hard `varco_core` dependency and decodes PKCS#12 natively. A genuine differentiator that costs almost nothing here | brief 001 §5; `varco_core/pyproject.toml` dependencies |
+| T7 | **Reconcile the three disagreeing cert-glob paths** | 🟢 nice | S | `SSLConfig` globs `*.pem` + `*.crt`; `TrustStore` globs `*.pem` + `*.crt`; `PemFolderSource` globs **only** `*.pem`. All three are non-recursive. Three code paths that answer "what is a cert file in this folder?" differently is a silent-misconfiguration surface — a `.cer` file, or a cert one directory down, is ignored with no error | `varco_core/varco_core/connection/ssl.py:261`; `varco_fastapi/varco_fastapi/auth/trust_store.py:225`; `varco_core/varco_core/authority/sources/pem_folder.py:196` |
+| P1 | **Import-time budget + lazy `__init__`** — PEP 562 module `__getattr__` on the large `__init__.py`s, plus a CI ceiling via `-X importtime` | 🔴 must | M | **The only perf item with a measured number: 419 ms vs a 7 ms baseline.** No hot leaf — it is purely structural, so it is fixable without touching logic. Every CLI invocation, serverless cold start and test-collection run pays it now. It also directly serves this cycle's own feature: a TLS/watch subsystem meant for sidecars and CLIs must not drag in 419 ms of unrelated framework | measured this session (see above); brief 002 §1 — PEP 562 is the shipped mechanism (PEP 690 rejected; PEP 810 lands in 3.15) |
+| P2 | **Benchmark + regression harness** — `pytest-codspeed`, PR comment first, **not** a gate | 🟡 should | S–M | There is currently **zero** perf infrastructure (`scripts/` has no benchmark runner). Nothing in P3/P4 can be honestly justified without it. Comment-not-gate is the mainstream posture: pydantic, FastAPI and polars all run CodSpeed; almost none gate on it, and GitHub-hosted runner noise is acknowledged but unquantified | brief 002 §5 |
+| P3 | **`slots=True` sweep on value objects and query AST nodes** | 🟢 nice | M | 40–90% per-instance memory on objects allocated per request; no `__slots__` exists anywhere in the repo today, and frozen+slots compose cleanly. ⚠️ **Cannot be a blanket sweep**: multiple inheritance imposes slot-layout constraints and this codebase is deliberately mixin/MRO-heavy. Also arguably breaking on public value objects (forbids attribute assignment), so in an additive 3.1 it is **internal types only**. **Blocked on P2** — currently a guess | brief 002 §2; `intuition` for the varco-specific win size |
+| P4 | **Reflection-caching audit** — `functools.cache` over `inspect.signature`/`get_type_hints`; build resolution plans at registration, not per call | 🟢 nice | M | Zero uses of `functools.cache`/`lru_cache` in the repo. Concrete lead: `QueryParser._parser` is `@cached_property` **per instance**, so a per-request parser rebuilds the Lark parser every time. ⚠️ Brief 002 §3 is explicit that "plan at registration, not call time" is universally advocated but **has no published micro-benchmarks** — which is precisely why this is 🟢 and **blocked on P2** | brief 002 §3; `varco_core/varco_core/query/parser.py:60-98` |
+
+## Parked — this cycle (do not relitigate without new evidence)
+
+| Item | Why parked | Re-open trigger |
+|---|---|---|
+| **Server-side cert rotation via `sni_callback`** | The user scoped this cycle to **outbound** calls. It was the only L-complexity item in the original candidate set, and dropping it is what made the cycle fit | varco services begin terminating TLS directly rather than sitting behind a proxy/ingress |
+| **`truststore` dependency** | **Investigated and rejected on source evidence, not assumption.** The objection raised was "it misses custom CA and hot reload". Half correct: it has **no** reload (that comes from T2 regardless), but it **does** support custom CAs — `load_verify_locations`/`load_cert_chain` delegate to the wrapped context, and `_macos.py` passes `ctx.get_ca_certs(binary_form=True)` to `SecTrustSetAnchorCertificates` then calls `SecTrustSetAnchorCertificatesOnly(trust, False)` ("we always want system certificates" *in addition*). The real reason to cut it is narrower and decisive: **on Linux its verifier is a documented no-op** ("we've enabled SSLContext's built-in verification via `verify_mode=CERT_REQUIRED`, and don't need to repeat it"), because OpenSSL's default paths *are* the Linux system store. Zero behavioural gain for a dependency | varco officially supports macOS or Windows deployments, where `create_default_context()` cannot see Keychain / CryptoAPI and an MDM-pushed corporate root is invisible |
+| **Cross-platform (macOS / Windows) support** | Explicitly deferred to a future release. Scoping to Linux keeps platform caveats out of the T1/T3 design instead of scattering them through it | A future release commits to official multi-OS support — at which point the work is *not* just adding `truststore`, but **auditing every implementation for Linux-only assumptions** (inotify, path handling, `SSL_CERT_DIR` semantics, the `StatPollWatcher`'s mtime granularity) |
+| **`slots` / reflection work as a decided outcome** | Not parked as *ideas* — filed as P3/P4. Parked as *decisions*: neither may be implemented until P2 can measure it | P2 lands and produces a benchmark showing a real win |
+| **PEP 810 native lazy imports** | Lands in Python 3.15; this repo's matrix is 3.12/3.13. P1 uses PEP 562, which ships today | The support matrix reaches 3.15 |
+
+## Open questions for `/plan`
+
+1. **T3's deprecation shim shape** — is `varco_fastapi.auth.TrustStore` a plain re-export alias, or
+   a subclass that keeps `include_system_cas` semantics exactly as they are today? The two differ
+   for anyone doing `isinstance` checks. AB-1/AB-2 set the precedent but neither had a behavioural
+   delta to preserve.
+2. **Does `SSLConfig` also gain reload**, or does it stay a static value object with
+   `varco_core.tls.TrustStore` as the only reloadable path? Additive either way; the question is
+   whether two objects should both be reloadable.
+3. **Where does the `ReloadingTrustStore` background task get started** — its own
+   `AbstractLifecycle` registered in `VarcoLifespan`, or a `@Configuration` in `varco_core`? The
+   broker backends that consume `SSLConfig` are not necessarily inside a FastAPI lifespan.
+4. **P1's CI ceiling value** — a hard number (e.g. 100 ms) or a ratchet against the committed
+   previous measurement? A hard number is clearer; a ratchet cannot be gamed by a slow runner.
+
+---
+
 
 # 3.0.1 — cleanup cycle
 

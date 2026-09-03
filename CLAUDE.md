@@ -452,6 +452,20 @@ Stampede protection (`Singleflight`, per-process only) and bulk operations (`Bul
 **separate** Protocol from `AsyncCache` — see the pitfall table) are covered in
 `technical_docs/features/cache-hardening.md`.
 
+### File watching and hot reload (varco_core.watch / varco_core.reload, Plan 025 / T1, T2)
+
+`AbstractPathWatcher` (`StatPollWatcher` default, `WatchfilesWatcher` opt-in via
+`varco-core[watch]`) watches a set of directories and notifies subscribers; `ReloadableResource[T]`
+loads a value from a watcher (or any manual trigger) and swaps it under a lock with keep-last-good
+semantics. Usage: README's "File watching and hot reload". Type hierarchy: ARCHITECTURE.md's
+"File watching".
+
+**Rule**: a watcher's fingerprint is `(st_mtime_ns, st_size, st_ino)` of the **resolved** path,
+and enumeration skips `..`-prefixed names — because Kubernetes delivers rotated
+Secrets/ConfigMaps as a `..data` symlink swap, and a watcher that stats the symlink itself (or a
+hand-rolled mtime-only dict) never sees it change. Never "fix" a watcher to stat the symlink
+itself.
+
 ### Query system (varco_core.query)
 
 The query system builds a typed AST over filter/sort/pagination parameters and applies it to
@@ -938,6 +952,10 @@ Am I adding a new capability?
 │
 ├─ Resilience pattern (new retry/timeout/breaker variant)?
 │  └─ → varco_core.resilience (decorator + config)
+│
+├─ File/dir change detection (config reload, cert rotation, anything watching a path)?
+│  └─ → varco_core.watch — never a hand-rolled mtime dict (misses the K8s `..data` rotation)
+│     ↳ Load → swap → notify subscribers on change? → varco_core.reload.ReloadableResource[T]
 │
 ├─ Profiling / performance diagnostic?
 │  ├─ New CPU backend (pyinstrument, py-spy)?

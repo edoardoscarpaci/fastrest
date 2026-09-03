@@ -380,6 +380,12 @@ from varco_core.validation import (
     Validator,
 )
 
+# NOTE (Plan 025 / T1, T2): varco_core.watch and varco_core.reload are deliberately NOT
+# re-exported here — import them explicitly (`from varco_core.watch import StatPollWatcher`,
+# `from varco_core.reload import ReloadableResource`). Plan 028 / P1 is about *shrinking* this
+# file's eager import graph, and varco_core.watch is meant to be usable from a sidecar or CLI
+# without paying for the whole framework's import cost.
+
 __all__ = [
     # ── Ambient request context (Plan 011 X1) ──────────────────────────────────
     "AmbientVar",

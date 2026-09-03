@@ -28,6 +28,10 @@ varco_core/              — Domain model, service layer, event system, resilien
   │                        eviction/duration/stampede_suppressed/stale_served + backplane
   │                        published/received/dropped counters (Plan 010 / C3)
   ├── lock.py            — AbstractDistributedLock, InMemoryLock, LockHandle
+  ├── watch/              — AbstractPathWatcher ABC, StatPollWatcher (default), WatchfilesWatcher
+  │                         (opt-in `varco-core[watch]`); WatchEvent/WatchKind/WatchTarget
+  ├── reload.py           — ReloadableResource[T] — load → swap under a lock → notify
+  │                         subscribers, keep-last-good on any post-startup load failure
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
   ├── repository.py      — AsyncRepository[D, PK] protocol
@@ -169,6 +173,29 @@ AbstractDeadLetterQueue (ABC)
 
 DeadLetterEntry (Plan 005 Phase 3) — event: DomainEvent | None, source: DeadLetterSource
   (CONSUMER default / OUTBOX_RELAY / JOB), source_ref, payload — one shape for all three
+
+### File watching (Plan 025 / T1)
+
+```
+AbstractPathWatcher (ABC)       — subscribe(cb) -> unsubscribe, async start()/stop(),
+  │                                abstract async _run(); shared _notify() debounce/error
+  │                                handling (§D-T1-errors)
+  ├── StatPollWatcher            — default, stdlib-only; polls a 3-field stat fingerprint
+  │                                (st_mtime_ns, st_size, st_ino) — correct on NFS/Docker
+  │                                bind mounts and Kubernetes `..data` symlink swaps
+  └── WatchfilesWatcher          — opt-in (`varco-core[watch]`); backed by the Rust `notify`
+                                   crate via watchfiles, but still re-derives events from the
+                                   same stat-fingerprint diff (never from watchfiles' own
+                                   Change enum), so both implementations are behaviourally
+                                   identical and share one contract test suite
+                                   (varco_core/tests/watch_contract.py)
+
+Both implementations structurally satisfy varco_fastapi.lifespan.AbstractLifecycle (a
+runtime_checkable Protocol) — zero import from varco_core to varco_fastapi.
+
+ReloadableResource[T] (varco_core.reload) — loader + optional AbstractPathWatcher +
+  generation counter + subscribers. Keep-last-good on any post-startup reload() failure;
+  the first start() load is fail-fast. Also structurally satisfies AbstractLifecycle.
   producers (EventConsumer retry exhaustion, OutboxRelay, JobRunner)
 
 ChannelManager (ABC) — admin-level create/delete/exists/list, separate from AbstractEventBus

@@ -9,6 +9,30 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`varco_core.watch` — `AbstractPathWatcher`, `StatPollWatcher`, `WatchfilesWatcher` (Plan 025 /
+  T1).** Backend-agnostic filesystem watching with no new hard dependency: `StatPollWatcher`
+  (stdlib-only, the default via `default_watcher()`) polls a `(st_mtime_ns, st_size, st_ino)`
+  stat fingerprint of the *resolved* target, correct under atomic rename and under the
+  Kubernetes `..data` symlink-swap cert/ConfigMap rotation — and correct on NFS/Docker bind
+  mounts, where inotify never fires. `WatchfilesWatcher` (opt-in, `pip install
+  "varco-core[watch]"`) is backed by the Rust `notify` crate via `watchfiles`, but re-derives
+  every event from the same stat-fingerprint diff rather than trusting watchfiles' own event
+  kind, so both implementations emit byte-identical event streams and share one contract test
+  suite (`varco_core/tests/watch_contract.py::PathWatcherContract`). Both debounce: a rotation
+  rewriting several files fires one coalesced callback, not several. New `varco-core[watch]`
+  optional extra (`watchfiles>=1.2.0`).
+- **`varco_core.reload.ReloadableResource[T]` (Plan 025 / T2).** Load → swap under a lock →
+  notify subscribers, with **keep-last-good** semantics: the first `start()` load is fail-fast
+  (no last-good value to fall back on), but every reload after that keeps serving the last
+  successfully loaded value on a loader failure — a truncated or half-written file mid-rotation
+  never takes a live service down. Composes with an optional `AbstractPathWatcher`, but
+  `reload()` is always independently callable (e.g. from a `SIGHUP` handler). Both
+  `AbstractPathWatcher` and `ReloadableResource` structurally satisfy
+  `varco_fastapi.lifespan.AbstractLifecycle` with zero import from `varco_core` into
+  `varco_fastapi`.
+
 ### Changed
 
 - **CI: `integration.yml` now cancels stale runs on `main` (Plan 024).** A new workflow-level

@@ -182,6 +182,7 @@ policy engine, field encryption, observability, profiling, …) — see
 - [Background Jobs](#background-jobs)
 - [Database Auditing](#database-auditing)
 - [Dead Letter Queue](#dead-letter-queue)
+- [File watching and hot reload](#file-watching-and-hot-reload)
 - [Composite Deployment](#composite-deployment)
 - [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
 
@@ -3557,6 +3558,76 @@ async def on_order(self, event: OrderPlacedEvent) -> None: ...
 
 Redrive, retention, tenancy, a Beanie backend, and a bundled REST admin surface
 (`mount_reliability_admin()`) are covered in `technical_docs/features/dead-letter-queues.md`.
+
+---
+
+## File watching and hot reload
+
+`varco_core.watch` (`AbstractPathWatcher`) watches a set of directories for changes and calls
+subscribers back — correct under atomic rename and under the Kubernetes `..data` symlink swap
+kubelet uses to deliver a rotated Secret/ConfigMap. `varco_core.reload.ReloadableResource[T]`
+loads a value from that watcher (or from any manual trigger) and swaps it under a lock, with
+**keep-last-good** semantics on any post-startup load failure.
+
+```python
+from pathlib import Path
+
+from varco_core.reload import ReloadableResource
+from varco_core.watch import WatchTarget, default_watcher
+
+watcher = default_watcher([WatchTarget(root=Path("/etc/certs"))])
+
+
+def load_bundle() -> bytes:
+    return Path("/etc/certs/ca.pem").read_bytes()
+
+
+bundle = ReloadableResource(loader=load_bundle, watcher=watcher, name="ca-bundle")
+await bundle.start()  # first load is fail-fast — propagates if it fails
+bundle.current  # -> bytes, updated automatically on every settled rotation
+```
+
+**Watcher implementations**:
+- `StatPollWatcher` (default, stdlib-only) — polls a stat fingerprint
+  (`st_mtime_ns`, `st_size`, `st_ino`) of every matching file, `interval=5.0` by default.
+  Correct on NFS and Docker bind mounts, where inotify never fires. `default_watcher(...)`
+  always returns one of these — prefer it when you just want "the default", not a specific
+  implementation.
+- `WatchfilesWatcher` (opt-in, `pip install "varco-core[watch]"`) — lower-latency local
+  dev-loop watching backed by the Rust `notify` crate (the same library uvicorn's
+  `--reload` uses). Still re-derives events from the same stat-fingerprint diff, never from
+  watchfiles' own event kind, so both implementations emit identical event streams.
+
+Both debounce: after any detected change, a watcher waits for the target to be stable for one
+`quiet_period` (default `0.25s`) before notifying, coalescing an entire rotation into **one**
+callback.
+
+**`ReloadableResource[T]` keep-last-good contract**: the *first* `start()` load is fail-fast — a
+service that cannot load its initial CA bundle refuses to start. Every load *after* that keeps
+serving `current`/`generation` unchanged on failure and returns
+`ReloadOutcome(changed=False, error=exc)` — a truncated or half-written file during rotation
+never takes the service down.
+
+**SIGHUP composition** — `reload()` is always independently callable, with or without a
+watcher:
+
+```python
+import signal
+
+loop = asyncio.get_running_loop()
+loop.add_signal_handler(signal.SIGHUP, lambda: asyncio.create_task(bundle.reload()))
+```
+
+**`VarcoLifespan` wiring** — both `AbstractPathWatcher` and `ReloadableResource` structurally
+satisfy `varco_fastapi.lifespan.AbstractLifecycle` (a `runtime_checkable` Protocol), so they
+register with zero import from `varco_core` into `varco_fastapi`:
+
+```python
+from varco_fastapi.lifespan import VarcoLifespan
+
+lifespan = VarcoLifespan()
+lifespan.register(bundle)  # starts the watcher too — ReloadableResource.start()/stop() own it
+```
 
 ---
 

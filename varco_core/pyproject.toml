@@ -53,6 +53,15 @@ dependencies = [
 tz = [
     "tzdata>=2024.1; sys_platform == 'win32' or sys_platform == 'linux'",
 ]
+# Plan 025 / T1b — opt-in, not a hard dependency: StatPollWatcher (stdlib-only) is the
+# default AbstractPathWatcher implementation, correct on NFS and Docker bind mounts where
+# inotify never fires (locked decision, BACKLOG.md:34, research brief 001 §1). watchfiles
+# is for callers who want lower dev-loop latency on a local, non-networked filesystem.
+# Floor 1.2.0 per brief 001's version table: Python 3.10+, Rust `notify` backend, the same
+# library uvicorn's `--reload` uses.
+watch = [
+    "watchfiles>=1.2.0",
+]
 
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
