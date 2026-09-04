@@ -158,6 +158,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Verification hardening (VARCO_JWT_*)](#verification-hardening-varco_jwt_)
 - [Connection Settings](#connection-settings)
   - [SSLConfig](#sslconfig)
+  - [TLS trust store](#tls-trust-store)
   - [RedisConnectionSettings](#redisconnectionsettings)
   - [HttpConnectionSettings](#httpconnectionsettings)
 - [FastAPI Integration](#fastapi-integration)
@@ -2762,6 +2763,83 @@ ssl = SSLConfig(
 # Disable verification (dev / testing only)
 ssl = SSLConfig(verify=False, check_hostname=False)
 ```
+
+### TLS trust store
+
+`varco_core.tls.TrustStore` (Plan 026) is a strict superset of `SSLConfig` and unifies TLS
+trust configuration across every backend — recursive, multi-folder CA search, `include_system_cas`,
+in-memory `bytes` CAs, and mTLS, in one type reachable from `varco_kafka`/`varco_redis`/`varco_sa`
+as well as `varco_fastapi`. Full design (mutate-vs-swap reload strategy, the deprecation shim,
+env-var reference): `technical_docs/features/tls-trust-and-hot-reload.md`.
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore
+
+# Private CA, recursive folder scan (the default on this type)
+store = TrustStore(ca_folders=Path("/etc/ssl/private-ca"))
+ctx = store.build_ssl_context()
+
+# From environment variables — VARCO_TRUST_STORE_DIR / VARCO_CA_CERT / VARCO_CLIENT_CERT /
+# VARCO_CLIENT_KEY, plus SSL_CERT_FILE / SSL_CERT_DIR (additive — see the table below)
+store = TrustStore.from_env()
+```
+
+**Bridge with `SSLConfig`** (lossless — carries both `verify` and `check_hostname`, unlike
+`HttpConnectionSettings.to_trust_store()`, which keeps returning the deprecated
+`varco_fastapi.auth.TrustStore` and drops `verify=False`):
+
+```python
+from varco_core.connection.ssl import SSLConfig
+
+store = SSLConfig(verify=False, check_hostname=False).to_trust_store()
+cfg = store.to_ssl_config()  # lossy in the other direction — see the feature doc
+```
+
+**Hot reload** — `ReloadingTrustStore` composes `varco_core.watch`/`varco_core.reload` (see
+["File watching and hot reload"](#file-watching-and-hot-reload)) to pick up certificate rotation
+without a process restart:
+
+```python
+from varco_core.tls import ReloadingTrustStore, bind_trust_store
+from varco_fastapi.lifespan import VarcoLifespan
+
+store = ReloadingTrustStore(TrustStore(ca_folders=Path("/etc/ssl/private-ca")))
+
+lifespan = VarcoLifespan()
+lifespan.register(store)  # starts/stops the watcher for you
+
+# DI: makes an already-constructed, already-owned store resolvable — no lifecycle side effect
+bind_trust_store(container, store)
+```
+
+**`ssl_context=` on the JWT issuer sources** (Plan 026 / T5) — point `JwksUrlSource`/
+`OidcDiscoverySource` at an internal PKI:
+
+```python
+from varco_core.authority.sources import JwksUrlSource
+
+ctx = TrustStore(ca_folders=Path("/etc/ssl/internal-pki")).build_ssl_context()
+jwks = JwksUrlSource("https://idp.internal/.well-known/jwks.json", ssl_context=ctx)
+```
+
+⚠️ `ssl_context=` fixes certificate *verification*, not proxy handling — `HTTP_PROXY`/
+`HTTPS_PROXY` still apply exactly as before. This does not make "JWKS through a proxy" work; it
+was already unaffected either way.
+
+| Env var | Effect | Additive? |
+|---|---|---|
+| `VARCO_TRUST_STORE_DIR` | entry in `ca_folders` | ✅ |
+| `VARCO_CA_CERT` | `ca_cert` | ✅ |
+| `VARCO_CLIENT_CERT` | `client_cert` | ✅ |
+| `VARCO_CLIENT_KEY` | `client_key` | ✅ |
+| `SSL_CERT_FILE` | `ca_cert` (only if `VARCO_CA_CERT` left it unset) | ✅ — **diverges from OpenSSL**, which replaces the default trust store entirely |
+| `SSL_CERT_DIR` | entry in `ca_folders` | ✅ — **diverges from OpenSSL** the same way |
+
+⚠️ **`SSL_CERT_FILE`/`SSL_CERT_DIR` are additive in varco, not replace-semantics like OpenSSL/
+`uv`/`requests`.** Both are merged on top of `include_system_cas`'s default of `True` — varco
+never silently drops the system trust store because a sidecar exported one of these names. If
+you need the OpenSSL behaviour, set `include_system_cas=False` explicitly.
 
 ### RedisConnectionSettings
 

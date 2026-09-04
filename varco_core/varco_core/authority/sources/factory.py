@@ -34,6 +34,7 @@ Async safety:   ✅ Pure transformation — no I/O.
 
 from __future__ import annotations
 
+import ssl
 from pathlib import Path
 
 from varco_core.authority.sources.jwks_url import JwksUrlSource
@@ -75,6 +76,7 @@ class IssuerSourceFactory:
         *,
         algorithm: str = "RS256",
         use: str = "sig",
+        ssl_context: ssl.SSLContext | None = None,
     ) -> IssuerSource:
         """
         Parse a source descriptor string and return the matching ``IssuerSource``.
@@ -85,12 +87,17 @@ class IssuerSourceFactory:
         the ``alg`` field in the remote JWKS.
 
         Args:
-            value:     Source descriptor.  See module docstring for prefix
-                       dispatch table and heuristic fallback rules.
-            algorithm: Default JWT algorithm for PEM sources.  Defaults to
-                       ``"RS256"``.  Ignored for URL-based sources.
-            use:       JWK public key use for PEM sources.  Defaults to
-                       ``"sig"``.  Ignored for URL-based sources.
+            value:       Source descriptor.  See module docstring for prefix
+                         dispatch table and heuristic fallback rules.
+            algorithm:   Default JWT algorithm for PEM sources.  Defaults to
+                         ``"RS256"``.  Ignored for URL-based sources.
+            use:         JWK public key use for PEM sources.  Defaults to
+                         ``"sig"``.  Ignored for URL-based sources.
+            ssl_context: Optional ``ssl.SSLContext`` forwarded to the two URL-based branches
+                         only (``JwksUrlSource``, ``OidcDiscoverySource``, Plan 026 / T5) —
+                         like ``algorithm``/``use`` for PEM sources, it is ignored by the
+                         other branch.  ``None`` (the default) is byte-identical to
+                         pre-Plan-026 behaviour.
 
         Returns:
             The appropriate ``IssuerSource`` for the given descriptor.
@@ -145,10 +152,10 @@ class IssuerSourceFactory:
             return PemFileSource(path=path, kid=kid, algorithm=algorithm, use=use)
 
         if value.startswith("jwks::"):
-            return JwksUrlSource(value[len("jwks::") :])
+            return JwksUrlSource(value[len("jwks::") :], ssl_context=ssl_context)
 
         if value.startswith("oidc::"):
-            return OidcDiscoverySource(value[len("oidc::") :])
+            return OidcDiscoverySource(value[len("oidc::") :], ssl_context=ssl_context)
 
         # ── Heuristic fallback ─────────────────────────────────────────────────
 
@@ -174,9 +181,9 @@ class IssuerSourceFactory:
         if value.startswith("https://") or value.startswith("http://"):
             # Explicit JWKS URL pattern: ends with jwks.json
             if value.endswith("jwks.json") or "jwks.json?" in value:
-                return JwksUrlSource(value)
+                return JwksUrlSource(value, ssl_context=ssl_context)
             # Everything else assumed to be an OIDC issuer base URL
-            return OidcDiscoverySource(value)
+            return OidcDiscoverySource(value, ssl_context=ssl_context)
 
         raise ValueError(
             f"Cannot determine source type for {value!r}. "

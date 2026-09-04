@@ -29,7 +29,7 @@ class TenantProvisionRequested(Event, frozen=True):
     Command: requests that ``tenant_id`` be provisioned (event-driven
     onboarding, RD-1).
 
-    Args:
+    Attributes:
         tenant_id: The tenant to provision.
         origin:    ``TenantControlService.node_id`` of the broadcaster, or
                     ``None`` for an externally-published command (RD-15).
@@ -52,7 +52,7 @@ class TenantDeprovisionRequested(Event, frozen=True):
     ``confirm_destroy`` gate — an event without it set is rejected (and,
     with a DLQ wired, DLQ'd) rather than silently executed.
 
-    Args:
+    Attributes:
         tenant_id: The tenant to deprovision.
         confirm:   Destructive-operation confirmation gate.
         origin:    Same RD-15 provenance semantics as
@@ -91,7 +91,7 @@ class TenantNodeReady(Event, frozen=True):
     ``TenantControlService.mark_active()`` (itself only emitting the fact
     ``TenantCatalogChanged`` — never a command, RD-13).
 
-    Args:
+    Attributes:
         tenant_id: The tenant that was locally provisioned.
         node_id:   The reporting node's ``TenantControlService.node_id``.
         store_id:  The reporting node's ``TenantControlService.store_id``

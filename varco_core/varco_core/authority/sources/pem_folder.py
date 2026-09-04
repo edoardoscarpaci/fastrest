@@ -37,6 +37,7 @@ from pathlib import Path
 from varco_core.authority.exceptions import KeyLoadError
 from varco_core.jwk.builder import JwkBuilder
 from varco_core.jwk.model import JsonWebKey, JsonWebKeySet
+from varco_core.tls.discovery import iter_cert_files
 
 # ── PemFolderSource ───────────────────────────────────────────────────────────
 
@@ -79,7 +80,11 @@ class PemFolderSource:
 
     Edge cases:
         - Empty folder → empty ``JsonWebKeySet`` (valid, not an error).
-        - Non-PEM files in the folder are silently ignored.
+        - Files that don't match ``patterns`` are ignored — but if a file matches
+          ``varco_core.tls.CERT_FILE_PATTERNS`` (the wider known cert-file set) without
+          matching ``patterns``, it is skipped *loudly*: one WARNING per
+          ``(path, patterns)`` per process (Plan 026 / T7 — the BACKLOG's own complaint
+          was the silence, not the narrow default).
         - A PEM file that fails to parse → ``KeyLoadError`` with the
           filename in the message.
         - Symlinks to PEM files are followed (``Path.glob()`` behaviour).
@@ -98,14 +103,29 @@ class PemFolderSource:
 
     # __slots__ saves ~200 bytes per instance and prevents accidental
     # attribute addition outside __init__.
-    __slots__ = ("_path", "_algorithm", "_use", "_mtimes", "_keyset")
+    __slots__ = ("_path", "_algorithm", "_use", "_patterns", "_mtimes", "_keyset")
 
-    def __init__(self, path: Path | str, *, algorithm: str, use: str = "sig") -> None:
+    def __init__(
+        self,
+        path: Path | str,
+        *,
+        algorithm: str,
+        use: str = "sig",
+        patterns: tuple[str, ...] = ("*.pem",),
+    ) -> None:
         """
         Args:
             path:      Directory path.  Converted to ``Path`` if a string.
             algorithm: Signing algorithm applied to all keys in the folder.
             use:       Public key use — ``"sig"`` or ``"enc"``.
+            patterns:  Filenames matched to be treated as keys.  Defaults to ``("*.pem",)`` —
+                       3.0's exact behaviour, unchanged (Plan 026 / T7, §D-T7).  This folder
+                       holds JWT *signing keys*, one file per ``kid`` — widening this by
+                       default the way ``TrustStore``'s cert-search widens would risk feeding
+                       an X.509 certificate to ``JwkBuilder.from_pem`` (wrong shape: at best a
+                       surprise ``kid``, at worst a ``KeyLoadError`` that takes issuer loading
+                       down).  Pass ``patterns=varco_core.tls.CERT_FILE_PATTERNS`` to opt into
+                       the wider set explicitly.
 
         Raises:
             ValueError: ``path`` is not a directory (checked lazily on
@@ -114,6 +134,7 @@ class PemFolderSource:
         self._path: Path = Path(path)
         self._algorithm: str = algorithm
         self._use: str = use
+        self._patterns: tuple[str, ...] = patterns
 
         # Tracks per-file mtime at last scan.  Used by _has_changes() to
         # detect whether a re-scan is needed without reading file contents.
@@ -189,8 +210,14 @@ class PemFolderSource:
             ``True`` when a re-scan is warranted; ``False`` when cache is fresh.
         """
         try:
-            # Build the current mtime map — stat() each found PEM file
-            current: dict[Path, float] = {p: p.stat().st_mtime for p in self._path.glob("*.pem")}
+            # Build the current mtime map — stat() each found key file. Uses the SAME
+            # iter_cert_files(..., patterns=self._patterns) call as _scan() (Plan 026 / T7,
+            # Step 4 comment): if this enumeration ever disagreed with _scan()'s, refresh()
+            # could silently miss a newly-added file that a full load() would have picked up.
+            current: dict[Path, float] = {
+                p: p.stat().st_mtime
+                for p in iter_cert_files(self._path, patterns=self._patterns, recursive=False)
+            }
         except OSError:
             # If we can't even stat the directory, treat as changed so the
             # next scan will produce a proper KeyLoadError with context.
@@ -226,8 +253,9 @@ class PemFolderSource:
         keys: list[JsonWebKey] = []
         new_mtimes: dict[Path, float] = {}
 
-        # Sort for deterministic ordering — JWKS key order is stable
-        for pem_file in sorted(self._path.glob("*.pem")):
+        # iter_cert_files() already returns a deterministically sorted iterator — JWKS key
+        # order is stable. Same enumeration as _has_changes() (see its comment above).
+        for pem_file in iter_cert_files(self._path, patterns=self._patterns, recursive=False):
             # Use the filename stem as kid — convention: name the file after
             # the kid you want (e.g. "user:auth-2025-A.pem")
             kid = pem_file.stem

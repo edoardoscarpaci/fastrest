@@ -466,6 +466,26 @@ Secrets/ConfigMaps as a `..data` symlink swap, and a watcher that stats the syml
 hand-rolled mtime-only dict) never sees it change. Never "fix" a watcher to stat the symlink
 itself.
 
+### TLS trust store (varco_core.tls, Plan 026 / T3, T5, T7)
+
+`TrustStore` unifies the two pre-3.1 TLS models (`SSLConfig`'s `verify=False` escape hatch +
+the old `varco_fastapi.auth.TrustStore`'s `include_system_cas`/`bytes`-CA support) into one
+frozen-dataclass superset, reachable from any backend; `ReloadingTrustStore` makes it hot-
+reloadable on top of Plan 025's `watch`/`reload` primitives. Usage: README's "TLS trust store".
+Type hierarchy + module listing: ARCHITECTURE.md's "TLS trust". Full design (mutate-vs-swap,
+the additive `SSL_CERT_FILE`/`SSL_CERT_DIR` divergence, the deprecation-subclass asymmetry, a
+Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
+
+**Rule**: TLS trust lives in `varco_core.tls` — `varco_fastapi` may import it (the deprecated
+`varco_fastapi.auth.TrustStore` shim does), never the reverse. Same seam rule as
+`AbstractEventBus`/`AbstractMigrator`.
+
+**Rule**: never add a scanned `@Configuration` to `varco_core.tls` — `container.scan(
+"varco_core", recursive=True)` is a documented, in-use pattern that auto-activates every scanned
+`@Configuration`, which would start a filesystem watcher in every app that scans `varco_core`.
+`varco_core.tls.bind_trust_store(container, store)` registers an already-constructed,
+already-owned store instead — no lifecycle side effect.
+
 ### Query system (varco_core.query)
 
 The query system builds a typed AST over filter/sort/pagination parameters and applies it to
@@ -956,6 +976,12 @@ Am I adding a new capability?
 ├─ File/dir change detection (config reload, cert rotation, anything watching a path)?
 │  └─ → varco_core.watch — never a hand-rolled mtime dict (misses the K8s `..data` rotation)
 │     ↳ Load → swap → notify subscribers on change? → varco_core.reload.ReloadableResource[T]
+│
+├─ TLS/CA/mTLS trust config, or a hot-reloading trust store?
+│  └─ → varco_core.tls.TrustStore (+ ReloadingTrustStore for hot reload)
+│     ↳ a settings-embedded fragment (nested in a ConnectionSettings)?
+│                            → varco_core.connection.SSLConfig, which converts via
+│                              to_trust_store()/TrustStore.to_ssl_config() (lossy the second way)
 │
 ├─ Profiling / performance diagnostic?
 │  ├─ New CPU backend (pyinstrument, py-spy)?

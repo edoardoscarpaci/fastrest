@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -65,6 +66,11 @@ class JwksUrlSource:
         min_refresh_interval: Minimum seconds between consecutive refresh()
                               calls.  Defaults to 10 seconds.
         timeout:              HTTP request timeout in seconds.  Defaults to 10.
+        ssl_context:          Optional ``ssl.SSLContext`` used for the HTTPS request — lets an
+                              internal PKI or an intercepting corporate proxy be trusted
+                              without process-wide env vars (Plan 026 / T5).  ``None``
+                              (the default) means ``urlopen``'s own stdlib default context —
+                              byte-identical to pre-Plan-026 behaviour.
 
     Edge cases:
         - HTTP error (4xx, 5xx) → ``KeyLoadError`` (chained from
@@ -76,6 +82,7 @@ class JwksUrlSource:
           This is valid — the issuer may have no active signing keys yet.
         - A key entry in ``keys`` is missing ``kty`` → ``KeyLoadError``
           (``JsonWebKey.from_dict()`` raises ``KeyError`` on missing ``kty``).
+        - ``ssl_context`` passed for an ``http://`` URL → ignored by ``urlopen``, no error.
 
     Example::
 
@@ -88,6 +95,7 @@ class JwksUrlSource:
         "_cache_ttl",
         "_min_refresh_interval",
         "_timeout",
+        "_ssl_context",
         "_keyset",
         "_loaded_at",
         "_last_refresh",
@@ -100,11 +108,13 @@ class JwksUrlSource:
         cache_ttl: float = 3600.0,
         min_refresh_interval: float = 10.0,
         timeout: float = 10.0,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         self._url = url
         self._cache_ttl = cache_ttl
         self._min_refresh_interval = min_refresh_interval
         self._timeout = timeout
+        self._ssl_context = ssl_context
 
         # None until first successful load() call
         self._keyset: JsonWebKeySet | None = None
@@ -196,7 +206,9 @@ class JwksUrlSource:
                           malformed JWK entry.
         """
         try:
-            with urllib.request.urlopen(self._url, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(
+                self._url, timeout=self._timeout, context=self._ssl_context
+            ) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as e:
             raise KeyLoadError(

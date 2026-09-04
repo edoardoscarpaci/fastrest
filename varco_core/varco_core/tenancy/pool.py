@@ -118,7 +118,8 @@ class TenantResourcePool(Generic[T]):
         exactly once — later callers await the same in-flight creation.
 
         Raises:
-            Whatever ``factory`` raises — no entry is cached on failure.
+            Exception: Whatever ``factory`` raises propagates unchanged — no
+                entry is cached on failure.
         """
         entry = self._entries.get(tenant_id)
         if entry is not None:

@@ -32,9 +32,64 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `AbstractPathWatcher` and `ReloadableResource` structurally satisfy
   `varco_fastapi.lifespan.AbstractLifecycle` with zero import from `varco_core` into
   `varco_fastapi`.
+- **`varco_core.tls` — `TrustStore`, `ReloadingTrustStore` (Plan 026 / T3, T5, T7).**
+  `TrustStore` (a frozen dataclass) is a strict superset of both `SSLConfig`'s `verify=False`
+  escape hatch and the old `varco_fastapi.auth.TrustStore`'s `include_system_cas`/`bytes`-CA
+  support, reachable from any backend — not just `varco_fastapi`. Recursive, multi-folder CA
+  search (`ca_folders`, opt-in on `SSLConfig` via new `recursive`/`cert_patterns` fields,
+  default-on for `TrustStore`), eager mTLS-pairing validation at construction, and
+  `SSLConfig.to_trust_store()` / `TrustStore.to_ssl_config()` as a lossless bridge (carries
+  both `verify` **and** `check_hostname`, unlike the pre-existing
+  `HttpConnectionSettings.to_trust_store()`, which still drops `verify=False`).
+  `ReloadingTrustStore` composes Plan 025's `ReloadableResource[ssl.SSLContext]` +
+  `AbstractPathWatcher` for hot reload: additions-only batches mutate the live
+  `ssl.SSLContext` in place (cheap, the common cert-renewal path); anything removed or
+  replaced rebuilds and swaps the context (`generation` bumps, `subscribe()` fires) —
+  `ssl.SSLContext` has no unload API, so mutation can only ever add trust, never revoke it.
+  `varco_core.tls.bind_trust_store(container, store)` registers an already-owned store as a
+  DI singleton with no lifecycle side effect; there is deliberately no scanned
+  `@Configuration`. `varco_core.tls.iter_cert_files()` is the one cert-glob helper now shared
+  by `SSLConfig`, the deprecated `varco_fastapi.auth.TrustStore`, and `PemFolderSource` — see
+  the `### Changed` entry below for its behavioural delta. Full design:
+  `technical_docs/features/tls-trust-and-hot-reload.md`.
+- **`ssl_context=` on `JwksUrlSource` / `OidcDiscoverySource` (Plan 026 / T5).** Both fetched
+  through a bare `urllib.request.urlopen()` with no SSL context, making a JWKS endpoint behind
+  an internal PKI or an intercepting corporate proxy unverifiable without process-wide env
+  vars. Now accept a keyword-only `ssl_context: ssl.SSLContext | None = None`, forwarded
+  through `IssuerSourceFactory.from_string(ssl_context=)` and
+  `AuthorizationConfig.to_registry(ssl_context=)`. `TrustedIssuerRegistry.from_env()` builds
+  one automatically from `varco_core.tls.TrustStore.from_env()`, but only when at least one CA
+  env var is actually set — `None` (stdlib default) otherwise, byte-identical to before. ⚠️
+  This fixes certificate verification only, not proxy handling — `HTTP_PROXY` still applies.
+
+### Deprecated
+
+- **`varco_fastapi.auth.TrustStore` → `varco_core.tls.TrustStore` (Plan 026 / T3, §D-T3-oq1),
+  removed in 4.0.0.** The `varco_fastapi` type is now a thin subclass of the new
+  `varco_core.tls.TrustStore` that pins its exact 3.0 semantics (non-recursive folder scan,
+  `("*.pem", "*.crt")` cert patterns, mTLS-pairing check deferred to `build_ssl_context()`
+  rather than eager at construction) — every existing construction keeps producing a
+  byte-identical `ssl.SSLContext`. A `DeprecationWarning` fires at construction, not at import.
+  ⚠️ **Asymmetric `isinstance`**: `isinstance(legacy_instance, varco_core.tls.TrustStore)` is
+  `True` (every new API accepts an old object), but
+  `isinstance(core_instance, varco_fastapi.auth.TrustStore)` is `False` — a user who constructs
+  the *new* type and passes it to code that `isinstance`-checks the *old* one will be
+  surprised. Nothing in this repo does such a check
+  (`varco_fastapi/tests/test_http_connection.py:110` checks the legacy type against a value
+  that, by design, still comes back as a legacy instance from `HttpConnectionSettings.
+  to_trust_store()`); audit your own call sites if you do.
 
 ### Changed
 
+- **A cert file matching a wider known pattern set, but not a call site's own patterns, in a
+  `ca_folder`/folder-based JWT key source now logs a WARNING once instead of being silently
+  skipped (Plan 026 / T7).** `SSLConfig`/the deprecated `varco_fastapi.auth.TrustStore` glob
+  `("*.pem", "*.crt")`; `PemFolderSource` globs `("*.pem",)`; none of these defaults changed —
+  a `.cer` file (or any other file matching `varco_core.tls.CERT_FILE_PATTERNS`) is still not
+  loaded by default, but is now named in a WARNING (at most once per `(root, patterns)` per
+  process) instead of vanishing with no trace. Opt a site into the wider set explicitly with
+  `cert_patterns=varco_core.tls.CERT_FILE_PATTERNS` (`SSLConfig`) or
+  `patterns=varco_core.tls.CERT_FILE_PATTERNS` (`PemFolderSource`).
 - **CI: `integration.yml` now cancels stale runs on `main` (Plan 024).** A new workflow-level
   `concurrency` stanza — `group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref
   }}`, `cancel-in-progress: true` — means that when several PRs merge to `main` in quick

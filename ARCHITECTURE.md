@@ -32,6 +32,13 @@ varco_core/              — Domain model, service layer, event system, resilien
   │                         (opt-in `varco-core[watch]`); WatchEvent/WatchKind/WatchTarget
   ├── reload.py           — ReloadableResource[T] — load → swap under a lock → notify
   │                         subscribers, keep-last-good on any post-startup load failure
+  ├── tls/                — TrustStore (unified TLS trust, superset of SSLConfig + the old
+  │   │                     varco_fastapi.auth.TrustStore), ReloadingTrustStore (on watch/
+  │   │                     reload above), iter_cert_files, bind_trust_store (Plan 026)
+  │   ├── store.py        — TrustStore — the frozen-dataclass superset value object
+  │   ├── discovery.py    — CERT_FILE_PATTERNS, iter_cert_files() — the one cert-glob helper
+  │   ├── reload.py       — ReloadStrategy, ReloadingTrustStore
+  │   └── di.py           — bind_trust_store() — no @Configuration, ever (see below)
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
   ├── repository.py      — AsyncRepository[D, PK] protocol
@@ -216,6 +223,51 @@ EventMiddleware (Callable[[Event, str, next] → Awaitable[None]])
       ├── records exception + sets ERROR status on failure
       └── graceful fallback: no-op if opentelemetry is not installed
 ```
+
+### TLS trust (Plan 026 / T3, T5, T7)
+
+One unified TLS trust model, plus its reloading wrapper. Full design (mutate-vs-swap reload
+strategy, the additive `SSL_CERT_FILE`/`SSL_CERT_DIR` divergence, the deprecation shim, a
+Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
+
+```
+TrustStore (varco_core.tls.store, @dataclass(frozen=True))
+  ├── ca_cert: Path | bytes | None,  ca_folders: Path | Sequence[Path] | None
+  ├── cert_patterns: tuple[str, ...] = CERT_FILE_PATTERNS,  recursive: bool = True
+  ├── client_cert / client_key,  include_system_cas,  verify,  check_hostname
+  ├── from_env()            — VARCO_* names + SSL_CERT_FILE/SSL_CERT_DIR (additive, §D-T3-env)
+  ├── build_ssl_context()   → ssl.SSLContext — union of the two predecessor orderings
+  └── to_ssl_config()       ⇄ SSLConfig.to_trust_store()   (lossless bridge, §D-T3-bridge)
+        │
+        └── varco_fastapi.auth.trust_store.TrustStore (subclass, §D-T3-oq1)
+              — ⚠️ DEPRECATED, removed in 4.0.0. Pins 3.0 semantics: recursive=False,
+                cert_patterns=("*.pem","*.crt"), deferred (not eager) mTLS-pairing check.
+                isinstance(legacy, core.TrustStore) is True; the reverse is False.
+
+ReloadingTrustStore (varco_core.tls.reload — composes, does not inherit)
+  ├── spec: TrustStore                                (frozen; the config)
+  ├── _resource: ReloadableResource[ssl.SSLContext]    (Plan 025 / T2 — keep-last-good)
+  ├── _watcher: AbstractPathWatcher                    (Plan 025 / T1 — over ca_folders + cert/key)
+  ├── .context / .generation / async start()/stop()/reload() / subscribe(cb)
+  └── ReloadStrategy: AUTO (default) | MUTATE | SWAP
+        AUTO → additions-only batch: MUTATE the live ssl.SSLContext (adds trust, never revokes —
+               ssl.SSLContext has no unload API); anything removed/replaced: SWAP + bump generation
+
+iter_cert_files(root, *, patterns, recursive)   (varco_core.tls.discovery, §D-T7)
+  — the one cert-glob helper for 4 call sites that used to disagree silently:
+    SSLConfig.build_ssl_context, the legacy TrustStore.build_ssl_context,
+    PemFolderSource._has_changes/_scan. A file matching the wider CERT_FILE_PATTERNS set but
+    not a site's own patterns is skipped AND logged once at WARNING per (root, patterns).
+```
+
+**Rule**: `varco_core.tls` imports **nothing** from `varco_core.connection`, `varco_fastapi`, or
+any backend package — mechanically enforced by `varco_core/tests/test_tls_layering.py` (an AST
+walk over module-level, non-`TYPE_CHECKING` imports; a `sys.modules` walk cannot work here
+because `varco_core/__init__.py` eagerly imports `varco_core.connection` before any `tls`
+submodule body runs). The bridge the other direction, `SSLConfig.to_trust_store()`, lives in
+`varco_core.connection.ssl`, not in `varco_core.tls`, precisely so this package stays a leaf.
+
+**Rule**: no scanned `@Configuration` in `varco_core.tls`, ever (§D-T3-oq3) — see CLAUDE.md.
 
 ### Service Layer
 

@@ -434,9 +434,8 @@ class NatsDLQ(AbstractDeadLetterQueue):
         Args:
             entry_id: The ``DeadLetterEntry.entry_id`` to acknowledge.
 
-        Raises:
-            Nothing — a failed acknowledgement is logged, never propagated, so
-            it cannot abort a relay/redrive loop mid-batch.
+        **Never raises** — a failed acknowledgement is logged, never
+        propagated, so it cannot abort a relay/redrive loop mid-batch.
 
         Edge cases:
             - Calling with an unknown ``entry_id`` (not returned by a prior

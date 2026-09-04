@@ -754,6 +754,19 @@ class TrustedIssuerRegistry:
 
     # ── Factory ───────────────────────────────────────────────────────────────
 
+    # The CA env var names that, if ANY is non-empty, trigger building an ssl_context for
+    # from_env()'s URL-based issuer sources (Plan 026 / T5) — exactly the set
+    # varco_core.tls.TrustStore.from_env() itself reads (VARCO_* names + the additive
+    # SSL_CERT_FILE/SSL_CERT_DIR pair, §D-T3-env).
+    _CA_TRIGGER_ENV_VARS: ClassVar[tuple[str, ...]] = (
+        "VARCO_TRUST_STORE_DIR",
+        "VARCO_CA_CERT",
+        "VARCO_CLIENT_CERT",
+        "VARCO_CLIENT_KEY",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+    )
+
     @classmethod
     def from_env(cls) -> TrustedIssuerRegistry:
         """
@@ -761,6 +774,14 @@ class TrustedIssuerRegistry:
 
         Reads ``FASTREST_AUTHORIZATION__<LABEL>__URL`` and
         ``FASTREST_AUTHORIZATION__<LABEL>__ISS`` pairs from the environment.
+
+        Also builds an ``ssl.SSLContext`` for the two URL-based issuer source kinds
+        (``jwks::``/``oidc::``, Plan 026 / T5) from ``varco_core.tls.TrustStore.from_env()`` —
+        but **only when at least one of the CA env vars it reads is actually set**
+        (``VARCO_TRUST_STORE_DIR``, ``VARCO_CA_CERT``, ``VARCO_CLIENT_CERT``,
+        ``VARCO_CLIENT_KEY``, ``SSL_CERT_FILE``, ``SSL_CERT_DIR``). With none of them set,
+        ``ssl_context`` stays ``None`` — byte-identical to pre-Plan-026 behaviour
+        (``urlopen(..., context=None)``, the stdlib default).
 
         Returns:
             Populated ``TrustedIssuerRegistry``.  Call ``load_all()`` after
@@ -774,8 +795,13 @@ class TrustedIssuerRegistry:
             FASTREST_AUTHORIZATION__GOOGLE__ISS = https://accounts.google.com
         """
         from varco_core.authority.config import AuthorizationConfig
+        from varco_core.tls.store import TrustStore
 
-        return AuthorizationConfig.from_env().to_registry()
+        ssl_context = None
+        if any(os.environ.get(name) for name in cls._CA_TRIGGER_ENV_VARS):
+            ssl_context = TrustStore.from_env().build_ssl_context()
+
+        return AuthorizationConfig.from_env().to_registry(ssl_context=ssl_context)
 
     @classmethod
     async def from_container(

@@ -180,14 +180,14 @@ class TenantControlService:
             (``TenantProvisionConsumer``) may ignore it.
 
         Raises:
-            Whatever the provisioner raises — the authority path leaves
-            status as-is (never advanced to ``ACTIVE`` on failure) and the
-            error propagates for the caller (REST handler / consumer retry
-            loop) to handle.
-            Whatever the catalog raises on ``get()`` other than
-            ``TenantNotFoundError`` — a catalog **outage** must not be
-            mistaken for an unknown tenant and silently become
-            ``add(PENDING)``.
+            Exception: Whatever the provisioner raises — the authority path
+                leaves status as-is (never advanced to ``ACTIVE`` on failure)
+                and the error propagates for the caller (REST handler /
+                consumer retry loop) to handle.
+            Exception: Whatever the catalog raises on ``get()`` other
+                than ``TenantNotFoundError`` — a catalog **outage** must not be
+                mistaken for an unknown tenant and silently become
+                ``add(PENDING)``.
 
         Edge cases:
             - Already ``ACTIVE`` → the existing descriptor is returned

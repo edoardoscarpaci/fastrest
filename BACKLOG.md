@@ -82,20 +82,38 @@ pydantic 48 ms, PyJWT 45 ms, lark 32 ms, psutil 17 ms — all unconditional toda
 | **`slots` / reflection work as a decided outcome** | Not parked as *ideas* — filed as P3/P4. Parked as *decisions*: neither may be implemented until P2 can measure it | P2 lands and produces a benchmark showing a real win |
 | **PEP 810 native lazy imports** | Lands in Python 3.15; this repo's matrix is 3.12/3.13. P1 uses PEP 562, which ships today | The support matrix reaches 3.15 |
 
-## Open questions for `/plan`
+## Open questions for `/plan` — 1-3 ANSWERED (Plan 026)
 
-1. **T3's deprecation shim shape** — is `varco_fastapi.auth.TrustStore` a plain re-export alias, or
-   a subclass that keeps `include_system_cas` semantics exactly as they are today? The two differ
-   for anyone doing `isinstance` checks. AB-1/AB-2 set the precedent but neither had a behavioural
-   delta to preserve.
-2. **Does `SSLConfig` also gain reload**, or does it stay a static value object with
-   `varco_core.tls.TrustStore` as the only reloadable path? Additive either way; the question is
-   whether two objects should both be reloadable.
-3. **Where does the `ReloadingTrustStore` background task get started** — its own
-   `AbstractLifecycle` registered in `VarcoLifespan`, or a `@Configuration` in `varco_core`? The
-   broker backends that consume `SSLConfig` are not necessarily inside a FastAPI lifespan.
+1. **T3's deprecation shim shape** — ~~is `varco_fastapi.auth.TrustStore` a plain re-export
+   alias, or a subclass that keeps `include_system_cas` semantics exactly as they are today?~~
+   **Answered**: a subclass, not a plain alias — a plain alias was never available here, unlike
+   AB-1/AB-2, because the old and new names do not denote the same behaviour (the new type is
+   recursive by default and globs a wider cert set; aliasing would silently widen every
+   existing `varco_fastapi.auth.TrustStore` construction on upgrade). The subclass pins the
+   exact 3.0 semantics (non-recursive scan, `("*.pem", "*.crt")` patterns, deferred mTLS-pairing
+   check) and accepts the resulting `isinstance` asymmetry
+   (`isinstance(legacy, core.TrustStore)` is `True`; the reverse is `False`) as a documented,
+   CHANGELOG'd cost of a deprecation window. See plan 026 §D-T3-oq1.
+2. **Does `SSLConfig` also gain reload** — ~~or does it stay a static value object with
+   `varco_core.tls.TrustStore` as the only reloadable path?~~ **Answered**: `SSLConfig` stays
+   frozen and static; `varco_core.tls.ReloadingTrustStore` is the only reloadable path. Making
+   `SSLConfig` reloadable would turn every settings object constructed at import/DI time into an
+   unmanaged background-task owner — `SSLConfig` gains only `recursive`/`cert_patterns` (opt-in)
+   and the lossless `to_trust_store()` conversion. See plan 026 §D-T3-oq2.
+3. **Where does the `ReloadingTrustStore` background task get started** — ~~its own
+   `AbstractLifecycle` registered in `VarcoLifespan`, or a `@Configuration` in `varco_core`?~~
+   **Answered**: `ReloadingTrustStore` owns `start()`/`stop()` itself (inherited shape from Plan
+   025's watch/reload composition) and is an `async` context manager; **no** `@Configuration` is
+   added to `varco_core` — `container.scan("varco_core", recursive=True)` is a documented,
+   in-use pattern that auto-activates every scanned `@Configuration`, which would start a
+   filesystem watcher in every app that scans `varco_core`. `varco_core/tls/di.py` exposes only
+   `bind_trust_store(container, store)`, with no lifecycle side effect; a FastAPI app registers
+   an already-started store with `lifespan.register(store)`, non-FastAPI consumers use `async
+   with store:` or call `start()`/`stop()` directly. See plan 026 §D-T3-oq3.
 4. **P1's CI ceiling value** — a hard number (e.g. 100 ms) or a ratchet against the committed
    previous measurement? A hard number is clearer; a ratchet cannot be gamed by a slow runner.
+   **Not answered by Plan 026** — P1 (import-time budget) is unrelated to T3/T5/T7 and is still
+   open.
 
 ---
 

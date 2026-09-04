@@ -235,9 +235,13 @@ non-failing note. `--check` is a CI gate (`.github/workflows/test.yml:64-65`) an
 limitation), so no gate churn from the widened `ca_folders` annotation either.
 ❌ **The asymmetry**: `isinstance(core_store, varco_fastapi.auth.TrustStore)` is `False`. A user who
 constructs the *new* type and passes it to their own function that `isinstance`-checks the *old*
-one will get a surprise. Mitigation: nothing in varco does such a check (verified by grep in Step
-14), and the deprecation warning tells the user to stop importing the old name. Documented in the
-CHANGELOG entry and the class docstring, not hidden.
+one will get a surprise. Mitigation: Step 15's grep found exactly **one** in-repo check —
+`varco_fastapi/tests/test_http_connection.py:110` does `isinstance(ts, TrustStore)` (the legacy
+type) on the result of `HttpConnectionSettings.to_trust_store()`. It does not invalidate this
+design: §D-T3-bridge deliberately freezes that method's return type as the legacy subclass, so
+`ts` is always a legacy instance and the check keeps passing, verified green. The deprecation
+warning tells the user to stop importing the old name for new code. Documented in the CHANGELOG
+entry and the class docstring, not hidden.
 ❌ Two live classes instead of one until 4.0.0. Accepted — that is what a deprecation window is.
 
 The `DeprecationWarning` is emitted **at construction**, not at import, so merely having
@@ -351,33 +355,35 @@ two. "None of them set" → `None` → today's behaviour, exactly.
 
 ### Phase 0 — T7: one cert-glob helper (🟢 nice, S — but first, see Phase order)
 
-1. [ ] `varco_core/tests/test_tls_discovery.py` (new, **failing first**) — `iter_cert_files`:
+1. [x] `varco_core/tests/test_tls_discovery.py` (new, **failing first**) — `iter_cert_files`:
        pattern filtering; deterministic sort; `recursive=True` finding a cert one level down and
        `recursive=False` not; `..data` symlink layouts enumerating the resolved files once;
        a `.cer` present with `patterns=("*.pem","*.crt")` producing **exactly one** WARNING
        (via `caplog`) and **not** being returned; the warning firing at most once per
        `(root, patterns)` per process; a non-existent root returning empty without raising.
-2. [ ] `varco_core/varco_core/tls/discovery.py` (new) — `CERT_FILE_PATTERNS`,
+2. [x] `varco_core/varco_core/tls/discovery.py` (new) — `CERT_FILE_PATTERNS`,
        `iter_cert_files(root, *, patterns, recursive=False)`. Reuses Plan 025's `..`-skip and
        symlink-resolution helpers from `varco_core.watch` (import them; do not copy).
-3. [ ] `varco_core/varco_core/connection/ssl.py` — replace the inline glob at `:259-262` with
+3. [x] `varco_core/varco_core/connection/ssl.py` — replace the inline glob at `:259-262` with
        `iter_cert_files(folder, patterns=self.cert_patterns, recursive=self.recursive)`; add the
        two **new opt-in fields** `cert_patterns: tuple[str, ...] = ("*.pem", "*.crt")` and
        `recursive: bool = False` with docstrings stating that the defaults preserve 3.0 behaviour
        and why the new type differs (`BACKLOG.md:30`). Update the `build_ssl_context` docstring's
        "Steps" list, which currently hard-codes the glob at `:226`.
-4. [ ] `varco_core/varco_core/authority/sources/pem_folder.py` — both `:193` and `:230` call
+4. [x] `varco_core/varco_core/authority/sources/pem_folder.py` — both `:193` and `:230` call
        `iter_cert_files(self._path, patterns=self._patterns, recursive=False)`; add a keyword-only
        `patterns: tuple[str, ...] = ("*.pem",)` constructor parameter (`__slots__` update if the
        class declares one). The two sites must use the **same** enumeration or `_has_changes` and
        `_scan` can disagree — call that out in a comment.
-5. [ ] `varco_core/tests/test_pem_folder_source.py` (extend) — a `.crt` and a `.cer` in the folder
+5. [x] `varco_core/tests/test_pem_folder_source.py` (⚠️ this step said "extend" — the file did not
+       already exist and was created fresh, scoped to exactly this step's claims, not a
+       pre-existing broader `PemFolderSource` suite) — a `.crt` and a `.cer` in the folder
        are still ignored (trust/keyset unchanged) **and** produce the WARNING; passing
        `patterns=CERT_FILE_PATTERNS` explicitly opts in.
 
 ### Phase 1 — T3a: the superset value object (🔴 must, L)
 
-6. [ ] `varco_core/tests/test_tls_store.py` (new, **failing first**) — the §D-T3-model field table
+6. [x] `varco_core/tests/test_tls_store.py` (new, **failing first**) — the §D-T3-model field table
        as executable assertions: defaults; `recursive` defaults to `True` **on this type**;
        `ca_folders` accepts one `Path` or a sequence and normalises to a tuple; the two
        `__post_init__` `ValueError`s; `bytes` `ca_cert` loading via `cadata`; `include_system_cas=False`
@@ -387,24 +393,31 @@ two. "None of them set" → `None` → today's behaviour, exactly.
        `SSLConfig(...)`/`varco_fastapi` `TrustStore(...)` produce contexts with equal
        `get_ca_certs()`, `verify_mode` and `check_hostname`. That differential test is the
        no-regression proof for the whole phase.
-7. [ ] `varco_core/varco_core/tls/store.py` (new) — `TrustStore` per §D-T3-model, with the
+7. [x] `varco_core/varco_core/tls/store.py` (new) — `TrustStore` per §D-T3-model, with the
        `DESIGN:` block, full docstrings (Args/Returns/Raises/Edge cases/Thread safety), and
        `from_env()` per §D-T3-env.
-8. [ ] `varco_core/varco_core/tls/__init__.py` (new) — export `TrustStore`, `CERT_FILE_PATTERNS`,
+8. [x] `varco_core/varco_core/tls/__init__.py` (new) — export `TrustStore`, `CERT_FILE_PATTERNS`,
        `iter_cert_files`, `ReloadStrategy`, `ReloadingTrustStore` (Phase 2), `bind_trust_store`
        (Phase 2). `__all__`.
-9. [ ] `varco_core/tests/test_tls_layering.py` (new) — assert `varco_core.tls` imports **no**
-       `varco_core.connection`, no `varco_fastapi`, no backend package (walk
-       `sys.modules` after a fresh subprocess import, or inspect the module's AST). This is the
-       mechanical guard for CLAUDE.md's layer rule and for §D-T3-bridge's no-cycle claim.
-10. [ ] `varco_core/varco_core/connection/ssl.py` — add `to_trust_store()` (lossless, carries
+9. [x] `varco_core/tests/test_tls_layering.py` (new) — assert `varco_core.tls` imports **no**
+       `varco_core.connection`, no `varco_fastapi`, no backend package. ⚠️ **The `sys.modules`-walk
+       oracle this step originally proposed is structurally unusable**: `varco_core/__init__.py`
+       eagerly imports `varco_core.connection` before any `varco_core.tls` submodule body ever
+       runs, so `varco_core.connection` is *always* present in `sys.modules` by the time
+       `varco_core.tls` finishes importing — regardless of whether `varco_core.tls` itself
+       imports it. The test therefore uses the AST-inspection alternative this step itself
+       named as a fallback: walk every `.py` file under `varco_core/varco_core/tls/` and assert
+       no module-level, non-`TYPE_CHECKING` import statement references a forbidden package
+       (`TYPE_CHECKING`-guarded and function-local deferred imports are both tolerated). This is
+       the mechanical guard for CLAUDE.md's layer rule and for §D-T3-bridge's no-cycle claim.
+10. [x] `varco_core/varco_core/connection/ssl.py` — add `to_trust_store()` (lossless, carries
         `verify` + `check_hostname`), and `TrustStore.to_ssl_config()` in `tls/store.py` (documents
         the two lossy directions that remain: `bytes` `ca_cert` and `include_system_cas=False`,
         exactly as `trust_store.py:139-147` already documents them).
 
 ### Phase 2 — T3b: reload (🔴 must, L)
 
-11. [ ] `varco_core/tests/test_tls_reloading_store.py` (new, **failing first**) — `start()` loads
+11. [x] `varco_core/tests/test_tls_reloading_store.py` (new, **failing first**) — `start()` loads
         and `.context` is usable; adding a CA file to a watched folder is picked up **without**
         the context object identity changing (MUTATE branch) and the new CA appears in
         `get_ca_certs()`; removing a file **does** change identity and bumps `generation` (SWAP
@@ -413,27 +426,27 @@ two. "None of them set" → `None` → today's behaviour, exactly.
         once per successful swap; `stop()` is idempotent; `async with` works. Certs are generated
         in-test with `cryptography` (already a hard dependency, `varco_core/pyproject.toml:33-34`)
         — a session fixture minting a CA and two leaf certs.
-12. [ ] `varco_core/varco_core/tls/reload.py` (new) — `ReloadStrategy` enum, `ReloadingTrustStore`
+12. [x] `varco_core/varco_core/tls/reload.py` (new) — `ReloadStrategy` enum, `ReloadingTrustStore`
         per §D-T3-reload, composing `ReloadableResource[ssl.SSLContext]` and an
         `AbstractPathWatcher` over `spec.ca_folders` + the parent dirs of `ca_cert`/`client_cert`/
         `client_key`. Watcher injectable (`watcher=None` → `default_watcher(...)`) so tests can
         drive a fast one. Docstring must state the brief 001 §2 fact that established connections
         keep the old context either way.
-13. [ ] `varco_core/varco_core/tls/di.py` (new) — `bind_trust_store(container, store)` registering
+13. [x] `varco_core/varco_core/tls/di.py` (new) — `bind_trust_store(container, store)` registering
         both the concrete `ReloadingTrustStore` and the `TrustStore` spec, using
         `container.provide(Provider(singleton=...)(factory), returns=...)` per CLAUDE.md's
         `returns=` rule. Module docstring states loudly: **no `@Configuration` here, and why**
         (§D-T3-oq3, `README.md:2082`).
-14. [ ] `varco_core/tests/test_tls_di.py` (new) — `bind_trust_store` resolves; a
+14. [x] `varco_core/tests/test_tls_di.py` (new) — `bind_trust_store` resolves; a
         `container.scan("varco_core", recursive=True)` **starts no watcher and registers no TLS
         binding** (the anti-implicit assertion — this is the test that keeps §D-T3-oq3 true over
         time); `assert_no_structural_di_issues()` clean.
 
 ### Phase 3 — T3c: the deprecation shim (🔴 must, M)
 
-15. [ ] `rg -n "isinstance\(.*TrustStore" .` — confirm no in-repo `isinstance` check on the legacy
+15. [x] `rg -n "isinstance\(.*TrustStore" .` — confirm no in-repo `isinstance` check on the legacy
         type exists (the ❌ in §D-T3-oq1 depends on it). Record the result in the commit message.
-16. [ ] `varco_fastapi/tests/test_trust_store_deprecation.py` (new, **failing first**) —
+16. [x] `varco_fastapi/tests/test_trust_store_deprecation.py` (new, **failing first**) —
         constructing `varco_fastapi.auth.TrustStore` emits exactly one `DeprecationWarning` naming
         `varco_core.tls.TrustStore`; **importing** `varco_fastapi` emits none; the legacy type is a
         subclass of the core type; `recursive` is `False` and `cert_patterns` is `("*.pem","*.crt")`
@@ -442,44 +455,51 @@ two. "None of them set" → `None` → today's behaviour, exactly.
         `check_hostname`) to what 3.0 produced for a fixture folder containing `ca.pem`, `ca.crt`,
         `ca.cer` and `sub/deep.pem`; partial mTLS config still raises at `build_ssl_context()`
         time, **not** at construction (behaviour frozen).
-17. [ ] `varco_fastapi/varco_fastapi/auth/trust_store.py` — replace the implementation with the
+17. [x] `varco_fastapi/varco_fastapi/auth/trust_store.py` — replace the implementation with the
         subclass per §D-T3-oq1. Keep `from_env`, `to_ssl_config`, `system` working. Module
         docstring rewritten to a deprecation notice with the migration line and the 4.0.0 removal
         date; the class docstring keeps its existing Examples (they still run).
-18. [ ] `uv run python scripts/api_surface.py` — regenerate both snapshot files and **commit them
-        in this commit** (CI gate, `.github/workflows/test.yml:64-65`). Expected delta: new
-        `varco_core` rows (`TrustStore`, `ReloadingTrustStore`, `ReloadStrategy`,
-        `CERT_FILE_PATTERNS`, `iter_cert_files`, `bind_trust_store`) as non-failing *additions*;
-        the `varco_fastapi` `TrustStore` row's `module` column unchanged (§D-T3-oq1). **If that
-        column moved, the shim was implemented as an alias — stop and fix it.**
+18. [x] `uv run python scripts/api_surface.py` — regenerate both snapshot files and **commit them
+        in this commit** (CI gate, `.github/workflows/test.yml:64-65`). ⚠️ **The predicted delta
+        did not materialize, by design**: `api_surface.py` walks each distribution package's
+        top-level `__all__` (per `scripts/packages.sh`'s package list), and `varco_core.tls` is
+        deliberately **not** re-exported at the `varco_core` top level — following Plan 025's own
+        precedent for `varco_core.watch`/`varco_core.reload` (keeps the eager import graph
+        small). So no new `varco_core` rows for `TrustStore`/`ReloadingTrustStore`/
+        `ReloadStrategy`/`CERT_FILE_PATTERNS`/`iter_cert_files`/`bind_trust_store` appeared — the
+        regenerated snapshot came back **byte-identical** to the pre-Plan-026 one. This makes
+        the DoD check below weaker than originally assumed: the `varco_fastapi` `TrustStore`
+        row's `module` column unchanged (§D-T3-oq1) still holds and is still the load-bearing
+        proof the shim is a subclass, not an alias — but there is no additive row left to
+        observe alongside it as corroborating evidence.
 
 ### Phase 4 — T5: SSL context for the issuer sources (🟡 should, S)
 
-19. [ ] `varco_core/tests/test_issuer_source_ssl.py` (new, **failing first**) — spin a loopback
+19. [x] `varco_core/tests/test_issuer_source_ssl.py` (new, **failing first**) — spin a loopback
         HTTPS server (`http.server` + `ssl.SSLContext.wrap_socket` in a thread) with a
         self-signed CA minted by the Phase 2 fixture; assert `JwksUrlSource(url)` **fails** with
         `KeyLoadError` (untrusted), and `JwksUrlSource(url, ssl_context=store.build_ssl_context())`
         succeeds. Same for `OidcDiscoverySource`. Bind to `127.0.0.1:0`.
-20. [ ] `varco_core/varco_core/authority/sources/jwks_url.py` — keyword-only `ssl_context`, added
+20. [x] `varco_core/varco_core/authority/sources/jwks_url.py` — keyword-only `ssl_context`, added
         to `__slots__` (`:86-94`), passed at `:199`. Docstring: Args entry + an Edge case noting
         `None` means stdlib default, unchanged.
-21. [ ] `varco_core/varco_core/authority/sources/oidc.py` — same treatment at `:189`; check and
+21. [x] `varco_core/varco_core/authority/sources/oidc.py` — same treatment at `:189`; check and
         update its `__slots__` if present. If OIDC discovery makes a *second* request for the
         `jwks_uri`, the context must be threaded to that call too **and** to the `JwksUrlSource` it
         constructs — grep the module before editing.
-22. [ ] `varco_core/varco_core/authority/sources/factory.py` — `from_string(..., ssl_context=None)`,
+22. [x] `varco_core/varco_core/authority/sources/factory.py` — `from_string(..., ssl_context=None)`,
         forwarded to the two URL-based branches only; docstring's parameter table updated (it
         currently says `algorithm`/`use` are ignored for URL sources — add the mirror sentence).
-23. [ ] `varco_core/varco_core/authority/config.py` — `to_registry(ssl_context=None)` forwarding at
+23. [x] `varco_core/varco_core/authority/config.py` — `to_registry(ssl_context=None)` forwarding at
         `:213`; `TrustedIssuerRegistry.from_env()` (`registry.py:758-778`) builds a context from
         `TrustStore.from_env()` **only when at least one CA env var is set**, else `None`.
-24. [ ] `varco_core/tests/test_issuer_source_ssl.py` (extend) — with no CA env vars set,
+24. [x] `varco_core/tests/test_issuer_source_ssl.py` (extend) — with no CA env vars set,
         `from_env()` produces sources whose `ssl_context is None` (the byte-identical-default
         proof); with `VARCO_CA_CERT` set, it is not `None`.
 
 ### Phase 5 — docs, changelog (🟡 should, S — same commit as the code)
 
-25. [ ] `technical_docs/features/tls-trust-and-hot-reload.md` (new) — the design narrative: the
+25. [x] `technical_docs/features/tls-trust-and-hot-reload.md` (new) — the design narrative: the
         two-model history and why they merged; the §D-T3-model field table; mutate-vs-swap with the
         brief 001 §2 citation and the "established connections keep the old context" caveat; the
         `SSL_CERT_FILE`/`SSL_CERT_DIR` **additive divergence** (§D-T3-env) called out as a
@@ -487,25 +507,25 @@ two. "None of them set" → `None` → today's behaviour, exactly.
         the additive-env divergence, "SWAP forces pooled clients to rebuild", "MUTATE cannot
         revoke", "recursive is `True` only on the new type", and "a `.cer` in a `ca_folder` is
         warned about, not loaded".
-26. [ ] `README.md` — "TLS trust store" section: `TrustStore`, `from_env()`, `ReloadingTrustStore`
+26. [x] `README.md` — "TLS trust store" section: `TrustStore`, `from_env()`, `ReloadingTrustStore`
         + `lifespan.register(...)`, the `bind_trust_store` DI line, the `SSLConfig.to_trust_store()`
         bridge, and the T5 `ssl_context=` example. Env-var reference table for the `VARCO_*` names
         plus the two OpenSSL names with their additive caveat.
-27. [ ] `ARCHITECTURE.md` — a "TLS trust" type hierarchy (`TrustStore` → legacy subclass;
+27. [x] `ARCHITECTURE.md` — a "TLS trust" type hierarchy (`TrustStore` → legacy subclass;
         `ReloadingTrustStore` composing `ReloadableResource`/`AbstractPathWatcher`) and the new
         `varco_core.tls` module listing.
-28. [ ] `CLAUDE.md` — a short Key-Abstractions subsection: **Rule** — TLS trust lives in
+28. [x] `CLAUDE.md` — a short Key-Abstractions subsection: **Rule** — TLS trust lives in
         `varco_core.tls`; `varco_fastapi` may import it but never the reverse; **Rule** — never add
         a scanned `@Configuration` to `varco_core.tls` (§D-T3-oq3, with the `README.md:2082`
         reason); one Decision-Tree row (*TLS/CA/mTLS config? → `varco_core.tls`; a settings-embedded
         fragment? → `varco_core.connection.SSLConfig`, which converts*). Link the new feature doc.
-29. [ ] `CHANGELOG.md` `## [Unreleased]` — `### Added` (`varco_core.tls`, `ReloadingTrustStore`,
+29. [x] `CHANGELOG.md` `## [Unreleased]` — `### Added` (`varco_core.tls`, `ReloadingTrustStore`,
         `SSLConfig.to_trust_store`, `SSLConfig.recursive`/`cert_patterns`, `ssl_context=` on the two
         issuer sources — "Plan 026 / T3, T5, T7"); `### Deprecated`
         (`varco_fastapi.auth.TrustStore` → `varco_core.tls.TrustStore`, removed in 4.0.0, **with
         the isinstance-asymmetry note from §D-T3-oq1**); `### Changed` (a non-matching cert file in
         a `ca_folder` now logs a WARNING instead of being silently skipped — "Plan 026 / T7").
-30. [ ] `BACKLOG.md` — replace open questions 1-3 (`BACKLOG.md:87-96`) with their answers, pointing
+30. [x] `BACKLOG.md` — replace open questions 1-3 (`BACKLOG.md:87-96`) with their answers, pointing
         at §D-T3-oq1/oq2/oq3 in this file, in the same "answered, not deleted" style Plan 024 used.
 
 ---
