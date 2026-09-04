@@ -1,0 +1,52 @@
+{
+  "varco_core": {
+    "measured_ms": 6.6,
+    "ceiling_ms": 25.0,
+    "observations": []
+  },
+  "varco_kafka": {
+    "measured_ms": 143.9,
+    "ceiling_ms": 290.0,
+    "observations": []
+  },
+  "varco_nats": {
+    "measured_ms": 207.9,
+    "ceiling_ms": 415.0,
+    "observations": []
+  },
+  "varco_redis": {
+    "measured_ms": 256.0,
+    "ceiling_ms": 510.0,
+    "observations": []
+  },
+  "varco_beanie": {
+    "measured_ms": 260.5,
+    "ceiling_ms": 520.0,
+    "observations": []
+  },
+  "varco_sa": {
+    "measured_ms": 308.9,
+    "ceiling_ms": 620.0,
+    "observations": []
+  },
+  "varco_memcached": {
+    "measured_ms": 207.9,
+    "ceiling_ms": 415.0,
+    "observations": []
+  },
+  "varco_ws": {
+    "measured_ms": 119.4,
+    "ceiling_ms": 240.0,
+    "observations": []
+  },
+  "varco_fastapi": {
+    "measured_ms": 342.9,
+    "ceiling_ms": 685.0,
+    "observations": []
+  },
+  "varco_casbin": {
+    "measured_ms": 398.9,
+    "ceiling_ms": 800.0,
+    "observations": []
+  }
+}

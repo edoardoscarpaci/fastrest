@@ -29,6 +29,22 @@ make test PKG=varco_redis                # narrow to one package
 | `make lint` | `ruff check .` **+** `ruff format --check .` (the formatter is a CI gate, Plan 020 / RL-17) **+** `scripts/api_surface.py --check` (a CI gate as of Plan 024 / C5 — regenerate and commit the snapshot alongside any `__all__`/exported-function-signature change: `uv run python scripts/api_surface.py`) |
 | `make type-check` | `mypy` over the ten source dirs, `strict = true` |
 | `make test` | all eleven unit-test suites |
+| `make bench` | *optional* — runs `benchmarks/` uninstrumented as plain pytest tests. Not part of `make lint`/`make test`, and ⛔ **never a required check** |
+
+`make lint` (with no `PKG=`) also runs `scripts/import_budget.py --check --warn-only` — the
+`-X importtime` budget from Plan 028. A breach **prints and exits 0 today**; the flip to a real
+gate is blocked on ≥10 recorded CI observations. If you add a top-level `import` to any
+`varco_*/__init__.py`, run it and look at the output rather than assuming the import is free —
+`varco_core/__init__.py` is PEP 562 lazy on purpose and is easy to undo by accident. Ceilings live
+in `design/async-performance-patterns/measurements/import-budget.json` and only ever move in a
+reviewed diff.
+
+Benchmarks live in `benchmarks/` (one `bench_*.py` module per hot path), need the root `bench`
+dependency group (`uv run --group bench …`), and are wired to CodSpeed by
+`.github/workflows/bench.yml` — a **separate, comment-only** workflow. It is not in `test.yml`'s
+`needs:` and must never appear in `all-green`'s `needs:` or in branch protection: `Tests / All
+tests passed` is the only required check. See `benchmarks/README.md` for the three standing rules
+(never a gate; never import a container-backed backend; never assert on time).
 
 ⚠️ **Never invoke linting via `uvx ruff`.** `uvx` resolves whatever the newest ruff release is at
 the moment you run it, which can silently diverge from the pin CI enforces

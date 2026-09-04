@@ -63,6 +63,14 @@ jobs:
           varco_fastapi/varco_fastapi varco_casbin/varco_casbin
       - name: api surface --check
         run: uv run python scripts/api_surface.py --check
+      # Plan 028 / Phase 1 (P1b), Step 12. WARN-ONLY on purpose: the ~2x
+      # ceiling headroom in import-budget.json is an assumption about
+      # GitHub-runner variance that no source quantifies, so a breach prints
+      # and exits 0 today. Plan 028's Step 14 drops `--warn-only` here (and in
+      # `make lint`) once >= 10 observations across both matrix legs have been
+      # appended to each entry's `observations` array — Step 13.
+      - name: import budget --check (warn-only)
+        run: uv run python scripts/import_budget.py --check --warn-only
   unit:
     name: Unit tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest

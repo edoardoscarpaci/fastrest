@@ -295,9 +295,13 @@ varco_core.tls.pkcs12 (Plan 027 / T6b, §D-T6-pkcs12)
 **Rule**: `varco_core.tls` imports **nothing** from `varco_core.connection`, `varco_fastapi`, or
 any backend package — mechanically enforced by `varco_core/tests/test_tls_layering.py` (an AST
 walk over module-level, non-`TYPE_CHECKING` imports; a `sys.modules` walk cannot work here
-because `varco_core/__init__.py` eagerly imports `varco_core.connection` before any `tls`
-submodule body runs). The bridge the other direction, `SSLConfig.to_trust_store()`, lives in
-`varco_core.connection.ssl`, not in `varco_core.tls`, precisely so this package stays a leaf.
+because the full test suite runs in one process and countless other tests already import
+`varco_core.connection` before `test_tls_layering.py` ever runs, so `varco_core.connection`
+would already be in `sys.modules` regardless of whether `varco_core.tls` itself imports it —
+note this is no longer caused by `varco_core/__init__.py` itself, which is PEP 562-lazy as of
+Plan 028/P1a and does not eagerly import `connection`). The bridge the other direction,
+`SSLConfig.to_trust_store()`, lives in `varco_core.connection.ssl`, not in `varco_core.tls`,
+precisely so this package stays a leaf.
 
 **Rule**: no scanned `@Configuration` in `varco_core.tls`, ever (§D-T3-oq3) — see CLAUDE.md.
 

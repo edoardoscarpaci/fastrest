@@ -152,6 +152,64 @@ differed by interpreter would make `--check` unrunnable in CI. So `--check` catc
 heap addresses in sentinel default values are stripped, or every run would report a spurious
 change — see `_ADDRESS_RE`.) Additions and module moves are reported as notes and never fail.
 
+### Import-time budget (`scripts/import_budget.py`)
+
+`scripts/import_budget.py` (Plan 028 / P1b) measures each distribution package's
+`python -X importtime` cost **above a bare-interpreter baseline measured in the same job**
+(best-of-5, fresh subprocesses, self-times summed) and compares it against a hard ceiling
+committed in `design/async-performance-patterns/measurements/import-budget.json`. Same
+RL-18 package derivation as `api_surface.py`/`bump.py` — it executes `scripts/packages.sh`.
+
+```bash
+uv run python scripts/import_budget.py --check --warn-only   # what make lint / CI run today
+uv run python scripts/import_budget.py --check               # the same, as a gate
+uv run python scripts/import_budget.py --update              # rewrite measured_ms, never ceilings
+make import-budget                                           # the warn-only form
+```
+
+**Rule: a new top-level `import` in a `varco_*` `__init__.py` needs a budget check, not a hunch.**
+`varco_core/__init__.py` is PEP 562 lazy as of 3.1 (289.6 ms → 6.6 ms); re-eagerising even one of
+the four measured contributors (`lark`, `jwt`, `psutil`, `opentelemetry.sdk`) undoes it. Run the
+script before assuming an import is free.
+
+⚠️ **Warn-only today, a gate tomorrow.** It is wired into `make lint`'s no-`PKG` path (beside
+`api-check` — `make lint PKG=<one>` stays narrow, the §D-C5 rule) and into `test.yml`'s `lint` job,
+in both cases **with `--warn-only`**: a breach prints loudly and exits 0. The flip to a real gate
+is Plan 028's Phase 2 (Steps 13-14) and is deliberately blocked on ≥10 real CI observations
+recorded in each entry's `observations` array, because the ~2× ceiling headroom is an assumption
+about GitHub-runner variance that no source quantifies. Until those exist, **do not drop
+`--warn-only`** — and never "fix" a breach by raising a ceiling silently; a ceiling only moves in a
+reviewed diff with the observations as justification.
+
+⚠️ **Contrast with the benchmark harness, which is never a gate** (see below). Import time is a
+structural property measured in a fresh subprocess with best-of-N, whose failure mode is "someone
+added a top-level import" — reproducible and actionable. A microbenchmark on a shared GitHub
+runner is neither. The asymmetry is deliberate; do not "unify" it in either direction.
+
+### Benchmarks (`make bench`, `benchmarks/`, CodSpeed)
+
+`benchmarks/` (Plan 028 / P2) holds seven in-process, Docker-free, deterministic benchmarks over
+the paths varco pays per request — query parse, AST build + SA compile, DTO roundtrip,
+`AsyncService.create()`, event publish, cache get/set, and a subprocess `import varco_core`. They
+are collected by their own `benchmarks/pytest.ini` (`python_files = bench_*.py`), so
+`scripts/unit_tests.sh` — which iterates an explicit suite list — never picks them up and the unit
+legs never slow down. `pytest-codspeed` lives in a root `bench` dependency group deliberately
+**excluded from `dev`**, so a normal `uv sync` never installs it.
+
+```bash
+make bench                                   # plain pytest, uninstrumented, no token needed
+uv run --group bench pytest benchmarks/ -q   # the same thing
+```
+
+⛔ **Rule: `bench` is never a required check and must never appear in `all-green`'s `needs:`.**
+`.github/workflows/bench.yml` is a separate workflow, comment-only, and skips (never fails) on a
+fork PR with no `CODSPEED_TOKEN`. Adding it to branch protection, or to `test.yml`'s `needs:`,
+converts an unquantified-noise signal into a merge blocker. Full rules: `benchmarks/README.md`.
+
+⛔ **Rule: a benchmark must never import a backend that needs a container**, and must never assert
+anything about time. Timing is CodSpeed's job; correctness assertions belong in a package's
+`tests/`.
+
 ### Lockstep version bump (`scripts/bump.py`)
 
 `scripts/bump.py` (Plan 023 / Phase 1, §RL-9-bump) is the **only** mechanism that writes a version
@@ -225,6 +283,10 @@ workflows that never gate a PR (Plan 023 / Phase 5):
   `Signed-Releases`).
 - **`docs.yml`** — versioned docs via `mike`, see the "Versioned documentation" section below.
   Never a required check.
+- **`bench.yml`** — CodSpeed benchmarks (Plan 028 / P2). `pull_request` + `push: [main]`,
+  `permissions: {}` at top level, a `concurrency` group scoped by `github.event_name` as well as
+  `github.ref`, and an `if:` that **skips** a fork PR (no `CODSPEED_TOKEN`) rather than failing it.
+  Comment-only. Not in `test.yml`'s `needs:`; ⛔ must never become a required check.
 
 **Branch protection (repository setting, not in the repo tree) — APPLIED.** Plan 023's Phase 9 +
 Appendix A ruleset shape is live: branch ruleset `main-branch-protection` (Settings → Branches →

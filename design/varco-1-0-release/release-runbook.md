@@ -58,6 +58,37 @@ Settings → Pages → Build and deployment → Source: **Deploy from a branch**
 pushes" breaks `mike deploy --push`, which force-pushes by design. See Phase 9's ruleset target
 invariant — it is the literal string `main`, never a wildcard that could also catch `gh-pages`.
 
+## 3b. CodSpeed — `CODSPEED_TOKEN` + repo connection — ⬜ Not yet applied
+
+**Plan 028 / Phase 3 (P2), Step 20.** `.github/workflows/bench.yml` exists and runs, but uploads
+nothing until this is done. Recorded here for the same reason as the ten PyPI environments: it is
+an out-of-repo step no file in this tree can perform, so the runbook is the durable record of how
+it was done and how to redo it.
+
+1. Sign in at <https://codspeed.io> with the GitHub account that owns `edoardoscarpaci/varco` and
+   install the CodSpeed GitHub App on the repository. This is what grants CodSpeed permission to
+   post the PR comment.
+2. Copy the upload token CodSpeed issues for the repo.
+3. Settings → Secrets and variables → Actions → **New repository secret**, name
+   `CODSPEED_TOKEN`, value = that token. A *repository* secret, not an environment secret —
+   `bench.yml`'s job declares no `environment:` and must not gain one (an environment with an
+   approval rule would make a benchmark run block on a human, which is exactly the merge-path
+   coupling §D-P2-harness exists to avoid).
+
+⛔ **`bench.yml` must never be selected as a required status check**, on any schedule.
+`Tests / All tests passed` (`test.yml`'s `all-green`) is and remains the only one. Same standing
+rule already recorded for `release`, `docs`, `scorecard` and `chaos`.
+
+ℹ️ Until the secret exists, `bench.yml` still runs on `push: main` and same-repo PRs and simply
+produces no CodSpeed report; it cannot fail a merge either way. Fork PRs skip the job entirely by
+its `if:` guard rather than failing on the missing secret.
+
+ℹ️ `CodSpeedHQ/action` is SHA-pinned like every other action in this repo
+(`f22792bfac16f3e14eb9fbea76f4a48e9cc22b93 # v4`), enforced by
+`varco_core/tests/test_repo_ci_invariants.py::test_all_uses_lines_pinned_by_commit_sha`. Note the
+`v4` tag is an *annotated* tag, so resolving it takes two calls — `git/ref/tags/v4` yields the tag
+object's SHA, and `git/tags/<that sha>` yields the commit SHA that belongs in the pin.
+
 ## 4. `main` branch ruleset (Phase 9, after the release tag) — ✅ Applied
 
 Specified in full in `plans/023-release-version-freeze-and-supply-chain.md`'s Phase 9 and

@@ -5,12 +5,14 @@ Plan 026 / Step 9 — import-layering guard for ``varco_core.tls``.
 ``varco_fastapi``, or any backend package (``varco_kafka``/``varco_redis``/``varco_sa``/
 ``varco_beanie``/...).
 
-A ``sys.modules``-walk (even from a fresh subprocess) cannot detect this: ``varco_core``'s own
-package ``__init__`` eagerly imports ``varco_core.connection`` before any submodule's body
-executes (``varco_core/__init__.py``), so ``varco_core.connection`` is always present in
+A ``sys.modules``-walk (even from a fresh subprocess) cannot detect this reliably in the full
+suite: countless other tests import ``varco_core.connection`` before ``test_tls_layering.py``
+runs in the same pytest process, so ``varco_core.connection`` is typically already present in
 ``sys.modules`` by the time ``varco_core.tls`` finishes importing — regardless of whether
-``varco_core.tls`` itself imports it. That is pre-existing, unrelated to Plan 026, and makes a
-runtime-import oracle structurally unusable here.
+``varco_core.tls`` itself imports it. (Note: as of Plan 028/P1a, ``varco_core/__init__.py`` is
+PEP 562-lazy and does *not* itself eagerly import ``varco_core.connection`` — that used to be
+this docstring's stated cause, but it was never the only one and is no longer true.) This makes
+a runtime-import oracle structurally unusable here.
 
 So this uses the AST-inspection alternative Step 9 itself names: walk every ``.py`` file under
 ``varco_core/varco_core/tls/`` and assert no **module-level, non-``TYPE_CHECKING``** import

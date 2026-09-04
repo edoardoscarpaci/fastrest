@@ -44,6 +44,18 @@ clients = [
     "requests>=2.32.3",
     "httpx>=0.28",
 ]
+# Plan 028 / Phase 3 (P2), Step 16. Deliberately NOT included in `dev`: a
+# normal `uv sync` must not install it, so pytest-codspeed's plugin can never
+# alter collection or timing on the unit legs. Benchmarks run only through
+# `make bench` (uv run --group bench) and .github/workflows/bench.yml.
+# Brief 002 §5: CodSpeed is the 2025/2026 table stakes (pydantic, FastAPI,
+# polars) and its "simulation" mode runs in an instrumented VM for
+# reproducible timing; comment-not-gate is the mainstream posture. It is also
+# API-compatible with pytest-benchmark, so `benchmarks/` runs as plain pytest
+# tests locally with no instrumentation and no token.
+bench = [
+    "pytest-codspeed>=3",
+]
 dev = [
     "asyncpg>=0.31.0",
     { include-group = "lint" },   # PEP 735 — `uv sync` installs lint tooling by default

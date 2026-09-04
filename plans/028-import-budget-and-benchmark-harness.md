@@ -276,17 +276,17 @@ being an AST node. That exclusion is the plan's own worked example of the fence.
 
 ### Phase 0 — P1a: lazy `varco_core/__init__.py` (🔴 must, M)
 
-1. [ ] **Side-effect audit (gating).** Run §D-P1-sideeffects' two `rg` sweeps plus the `sys.modules`
+1. [x] **Side-effect audit (gating).** Run §D-P1-sideeffects' two `rg` sweeps plus the `sys.modules`
        differential. Record the result in
        `design/async-performance-patterns/measurements/p1-side-effect-audit.md`: every module-scope
        non-definition statement found, and the verdict (harmless / must be `_EAGER`). Explicitly
        confirm `register_framework_metadata` is `varco_sa`-only (`varco_sa/varco_sa/metadata.py:55`)
        and therefore out of P1's blast radius. **Do not write code before this file exists.**
-2. [ ] `uv run python -X importtime -c "import varco_core" 2>&1 | tail -1` and the same for
+2. [x] `uv run python -X importtime -c "import varco_core" 2>&1 | tail -1` and the same for
        `-c "import sys"` — reproduce the BACKLOG's 419 ms / 7 ms baseline on the implementer's
        machine and record both in the audit file. A materially different starting number means the
        premise changed and the plan needs re-reading before proceeding.
-3. [ ] `varco_core/tests/test_lazy_init.py` (new, **failing first** — it fails on `main` only in
+3. [x] `varco_core/tests/test_lazy_init.py` (new, **failing first** — it fails on `main` only in
        its cold-set assertions) —
        (a) every name in `varco_core.__all__` is resolvable via `getattr` and via
        `from varco_core import <name>`, and is the **same object** as the direct submodule import;
@@ -296,40 +296,40 @@ being an AST node. That exclusion is the plan's own worked example of the fence.
        `sys.modules` contains none of `lark`, `jwt`, `psutil`, `opentelemetry.sdk` (the measured
        contributors, `BACKLOG.md:56-57`); after touching one name from each owning subsystem, each
        appears. This test is the whole phase's specification.
-4. [ ] `varco_core/varco_core/__init__.py` — rewrite per §D-P1-mechanism. Keep the existing module
+4. [x] `varco_core/varco_core/__init__.py` — rewrite per §D-P1-mechanism. Keep the existing module
        docstring and `__all__` (`:383-655`) **byte-identical**. The `_LAZY` map is generated from
        the current import block (a throwaway script is fine; the map is committed, not generated at
        runtime). `_EAGER` holds whatever Step 1 found, each entry with an inline reason. Add a
        `DESIGN:` block with §D-P1-mechanism's ✅/❌ verbatim, including the `TYPE_CHECKING`
        explanation.
-5. [ ] `uv run python scripts/api_surface.py --check` — **must pass with no regeneration.** If it
+5. [x] `uv run python scripts/api_surface.py --check` — **must pass with no regeneration.** If it
        does not, P1 changed the public surface and the diff must be understood before proceeding,
        not committed.
-6. [ ] `make type-check` — mypy `strict` must report the **same** error count as before (expected:
+6. [x] `make type-check` — mypy `strict` must report the **same** error count as before (expected:
        zero). If new `Any`-related errors appear, the `TYPE_CHECKING` block is incomplete.
-7. [ ] `make test` — the full eleven-suite run. Any failure here is a side effect Step 1 missed;
+7. [x] `make test` — the full eleven-suite run. Any failure here is a side effect Step 1 missed;
        add it to `_EAGER` **and** to the audit file, never "fix" the test.
-8. [ ] Re-measure and record in the audit file: `import varco_core` delta after the change, plus
+8. [x] Re-measure and record in the audit file: `import varco_core` delta after the change, plus
        `import varco_fastapi` and one backend (`varco_redis`) as observations for §D-P1-scope.
 
 ### Phase 1 — P1b: the import budget, warn-only (🔴 must, S)
 
-9. [ ] `scripts/import_budget.py` (new) — for each target: run `python -X importtime -c "import
+9. [x] `scripts/import_budget.py` (new) — for each target: run `python -X importtime -c "import
        <target>"` in a subprocess 5 times, take the min of the cumulative total, subtract a
        same-methodology `import sys` baseline, and compare to the ceiling from
        `design/async-performance-patterns/measurements/import-budget.json`. Flags: `--check`
        (compare), `--update` (rewrite measured values, never ceilings), `--warn-only` (print,
        exit 0). Derives its package list by **executing `scripts/packages.sh`**, per RL-18 and the
        precedent set by `scripts/api_surface.py` and `scripts/bump.py` (CLAUDE.md).
-10. [ ] `design/async-performance-patterns/measurements/import-budget.json` (new) — per target:
+10. [x] `design/async-performance-patterns/measurements/import-budget.json` (new) — per target:
         `{"measured_ms": ..., "ceiling_ms": ..., "observations": []}`. Ceilings ≈ 2× the Step 8
         measurement, with a header comment (in a sibling `.md`) explaining the normalisation and
         the headroom rule.
-11. [ ] `Makefile` — `make import-budget` target + a `make help` line; wire `--warn-only` into
+11. [x] `Makefile` — `make import-budget` target + a `make help` line; wire `--warn-only` into
         `make lint`'s **no-`PKG`** path only, beside `api-check` (`Makefile:151-167` shows the
         existing `ifeq ($(strip $(PKG)),)` pattern). `make lint PKG=<one>` must stay narrow and
         fast — same rule §D-C5 established for `api-check` in Plan 024.
-12. [ ] `.github/workflows/test.yml` — a step in the `lint` job after `api surface --check`
+12. [x] `.github/workflows/test.yml` — a step in the `lint` job after `api surface --check`
         (`:64-65`): `uv run python scripts/import_budget.py --check --warn-only`. Explicitly
         warn-only for now (§D-P1-oq4), with a comment naming Step 14 as the flip.
 
@@ -340,37 +340,40 @@ being an AST node. That exclusion is the plan's own worked example of the fence.
 14. [ ] If observed max < ceiling with margin: drop `--warn-only` from `test.yml` and from `make
         lint`. If not: raise the ceilings **once**, with the observations as the justification in
         the commit message, and only then flip. Record the decision in the measurements `.md`.
-15. [ ] `CLAUDE.md` — a short "Import-time budget" subsection under Commands: what
+15. [~] (partial — the CLAUDE.md "Import-time budget" subsection landed with Plan 028's
+        Phase 1, worded **warn-only-today with the flip pending**, because docs ship with
+        code in this repo. It must be reworded to "it **is** a gate" as part of Step 14.)
+        `CLAUDE.md` — a short "Import-time budget" subsection under Commands: what
         `scripts/import_budget.py` does, that it **is** a gate (contrast with the benchmark harness,
         which never is — §D-P1-oq4), and the rule: **a new top-level `import` in a `varco_*`
         `__init__.py` needs a budget check, not a hunch.**
 
 ### Phase 3 — P2: the benchmark harness (🟡 should, M)
 
-16. [ ] `pyproject.toml` (root) `[dependency-groups]` — a `bench` group with
+16. [x] `pyproject.toml` (root) `[dependency-groups]` — a `bench` group with
         `pytest-codspeed>=3`, **not** included in `dev` (it must not be installed for a normal
         `uv sync`, so it never affects the unit legs). Comment cites brief 002 §5.
-17. [ ] `benchmarks/` (new) — `conftest.py` plus one module per §D-P2-harness's seed table. Every
+17. [x] `benchmarks/` (new) — `conftest.py` plus one module per §D-P2-harness's seed table. Every
         benchmark is deterministic, in-process, Docker-free, and asserts nothing about time (that
         is CodSpeed's job). A `README.md` in the directory states: **these are not tests, they are
         never a gate, and they must never import a backend that needs a container.**
-18. [ ] `Makefile` — `make bench` (`uv run --group bench pytest benchmarks/`) and a `make help`
+18. [x] `Makefile` — `make bench` (`uv run --group bench pytest benchmarks/`) and a `make help`
         line. Confirm `scripts/unit_tests.sh` does **not** pick `benchmarks/` up (it iterates an
         explicit `SUITES` list — verify, do not assume).
-19. [ ] `.github/workflows/bench.yml` (new) — `pull_request` + `push: [main]`;
+19. [x] `.github/workflows/bench.yml` (new) — `pull_request` + `push: [main]`;
         `permissions: {}` at top level with the minimum the action needs on the job; a
         `concurrency` group including `github.event_name` (the lesson Plan 024 recorded for
         `integration.yml`, `design/research/001-github-actions-concurrency-semantics.md` §3);
         `if: github.event.pull_request.head.repo.full_name == github.repository` so fork PRs skip
         rather than fail on the missing secret; `CodSpeedHQ/action` running
         `uv run --group bench pytest benchmarks/ --codspeed`. **Not** in `test.yml`'s `needs:`.
-20. [ ] `design/varco-1-0-release/release-runbook.md` — a new operator section: add the
+20. [x] `design/varco-1-0-release/release-runbook.md` — a new operator section: add the
         `CODSPEED_TOKEN` repository secret and connect the repo on codspeed.io. Same treatment as
         the PyPI environments: the runbook is the durable record of an out-of-repo step.
-21. [ ] `CLAUDE.md` + `CONTRIBUTING.md` — one paragraph each: `make bench`, where benchmarks live,
+21. [x] `CLAUDE.md` + `CONTRIBUTING.md` — one paragraph each: `make bench`, where benchmarks live,
         and the standing rule that `bench` is **never** a required check and must never appear in
         `all-green`'s `needs:`.
-22. [ ] `CHANGELOG.md` — `### Changed`/`### Added` entries for the lazy import, the budget script
+22. [x] `CHANGELOG.md` — `### Changed`/`### Added` entries for the lazy import, the budget script
         and the benchmark harness, referencing "Plan 028 / P1" and "Plan 028 / P2".
 
 ### Phase 4 — P4 ⛔ GATED: reflection caching (🟢 nice, M)

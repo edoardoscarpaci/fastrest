@@ -11,6 +11,29 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Import-time budget — `scripts/import_budget.py` + `make import-budget` (Plan 028 / P1).**
+  Measures each distribution package's `python -X importtime` cost above a bare-interpreter
+  baseline measured in the same job (best-of-5, fresh subprocesses, self-times summed) and
+  compares the **delta** against a hard ceiling committed in
+  `design/async-performance-patterns/measurements/import-budget.json`. Derives its package list by
+  executing `scripts/packages.sh` (RL-18) and fails loudly rather than silently measuring an empty
+  target list. `--check` / `--update` (measured values only, never ceilings) / `--warn-only`.
+  ⚠️ **Warn-only today**: wired into `make lint`'s no-`PKG` path and `test.yml`'s `lint` job with
+  `--warn-only`, so a breach prints and CI stays green. The flip to a real gate is deliberately
+  blocked on ≥10 recorded CI observations, because the ~2× ceiling headroom is an assumption about
+  runner variance that no source quantifies — U-8 evidence discipline applied to our own gate. A
+  ratchet was rejected on three independent grounds (see the script's `DESIGN:` block).
+- **Benchmark harness — `benchmarks/` + `make bench` + `.github/workflows/bench.yml` (Plan 028 /
+  P2).** Seven in-process, deterministic, Docker-free benchmarks (query parse; AST build + SA
+  compile; DTO roundtrip; `AsyncService.create()` over an in-memory repo; event publish; cache
+  get/set; subprocess `import varco_core`) run through `pytest-codspeed`, which lives in a root
+  `bench` dependency group **excluded from `dev`** so a normal `uv sync` never installs it.
+  Collected by `benchmarks/pytest.ini` (`python_files = bench_*.py`), so `scripts/unit_tests.sh`
+  never picks them up and the unit legs are unaffected. ⛔ **Comment-only, never a gate**:
+  `bench.yml` is a separate workflow, is not in `test.yml`'s `needs:`, must never appear in
+  `all-green`'s `needs:` or in branch protection, and skips (never fails) on a fork PR with no
+  `CODSPEED_TOKEN`. The asymmetry with the import budget is deliberate and argued in the plan's
+  §D-P1-oq4.
 - **`varco_core.watch` — `AbstractPathWatcher`, `StatPollWatcher`, `WatchfilesWatcher` (Plan 025 /
   T1).** Backend-agnostic filesystem watching with no new hard dependency: `StatPollWatcher`
   (stdlib-only, the default via `default_watcher()`) polls a `(st_mtime_ns, st_size, st_ino)`
@@ -116,6 +139,24 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   to_trust_store()`); audit your own call sites if you do.
 
 ### Changed
+
+- **BREAKING-ADJACENT (but not a break): `import varco_core` is now lazy (Plan 028 / P1a).**
+  `varco_core/__init__.py` was ~330 lines of eager `from varco_core.X import (...)` binding 235
+  names and pulling ~700 modules; it is now a PEP 562 module `__getattr__` over a committed
+  `_LAZY` name→submodule map, with the previous import block kept verbatim under
+  `if TYPE_CHECKING:` so mypy `strict`, IDEs and `scripts/api_surface.py` are unaffected.
+  **Measured: 289.6 ms → 6.6 ms** above a bare-interpreter baseline; `lark`, `jwt`, `psutil` and
+  `opentelemetry.sdk` are no longer in `sys.modules` after a bare `import varco_core`.
+  `varco_fastapi` and `varco_redis` improve ~22% for free. **Not one name was added or removed**
+  — `scripts/api_surface.py --check` passes with no snapshot regeneration, which is the strongest
+  available proof the change is invisible. Two accepted incompatibilities, both documented in the
+  module's `DESIGN:` block: an `ImportError` inside a submodule now surfaces at first *attribute
+  access* rather than at `import varco_core` (mitigated by a test that resolves every `__all__`
+  name on every CI run), and `varco_core.__dict__["Name"]` raises `KeyError` before that name's
+  first access — attribute access, `from`-import and `getattr` are all unaffected. The
+  side-effect audit bounding the change (two `rg` sweeps, a module-scope decorator sweep, and a
+  `sys.modules` differential showing an empty set difference in both directions) is committed at
+  `design/async-performance-patterns/measurements/p1-side-effect-audit.md`.
 
 - **A cert file matching a wider known pattern set, but not a call site's own patterns, in a
   `ca_folder`/folder-based JWT key source now logs a WARNING once instead of being silently
