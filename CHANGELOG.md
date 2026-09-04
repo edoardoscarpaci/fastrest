@@ -9,8 +9,49 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### BREAKING (optional extra) — MCP Python SDK bumped to v2 (Plan 029 / N1)
+
+- **`varco-fastapi[mcp]` now requires `mcp>=2,<3`** (was `mcp>=1.28.1,<2`). `pip install mcp`
+  already resolves to the v2 line and v1.x is maintenance-only (security fixes alone) — the old
+  pin protected nobody, it only stranded users on an abandoned branch (research brief 003 §1).
+  Dual v1/v2 support was evaluated and rejected: v1 registers MCP handlers by decorator
+  post-construction, v2 by constructor argument, and one codebase cannot cleanly serve both
+  (§D-N1-pin). `MCPAdapter.to_mcp_server()` now builds `mcp.server.Server(name=...,
+  on_list_tools=..., on_call_tool=...)` instead of the v1 low-level `Server` +
+  `@server.list_tools()`/`@server.call_tool()` decorator pair — deletes both
+  `# type: ignore[untyped-decorator]` suppressions. `on_list_tools` now returns a
+  `ListToolsResult` (carrying `ttl_ms`/`cache_scope`, required by the 2026-07-28 wire) rather
+  than a bare `list[Tool]` — resolved by experiment against the installed SDK, not by reading
+  (research brief 003, "Experiment evidence" addendum). New `MCPAdapter(..., ttl_ms=60_000)`
+  constructor parameter controls the advertised `tools/list` cache TTL. `mount()`'s
+  `SseServerTransport`-based recipe needed no structural change. Blast radius: only users who
+  installed `varco-fastapi[mcp]` — nobody else sees a resolver change. Follow-up (not this
+  plan): HTTP+SSE is deprecated in favour of Streamable HTTP by the 2026-07-28 spec but remains
+  functional; `mount()` migrating transports is new scope, filed to BACKLOG.
+
 ### Added
 
+- **`Idempotency-Key` HTTP middleware — `varco_core.idempotency` + `IdempotencyMiddleware`
+  (Plan 029 / D1).** A retried `POST`/`PATCH` carrying a repeated `Idempotency-Key` header
+  replays the first response instead of executing twice. `AbstractIdempotencyStore`
+  (`reserve`/`complete`/`get`/`release`/`delete_expired`) is the seam — `reserve()` is the one
+  atomic primitive every implementation must offer (never emulated with `exists()`+`set()`,
+  which is why `AsyncCache` was deliberately not extended). Four implementations ship:
+  `InMemoryIdempotencyStore` (`varco_core`, single-process only), `RedisIdempotencyStore`
+  (`SET NX PX`), `SAIdempotencyStore` (`UNIQUE` + `IntegrityError`), `BeanieIdempotencyStore`
+  (unique index + `DuplicateKeyError`) — covered by a shared conformance suite
+  (`testkit/varco_conformance/idempotency_store.py`) including a genuine concurrency race
+  against all four backends. `IdempotencyMiddleware` (`varco_fastapi.middleware.idempotency`) is
+  **opt-in** — never added by `create_varco_app()` — and must be registered inside
+  `ErrorMiddleware` and inside `RequestContextMiddleware` (a correctness requirement, asserted
+  by test). Fingerprint = `sha256(method + path + sorted_query + sha256(body))`; a reused key
+  with a different fingerprint returns 422, an in-flight reservation returns 409 (with
+  `Retry-After: 1`), a malformed/oversized key returns 400. Streaming responses and responses
+  over `max_stored_body_bytes` (default 1 MiB) are never captured — the reservation is released
+  so a retry re-executes. Storage key scoping fails closed when tenancy is enabled and no
+  ambient tenant is set. Implements the (expired) IETF draft
+  `draft-ietf-httpapi-idempotency-key-header-07` plus Stripe's de-facto conventions (24h TTL),
+  not an RFC. Full design: `technical_docs/features/idempotency-key.md`.
 - **Import-time budget — `scripts/import_budget.py` + `make import-budget` (Plan 028 / P1).**
   Measures each distribution package's `python -X importtime` cost above a bare-interpreter
   baseline measured in the same job (best-of-5, fresh subprocesses, self-times summed) and

@@ -413,6 +413,23 @@ be silently deleted (no TTL index by default).
 Usage: README's "Dead Letter Queue" section. Full detail (redrive policy, retention, tenancy,
 REST admin): `technical_docs/features/dead-letter-queues.md`.
 
+### Idempotency-Key middleware (varco_core.idempotency + varco_fastapi.middleware.idempotency, Plan 029 / D1)
+
+`AbstractIdempotencyStore` (`reserve`/`complete`/`get`/`release`/`delete_expired`) is the seam —
+contract + `InMemoryIdempotencyStore` in `varco_core`, the HTTP adapter
+(`IdempotencyMiddleware`) in `varco_fastapi`, four backends (`InMemoryIdempotencyStore`,
+`RedisIdempotencyStore`, `SAIdempotencyStore`, `BeanieIdempotencyStore`).
+
+**Rule**: `reserve()` is the one atomic primitive every implementation must offer — never add a
+set-if-absent method to `AsyncCache` for this (Plan 011 D-11 forbids it); the atomicity
+requirement is pushed up into this ABC instead, and each backend uses its own native atomic
+primitive (`SET NX PX` / `UNIQUE` + `IntegrityError` / `DuplicateKeyError` / a lazily-created
+`asyncio.Lock`).
+
+Usage: README's "Idempotency-Key middleware" section. Full design (fingerprint construction,
+header replay allowlist, tenant/subject scoping's fail-closed rule, streaming/over-ceiling
+handling, a Pitfalls table): `technical_docs/features/idempotency-key.md`.
+
 ### Observability (varco_core.observability)
 
 `@span`/`@counter`/`@histogram` decorators, `TracingServiceMixin`/`TracingRepositoryMixin`,
@@ -1135,6 +1152,16 @@ Am I adding a new capability?
 │                            (never a create_varco_app kwarg — RD-9, same rule
 │                            as mount_tenant_admin())
 │       ↳ New CLI verb? → varco_core.cli.dlq / varco_core.cli.retention
+│
+├─ HTTP idempotency / dedup-a-retried-request feature (Plan 029 / D1)?
+│  └─ → varco_core.idempotency (AbstractIdempotencyStore, reserve/complete/
+│         get/release/delete_expired — reserve() MUST be atomic)
+│       + varco_fastapi.middleware.idempotency.IdempotencyMiddleware (opt-in,
+│         never create_varco_app default — install via install_middleware_stack
+│         INSIDE ErrorMiddleware, INSIDE RequestContextMiddleware)
+│       ↳ New backend? → implement AbstractIdempotencyStore using that
+│                            backend's own atomic set-if-absent primitive;
+│                            never emulate one with exists()+set()
 │
 └─ ORM/database feature?
    └─ → varco_sa (SQLAlchemy) and/or varco_beanie (MongoDB)

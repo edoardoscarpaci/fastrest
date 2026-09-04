@@ -16,12 +16,20 @@ Exception hierarchy for the varco_core domain, query, and service layers.
     └── StaleEntityError
 
     ServiceException    — base for all service-layer errors
-    ├── ServiceNotFoundError      → HTTP 404
-    ├── ServiceAuthorizationError → HTTP 403
-    ├── ServiceConflictError      → HTTP 409
-    └── ServiceValidationError    → HTTP 422
+    ├── ServiceNotFoundError                  → HTTP 404
+    ├── ServiceAuthorizationError              → HTTP 403
+    ├── ServiceConflictError                   → HTTP 409
+    │   └── IdempotencyKeyConflictError        → HTTP 409 (Plan 029 / D1)
+    ├── ServiceValidationError                 → HTTP 422
+    │   └── IdempotencyFingerprintMismatchError → HTTP 422 (Plan 029 / D1)
+    └── IdempotencyKeyInvalidError              → HTTP 400 (Plan 029 / D1)
 """
 
+from varco_core.exception.idempotency import (
+    IdempotencyFingerprintMismatchError,
+    IdempotencyKeyConflictError,
+    IdempotencyKeyInvalidError,
+)
 from varco_core.exception.query import (
     CoercionError,
     OperationNotFound,
@@ -63,4 +71,8 @@ __all__ = [
     "ServiceAuthorizationError",
     "ServiceConflictError",
     "ServiceValidationError",
+    # Idempotency exceptions (Plan 029 / D1a)
+    "IdempotencyKeyConflictError",
+    "IdempotencyFingerprintMismatchError",
+    "IdempotencyKeyInvalidError",
 ]

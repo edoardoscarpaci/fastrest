@@ -39,6 +39,10 @@ varco_core/              — Domain model, service layer, event system, resilien
   │   ├── discovery.py    — CERT_FILE_PATTERNS, iter_cert_files() — the one cert-glob helper
   │   ├── reload.py       — ReloadStrategy, ReloadingTrustStore
   │   └── di.py           — bind_trust_store() — no @Configuration, ever (see below)
+  ├── idempotency/        — AbstractIdempotencyStore ABC, ReserveOutcome, IdempotencyRecord,
+  │                         InMemoryIdempotencyStore (default), compute_fingerprint(),
+  │                         IdempotencySettings (Plan 029 / D1a — HTTP adapter lives in
+  │                         varco_fastapi.middleware.idempotency, not here)
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
   ├── repository.py      — AsyncRepository[D, PK] protocol
@@ -74,6 +78,7 @@ varco_redis/             — Redis Pub/Sub event bus + cache backend (redis.asyn
   ├── streams.py         — Redis streams utilities (for channels)
   ├── channel.py         — RedisChannel (pubsub or stream routing)
   ├── dlq.py             — RedisDLQ (dead letter queue)
+  ├── idempotency.py     — RedisIdempotencyStore(AbstractIdempotencyStore) — SET NX PX (Plan 029 / D1b)
   ├── config.py          — RedisConfig, CacheConfig (frozen dataclasses)
   └── di.py              — bootstrap() scan helper; RedisCacheConfiguration (opt-in cache)
 
@@ -89,6 +94,9 @@ varco_sa/                — SQLAlchemy async ORM backend
   ├── advisory_lock.py   — SAAdvisoryLock (PostgreSQL pg_try_advisory_lock / pg_advisory_unlock)
   ├── schema_guard.py    — SchemaGuard, SchemaDrift, SchemaDriftReport
   ├── encryption_store.py — SAEncryptionKeyStore (varco_encryption_keys table)
+  ├── idempotency.py     — SAIdempotencyStore(AbstractIdempotencyStore) — UNIQUE(key) +
+  │                        IntegrityError; table: varco_idempotency (Plan 029 / D1b, the
+  │                        eleventh framework table)
   ├── audit.py           — SAAuditRepository (AuditEntryModel; table: varco_audit_log;
   │                        Postgres ON CONFLICT DO NOTHING on entry_id, plain INSERT elsewhere)
   ├── health.py          — SAHealthCheck (SELECT 1 probe)
@@ -105,6 +113,8 @@ varco_beanie/            — Beanie/MongoDB async ODM backend
   ├── saga.py            — BeanieSagaRepository (SagaDocument, varco_sagas collection)
   ├── audit.py           — BeanieAuditRepository (AuditDocument; collection: varco_audit_log;
   │                        plain insert() — no conflict handling, raises DuplicateKeyError)
+  ├── idempotency.py     — BeanieIdempotencyStore(AbstractIdempotencyStore) — unique index +
+  │                        DuplicateKeyError; collection: varco_idempotency (Plan 029 / D1b)
   ├── query/aggregation.py — BeanieAggregationApplicator (MongoDB aggregation pipeline)
   ├── index_guard.py     — BeanieIndexGuard, IndexDrift, IndexDriftReport
   ├── health.py          — BeanieHealthCheck (server_info() probe)
@@ -757,6 +767,46 @@ Rule: Always check is_duplicate() before processing — idempotency guard for at
 Rule: record() inside the same DB transaction as the business operation to avoid partial commits
 ```
 
+### Idempotency-Key store (Plan 029 / D1a, D1b)
+
+```
+AbstractIdempotencyStore (ABC) — varco_core.idempotency.base
+  ├── reserve(key, fingerprint, *, ttl) → ReserveOutcome   (the one atomic primitive — MUST be
+  │                                                          atomic; every implementation's
+  │                                                          native set-if-absent, never
+  │                                                          exists()+set())
+  ├── complete(key, record: IdempotencyRecord) → None      (store the final captured response)
+  ├── get(key) → IdempotencyRecord | None                  (fetch a completed record, or None)
+  ├── release(key) → None                                  (free an un-completable reservation —
+  │                                                          streaming/over-ceiling responses)
+  └── delete_expired() → int                                (best-effort sweep; no-op where the
+                                                              backend has native TTL)
+
+ReserveOutcome (Enum): ACQUIRED | IN_FLIGHT | REPLAY
+IdempotencyRecord (frozen dataclass): status, body: bytes, headers, fingerprint, created_at
+
+Implementations, each using its own backend's native atomic primitive:
+  ├── InMemoryIdempotencyStore (varco_core)   — a lazily-created asyncio.Lock; single-process
+  │                                              only (same warning as InMemoryRateLimiter)
+  ├── RedisIdempotencyStore (varco_redis)     — SET key value NX PX ttl
+  ├── SAIdempotencyStore (varco_sa)           — varco_idempotency table; UNIQUE(key) +
+  │                                              IntegrityError on a losing INSERT
+  └── BeanieIdempotencyStore (varco_beanie)   — IdempotencyDocument; unique index +
+                                                 DuplicateKeyError on a losing insert
+
+Conformance suite: testkit/varco_conformance/idempotency_store.py's IdempotencyStoreConformance,
+subclassed by all four — including a genuine asyncio.gather() concurrency race asserting exactly
+one ACQUIRED (§D-D1-atomic's load-bearing guarantee).
+
+Distinct from the Inbox Pattern above: the inbox persists an *incoming event* before a handler
+runs (bus → handler gap) and deletes the entry once processed; this store persists an *outgoing
+response* to suppress re-execution and the record must *survive* processing for its full TTL —
+opposite lifecycles, not two implementations of the same idea.
+
+HTTP adapter: IdempotencyMiddleware (varco_fastapi.middleware.idempotency) — the only piece that
+knows about headers/status codes/streaming detection. Full design: `technical_docs/features/idempotency-key.md`.
+```
+
 ### Job Store
 
 ```
@@ -1264,6 +1314,7 @@ unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
 | `tz/format.py` | D-9 — RFC 9557 output-only formatting | `format_rfc9557()` |
 | `job/reschedule.py` | T2's opt-in recompute-on-read sweeper | `ScheduleRematerializer` |
 | `query/policy.py` | T3's declared datetime coercion contract | `DatetimeCoercionPolicy` |
+| `idempotency/` | D1a (Plan 029) — HTTP idempotency storage contract, framework-agnostic | `AbstractIdempotencyStore`, `ReserveOutcome`, `IdempotencyRecord`, `InMemoryIdempotencyStore`, `compute_fingerprint()`, `IdempotencySettings` |
 
 ---
 
@@ -1782,8 +1833,8 @@ adapter.mount(app)  # registers GET {path}/sse + POST {path}/messages/
 
 # Option B: run as standalone stdio MCP server (for local LLMs)
 server = adapter.to_mcp_server()
-# server is a low-level mcp.server.lowlevel.Server — run it over a transport,
-# e.g. mcp.server.stdio.stdio_server() + server.run(read, write, options)
+# server is a low-level mcp.server.Server (v2 import path) — run it over a
+# transport, e.g. mcp.server.stdio.stdio_server() + server.run(read, write, options)
 
 # DI-friendly usage
 bind_mcp_adapter(container, OrderRouter, client_cls=OrderClient)
@@ -1794,19 +1845,53 @@ bind_mcp_adapter(container, OrderRouter, client_cls=OrderClient)
 from path parameters, request body model (`model_json_schema()`), and pagination/filter
 params for list routes.
 
-⚠️ **BREAKING (Plan 020 / KI-11)**: `to_mcp_server()` returns a low-level
-`mcp.server.lowlevel.Server`, not a `FastMCP` instance — the high-level `FastMCP.add_tool()`
+⚠️ **BREAKING (Plan 020 / KI-11)**: `to_mcp_server()` returns a low-level `Server`
+(imported from `mcp.server.lowlevel` under v1; from `mcp.server` since the Plan 029 / N1 bump to
+`mcp>=2,<3`), not a `FastMCP` instance — the high-level `FastMCP.add_tool()`
 has never accepted an `input_schema=` parameter (SDK issue #761), so `to_mcp_server()`/`mount()`
 were both dead code (`TypeError` on every call) before this fix. `_to_mcp_tools()`
 (`varco_fastapi.router.mcp`) builds `mcp.types.Tool` objects carrying varco's JSON Schema
 verbatim. Anyone calling `to_mcp_server()` directly and relying on `FastMCP`-specific methods
 (`.run()`'s no-arg stdio shortcut, `.add_tool()`, `.sse_app()`) must update to the low-level
-`Server` API.
+`Server` API. The v1→v2 portability this decision predicted held: only the *registration* lines
+changed, and `_to_mcp_tools()` was untouched.
 
-**Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=1.28.1,<2` — upper-bounded because
-v2 removes the low-level `Server` decorator API this adapter is built on; filed forward as
-BACKLOG row MCP-v2). The adapter is constructible without the extra — `to_mcp_server()` and
-`mount()` raise `ImportError` with a clear install message if the SDK is absent.
+**Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=2,<3` as of 3.1 — Plan 029 / N1
+migrated off the v1 low-level `Server` decorator API, which v2 removed). `to_mcp_server()` now
+builds `mcp.server.Server(name=..., on_list_tools=..., on_call_tool=...)`: handlers are passed as
+constructor arguments, each takes a `ctx` first argument, and `on_call_tool` receives a single
+`CallToolRequestParams` rather than `(name, arguments)` positionals. `on_list_tools` returns a
+`ListToolsResult` carrying the v2-required `ttl_ms` (from `MCPAdapter(ttl_ms=60_000)`) and
+`cache_scope="private"` — verified by experiment against mcp 2.1.1, not inferred; see
+`design/research/003-mcp-python-sdk-v2-migration.md`'s evidence addendum. `_to_mcp_tools()`'s
+`Tool(name=, description=, input_schema=)` shape is unchanged across the major, which is the
+payoff of the original low-level-`Server` choice. `mount()` is structurally unchanged —
+`mcp.server.sse.SseServerTransport` + `connect_sse` still exist in v2, though HTTP+SSE is
+deprecated in favour of Streamable HTTP (a filed BACKLOG follow-up, not this migration's scope).
+The adapter is constructible without the extra — `to_mcp_server()` and `mount()` raise
+`ImportError` with a clear install message if the SDK is absent.
+⚠️ **BREAKING for that extra only**: an app pinned to mcp 1.x cannot take varco 3.1's
+`varco-fastapi[mcp]`. Nothing changes for anyone not installing it.
+
+**`IdempotencyMiddleware`** (`varco_fastapi.middleware.idempotency` — Plan 029 / D1b): replays
+the stored response for a repeated `Idempotency-Key` on `POST`/`PATCH` instead of executing
+twice. Opt-in — `create_varco_app()` never adds it; register it through
+`install_middleware_stack` or `app.add_middleware(IdempotencyMiddleware, store=...)`. It holds an
+`AbstractIdempotencyStore` (above) and is the only piece that knows about headers, status codes,
+and streaming detection.
+
+⚠️ **Its stack position is a correctness requirement, not a preference** — it must sit *inside*
+`ErrorMiddleware` (so its 409/422/400 render through the RFC 9457 problem+json path rather than
+escaping as a 500) and *inside* `RequestContextMiddleware` (so `current_tenant()` and the ambient
+`AuthContext` are populated before the storage key is built). An explicit ordering test guards
+this. Note Starlette's `add_middleware()` **prepends** — the last call ends up outermost — so an
+outermost-first reading of the call sequence is backwards.
+
+Storage key is `idempotency:{tenant}:{subject}:{key}` and **fails closed**: with tenancy enabled
+and no ambient tenant it raises rather than falling back to a global key, since a cross-tenant
+collision would replay one tenant's response to another. Streaming responses and bodies over
+`max_stored_body_bytes` (1 MiB default) pass through and *release* the reservation, so a retry
+re-executes. Full design + Pitfalls: `technical_docs/features/idempotency-key.md`.
 
 **Localization / timezone middleware** (`varco_fastapi.middleware.localization`,
 `varco_fastapi.i18n` — Plan 011): `LocalizationMiddleware` resolves locale (I2) and/or

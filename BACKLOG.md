@@ -1,14 +1,72 @@
 # BACKLOG
 
-> **Three cycles live in this file.** The **3.1 trust-store / hot-reload / performance** cycle is
-> immediately below. The  cycle follows it. Everything from **3.0.1 cleanup** is already completed and 
-> `# 3.0.0 — release cycle (historical record)` onward is the **completed 3.0.0 backlog**, kept
-> verbatim as the record of what shipped and what was decided. Do not delete any of it — the
-> Parked and "do not relitigate" sections are the reason decisions are not re-argued each cycle,
-> and this repo has already lost one ledger to a wholesale rewrite (`cae7f33`, see
+> **Four cycles live in this file.** The **3.1 API-surface & interop** cycle is immediately
+> below; the **3.1 trust-store / hot-reload / performance** cycle follows it. Both are 3.1 and
+> both are live — the second does not supersede the first, and neither supersedes the `N1`–`N5`
+> rows carried in the 3.0.1 section. Everything under `# 3.0.1 — cleanup cycle` is already
+> completed, and `# 3.0.0 — release cycle (historical record)` onward is the **completed 3.0.0
+> backlog**, kept verbatim as the record of what shipped and what was decided. Do not delete any
+> of it — the Parked and "do not relitigate" sections are the reason decisions are not re-argued
+> each cycle, and this repo has already lost one ledger to a wholesale rewrite (`cae7f33`, see
 > UPSTREAM-GAPS.md's header).
 
 ---
+
+# 3.1 — API surface & interop (discover, 2026-09-04)
+
+Produced by `/discover` (no focus given — a full-repo scan plus two research briefs).
+
+⚠️ **This cycle adds to, and does not replace, the two 3.1 sections below it.** The
+trust-store / hot-reload / performance cycle (`T3`/`T5`/`T7`, `P2`–`P4`) and the
+`N1`–`N5` rows carried from 3.0.1 both remain in scope. Where a row here **is** one of
+those rows, it keeps its original ID (`N1`, `N2`, `N3`) and this section only records the
+severity the interview settled on — it is not a second, competing entry.
+
+Research briefs backing this cycle:
+- [`design/research/001-feature-gap-analysis-against-comparable-frameworks.md`](design/research/001-feature-gap-analysis-against-comparable-frameworks.md)
+- [`design/research/002-python-ecosystem-shifts-late-2026.md`](design/research/002-python-ecosystem-shifts-late-2026.md)
+
+## Locked decisions (this session)
+
+| Decision | Choice | Consequence |
+|---|---|---|
+| **Horizon** | **3.1, near-term** — finish the in-flight work and add S/M items alongside it | Every XL candidate is parked by definition, most consequentially **durable execution**. It is not rejected on merit — brief 001 calls it varco's largest strategic gap — it simply cannot fit a near-term minor |
+| **Must-ship bar** | Only **`N1` MCP v2** and **`D1` Idempotency-Key** are 🔴 | `N1` is repair of an already-shipped surface, not new scope; `D1` is S-sized and an adoption blocker. `N2`/`N3`/`D4` ship if ready and slip without blocking the release |
+| **Webhooks in scope** | **Yes**, as 🟡 | The largest genuinely-new surface this cycle. Kept because varco already owns every part (outbox, DLQ, retry, redrive) and only lacks the assembly |
+| **OpenFeature un-park** | **Re-opened as 🟢, trigger still unverified** | The recorded un-park condition is "`openfeature-sdk` Python SDK reaches 1.0". Brief 001/002 evidence is about the **specification** (v0.9), which is *not* the same claim. `/plan` must verify the SDK version before building — see the Parked table's amended row |
+
+## The work
+
+Ordered by severity, then complexity ascending.
+
+| ID | Feature | Severity | Complexity | Rationale | Evidence |
+|----|---------|----------|------------|-----------|----------|
+| `D1` | **`Idempotency-Key` HTTP middleware** — dedup a retried request by header, replay the stored response | 🔴 must | S | Both briefs surfaced it independently, which is the strongest signal either produced. varco already has the storage (inbox, cache) and the tenant/request-scoping; what is missing is the HTTP-layer assembly. Adoption blocker for anything payments-adjacent, where a retried POST that charges twice is not a tolerable failure mode | brief 001 (table stakes); brief 002 §6 (IETF draft-ietf-httpapi-idempotency-key-header-07) |
+| `N1` | **MCP v2 migration** | 🔴 must | M–L | ⬆️ **Confirmed 🔴, unchanged in substance from its row below.** Recorded here only because the interview ratified it as the one item 3.1 cannot ship without. This is repair: SDK v2.0.0 (stable 2026-07-28) removed the lowlevel decorators `to_mcp_server()` is built on, so the surface is broken-on-upgrade rather than merely dated. The `mcp>=1.28.1,<2` pin is what is currently holding it up | brief 002 §5 (obligation); `varco_fastapi/varco_fastapi/router/mcp.py`; the `N1` row in "3.1 — scoped, not worked this cycle" below |
+| `D5` | **CycloneDX SBOM per release + a written CRA / NIS2 posture** | 🟡 should | S | An **obligation, not a feature**. varco publishes ten distributions to PyPI, and EU CRA reporting obligations bind from September 2026. The supply-chain scaffolding to hang it on already exists — `release.yml` with PEP 740 attestations, `scorecard.yml` — so this is one workflow step plus a `SECURITY.md`-adjacent document, not a project | brief 002 §3/§8 (obligation) |
+| `N2` | **CloudEvents envelope** | 🟡 should | M | ⬆️ Ratified as 🟡 for this cycle. Design is already complete (Plan 022 §D-CE1–§D-CE4) with seam RS-1 reserved, so the remaining risk is execution, not design — the reason it survived a near-term scope cut that killed larger items | brief 001 (differentiator); `plans/022-api-freeze-and-standards-alignment.md` |
+| `N3` | **AsyncAPI export** | 🟡 should | M | ⬆️ Ratified as 🟡. Same standing as `N2` — design complete (§D-AA1–§D-AA4), seam RS-3 reserved. ⚠️ The `datamodel-code-generator` dependency risk flagged on the original row is still unassessed and is `/plan`'s first question, not this backlog's | brief 001; `plans/022-api-freeze-and-standards-alignment.md` |
+| `D4` | **Outbound webhooks** — subscription registry, HMAC/RFC 9421 signing, retry into the existing DLQ, replay from the admin surface | 🟡 should | M | Table stakes for anything SaaS-shaped, and the case here is unusually strong: varco already ships outbox, DLQ, retry policy, and redrive — a `WebhookDispatcher` is assembly over parts that exist, not new machinery. Svix is a whole company built on the fact that everyone rebuilds this badly. Kept at 🟡 rather than 🔴 because it is still the largest new surface area in the cycle | brief 001 (table stakes) |
+| `D7` | **Feature flags — `AbstractFeatureFlags` seam + OpenFeature provider** | 🟢 nice | S–M | Re-opens a documented park. The seam is the valuable half — a tenant/user-aware evaluation context wired to `RequestContext`, with the provider as an adapter — so it stays useful even if the OpenFeature verdict changes. ⚠️ The recorded un-park trigger (Python SDK ≥ 1.0) is **not** what the briefs evidence (spec v0.9); do not treat it as fired until `/plan` checks the SDK. `varco_core.flags` remains reserved (RS-3) | brief 001; brief 002 §6; the amended Parked row below |
+| `D6` | **Recurring schedules (cron / RRULE)** — a `Schedule` entity that *materializes* `Job` rows | 🟢 nice | M | Carried as a non-goal since 3.0.0, and CLAUDE.md already sketches the exact shape: "a future `Schedule` entity that produces `Job` rows exactly like these". The DST-safe zoned fields (`run_at_wall`/`run_at_tz`/`run_at_fold`) were designed for it. Closes the loop on the job subsystem | brief 001; CLAUDE.md §Decision Tree (tz/schedule.py branch) |
+| `D8` | **Ship `varco-testkit` to PyPI** | 🟢 nice | M | `intuition` — no brief raised it; it came out of the scout report noting `testkit/` is deliberately never packaged. Consequence: every downstream app rebuilds fakes, clock control, and tenant fixtures that already exist in-tree. ⚠️ Packaging it converts internal test scaffolding into public API subject to the `api_surface.py` gate — that trade-off is the whole decision, and it belongs to `/plan` | `intuition`; scout §"testkit is never packaged by design"; `testkit/varco_conformance/COVERAGE.md` |
+
+## Parked — this cycle (do not relitigate without new evidence)
+
+| Item | Why parked | What would un-park it |
+|---|---|---|
+| **Durable execution / workflow-as-code** (`@workflow`/`@activity`, deterministic replay) | **XL, and parked on size alone — not on merit.** Brief 001 names it varco's largest strategic gap, and varco owns unusual amounts of the substrate (job store with fenced leases, outbox, saga orchestrator, DLQ). It cannot fit a near-term minor, and half of it would be worse than none | A major-version horizon (4.0) with the appetite to build it properly, or a consumer requirement that makes the saga orchestrator's limits concrete rather than theoretical |
+| **Per-tenant quotas & usage metering** | Cut in the interview. Real (multitenancy is a varco flagship and quotas are its missing half), but M-sized new surface in a cycle already carrying `D4` | 3.2, or a consumer asking for metered billing events off the existing rate limiter |
+| **Secrets-manager sources (Vault / cloud KMS)** | Cut in the interview. The technical argument is good — credential rotation is the same problem as cert rotation, and Plan 025–027 built the machinery — but it is an extension, not a gap | 3.2, or JWT-signing-key rotation becoming a concrete need rather than an analogy |
+| **Free-threading (3.13t/3.14t) readiness** | Cut in the interview. Brief 002 is explicit that **no code changes are forced** — varco's async design is already sound under no-GIL — so this is an audit plus a published support statement, and the credibility payoff does not beat the 🔴 rows | Free-threaded builds becoming a default rather than an opt-in, or a consumer actually running one |
+| **GraphQL surface** | 🔁 **Re-affirmed non-goal, now with outside evidence.** Brief 001 independently classifies it defensible: REST + OpenAPI covers the case, and Strawberry/Ariadne integrate at the app layer without varco's involvement | Unchanged from 3.0.0 |
+| **Admin UI / CRUD scaffolding** | 🔁 Re-affirmed. Brief 001: Django-level admin is full-stack scope, incompatible with varco's API-first position | Unchanged |
+| **Event sourcing** | 🔁 Re-affirmed. Brief 001: the audit trail covers the common case that sends people to event sourcing | Unchanged |
+| **OpenFeature — the *park* is lifted, the *trigger* is not** | ⚠️ **Amended, read this before re-arguing either way.** The row below parks OpenFeature until the `openfeature-sdk` Python SDK reaches 1.0. This cycle re-opens the work as `D7` **on the strength of the seam being worth having regardless**, *not* on a claim that the trigger fired — the briefs evidence spec v0.9, which is a different artifact from the SDK version the trigger names | `/plan` verifies the actual `openfeature-sdk` release and records it. If it is still pre-1.0, `D7` ships the seam and defers the provider |
+| **MCP `mount()` — migrate HTTP+SSE transport to Streamable HTTP** | Filed forward by Plan 029 / N1b (Step 24). HTTP+SSE is *deprecated* in the 2026-07-28 spec revision but remains fully functional (research brief 003 §5) — replacing a working transport mid-repair is new scope, not the parity fix N1 was scoped to | A client drops HTTP+SSE support entirely, or a future minor picks up MCP transport work generally (3.2) |
+
+---
+
 
 # 3.1 — trust store, hot reload & performance
 

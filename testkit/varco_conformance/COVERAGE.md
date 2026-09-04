@@ -62,6 +62,23 @@ These are legitimate, permanent absences — not TODOs, not backlog rows.
   `testkit/varco_conformance` at that point. This row pre-empts the "why is there no suite for
   this?" audit question this page exists to answer.
 
+## New ABC outside the five, with a shared suite (Plan 029)
+
+- **`AbstractIdempotencyStore`** (`varco_core.idempotency.base`, Plan 029 / D1) is a **sixth ABC**,
+  outside the original five this page audits, but — unlike `AbstractPathWatcher` above — it has
+  **four** implementations across **three** packages from day one
+  (`InMemoryIdempotencyStore` in `varco_core`, `RedisIdempotencyStore`, `SAIdempotencyStore`,
+  `BeanieIdempotencyStore`), so it earns a real cross-package suite in this directory rather than
+  a same-package contract module. `testkit/varco_conformance/idempotency_store.py`'s
+  `IdempotencyStoreConformance` is subclassed by all four:
+  `varco_core/tests/test_idempotency_conformance_inmemory.py`,
+  `varco_redis/tests/test_idempotency_store_conformance.py`,
+  `varco_sa/tests/test_idempotency_store_conformance.py`,
+  `varco_beanie/tests/test_idempotency_store_conformance.py`. The load-bearing assertion —
+  `test_concurrent_reserve_race_yields_exactly_one_acquired` — is exactly what §D-D1-atomic exists
+  to guarantee, run against every backend's own native atomic primitive (`SET NX PX`, a unique
+  index + `IntegrityError`/`DuplicateKeyError`, a lazily-created `asyncio.Lock`).
+
 ## What Plan 024 filled
 
 - **`RedisStreamDLQ` → subclassed.** `varco_redis/tests/test_redis_conformance.py` gained

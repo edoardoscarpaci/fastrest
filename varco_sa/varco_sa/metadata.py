@@ -49,6 +49,8 @@ _OWNING_MODULES = (
     "varco_sa.encryption_store",
     # Plan 007, Phase 4 — the tenant catalog, the tenth framework table.
     "varco_sa.tenancy.models",
+    # Plan 029 / D1b — the eleventh framework table.
+    "varco_sa.idempotency",
 )
 
 

@@ -33,6 +33,10 @@
         "kind": "class",
         "module": "varco_beanie.health"
       },
+      "BeanieIdempotencyStore": {
+        "kind": "class",
+        "module": "varco_beanie.idempotency"
+      },
       "BeanieInboxRepository": {
         "kind": "class",
         "module": "varco_beanie.inbox"
@@ -88,6 +92,10 @@
       "DeduplicationDocument": {
         "kind": "class",
         "module": "varco_beanie.deduplication"
+      },
+      "IdempotencyDocument": {
+        "kind": "class",
+        "module": "varco_beanie.idempotency"
       },
       "InboxDocument": {
         "kind": "class",
@@ -1817,6 +1825,10 @@
         "kind": "class",
         "module": "varco_sa.health"
       },
+      "SAIdempotencyStore": {
+        "kind": "class",
+        "module": "varco_sa.idempotency"
+      },
       "SAInboxRepository": {
         "kind": "class",
         "module": "varco_sa.inbox"
@@ -1924,6 +1936,10 @@
         "kind": "function",
         "module": "varco_sa.alembic_helpers",
         "signature": "(*domain_classes: 'type[DomainModel]', base: 'type[DeclarativeBase] | None' = None, include_framework: 'bool' = False) -> 'MetaData'"
+      },
+      "idempotency_metadata": {
+        "kind": "constant",
+        "module": "sqlalchemy.sql.schema"
       },
       "inbox_metadata": {
         "kind": "constant",

@@ -499,9 +499,11 @@ def test_to_mcp_server_returns_a_low_level_server_and_does_not_raise():
     defects (importing ``FastMCP`` from the wrong location, and calling
     ``server.add_tool(input_schema=...)``, a parameter ``FastMCP.add_tool()``
     has never accepted) are now fixed by dropping to the low-level
-    ``mcp.server.lowlevel.Server`` API (§KI-11 design), so this test asserts
-    what ``to_mcp_server()`` now actually does instead of what it used to
-    fail at.
+    ``Server`` API (§KI-11 design) — as of Plan 029 / N1a,
+    ``mcp.server.Server`` on the mcp v2 SDK (constructor-argument handler
+    registration; the v1 import path was ``mcp.server.lowlevel.Server`` with
+    decorator-based registration) — so this test asserts what
+    ``to_mcp_server()`` now actually does instead of what it used to fail at.
 
     Edge cases:
         - ``mcp`` genuinely not installed → skipped; the ImportError branch is

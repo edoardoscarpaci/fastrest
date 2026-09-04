@@ -170,6 +170,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Middleware stack](#middleware-stack)
   - [Job runner — async mode](#job-runner--async-mode)
   - [Bootstrap helpers](#bootstrap-helpers)
+  - [MCP — exposing a VarcoRouter as an MCP server](#mcp--exposing-a-varcorouter-as-an-mcp-server)
   - [A2A — exposing a non-router subject](#a2a--exposing-a-non-router-subject)
   - [Calling other varco services — client_for](#calling-other-varco-services--client_for)
 - [Observability](#observability)
@@ -186,6 +187,7 @@ policy engine, field encryption, observability, profiling, …) — see
 - [File watching and hot reload](#file-watching-and-hot-reload)
 - [Composite Deployment](#composite-deployment)
 - [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
+- [Idempotency-Key middleware](#idempotency-key-middleware)
 
 ---
 
@@ -3270,6 +3272,41 @@ fastapi_bootstrap(container, setup_producer=True)
 app = FastAPI(lifespan=VarcoLifespan(container))
 ```
 
+### MCP — exposing a `VarcoRouter` as an MCP server
+
+`MCPAdapter` (`varco_fastapi.router.mcp`) converts any `VarcoRouter` into a Model Context
+Protocol server, built against **MCP Python SDK v2.x** (`pip install "varco-fastapi[mcp]"` — the
+package now requires `mcp>=2,<3`, since `pip install mcp` already resolves to the v2 line and
+v1.x is maintenance-only; see CHANGELOG's **BREAKING (optional extra)** entry, Plan 029 / N1, if
+upgrading from an app pinned to varco-fastapi's old `mcp<2` requirement).
+
+```python
+from varco_fastapi.router.mcp import MCPAdapter
+from myapp.routers import OrderRouter
+from myapp.clients import OrderClient
+
+adapter = MCPAdapter(
+    OrderRouter,
+    client=OrderClient(base_url="http://localhost:8080"),
+    ttl_ms=60_000,  # tools/list client-side cache TTL (2026-07-28 wire requirement)
+)
+
+# Mount as an HTTP+SSE endpoint on an existing FastAPI app
+adapter.mount(app)   # adds GET {path}/sse + POST {path}/messages/
+
+# Or run as a standalone stdio MCP server (for local LLMs)
+server = adapter.to_mcp_server()   # an mcp.server.Server (v2)
+from mcp.server.stdio import stdio_server
+async with stdio_server() as (read, write):
+    await server.run(read, write, server.create_initialization_options())
+```
+
+Every route flagged `mcp_enabled=True` (via `_create_mcp = True` etc. on the router, or
+`@route(mcp_enabled=True)`) becomes one MCP tool; execution is delegated to the already-injected
+`AsyncVarcoClient`, so no handler logic is duplicated. Full migration rationale (why v1/v2 dual
+support was rejected, the `ListToolsResult`/`ttl_ms`/`cache_scope` requirement, and the
+HTTP+SSE-vs-Streamable-HTTP follow-up): `design/research/003-mcp-python-sdk-v2-migration.md`.
+
 ### A2A — exposing a non-router subject
 
 Use `source=` instead of `router_cls` when the thing you want other agents to call is not a
@@ -3721,6 +3758,67 @@ async def on_order(self, event: OrderPlacedEvent) -> None: ...
 
 Redrive, retention, tenancy, a Beanie backend, and a bundled REST admin surface
 (`mount_reliability_admin()`) are covered in `technical_docs/features/dead-letter-queues.md`.
+
+---
+
+## Idempotency-Key middleware
+
+Plan 029 / D1. `IdempotencyMiddleware` (`varco_fastapi.middleware.idempotency`) makes a retried
+`POST`/`PATCH` carrying a repeated `Idempotency-Key` header replay the first response instead of
+executing twice. The storage contract, the fingerprint function, and the in-memory default
+implementation live in `varco_core.idempotency` (framework-agnostic — no FastAPI dependency);
+only the HTTP adapter lives in `varco_fastapi`.
+
+⚠️ **Opt-in, off by default.** Not added by `create_varco_app()` — register it explicitly, and it
+**must** sit inside `ErrorMiddleware` (so its 409/422/400 render through the normal error path)
+and inside `RequestContextMiddleware` (so `current_tenant()`/the auth subject are populated
+before its scoping logic reads them):
+
+```python
+from varco_core.idempotency.memory import InMemoryIdempotencyStore
+from varco_fastapi.middleware import (
+    ErrorMiddleware,
+    IdempotencyMiddleware,
+    RequestContextMiddleware,
+    install_middleware_stack,
+)
+
+install_middleware_stack(app, [
+    ErrorMiddleware,
+    (RequestContextMiddleware, {"server_auth": my_auth}),
+    (IdempotencyMiddleware, {"store": InMemoryIdempotencyStore()}),
+])
+```
+
+```python
+import httpx
+
+headers = {"Idempotency-Key": "order-42-retry-1"}
+first = httpx.post("http://api/orders", json={"sku": "abc"}, headers=headers)
+second = httpx.post("http://api/orders", json={"sku": "abc"}, headers=headers)
+# second.status_code == first.status_code
+# second.headers["Idempotency-Replayed"] == "true"
+# the handler executed exactly once
+```
+
+Outcomes: no header on a `POST`/`PATCH` → executes normally (unless `require_key=True`, then
+400); a fresh key → executes, stores, returns the real response; a completed key with a matching
+fingerprint (method + path + query + body hash) → replays the stored response; a completed key
+with a **different** fingerprint → **422**; a key whose first request is still running → **409**
+(with a `Retry-After` header); an empty or over-length key → **400**.
+
+Four `AbstractIdempotencyStore` implementations ship: `InMemoryIdempotencyStore` (`varco_core` —
+⚠️ single-process only, same warning as `InMemoryRateLimiter`), `RedisIdempotencyStore`
+(`varco_redis`, `SET NX PX`), `SAIdempotencyStore` (`varco_sa`, a unique index +
+`IntegrityError`), `BeanieIdempotencyStore` (`varco_beanie`, a unique index +
+`DuplicateKeyError`). Each uses its own backend's atomic primitive for the load-bearing
+`reserve()` call — never emulated with a separate `exists()` + `set()`.
+
+⚠️ This implements the expired IETF draft (`draft-ietf-httpapi-idempotency-key-header-07`) plus
+Stripe's de-facto conventions (24h TTL, 1 MiB body cap, streaming responses never captured) —
+not an RFC. Full design (fingerprint construction, header replay allowlist, tenant/subject
+scoping and its fail-closed rule, streaming/over-ceiling handling, a Pitfalls table):
+`technical_docs/features/idempotency-key.md`.
 
 ---
 

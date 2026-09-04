@@ -21,7 +21,7 @@ Typical usage::
     adapter.mount(app)   # adds GET {path}/sse + POST {path}/messages/
 
     # Option B: run as standalone stdio MCP server (for local LLMs)
-    server = adapter.to_mcp_server()   # a low-level mcp.server.lowlevel.Server
+    server = adapter.to_mcp_server()   # an mcp.server.Server (v2)
     # run it over a transport, e.g.:
     #   from mcp.server.stdio import stdio_server
     #   async with stdio_server() as (read, write):
@@ -308,12 +308,18 @@ def _to_mcp_tools(tools: Sequence[MCPToolDefinition]) -> list[_MCPTool]:
         MCPTool(
             name=tool_def.name,
             description=tool_def.description,
-            # The pinned mcp>=1.28.1,<2 `Tool` model spells this field
-            # `inputSchema` (camelCase) — verified against the resolved SDK's
-            # `mcp/types.py` per Plan 020 Step 26. v2 renames it to
-            # `input_schema`; that rename is out of scope here (§KI-11
-            # deliberately stays on v1.x).
-            inputSchema=tool_def.input_schema,
+            # mcp v1.x's `Tool` model spelled this field `inputSchema`
+            # (camelCase) — verified against the resolved SDK's
+            # `mcp/types.py` per Plan 020 Step 26. mcp v2's `Tool` renamed
+            # the Python-facing attribute to `input_schema` (snake_case),
+            # keeping `inputSchema` only as the wire/serialization alias —
+            # both spellings still construct an identical object at
+            # runtime (pydantic's `populate_by_name`), but mypy resolves
+            # the constructor against the real field name, so this uses
+            # `input_schema=` for the v2 migration (Plan 029 / N1a, Step 19)
+            # rather than carrying a mypy suppression for a spelling with
+            # no remaining reason to prefer it.
+            input_schema=tool_def.input_schema,
         )
         for tool_def in tools
     ]
@@ -486,7 +492,7 @@ class MCPAdapter:
 
     Typical usage — stdio transport (local LLM)::
 
-        server = adapter.to_mcp_server()   # a low-level mcp.server.lowlevel.Server
+        server = adapter.to_mcp_server()   # an mcp.server.Server (v2)
         # run it over a transport, e.g. mcp.server.stdio.stdio_server() +
         # server.run(read, write, server.create_initialization_options())
 
@@ -508,6 +514,15 @@ class MCPAdapter:
                           (e.g. ``"store_"`` → ``"store_create_order"``).
         enabled_routes:  Explicit allowlist of route names to include.
                          ``None`` means include all ``mcp_enabled`` routes.
+        ttl_ms:          Plan 029 / N1a, §D-N1-parity. Milliseconds the MCP
+                         client MAY cache a ``tools/list`` response for,
+                         emitted as ``ListToolsResult.ttl_ms`` (wire key
+                         ``ttlMs``) by ``to_mcp_server()``. Default
+                         ``60_000`` — varco's tool list never changes after
+                         construction, so a full minute of client-side
+                         caching is safe. ``0`` (the SDK's own default)
+                         would mean "immediately stale," defeating the
+                         point of advertising a TTL at all.
 
     Thread safety:  ✅ Read-only after construction — safe to share across tasks.
     Async safety:   ✅ ``execute()`` is async; ``tools`` has no I/O.
@@ -521,10 +536,12 @@ class MCPAdapter:
         base_url: str | None = None,
         tool_name_prefix: str = "",
         enabled_routes: set[str] | None = None,
+        ttl_ms: int = 60_000,
     ) -> None:
         self._router_cls = router_cls
         self._prefix = tool_name_prefix
         self._resource = _resource_name(router_cls)
+        self._ttl_ms = ttl_ms
 
         # Resolve client — prefer explicit instance, then build from base_url
         self._client = client
@@ -705,12 +722,14 @@ class MCPAdapter:
 
     def to_mcp_server(self) -> Any:
         """
-        Build a low-level ``mcp.server.lowlevel.Server`` from the adapter's tool list.
+        Build an ``mcp.server.Server`` from the adapter's tool list (mcp v2).
 
         Requires the ``mcp`` SDK (``pip install varco-fastapi[mcp]``).
 
-        DESIGN: low-level ``Server`` + ``mcp.types.Tool`` carrying varco's schema
-        verbatim, over the high-level ``FastMCP`` (BACKLOG KI-11, research brief 003)
+        DESIGN: ``mcp.server.Server`` + ``mcp.types.Tool`` carrying varco's
+        schema verbatim, over the high-level ``FastMCP`` (BACKLOG KI-11,
+        research brief 003; migrated to v2's constructor-argument handler
+        registration by Plan 029 / N1a, §D-N1-rewrite)
           ✅ Works today with what varco already has — ``Tool(name=…,
              description=…, inputSchema={…})`` accepts a plain dict; no
              signature synthesis, no post-processing (brief 003 §finding 2).
@@ -719,11 +738,12 @@ class MCPAdapter:
              schema from the handler's type hints, which cannot express
              varco's generic ``execute(tool_name, arguments)`` dispatch (an
              untyped ``**kwargs`` shim, deliberately — dispatch is generic).
-          ✅ Portable across mcp v1 and v2 — the low-level ``Tool``-with-schema
-             path exists in both; only handler *registration* differs (brief
-             003 §finding 3), so a future v2 migration touches only the
-             registration lines below, not the schema-construction lines in
-             ``_to_mcp_tools``.
+          ✅ **The v1→v2 portability claim this DESIGN block originally made
+             was tested and held** (Plan 029 / N1a, Step 20): the low-level
+             ``Tool``-with-schema construction in ``_to_mcp_tools`` needed
+             ZERO changes migrating from v1.29.1 to v2.1.1 — only handler
+             *registration* changed (this method), exactly as predicted
+             (brief 003 §finding 3).
           ✅ Reversible — if SDK issue #761 ever lands ``input_schema=`` on the
              high-level server, reverting to decorators is a small diff.
           ❌ More verbose than ``FastMCP``, and loses its automatic argument
@@ -733,8 +753,6 @@ class MCPAdapter:
              avoids). ``mount()`` also loses ``FastMCP.sse_app()`` and must
              build its own Starlette SSE routes (§mount below) — bounded cost,
              since ``mount()`` was already broken by this same defect.
-          ❌ Pins onto mcp's maintenance-only v1.x branch (v1.29.1 is the last
-             v1 release) — filed forward as BACKLOG row MCP-v2.
           Rejected: synthesizing a typed handler signature from the JSON
           Schema so FastMCP derives the "right" schema — brief 003 calls this
           "fragile; no robust off-the-shelf tool" and issue #761 itself
@@ -744,10 +762,27 @@ class MCPAdapter:
           providify discipline forbids ("use the sanctioned API, file the
           gap").
 
+        DESIGN: ``on_list_tools`` returns a ``ListToolsResult``, not a bare
+        ``list[Tool]`` (§D-N1-parity, resolved by experiment against the
+        installed mcp 2.1.1 SDK, not by reading — Step 21)
+          The 2026-07-28 wire requires ``resultType``/``ttlMs``/``cacheScope``
+          on every list-shaped result. Verified via
+          ``inspect.signature(Server.__init__)``: ``on_list_tools`` is typed
+          ``Callable[..., Awaitable[types.ListToolsResult]]`` — a bare list is
+          not the contracted return type at all. Verified via
+          ``inspect.getsource(types.CacheableResult)``: the SDK **does**
+          default ``ttl_ms=0``/``cache_scope="private"`` on construction, so
+          the only obligation on varco's side is constructing the
+          ``ListToolsResult`` wrapper — ``ttl_ms=`` is set explicitly here
+          from the adapter's own ``ttl_ms`` parameter (default ``60_000``)
+          rather than accepting the SDK's ``0`` (immediately-stale) default,
+          since varco's tool list does not change after construction.
+
         Returns:
-            A configured ``mcp.server.lowlevel.Server`` instance with
-            ``list_tools`` and ``call_tool`` handlers registered, ready to be
-            run over stdio or wrapped in an ASGI transport (see ``mount()``).
+            A configured ``mcp.server.Server`` instance with
+            ``on_list_tools``/``on_call_tool`` handlers registered, ready to
+            be run over stdio or wrapped in an ASGI transport (see
+            ``mount()``).
 
         Raises:
             ImportError: If the ``mcp`` package is not installed.
@@ -760,32 +795,39 @@ class MCPAdapter:
         Thread safety:  ✅ Creates a new Server instance — no shared state.
         """
         try:
-            from mcp.server.lowlevel import Server  # noqa: PLC0415
+            from mcp.server import Server  # noqa: PLC0415
+            from mcp.types import (  # noqa: PLC0415
+                CallToolRequestParams,
+                CallToolResult,
+                ListToolsResult,
+            )
         except ImportError as exc:
             raise ImportError(
                 "The 'mcp' package is required to run MCPAdapter as an MCP server. "
                 "Install it with: pip install 'varco-fastapi[mcp]'"
             ) from exc
 
-        server: Any = Server(name=f"{self._router_cls.__name__}MCP")
         mcp_tools = _to_mcp_tools(self._tools)
+        ttl_ms = self._ttl_ms
 
-        # `server` is typed `Any` (the `mcp` import is deferred, and `Server`'s
-        # decorator-returning methods are themselves untyped from mypy's
-        # perspective under `ignore_missing_imports`) — `disallow_untyped_decorators`
-        # (Plan 020 / RL-14 G4) flags decorating with an `Any`-typed callable.
-        # Genuinely untypable third-party surface, not debt (§RL-14-metric).
-        @server.list_tools()  # type: ignore[untyped-decorator]
-        async def _list_tools() -> list[Any]:
-            return mcp_tools
+        async def _list_tools(ctx: Any, params: Any = None) -> ListToolsResult:
+            # §D-N1-parity: a list-shaped result must carry cacheScope/ttlMs
+            # on the 2026-07-28 wire — see the method DESIGN block above.
+            return ListToolsResult(tools=mcp_tools, ttl_ms=ttl_ms, cache_scope="private")
 
-        @server.call_tool()  # type: ignore[untyped-decorator]
-        async def _call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
+        async def _call_tool(ctx: Any, params: CallToolRequestParams) -> CallToolResult:
             from mcp.types import TextContent  # noqa: PLC0415
 
-            result = await self.execute(name, arguments)
-            return [TextContent(type="text", text=_json.dumps(result, default=str))]
+            result = await self.execute(params.name, params.arguments or {})
+            return CallToolResult(
+                content=[TextContent(type="text", text=_json.dumps(result, default=str))]
+            )
 
+        server: Any = Server(
+            name=f"{self._router_cls.__name__}MCP",
+            on_list_tools=_list_tools,
+            on_call_tool=_call_tool,
+        )
         return server
 
     def mount(
