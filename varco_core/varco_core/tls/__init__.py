@@ -34,16 +34,33 @@ Usage::
 
 from __future__ import annotations
 
+from varco_core.tls.clients import (
+    MissingClientDependencyError,
+    to_aiohttp_connector,
+    to_httpx_verify,
+    to_requests_adapter,
+    to_urllib3_poolmanager,
+)
 from varco_core.tls.di import bind_trust_store
 from varco_core.tls.discovery import CERT_FILE_PATTERNS, iter_cert_files
+from varco_core.tls.install import RestoreHandle, install_process_trust
+from varco_core.tls.pkcs12 import Pkcs12LoadError
 from varco_core.tls.reload import ReloadingTrustStore, ReloadStrategy
 from varco_core.tls.store import TrustStore
 
 __all__ = [
     "CERT_FILE_PATTERNS",
+    "MissingClientDependencyError",
+    "Pkcs12LoadError",
     "ReloadStrategy",
     "ReloadingTrustStore",
+    "RestoreHandle",
     "TrustStore",
     "bind_trust_store",
+    "install_process_trust",
     "iter_cert_files",
+    "to_aiohttp_connector",
+    "to_httpx_verify",
+    "to_requests_adapter",
+    "to_urllib3_poolmanager",
 ]

@@ -224,20 +224,27 @@ EventMiddleware (Callable[[Event, str, next] → Awaitable[None]])
       └── graceful fallback: no-op if opentelemetry is not installed
 ```
 
-### TLS trust (Plan 026 / T3, T5, T7)
+### TLS trust (Plan 026 / T3, T5, T7; client injection + mTLS hardening Plan 027 / T4, T6)
 
-One unified TLS trust model, plus its reloading wrapper. Full design (mutate-vs-swap reload
-strategy, the additive `SSL_CERT_FILE`/`SSL_CERT_DIR` divergence, the deprecation shim, a
-Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
+One unified TLS trust model, plus its reloading wrapper, four HTTP-client injection adapters,
+an opt-in process-global installer, and encrypted-key/PKCS#12 mTLS support. Full design
+(mutate-vs-swap reload strategy, the additive `SSL_CERT_FILE`/`SSL_CERT_DIR` divergence, the
+deprecation shim, the PKCS#12 temp-file discipline, a Pitfalls table):
+`technical_docs/features/tls-trust-and-hot-reload.md`.
 
 ```
 TrustStore (varco_core.tls.store, @dataclass(frozen=True))
   ├── ca_cert: Path | bytes | None,  ca_folders: Path | Sequence[Path] | None
   ├── cert_patterns: tuple[str, ...] = CERT_FILE_PATTERNS,  recursive: bool = True
   ├── client_cert / client_key,  include_system_cas,  verify,  check_hostname
+  ├── key_password: str | bytes | Callable[[], str | bytes] | None    (repr=False, Plan 027 / T6a)
+  ├── pkcs12_file / pkcs12_password (repr=False) / pkcs12_trust_ca    (Plan 027 / T6b)
   ├── from_env()            — VARCO_* names + SSL_CERT_FILE/SSL_CERT_DIR (additive, §D-T3-env)
-  ├── build_ssl_context()   → ssl.SSLContext — union of the two predecessor orderings
-  └── to_ssl_config()       ⇄ SSLConfig.to_trust_store()   (lossless bridge, §D-T3-bridge)
+  ├── build_ssl_context()   → ssl.SSLContext — union of the two predecessor orderings, plus
+  │                           key_password/PKCS#12 branches (§D-T6-password, §D-T6-pkcs12)
+  ├── to_ssl_config()       ⇄ SSLConfig.to_trust_store()   (lossless bridge, §D-T3-bridge)
+  └── to_httpx_verify() / to_aiohttp_connector() / to_urllib3_poolmanager() /
+      to_requests_adapter()                        — thin delegations to tls.clients (below)
         │
         └── varco_fastapi.auth.trust_store.TrustStore (subclass, §D-T3-oq1)
               — ⚠️ DEPRECATED, removed in 4.0.0. Pins 3.0 semantics: recursive=False,
@@ -249,6 +256,8 @@ ReloadingTrustStore (varco_core.tls.reload — composes, does not inherit)
   ├── _resource: ReloadableResource[ssl.SSLContext]    (Plan 025 / T2 — keep-last-good)
   ├── _watcher: AbstractPathWatcher                    (Plan 025 / T1 — over ca_folders + cert/key)
   ├── .context / .generation / async start()/stop()/reload() / subscribe(cb)
+  ├── to_httpx_verify() / to_aiohttp_connector() / to_urllib3_poolmanager() /
+  │   to_requests_adapter()                        — same four delegations, reading .context live
   └── ReloadStrategy: AUTO (default) | MUTATE | SWAP
         AUTO → additions-only batch: MUTATE the live ssl.SSLContext (adds trust, never revokes —
                ssl.SSLContext has no unload API); anything removed/replaced: SWAP + bump generation
@@ -258,6 +267,29 @@ iter_cert_files(root, *, patterns, recursive)   (varco_core.tls.discovery, §D-T
     SSLConfig.build_ssl_context, the legacy TrustStore.build_ssl_context,
     PemFolderSource._has_changes/_scan. A file matching the wider CERT_FILE_PATTERNS set but
     not a site's own patterns is skipped AND logged once at WARNING per (root, patterns).
+
+varco_core.tls.clients (Plan 027 / T4b, §D-T4-adapters) — zero hard client dependencies
+  ├── to_httpx_verify(store)              → ssl.SSLContext          (httpx 0.28+)
+  ├── to_aiohttp_connector(store, **kw)   → aiohttp.TCPConnector    (aiohttp 3.14+, async def)
+  ├── to_urllib3_poolmanager(store, **kw) → urllib3.PoolManager     (urllib3 v2.x)
+  ├── to_requests_adapter(store)          → requests.adapters.HTTPAdapter subclass (requests 2.32.3+)
+  └── MissingClientDependencyError(ImportError)  — raised by any of the above if uninstalled
+  — every httpx/aiohttp/urllib3/requests import is function-body-only; enforced by
+    test_tls_no_hard_client_deps.py (ast walk + subprocess sys.modules check)
+
+varco_core.tls.install (Plan 027 / T4c, §D-T4-install)
+  ├── install_process_trust(store, *, acknowledge_global_mutation)  → RestoreHandle
+  │     — patches ssl._create_default_https_context; ValueError without the ack kwarg;
+  │       RuntimeError if the private hook is absent on the running interpreter
+  └── RestoreHandle(previous_hook)   — .restore(), also usable as a context manager
+  — varco itself never calls install_process_trust (mechanically checked by `rg`, Step 20)
+
+varco_core.tls.pkcs12 (Plan 027 / T6b, §D-T6-pkcs12)
+  ├── load_pkcs12_identity(path, password) → Pkcs12Identity(key_pem, cert_pem, ca_pems)
+  │     — decodes via cryptography.hazmat...pkcs12, entirely in memory
+  ├── materialize_chain()  → contextmanager yielding a private (0700 dir/0600 file,
+  │     /dev/shm-preferred) temp Path; unlinked in `finally` on every exit path
+  └── Pkcs12LoadError(ValueError)  — wrong password, corrupt bundle, or no private key
 ```
 
 **Rule**: `varco_core.tls` imports **nothing** from `varco_core.connection`, `varco_fastapi`, or

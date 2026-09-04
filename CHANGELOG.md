@@ -61,6 +61,42 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   one automatically from `varco_core.tls.TrustStore.from_env()`, but only when at least one CA
   env var is actually set — `None` (stdlib default) otherwise, byte-identical to before. ⚠️
   This fixes certificate verification only, not proxy handling — `HTTP_PROXY` still applies.
+- **`varco_core.tls.clients` — `to_httpx_verify()`, `to_aiohttp_connector()`,
+  `to_urllib3_poolmanager()`, `to_requests_adapter()` (Plan 027 / T4).** Four thin adapters
+  converting a `TrustStore`/`ReloadingTrustStore` into the shape each mainstream HTTP client
+  wants (`ssl.SSLContext`, `aiohttp.TCPConnector`, `urllib3.PoolManager`, an
+  `HTTPAdapter` subclass), with **no new hard dependency** on httpx, aiohttp, urllib3, or
+  requests — every import is inside the function body that needs it, mechanically guarded by
+  `test_tls_no_hard_client_deps.py`. Also exposed as delegating methods directly on
+  `TrustStore`/`ReloadingTrustStore`. All four read the store's context at call time, so a
+  `ReloadStrategy.MUTATE` rotation reaches an already-built client with no action; `SWAP`
+  requires rebuilding via `store.subscribe(cb)`. A missing library raises
+  `MissingClientDependencyError` naming the `pip install` package.
+- **`varco_core.tls.install_process_trust()` (Plan 027 / T4).** An explicit, acknowledged,
+  reversible process-global override of `ssl._create_default_https_context`, so any
+  stdlib-ssl-backed HTTP client built after the call (via a `create_default_context()`-style
+  path) picks up a `TrustStore`'s trust configuration process-wide. Requires
+  `acknowledge_global_mutation=True` (`ValueError` otherwise, with no mutation) and returns a
+  `RestoreHandle` (also a context manager) that undoes it. **varco itself never calls this
+  function** — it is an application-level decision only, mechanically checked by an `rg` sweep.
+- **`TrustStore.key_password` — encrypted private-key support (Plan 027 / T6).** A `str`,
+  `bytes`, or zero-argument callable passed straight through to
+  `ssl.SSLContext.load_cert_chain(..., password=...)`, so an mTLS client key encrypted with
+  `BestAvailableEncryption` (previously unsupported — `build_ssl_context()` would raise, or on
+  some platforms prompt on a TTY) now loads correctly. The callable form is recommended so the
+  secret is fetched lazily (e.g. from Vault/KMS) rather than held in memory for the store's
+  lifetime; the field is `repr=False` so it never appears in a `repr(store)`. Requires
+  `client_key` to also be set (`ValueError` otherwise).
+- **`TrustStore.pkcs12_file` / `pkcs12_password` / `pkcs12_trust_ca` — PKCS#12/`.pfx` support
+  (Plan 027 / T6).** Ingests a PKCS#12 client-identity bundle as an alternative to
+  `client_cert`/`client_key` (mutually exclusive with them), decoded via `cryptography`
+  (already a hard `varco_core` dependency) with **no new dependency** and no
+  `httpx-pkcs12`/`requests-pkcs12` shim. The private key is briefly materialized to a private
+  (`0600`, `/dev/shm`-preferred) temp file for `load_cert_chain` to read, then unlinked in a
+  `finally` on both the success and failure path. `pkcs12_trust_ca` defaults to `False` — the
+  bundle's own CA chain is not automatically trusted for server verification unless opted in.
+  A wrong password or corrupt bundle raises `Pkcs12LoadError`, never a raw `cryptography`
+  traceback.
 
 ### Deprecated
 

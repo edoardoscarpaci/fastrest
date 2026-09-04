@@ -201,28 +201,28 @@ patching one documented-by-convention hook.
 
 ### Phase 0 — T6a: encrypted private keys (🟡 should, S)
 
-1. [ ] `varco_core/tests/conftest.py` (extend) or `varco_core/tests/tls_fixtures.py` (new) — a
+1. [x] `varco_core/tests/conftest.py` (extend) or `varco_core/tests/tls_fixtures.py` (new) — a
        session-scoped PKI fixture built with `cryptography`: a self-signed CA, a server leaf
        (SAN `localhost`, `127.0.0.1`), a client leaf, the client key in **both** unencrypted and
        encrypted (`BestAvailableEncryption`) PEM form, and a PKCS#12 bundle of the client identity
        (used in Phase 1). Written under `tmp_path_factory`.
-2. [ ] `varco_core/tests/test_tls_mtls.py` (new, **failing first**) — an encrypted client key with
+2. [x] `varco_core/tests/test_tls_mtls.py` (new, **failing first**) — an encrypted client key with
        no `key_password` raises from `build_ssl_context()`; with a `str` password it loads; with a
        `bytes` password it loads; with a `Callable` password it loads and the callable is invoked
        lazily (not at construction); `repr(store)` contains **neither** the password nor the
        string `"password"`'s value; `key_password` without `client_key` raises `ValueError` at
        construction.
-3. [ ] `varco_core/varco_core/tls/store.py` — add `key_password` per §D-T6-password
+3. [x] `varco_core/varco_core/tls/store.py` — add `key_password` per §D-T6-password
        (`field(default=None, repr=False)`), the `__post_init__` rule, and the `password=`
        argument at the `load_cert_chain` call. Docstring: Args entry + an **Edge cases** note that
        a callable is invoked once per `build_ssl_context()`, and a security note recommending it.
-4. [ ] `varco_core/varco_core/connection/ssl.py` — docstring-only change on `SSLConfig`: state
+4. [x] `varco_core/varco_core/connection/ssl.py` — docstring-only change on `SSLConfig`: state
        that key passwords and PKCS#12 are deliberately **not** settings fields (§D-T6-password ❌)
        and point at `to_trust_store()`.
 
 ### Phase 1 — T6b: PKCS#12 (🟡 should, M)
 
-5. [ ] `varco_core/tests/test_tls_pkcs12.py` (new, **failing first**) — a password-protected `.p12`
+5. [x] `varco_core/tests/test_tls_pkcs12.py` (new, **failing first**) — a password-protected `.p12`
        from the Phase 0 fixture loads and produces a context whose client cert matches the
        standalone-PEM path (compare `ctx.get_ca_certs()` plus a real loopback mTLS handshake
        asserting the server sees the expected client subject); wrong password → a clear varco
@@ -231,16 +231,16 @@ patching one documented-by-convention hook.
        returns *and* after it raises (assert on the returned path captured via monkeypatch);
        `pkcs12_trust_ca=True` adds the bundle's CA to `get_ca_certs()` and the default `False`
        does not.
-6. [ ] `varco_core/varco_core/tls/pkcs12.py` (new) — `load_pkcs12_identity(path, password) ->
+6. [x] `varco_core/varco_core/tls/pkcs12.py` (new) — `load_pkcs12_identity(path, password) ->
        Pkcs12Identity` (frozen dataclass of PEM `bytes`: `key_pem`, `cert_pem`,
        `ca_pems: tuple[bytes, ...]`), and a `materialize_chain()` context manager implementing the
        `/dev/shm`-preferred, `0600`, unlink-in-`finally` discipline from §D-T6-pkcs12. Errors
        wrapped in `Pkcs12LoadError(ValueError)`.
-7. [ ] `varco_core/varco_core/tls/store.py` — `pkcs12_file`, `pkcs12_password` (`repr=False`),
+7. [x] `varco_core/varco_core/tls/store.py` — `pkcs12_file`, `pkcs12_password` (`repr=False`),
        `pkcs12_trust_ca: bool = False`; mutual-exclusion rule; `build_ssl_context()` step 5 branches
        to the PKCS#12 path. The `DESIGN:` block from §D-T6-pkcs12 goes in `pkcs12.py`'s module
        docstring, including the ❌ temp-file window.
-8. [ ] `varco_core/tests/test_tls_pkcs12.py` (extend) — `@pytest.mark.integration` end-to-end: a
+8. [x] `varco_core/tests/test_tls_pkcs12.py` (extend) — `@pytest.mark.integration` end-to-end: a
        loopback TLS server with `verify_mode=CERT_REQUIRED` and the CA loaded, an httpx client
        built from `to_httpx_verify()` (after Phase 3) — or, if Phase 3 has not landed yet in the
        implementer's ordering, a raw `ssl` client socket — completing a mutual handshake with the
@@ -248,14 +248,14 @@ patching one documented-by-convention hook.
 
 ### Phase 2 — T4a: test-only client dependencies (🟡 should, S)
 
-9. [ ] `pyproject.toml` (root) `[dependency-groups]` — add a `clients` group with
+9. [x] `pyproject.toml` (root) `[dependency-groups]` — add a `clients` group with
        `aiohttp>=3.14`, `urllib3>=2`, `requests>=2.32.3` and `httpx>=0.28`, and
        `{ include-group = "clients" }` in `dev`. Comment: **test-only**; these must never appear in
        any `varco_*/pyproject.toml` `[project].dependencies` or `[project.optional-dependencies]`
        (locked, `BACKLOG.md:37`). Floors are brief 001 §4's (requests 2.32.3 is the release that
        fixed custom-`SSLContext` `HTTPAdapter` subclasses; urllib3 v2 because v1.26 is EOL). Then
        `uv lock` + `uv sync --all-packages --all-extras`.
-10. [ ] `varco_core/tests/test_tls_no_hard_client_deps.py` (new) — a **structural** test: parse
+10. [x] `varco_core/tests/test_tls_no_hard_client_deps.py` (new) — a **structural** test: parse
         `varco_core/varco_core/tls/clients.py` with `ast` and assert every `httpx`/`aiohttp`/
         `urllib3`/`requests` import is inside a function body, and that a fresh subprocess
         `import varco_core.tls` leaves all four out of `sys.modules`. This is the guard that keeps
@@ -263,28 +263,28 @@ patching one documented-by-convention hook.
 
 ### Phase 3 — T4b: the four adapters (🟡 should, M)
 
-11. [ ] `varco_core/tests/test_tls_clients.py` (new, **failing first**) — for each of the four:
+11. [x] `varco_core/tests/test_tls_clients.py` (new, **failing first**) — for each of the four:
         the returned object carries the store's context (identity check where the library exposes
         it: `TCPConnector._ssl`, `PoolManager.connection_pool_kw["ssl_context"]`, the adapter's
         stored context, and httpx's returned context itself); a `ReloadingTrustStore` argument
         reads `.context` at call time (assert by swapping the store's context between two calls);
         a missing library raises `MissingClientDependencyError` naming the pip package (simulate
         by monkeypatching `builtins.__import__`).
-12. [ ] `varco_core/varco_core/tls/clients.py` (new) — the four functions per §D-T4-adapters, each
+12. [x] `varco_core/varco_core/tls/clients.py` (new) — the four functions per §D-T4-adapters, each
         with a full docstring carrying the brief 001 §4 version note (and, for httpx, the
         `cert=`-deprecated-in-0.28 note so nobody re-adds it), Args/Returns/Raises/Edge cases, and
         the reload caveat. `MissingClientDependencyError(ImportError)`.
-13. [ ] `varco_core/varco_core/tls/store.py` — thin delegating methods `to_httpx_verify()`,
+13. [x] `varco_core/varco_core/tls/store.py` — thin delegating methods `to_httpx_verify()`,
         `to_aiohttp_connector()`, `to_urllib3_poolmanager()`, `to_requests_adapter()`.
-14. [ ] `varco_core/varco_core/tls/reload.py` — the same four delegating methods on
+14. [x] `varco_core/varco_core/tls/reload.py` — the same four delegating methods on
         `ReloadingTrustStore`, each reading `self.context` at call time.
-15. [ ] `varco_core/tests/test_tls_clients_integration.py` (new,
+15. [x] `varco_core/tests/test_tls_clients_integration.py` (new,
         `pytestmark = pytest.mark.integration`) — a loopback TLS server (self-signed CA from the
         Phase 0 fixture) fetched successfully through **all four** clients via the adapters, and
         failing without them. Marked `integration` because it binds a port and does real
         handshakes; it needs no Docker, which the module docstring must say so nobody adds a
         container fixture.
-16. [ ] `varco_core/tests/test_tls_clients_integration.py` (extend) — a rotation test: an httpx
+16. [x] `varco_core/tests/test_tls_clients_integration.py` (extend) — a rotation test: an httpx
         client built from a `ReloadingTrustStore`, a CA **added** to the watched folder (MUTATE
         branch, Plan 026 / §D-T3-reload), and a second request to a server using the new CA
         succeeding **without** rebuilding the client. This is the end-to-end proof of the whole
@@ -293,27 +293,27 @@ patching one documented-by-convention hook.
 
 ### Phase 4 — T4c: `install_process_trust()` (🟡 should, S)
 
-17. [ ] `varco_core/tests/test_tls_install.py` (new, **failing first**) — without
+17. [x] `varco_core/tests/test_tls_install.py` (new, **failing first**) — without
         `acknowledge_global_mutation=True` → `ValueError` and **no** mutation; with it,
         `ssl.create_default_context()`-consuming code sees the store's context, and the returned
         `RestoreHandle` (also usable as a context manager) restores the original exactly; calling
         it twice nests correctly; varco itself never calls it (assert by grep in Step 20).
-18. [ ] `varco_core/varco_core/tls/install.py` (new) — `install_process_trust(store, *,
+18. [x] `varco_core/varco_core/tls/install.py` (new) — `install_process_trust(store, *,
         acknowledge_global_mutation)` + `RestoreHandle`. It must first assert
         `hasattr(ssl, "_create_default_https_context")` and raise a clear, actionable
         `RuntimeError` naming the Python version if not (§D-T4-install ❌ / Risks). Module docstring
         carries the brief 001 §3 "libraries must not inject" citation as the reason for the
         acknowledgement kwarg.
-19. [ ] `varco_core/varco_core/tls/__init__.py` — export `install_process_trust`, `RestoreHandle`,
+19. [x] `varco_core/varco_core/tls/__init__.py` — export `install_process_trust`, `RestoreHandle`,
         `MissingClientDependencyError`, `Pkcs12LoadError`, the four adapter functions. Update
         `__all__`.
-20. [ ] `rg -n "install_process_trust" varco_*/varco_*` — assert the only hits are the definition
+20. [x] `rg -n "install_process_trust" varco_*/varco_*` — assert the only hits are the definition
         and the export. Record in the commit message; this is the mechanical form of "varco never
         calls it".
 
 ### Phase 5 — docs, changelog, snapshot (🟡 should, S — same commit as the code)
 
-21. [ ] `uv run python scripts/api_surface.py` — regenerate and commit both snapshot files. All
+21. [x] `uv run python scripts/api_surface.py` — regenerate and commit both snapshot files. All
         deltas here are **additions** (non-failing notes), but the gate compares the committed file
         (`.github/workflows/test.yml:64-65`), so it must be regenerated.
 22. [ ] `technical_docs/features/tls-trust-and-hot-reload.md` (extend, created by Plan 026) — new
@@ -334,7 +334,7 @@ patching one documented-by-convention hook.
         urllib3/requests? → `varco_core.tls.clients`, never a hand-built context*).
 25. [ ] `CHANGELOG.md` `## [Unreleased]` `### Added` — the four adapters, `install_process_trust`,
         `key_password`, PKCS#12 support; each referencing "Plan 027 / T4" or "Plan 027 / T6".
-26. [ ] `BACKLOG.md` — mark T4/T6 against Plan 027.
+26. [x] `BACKLOG.md` — mark T4/T6 against Plan 027.
 
 ---
 

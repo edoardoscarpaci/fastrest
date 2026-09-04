@@ -2841,6 +2841,91 @@ was already unaffected either way.
 never silently drops the system trust store because a sidecar exported one of these names. If
 you need the OpenSSL behaviour, set `include_system_cas=False` explicitly.
 
+#### mTLS — encrypted private keys and PKCS#12 (Plan 027 / T6)
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore
+
+# Encrypted PEM client key — str/bytes, or a callable (recommended: fetched lazily, never
+# held in memory until build_ssl_context() actually needs it)
+store = TrustStore(
+    client_cert=Path("/etc/ssl/client.crt"),
+    client_key=Path("/etc/ssl/client-encrypted.key"),
+    key_password=lambda: vault_client.read_secret("client-key-password"),
+)
+
+# PKCS#12 / .pfx bundle — zero new dependencies, built on cryptography (already a hard
+# varco_core dependency). pkcs12_trust_ca defaults to False: the bundle's own CAs are not
+# automatically trusted for server verification.
+store = TrustStore(
+    pkcs12_file=Path("/etc/ssl/client-identity.p12"),
+    pkcs12_password="s3cret",
+    pkcs12_trust_ca=False,
+)
+ctx = store.build_ssl_context()
+```
+
+`pkcs12_file` is mutually exclusive with `client_cert`/`client_key`. Neither `key_password` nor
+`pkcs12_file`/`pkcs12_password` are `SSLConfig` settings fields — a secret does not belong in a
+pydantic settings model populated from env vars. Full design (the temp-file window,
+`/dev/shm` preference, the `password=b""` OpenSSL-prompt-avoidance deviation):
+`technical_docs/features/tls-trust-and-hot-reload.md`.
+
+#### Client injection — httpx, aiohttp, urllib3, requests (Plan 027 / T4)
+
+Four adapters convert a `TrustStore`/`ReloadingTrustStore` into the shape each mainstream
+HTTP client wants, with **no new hard dependency** on any of them (function-body imports only):
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore
+
+store = TrustStore(ca_folders=Path("/etc/ssl/private-ca"))
+
+import httpx
+client = httpx.Client(verify=store.to_httpx_verify())  # httpx 0.28+
+
+import aiohttp
+# must be built inside the event loop that will use it
+connector = await store.to_aiohttp_connector()  # aiohttp 3.14+
+async with aiohttp.ClientSession(connector=connector) as session:
+    ...
+
+import urllib3
+pool = store.to_urllib3_poolmanager()  # urllib3 v2.x
+
+import requests
+session = requests.Session()
+session.mount("https://", store.to_requests_adapter())  # requests 2.32.3+
+```
+
+A missing library raises `MissingClientDependencyError` naming the `pip install` package. All
+four also exist as module-level functions in `varco_core.tls.clients`
+(`to_httpx_verify(store)`, etc.) — the methods above are thin delegations for discoverability.
+Every adapter reads the store's context **at call time** — under `ReloadStrategy.SWAP`, a
+client built before a rotation keeps the old context until rebuilt via `store.subscribe(cb)`;
+under `MUTATE` it picks up the rotation with no action.
+
+#### `install_process_trust()` — process-wide trust, explicit and never automatic (Plan 027 / T4)
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore, install_process_trust
+
+store = TrustStore(ca_folders=Path("/etc/ssl/private-ca"))
+
+# ⚠️ Call this ONCE, at your application's entry point, before constructing/importing any
+# HTTP client. It patches ssl._create_default_https_context process-wide — every stdlib-ssl-
+# backed client built AFTER this call (via a create_default_context()-consuming path) picks
+# up `store`'s trust. varco itself never calls this on your behalf; it is an application-level
+# decision only, and omitting acknowledge_global_mutation=True raises ValueError with no
+# mutation at all.
+handle = install_process_trust(store, acknowledge_global_mutation=True)
+...
+handle.restore()  # or use install_process_trust(...) as a context manager
+```
+
 ### RedisConnectionSettings
 
 ```python

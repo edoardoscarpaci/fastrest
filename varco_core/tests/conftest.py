@@ -17,6 +17,10 @@ from __future__ import annotations
 
 import pytest
 
+# Plan 027 / Step 1 — registers tls_fixtures.py's session-scoped `pki_bundle` fixture
+# for the mTLS/PKCS#12/client-adapter suites.
+pytest_plugins = ["tls_fixtures"]
+
 
 @pytest.fixture(autouse=True)
 def _reset_jwt_globals():

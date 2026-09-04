@@ -39,8 +39,8 @@ from __future__ import annotations
 
 import os
 import ssl
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -78,6 +78,22 @@ class TrustStore:
         client_cert: mTLS client certificate path.
         client_key: mTLS client private key path. Must be set together with ``client_cert``
             or neither — checked eagerly at construction (see class docstring).
+        key_password: Decryption password for an encrypted ``client_key`` PEM
+            (``-----BEGIN ENCRYPTED PRIVATE KEY-----``) — a ``str``, ``bytes``, or a
+            zero-argument callable returning one (§D-T6-password). Passed straight through
+            to ``ssl.SSLContext.load_cert_chain(..., password=...)``; varco never decrypts
+            the key itself. Prefer the callable form (e.g. reading from Vault/KMS lazily at
+            handshake-build time) over a plaintext ``str``/``bytes`` held for the store's
+            lifetime. ``repr=False`` — never printed by the dataclass's own ``__repr__``.
+        pkcs12_file: A PKCS#12/``.pfx`` bundle containing the client identity (leaf cert +
+            private key + optional CA chain), as an alternative to ``client_cert``/
+            ``client_key`` (§D-T6-pkcs12). Mutually exclusive with ``client_cert``.
+        pkcs12_password: Decryption password for ``pkcs12_file`` — same ``str``/``bytes``/
+            callable shape as ``key_password``, ``repr=False``. ``None`` and ``b""`` are both
+            accepted and passed through unchanged (``cryptography`` distinguishes them).
+        pkcs12_trust_ca: Whether the CA certificates bundled inside ``pkcs12_file`` are also
+            added as trust anchors. Defaults to ``False`` — a client identity bundle's CAs
+            are not automatically trusted; opt in explicitly.
         include_system_cas: Whether to include the OS CA bundle.
         verify: Whether to verify the server's certificate chain at all.
             ``check_hostname=True`` requires ``verify=True``.
@@ -85,7 +101,9 @@ class TrustStore:
 
     Raises:
         ValueError: ``check_hostname=True`` with ``verify=False`` (the ``ssl`` module's own
-            requirement, raised early); or exactly one of ``client_cert``/``client_key`` set.
+            requirement, raised early); exactly one of ``client_cert``/``client_key`` set;
+            ``key_password`` set without ``client_key``; or ``pkcs12_file`` set together with
+            ``client_cert``/``client_key``.
 
     Edge cases:
         - ``ca_folders=[]`` (empty sequence) → normalised to ``None``; no folder loading, no
@@ -96,6 +114,8 @@ class TrustStore:
           connection fails. Intentional for strict-pinning scenarios.
         - ``verify=False`` wins over ``include_system_cas=True`` — the base context is
           ``CERT_NONE`` regardless of ``include_system_cas``.
+        - A ``key_password`` callable is invoked exactly once per ``build_ssl_context()``
+          call — not at construction, and not cached across calls.
 
     Example::
 
@@ -117,6 +137,12 @@ class TrustStore:
     recursive: bool = True
     client_cert: Path | None = None
     client_key: Path | None = None
+    key_password: str | bytes | Callable[[], str | bytes] | None = field(default=None, repr=False)
+    pkcs12_file: Path | None = None
+    pkcs12_password: str | bytes | Callable[[], str | bytes] | None = field(
+        default=None, repr=False
+    )
+    pkcs12_trust_ca: bool = False
     include_system_cas: bool = True
     verify: bool = True
     check_hostname: bool = True
@@ -129,6 +155,18 @@ class TrustStore:
         validate_trust_store_flags(
             self.verify, self.check_hostname, self.client_cert, self.client_key
         )
+        if self.key_password is not None and self.client_key is None:
+            raise ValueError(
+                "TrustStore: 'key_password' was set but 'client_key' was not — a password "
+                "with nothing to decrypt is always a misconfiguration."
+            )
+        if self.pkcs12_file is not None and (
+            self.client_cert is not None or self.client_key is not None
+        ):
+            raise ValueError(
+                "TrustStore: 'pkcs12_file' is mutually exclusive with 'client_cert'/"
+                "'client_key' — pick exactly one way to supply the mTLS client identity."
+            )
 
     # ── Factory methods ───────────────────────────────────────────────────────
 
@@ -238,7 +276,13 @@ class TrustStore:
         2. ``check_hostname=False`` with ``verify=True`` → disable hostname checking.
         3. Every ``ca_folders`` entry, enumerated via ``iter_cert_files()``, loaded.
         4. ``ca_cert``: ``bytes`` → ``load_verify_locations(cadata=...)``; ``Path`` → ``cafile=``.
-        5. ``client_cert`` + ``client_key`` → ``load_cert_chain(...)``.
+        5. mTLS client identity: ``client_cert`` + ``client_key`` → ``load_cert_chain(...,
+           password=key_password)``; **or**, if ``pkcs12_file`` is set instead, the bundle is
+           decoded and re-serialised to a temporary PEM chain file via
+           ``varco_core.tls.pkcs12.materialize_chain()`` (§D-T6-pkcs12 — see that module's
+           docstring for the full temp-file discipline), loaded via ``load_cert_chain``, and
+           the temp file is unlinked before this method returns (success or failure). Any CA
+           bundled in the PKCS#12 file is additionally trusted only if ``pkcs12_trust_ca=True``.
 
         System CAs stay additive throughout — ``create_default_context()`` is followed by
         additive ``load_verify_locations`` calls, never replaced (``BACKLOG.md:32``).
@@ -288,11 +332,75 @@ class TrustStore:
             else:
                 ctx.load_verify_locations(cafile=str(self.ca_cert))
 
-        # Step 5: mTLS client identity — __post_init__ already guarantees both or neither.
+        # Step 5: mTLS client identity — __post_init__ already guarantees both-or-neither for
+        # client_cert/client_key, and mutual exclusion with pkcs12_file.
         if self.client_cert is not None and self.client_key is not None:
-            ctx.load_cert_chain(certfile=str(self.client_cert), keyfile=str(self.client_key))
+            # DESIGN: never let `password=None` reach load_cert_chain (§D-T6-password).
+            # OpenSSL's C-level default behaviour for an *encrypted* key with no password
+            # callback is to fall back to its own interactive console read — exactly the
+            # "or worse, prompt on a TTY" outcome this field exists to prevent (module
+            # docstring). Substituting an explicit b"" when no key_password was given still
+            # loads an *unencrypted* key correctly (OpenSSL ignores an unused password), and
+            # for an *encrypted* key with no key_password it now fails deterministically with
+            # ssl.SSLError ("PEM lib" — a decrypt failure) instead of ever touching a console.
+            ctx.load_cert_chain(
+                certfile=str(self.client_cert),
+                keyfile=str(self.client_key),
+                password=self.key_password if self.key_password is not None else b"",
+            )
+        elif self.pkcs12_file is not None:
+            # Local import: keeps varco_core.tls.pkcs12 (and its cryptography.hazmat usage)
+            # out of every TrustStore construction that never touches PKCS#12 — see
+            # pkcs12.py's module docstring for the full §D-T6-pkcs12 design rationale.
+            from varco_core.tls.pkcs12 import (  # noqa: PLC0415
+                load_pkcs12_identity,
+                materialize_chain,
+            )
+
+            # materialize_chain() yields first, then this block decodes — so a wrong-
+            # password/corrupt-bundle failure still runs materialize_chain()'s own cleanup
+            # (see that function's DESIGN note for why decode is not done ahead of the yield).
+            with materialize_chain() as chain_path:
+                identity = load_pkcs12_identity(self.pkcs12_file, self.pkcs12_password)
+                chain_path.write_bytes(identity.key_pem + identity.cert_pem)
+                ctx.load_cert_chain(certfile=str(chain_path))
+            if self.pkcs12_trust_ca:
+                for ca_pem in identity.ca_pems:
+                    ctx.load_verify_locations(cadata=ca_pem.decode("utf-8"))
 
         return ctx
+
+    # ── HTTP-client adapters (Plan 027 / T4b, §D-T4-adapters) ─────────────────
+    #
+    # Thin delegations to varco_core.tls.clients' module-level functions — exposed as
+    # methods purely for discoverability (`store.to_httpx_verify()` reads naturally next to
+    # `store.build_ssl_context()`). The real implementation, including the function-body-
+    # import discipline that keeps httpx/aiohttp/urllib3/requests out of this module's own
+    # import graph, lives in clients.py — see that module's docstring for the full design.
+
+    def to_httpx_verify(self) -> ssl.SSLContext:
+        """See ``varco_core.tls.clients.to_httpx_verify``."""
+        from varco_core.tls.clients import to_httpx_verify  # noqa: PLC0415
+
+        return to_httpx_verify(self)
+
+    async def to_aiohttp_connector(self, **kwargs: object) -> object:
+        """See ``varco_core.tls.clients.to_aiohttp_connector``."""
+        from varco_core.tls.clients import to_aiohttp_connector  # noqa: PLC0415
+
+        return await to_aiohttp_connector(self, **kwargs)
+
+    def to_urllib3_poolmanager(self, **kwargs: object) -> object:
+        """See ``varco_core.tls.clients.to_urllib3_poolmanager``."""
+        from varco_core.tls.clients import to_urllib3_poolmanager  # noqa: PLC0415
+
+        return to_urllib3_poolmanager(self, **kwargs)
+
+    def to_requests_adapter(self) -> object:
+        """See ``varco_core.tls.clients.to_requests_adapter``."""
+        from varco_core.tls.clients import to_requests_adapter  # noqa: PLC0415
+
+        return to_requests_adapter(self)
 
 
 # ── Shared normalisation/validation (also used by the 3.0-semantics deprecation shim,

@@ -177,6 +177,39 @@ class ReloadingTrustStore:
     async def __aexit__(self, *_exc_info: object) -> None:
         await self.stop()
 
+    # ── HTTP-client adapters (Plan 027 / T4b, §D-T4-adapters) ─────────────────
+    #
+    # Same thin-delegation shape as TrustStore's own four methods (varco_core.tls.store) —
+    # each reads self.context **at call time**, so the object handed to the client library is
+    # always the current one. This is what makes a MUTATE rotation reach an already-built
+    # client with zero action (see clients.py's "Reload interaction" docstring section); a
+    # SWAP rotation still requires the caller to rebuild via subscribe() — reading fresh here
+    # cannot retroactively fix a client that already captured the old context object.
+
+    def to_httpx_verify(self) -> ssl.SSLContext:
+        """See ``varco_core.tls.clients.to_httpx_verify``."""
+        from varco_core.tls.clients import to_httpx_verify  # noqa: PLC0415
+
+        return to_httpx_verify(self)
+
+    async def to_aiohttp_connector(self, **kwargs: object) -> object:
+        """See ``varco_core.tls.clients.to_aiohttp_connector``."""
+        from varco_core.tls.clients import to_aiohttp_connector  # noqa: PLC0415
+
+        return await to_aiohttp_connector(self, **kwargs)
+
+    def to_urllib3_poolmanager(self, **kwargs: object) -> object:
+        """See ``varco_core.tls.clients.to_urllib3_poolmanager``."""
+        from varco_core.tls.clients import to_urllib3_poolmanager  # noqa: PLC0415
+
+        return to_urllib3_poolmanager(self, **kwargs)
+
+    def to_requests_adapter(self) -> object:
+        """See ``varco_core.tls.clients.to_requests_adapter``."""
+        from varco_core.tls.clients import to_requests_adapter  # noqa: PLC0415
+
+        return to_requests_adapter(self)
+
     # ── Watcher glue ──────────────────────────────────────────────────────────
 
     def _on_watch_event(self, payload: WatchEvent | tuple[WatchEvent, ...]) -> None:

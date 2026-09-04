@@ -96,6 +96,14 @@ class SSLConfig(BaseModel):
         - Paths are validated for existence only at ``build_ssl_context()`` time —
           constructing an ``SSLConfig`` with a non-existent path does not raise.
 
+    **Deliberately absent: encrypted-key passwords and PKCS#12 (Plan 027 / §D-T6-password
+    ❌).** ``SSLConfig`` is a pydantic ``BaseModel`` populated by ``env_nested_delimiter`` from
+    environment variables — a secret field here (``key_password``) would land in
+    ``model_dump()``, in DI logging, and in any settings echo. Neither ``key_password`` nor
+    ``pkcs12_file``/``pkcs12_password`` are settings fields on this type, and never will be.
+    Use ``to_trust_store()`` below to convert to a ``varco_core.tls.TrustStore`` and set
+    those fields in code instead, where the secret is never routed through a settings model.
+
     Example::
 
         # Standard — system CAs, full verification

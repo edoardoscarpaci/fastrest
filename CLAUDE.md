@@ -466,15 +466,20 @@ Secrets/ConfigMaps as a `..data` symlink swap, and a watcher that stats the syml
 hand-rolled mtime-only dict) never sees it change. Never "fix" a watcher to stat the symlink
 itself.
 
-### TLS trust store (varco_core.tls, Plan 026 / T3, T5, T7)
+### TLS trust store (varco_core.tls, Plan 026 / T3, T5, T7; client injection + mTLS hardening Plan 027 / T4, T6)
 
 `TrustStore` unifies the two pre-3.1 TLS models (`SSLConfig`'s `verify=False` escape hatch +
 the old `varco_fastapi.auth.TrustStore`'s `include_system_cas`/`bytes`-CA support) into one
 frozen-dataclass superset, reachable from any backend; `ReloadingTrustStore` makes it hot-
-reloadable on top of Plan 025's `watch`/`reload` primitives. Usage: README's "TLS trust store".
-Type hierarchy + module listing: ARCHITECTURE.md's "TLS trust". Full design (mutate-vs-swap,
-the additive `SSL_CERT_FILE`/`SSL_CERT_DIR` divergence, the deprecation-subclass asymmetry, a
-Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
+reloadable on top of Plan 025's `watch`/`reload` primitives. `varco_core.tls.clients` adds four
+zero-hard-dependency adapters (`to_httpx_verify`/`to_aiohttp_connector`/
+`to_urllib3_poolmanager`/`to_requests_adapter`) and `varco_core.tls.install` adds the opt-in
+`install_process_trust()`; `TrustStore.key_password`/`pkcs12_file` add encrypted-key and
+PKCS#12 mTLS support. Usage: README's "TLS trust store" section (including the mTLS/client-
+injection/`install_process_trust` subsections). Type hierarchy + module listing:
+ARCHITECTURE.md's "TLS trust". Full design (mutate-vs-swap, the additive `SSL_CERT_FILE`/
+`SSL_CERT_DIR` divergence, the deprecation-subclass asymmetry, the PKCS#12 temp-file
+discipline, a Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
 
 **Rule**: TLS trust lives in `varco_core.tls` — `varco_fastapi` may import it (the deprecated
 `varco_fastapi.auth.TrustStore` shim does), never the reverse. Same seam rule as
@@ -485,6 +490,16 @@ Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
 `@Configuration`, which would start a filesystem watcher in every app that scans `varco_core`.
 `varco_core.tls.bind_trust_store(container, store)` registers an already-constructed,
 already-owned store instead — no lifecycle side effect.
+
+**Rule**: never add a hard dependency on httpx/aiohttp/urllib3/requests to any `varco_*`
+package's `[project.dependencies]`/extras for the adapters' sake — `varco_core.tls.clients`
+imports each of the four inside the function body that needs it, never at module scope, guarded
+mechanically by `varco_core/tests/test_tls_no_hard_client_deps.py`.
+
+**Rule**: never call `install_process_trust()` from library code — it is an application-level,
+explicit, `acknowledge_global_mutation=True`-gated decision only (§D-T4-install). varco itself
+never calls it; `rg -n "install_process_trust" varco_*/varco_*` should only ever hit the
+definition and its export.
 
 ### Query system (varco_core.query)
 
@@ -982,6 +997,8 @@ Am I adding a new capability?
 │     ↳ a settings-embedded fragment (nested in a ConnectionSettings)?
 │                            → varco_core.connection.SSLConfig, which converts via
 │                              to_trust_store()/TrustStore.to_ssl_config() (lossy the second way)
+│     ↳ Need a varco trust store in httpx/aiohttp/urllib3/requests?
+│                            → varco_core.tls.clients, never a hand-built context
 │
 ├─ Profiling / performance diagnostic?
 │  ├─ New CPU backend (pyinstrument, py-spy)?
