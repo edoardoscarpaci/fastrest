@@ -43,6 +43,16 @@ varco_core/              — Domain model, service layer, event system, resilien
   │                         InMemoryIdempotencyStore (default), compute_fingerprint(),
   │                         IdempotencySettings (Plan 029 / D1a — HTTP adapter lives in
   │                         varco_fastapi.middleware.idempotency, not here)
+  ├── webhook/            — WebhookSubscription, WebhookDelivery, WebhookSubscriptionRepository,
+  │                         WebhookSigner, validate_target(), WebhookDispatcher (Plan 031 / D4 —
+  │                         admin mount lives in varco_fastapi.webhook, not here)
+  ├── flags/              — AbstractFeatureFlags, FlagEvaluationContext, InMemoryFeatureFlags,
+  │                         NullFeatureFlags (Plan 032 / D7 — opt-in via
+  │                         varco_core.flags.di.enable_feature_flags(); OpenFeature provider
+  │                         deferred, see technical_docs/features/feature-flags.md)
+  ├── schedule/           — Schedule, CatchUpPolicy, parse_cron()/CronSchedule,
+  │                         ScheduleMaterializer, AbstractScheduleRepository (Plan 032 / D6 — no
+  │                         execution path; the existing AbstractJobRunner runs materialized jobs)
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
   ├── repository.py      — AsyncRepository[D, PK] protocol
@@ -99,6 +109,11 @@ varco_sa/                — SQLAlchemy async ORM backend
   │                        eleventh framework table)
   ├── audit.py           — SAAuditRepository (AuditEntryModel; table: varco_audit_log;
   │                        Postgres ON CONFLICT DO NOTHING on entry_id, plain INSERT elsewhere)
+  ├── webhook.py         — SAWebhookSubscriptionRepository (table: webhook_subscriptions;
+  │                        Plan 031 / D4a, the twelfth framework table)
+  ├── schedule.py        — SAScheduleRepository (table: schedules; UNIQUE(schedule_id);
+  │                        Plan 032 / D6, the thirteenth framework table, migration
+  │                        0007_schedules_table)
   ├── health.py          — SAHealthCheck (SELECT 1 probe)
   ├── di.py              — SAModule (@Configuration)
   └── (auto-generated)   — ORM models created from DomainModel subclasses at import time
@@ -115,6 +130,10 @@ varco_beanie/            — Beanie/MongoDB async ODM backend
   │                        plain insert() — no conflict handling, raises DuplicateKeyError)
   ├── idempotency.py     — BeanieIdempotencyStore(AbstractIdempotencyStore) — unique index +
   │                        DuplicateKeyError; collection: varco_idempotency (Plan 029 / D1b)
+  ├── webhook.py         — BeanieWebhookSubscriptionRepository (WebhookSubscriptionDocument;
+  │                        Plan 031 / D4a)
+  ├── schedule.py        — BeanieScheduleRepository (ScheduleDocument; unique index on
+  │                        schedule_id; Plan 032 / D6)
   ├── query/aggregation.py — BeanieAggregationApplicator (MongoDB aggregation pipeline)
   ├── index_guard.py     — BeanieIndexGuard, IndexDrift, IndexDriftReport
   ├── health.py          — BeanieHealthCheck (server_info() probe)
@@ -1138,6 +1157,82 @@ table): `technical_docs/features/outbound-webhooks.md`. Usage: README's "Outboun
 section.
 ```
 
+### Feature flags (varco_core.flags, Plan 032 / D7)
+
+```
+AbstractFeatureFlags (ABC) — varco_core.flags.base
+  ├── resolve_bool(key, default, *, context=None)   → FlagResolution[bool]
+  ├── resolve_string(key, default, *, context=None) → FlagResolution[str]
+  ├── resolve_numeric(key, default, *, context=None)→ FlagResolution[float]
+  └── resolve_object(key, default, *, context=None) → FlagResolution[Any]
+  (every resolver degrades to the caller's own `default` on an unconfigured key — never raises)
+
+FlagEvaluationContext (frozen dataclass) — varco_core.flags.base
+  ├── tenant_id: str | None    — from current_tenant(), NEVER RequestContext (tenant SSOT rule)
+  ├── attributes: dict[str, str] — from current_request_context().extras
+  └── .current() — builds one from ambient state
+
+FlagResolution[T] (frozen dataclass, Generic) — value + optional `reason` string
+
+Implementations:
+  ├── NullFeatureFlags (varco_core) — scanned @Singleton, priority=-sys.maxsize-1, the DI default;
+  │                                    every resolver returns the caller's default, reason="NULL"
+  └── InMemoryFeatureFlags (varco_core) — dict-backed, optional per-tenant overrides;
+                                           tenant override → global value → caller's default
+
+DI: varco_core.flags.di.enable_feature_flags(container) — opt-in @Provider binding
+InMemoryFeatureFlags → AbstractFeatureFlags, shadowing NullFeatureFlags. Deliberately NOT a
+scanned @Configuration (would auto-activate on any `container.scan("varco_core", recursive=True)`).
+
+Un-park trigger for an OpenFeatureFlags adapter: `openfeature-sdk` (the SDK, not the spec)
+reaches 1.0.0 — checked NOT fired as of 2026-09-04 (SDK 0.10.0, spec 0.9.0). Full version
+evidence: `technical_docs/features/feature-flags.md`. Usage: README's "Feature flags" section.
+```
+
+### Recurring schedules (varco_core.schedule, Plan 032 / D6)
+
+```
+Schedule (DomainModel) — varco_core.schedule.entity
+  schedule_id: UUID (stable domain identity, independent of `pk`)
+  tenant_id: str | None       cron_expr: str        timezone: str (IANA)
+  enabled: bool = True
+  gap_policy: GapPolicy = NEXT_VALID       overlap_policy: OverlapPolicy = FIRST
+  catchup_policy: CatchUpPolicy = SKIP     max_backfill: int = 100
+  last_materialized_at: datetime | None    payload: dict[str, Any]   callback_url: str | None
+  (no execution path here — the existing AbstractJobRunner runs materialized Job rows unchanged)
+
+CatchUpPolicy (StrEnum) — varco_core.schedule.entity
+  SKIP (default) | FIRE_ONCE | BACKFILL_ALL (bounded by max_backfill)
+
+parse_cron(expr) → CronSchedule — varco_core.schedule.cron
+  hand-rolled, zero-dependency 5-field parser + next_after()/at_or_before(); RRULE parked
+  (§D-D6-cron — a complete RFC 5545 engine means a new dateutil.rrule runtime dependency)
+
+ScheduleMaterializer(job_store=) — varco_core.schedule.materializer
+  .materialize(schedule, *, now=None) → list[Job]
+  ├── computes due occurrence(s) per catchup_policy, resolves each through resolve_zoned()
+  │   (varco_core.tz.schedule) → Job.run_at (UTC) + run_at_wall/run_at_tz/run_at_fold (intent)
+  └── ⚠️ deviates from the plan's draft mechanism — does NOT use the job store's fenced-lease
+      primitives (a synthetic lease row would corrupt list_by_status()/all_jobs() counts).
+      Instead: a deterministic uuid5 occurrence Job.job_id (cross-process idempotent-upsert
+      convergence via AbstractJobStore.save()) + a lazily-created, per-schedule-id asyncio.Lock
+      (in-process exclusivity only). UNIQUE(schedule_id) on the Schedule row backstops identity;
+      occurrence-level uniqueness lives entirely in the deterministic job id, not a
+      UNIQUE(schedule_id, run_at) index (Schedule has no run_at column).
+
+AbstractScheduleRepository (ABC) — varco_core.schedule.repository
+  ├── save(schedule) → Schedule      ├── find_by_id(pk) → Schedule | None
+  ├── find_all_enabled() → list[Schedule]   └── delete(pk) → None
+  Implementations:
+  ├── InMemoryScheduleRepository (varco_core) — single-process, lazily-created lock
+  ├── SAScheduleRepository (varco_sa)          — own Table/MetaData, migration 0007_schedules_table
+  └── BeanieScheduleRepository (varco_beanie)  — self-managed Motor client + init_beanie
+
+Full design (the fenced-lease deviation, a Pitfalls table for DST gaps/catch-up surprise/
+materializer downtime): `technical_docs/features/recurring-schedules.md`. Usage: README's
+"Recurring schedules" section.
+```
+
 ### WebSocket / SSE Push Adapters (varco_ws)
 
 ```
@@ -1389,6 +1484,8 @@ unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
 | `query/policy.py` | T3's declared datetime coercion contract | `DatetimeCoercionPolicy` |
 | `idempotency/` | D1a (Plan 029) — HTTP idempotency storage contract, framework-agnostic | `AbstractIdempotencyStore`, `ReserveOutcome`, `IdempotencyRecord`, `InMemoryIdempotencyStore`, `compute_fingerprint()`, `IdempotencySettings` |
 | `webhook/` | D4 (Plan 031) — outbound webhook subscription, signing, SSRF guard, dispatcher | `WebhookSubscription`, `WebhookDelivery`, `WebhookSubscriptionRepository`, `InMemoryWebhookSubscriptionRepository`, `WebhookSigner`, `StandardWebhooksSigner`, `Rfc9421Signer`, `validate_target()`, `WebhookDispatcher`, `WebhookSettings`, `install_webhook_metrics()` |
+| `flags/` | D7 (Plan 032) — feature-flag evaluation seam, varco-shaped (not OpenFeature-shaped); OpenFeature provider deferred | `AbstractFeatureFlags`, `FlagEvaluationContext`, `FlagResolution`, `InMemoryFeatureFlags`, `NullFeatureFlags`, `enable_feature_flags()` |
+| `schedule/` | D6 (Plan 032) — recurring cron `Schedule` → `Job` materialization, zero new dependencies | `Schedule`, `CatchUpPolicy`, `parse_cron()`, `CronSchedule`, `ScheduleMaterializer`, `AbstractScheduleRepository`, `InMemoryScheduleRepository` |
 
 ---
 

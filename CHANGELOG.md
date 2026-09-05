@@ -31,6 +31,34 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Recurring schedules — `varco_core.schedule` (Plan 032 / D6).** A `Schedule` entity (5-field
+  cron expression, IANA timezone, `GapPolicy`/`OverlapPolicy`, `CatchUpPolicy`) is materialized
+  into ordinary `Job` rows by `ScheduleMaterializer` — no new execution path; the existing
+  `AbstractJobRunner` runs the produced jobs unchanged. Cron parsing is a hand-rolled,
+  zero-dependency 5-field parser (`varco_core.schedule.cron`); RRULE/RFC 5545 stays parked (would
+  need a new `dateutil` runtime dependency). Three catch-up policies govern missed occurrences
+  (`SKIP` default, `FIRE_ONCE`, `BACKFILL_ALL`). `AbstractScheduleRepository` +
+  `InMemoryScheduleRepository` ship in `varco_core`; `SAScheduleRepository`
+  (`varco_sa`, migration `0007_schedules_table`, the thirteenth framework table) and
+  `BeanieScheduleRepository` (`varco_beanie`) back Postgres/Mongo. ⚠️ Cross-process
+  double-materialization safety deliberately does **not** reuse the job store's fenced-lease
+  primitives (a synthetic lease row would corrupt `list_by_status()`/`all_jobs()` counts) —
+  instead a deterministic `uuid5` occurrence `Job.job_id` gives idempotent-upsert convergence
+  across processes, backstopped by `UNIQUE(schedule_id)`, plus a lazily-created per-schedule
+  `asyncio.Lock` for in-process exclusivity. Full design + a Pitfalls table (DST gaps, catch-up
+  surprise, materializer downtime): `technical_docs/features/recurring-schedules.md`.
+- **Feature-flag evaluation seam — `varco_core.flags` (Plan 032 / D7).** `AbstractFeatureFlags`
+  (four typed resolutions: bool/string/numeric/object, each degrading to the caller's `default`
+  on an unconfigured key) is a varco-shaped ABC, **not** a transcription of OpenFeature's
+  pre-1.0 provider surface — the OpenFeature Python SDK sits at 0.10.0 and the spec at 0.9.0 as
+  of the 2026-09-04 check, and 0.10.0 itself shipped a breaking change inside a minor release.
+  `NullFeatureFlags` (scanned `@Singleton`, lowest priority) is the always-off DI default;
+  `varco_core.flags.di.enable_feature_flags(container)` opts in `InMemoryFeatureFlags`, same
+  `enable_*` verb shape as `varco_casbin.di.enable_policy_authorizer`.
+  `FlagEvaluationContext.tenant_id` comes from `current_tenant()`, never `RequestContext` — the
+  same tenant single-source-of-truth rule as everywhere else. No OpenFeature provider yet: an
+  `OpenFeatureFlags` adapter is purely additive once the SDK (not the spec) reaches 1.0. Full
+  version evidence and the un-park trigger: `technical_docs/features/feature-flags.md`.
 - **CloudEvents v1.0.2 structured envelope — `varco_core.event.cloudevents` (Plan 030 / N2).**
   `CloudEventsJsonSerializer` is a *second* `Serializer[Event]` implementation, so an app can put
   every published event inside a spec-compliant CloudEvents JSON envelope by binding one object:

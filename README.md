@@ -191,6 +191,8 @@ policy engine, field encryption, observability, profiling, …) — see
 - [CloudEvents envelope](#cloudevents-envelope)
 - [AsyncAPI export](#asyncapi-export)
 - [Outbound webhooks](#outbound-webhooks)
+- [Feature flags](#feature-flags)
+- [Recurring schedules](#recurring-schedules)
 
 ---
 
@@ -4007,6 +4009,91 @@ point a varco-app receiver at plan 029's `Idempotency-Key` middleware for dedup 
 
 Full design (the signing-scheme decision, the five-layer SSRF model, the retry-schedule
 convention, a Pitfalls table): `technical_docs/features/outbound-webhooks.md`.
+
+---
+
+## Feature flags
+
+Plan 032 / D7. `varco_core.flags` is a varco-shaped `AbstractFeatureFlags` seam — **not** a
+transcription of OpenFeature's `AbstractProvider`. The OpenFeature Python SDK sits at 0.10.0 and
+the spec itself at 0.9.0 (verified 2026-09-04); both pre-1.0, and 0.10.0 itself shipped a
+breaking change inside a minor release. So the seam ships now and an `OpenFeatureFlags` adapter
+is deferred until the SDK — not the spec — reaches 1.0. Full version evidence and the un-park
+trigger: `technical_docs/features/feature-flags.md`.
+
+Four typed resolutions (bool/string/numeric/object), each degrading to the caller's own
+`default` on any "flag not found" condition — never an exception:
+
+```python
+from varco_core.flags import AbstractFeatureFlags, FlagEvaluationContext, InMemoryFeatureFlags
+
+flags = InMemoryFeatureFlags(
+    flags={"new_checkout": False},
+    tenant_overrides={"acme": {"new_checkout": True}},
+)
+
+ctx = FlagEvaluationContext.current()  # tenant_id from current_tenant(), attributes from RequestContext
+resolution = await flags.resolve_bool("new_checkout", default=False, context=ctx)
+resolution.value    # True inside tenant "acme"'s ambient context, False elsewhere
+resolution.reason   # "TENANT_OVERRIDE" / "STATIC" / "DEFAULT"
+```
+
+`NullFeatureFlags` (a scanned `@Singleton`, lowest priority) is the DI default — importing or
+scanning `varco_core.flags` never changes behaviour for an app that has not opted in. Opt in
+explicitly:
+
+```python
+from varco_core.flags.di import enable_feature_flags
+
+container.scan("varco_core.flags", recursive=True)  # NullFeatureFlags bound
+enable_feature_flags(container)                       # opt-in: InMemoryFeatureFlags
+```
+
+`FlagEvaluationContext.tenant_id` comes from `current_tenant()` — never `RequestContext`, same
+single-source-of-truth rule the rest of the codebase follows for tenancy.
+
+---
+
+## Recurring schedules
+
+Plan 032 / D6. `varco_core.schedule` closes the loop the job subsystem's zoned fields
+(`Job.run_at_wall`/`run_at_tz`/`run_at_fold`) were built for: a `Schedule` entity describes a
+recurring cron expression, and `ScheduleMaterializer` turns its next-due occurrence(s) into
+ordinary `Job` rows. **No new execution path** — the existing `AbstractJobRunner` runs the
+produced jobs exactly as it always has.
+
+```python
+from varco_core.schedule.entity import CatchUpPolicy, Schedule
+from varco_core.schedule.materializer import ScheduleMaterializer
+from varco_core.tz.schedule import GapPolicy, OverlapPolicy
+
+schedule = Schedule(
+    cron_expr="0 9 * * 1-5",           # 09:00, weekdays
+    timezone="America/New_York",
+    gap_policy=GapPolicy.NEXT_VALID,    # spring-forward
+    overlap_policy=OverlapPolicy.FIRST, # fall-back
+    catchup_policy=CatchUpPolicy.SKIP,  # default — see the Pitfalls table
+    payload={"report": "daily-digest"},
+)
+
+materializer = ScheduleMaterializer(job_store=job_store)
+jobs = await materializer.materialize(schedule)  # [] if not yet due or already materialized
+```
+
+Cron parsing is a hand-rolled, zero-dependency 5-field parser (`varco_core.schedule.cron`) —
+RRULE/RFC 5545 is explicitly out of scope (a complete implementation means a `dateutil` runtime
+dependency for a 🟢 backlog row). Three catch-up policies govern what a materializer that missed
+occurrences does about it (`SKIP` default, `FIRE_ONCE`, `BACKFILL_ALL` bounded by
+`max_backfill`) — see the Pitfalls table in `technical_docs/features/recurring-schedules.md` for
+the surprising cases.
+
+`AbstractScheduleRepository` (`varco_core.schedule.repository`) is the storage contract —
+`InMemoryScheduleRepository` for tests, `SAScheduleRepository`/`BeanieScheduleRepository` for
+Postgres/Mongo, both with a `UNIQUE(schedule_id)` constraint.
+
+⚠️ Cross-process double-materialization safety does **not** reuse the job store's fenced-lease
+primitives — see `technical_docs/features/recurring-schedules.md` for what the materializer
+actually does instead (a deterministic occurrence id + a per-schedule in-process lock) and why.
 
 ---
 

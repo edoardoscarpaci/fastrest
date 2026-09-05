@@ -182,49 +182,67 @@ distribution, and prevents the question being reopened from scratch next cycle.
 
 ### Phase 0 — D7: the flags seam
 
-1. [ ] `varco_core/varco_core/flags/` — `base.py` (`AbstractFeatureFlags`, `FlagEvaluationContext`,
+1. [x] `varco_core/varco_core/flags/` — `base.py` (`AbstractFeatureFlags`, `FlagEvaluationContext`,
        `FlagResolution[T]`), `memory.py` (`InMemoryFeatureFlags`), `null.py` (`NullFeatureFlags`),
        `di.py` (`enable_feature_flags`). Four typed resolutions: bool, string, numeric, object.
-2. [ ] `FlagEvaluationContext` reads `current_tenant()` for the tenant (never `RequestContext` —
+2. [x] `FlagEvaluationContext` reads `current_tenant()` for the tenant (never `RequestContext` —
        CLAUDE.md's rule) and `RequestContext` for request-scoped attributes.
-3. [ ] `NullFeatureFlags` bound by default; `enable_feature_flags(container)` opts in
+3. [x] `NullFeatureFlags` bound by default; `enable_feature_flags(container)` opts in
        (`varco_casbin/varco_casbin/di.py`'s `enable_policy_authorizer` precedent). **Never** a
        scanned `@Configuration`.
-4. [ ] Tests: each resolution type; default returned on unknown flag; tenant-scoped override;
+4. [x] Tests: each resolution type; default returned on unknown flag; tenant-scoped override;
        `NullFeatureFlags` returns the caller's default for everything.
-5. [ ] Docs: README section; a short `technical_docs/features/feature-flags.md` recording
+5. [x] Docs: README section; a short `technical_docs/features/feature-flags.md` recording
        §D-D7-trigger's version evidence **with the fetch date**, and stating that an
        `OpenFeatureFlags` adapter is additive when the SDK reaches 1.0.
-6. [ ] Amend BACKLOG's OpenFeature Parked row: trigger checked 2026-09-04, SDK at 0.10.0, spec at
+6. [x] Amend BACKLOG's OpenFeature Parked row: trigger checked 2026-09-04, SDK at 0.10.0, spec at
        0.9.0, **not fired**; seam shipped, provider deferred. Cite brief 004 §1.
-7. [ ] API surface snapshot + import budget (`--warn-only`; `varco_core/__init__.py` stays lazy).
+7. [x] API surface snapshot + import budget (`--warn-only`; `varco_core/__init__.py` stays lazy).
 
 ⛔ **CHECKPOINT**
 
 ### Phase 1 — D6: recurring schedules
 
-8. [ ] `varco_core/varco_core/schedule/` — `Schedule` entity (cron expression, timezone,
+8. [x] `varco_core/varco_core/schedule/` — `Schedule` entity (cron expression, timezone,
        `GapPolicy`/`OverlapPolicy`, catch-up policy, payload template, enabled flag, last-materialized
        marker), `cron.py` (5-field parser + `next_after()`, zero dependencies),
        `materializer.py`.
-9. [ ] Materializer per §D-D6-cron: next wall-clock occurrence → `resolve_zoned()` → `run_at`, with
+9. [x] Materializer per §D-D6-cron: next wall-clock occurrence → `resolve_zoned()` → `run_at`, with
        `run_at_wall`/`run_at_tz`/`run_at_fold` carrying the intent
-       (`varco_core/varco_core/job/base.py:258-273`). Fenced lease via the job store's existing
-       primitives; `UNIQUE(schedule_id, run_at)`.
-10. [ ] `varco_sa` + `varco_beanie` repositories; SA migration revision +
-        `register_framework_metadata()`.
-11. [ ] Tests: cron parsing incl. ranges/steps/lists and **invalid expressions rejected loudly**;
+       (`varco_core/varco_core/job/base.py:258-273`). ⚠️ **Deviation from the plan's literal
+       mechanism, documented in `materializer.py`'s DESIGN note**: a synthetic lease row saved
+       through `AbstractJobStore` would itself count as a `Job` in every `list_by_status()`/
+       `all_jobs()` caller — that broke the concurrent-materializer test's `store.all_jobs() ==
+       1` assertion outright, not just stylistically. Implemented instead: a deterministic
+       (`uuid5`-derived) occurrence `Job.job_id` (idempotent-upsert convergence across processes)
+       plus a lazily-created, per-schedule-id `asyncio.Lock` (in-process exclusivity only). The
+       cross-process backstop is `UNIQUE(schedule_id)` on the SA/Beanie `Schedule` row (Step 10)
+       plus the deterministic id — see that step's note on why `UNIQUE(schedule_id, run_at)`
+       literally does not apply (no `run_at` column exists on `Schedule`).
+10. [x] `varco_sa` + `varco_beanie` repositories; SA migration revision +
+        `register_framework_metadata()`. Added `AbstractScheduleRepository` +
+        `InMemoryScheduleRepository` to `varco_core.schedule.repository` first (same "dedicated
+        ABC over `AsyncRepository`" pattern as `WebhookSubscriptionRepository`) since the plan's
+        Step 10 wording implies backend implementations of an ABC that did not yet exist. Unit
+        tests added for both backends (sqlite in-memory for SA, mocked Beanie operations for
+        Mongo) — the "repository shapes the test-writer deferred".
+11. [x] Tests: cron parsing incl. ranges/steps/lists and **invalid expressions rejected loudly**;
         a **spring-forward gap** and a **fall-back ambiguity** resolved per `GapPolicy`/`OverlapPolicy`
         (the whole reason the zoned fields exist — these two tests are the phase's core);
         all three catch-up policies; concurrent materializers produce exactly one job per
-        occurrence; a disabled schedule produces none.
-12. [ ] Docs: `technical_docs/features/recurring-schedules.md` with a Pitfalls table (DST gaps,
+        occurrence; a disabled schedule produces none. (Pre-existing red tests — all pass
+        unmodified except one mechanical `ruff format`/unused-import cleanup.)
+12. [x] Docs: `technical_docs/features/recurring-schedules.md` with a Pitfalls table (DST gaps,
         catch-up surprise, materializer downtime); README; a CLAUDE.md Decision-Tree branch under
         the existing `tz/schedule.py` line, replacing its "Non-goal" note for RRULE with a pointer.
 
 ⛔ **CHECKPOINT**
 
 ### Phase 2 — D8: `varco-testkit` (decision-gated)
+
+⛔ **NOT STARTED — the go/no-go gate at Step 13 has not been put to the maintainer.** Per the
+implementation instructions for this pass, Phase 2 is explicitly out of scope until that
+question is asked and answered. Steps 13–21 remain unchecked below.
 
 13. [ ] ⛔ **GO/NO-GO.** Confirm §D-D8-narrow with the maintainer: publish `varco_conformance` only,
         as `varco-testkit`, accepting the `api_surface.py` gate on it permanently. **If no, stop

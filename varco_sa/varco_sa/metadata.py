@@ -53,6 +53,8 @@ _OWNING_MODULES = (
     "varco_sa.idempotency",
     # Plan 031 / D4a — the twelfth framework table.
     "varco_sa.webhook",
+    # Plan 032 / D6, Step 10 — the thirteenth framework table.
+    "varco_sa.schedule",
 )
 
 

@@ -524,6 +524,41 @@ Full design (signing-scheme choice, the five-layer SSRF model, retry-schedule co
 Pitfalls table): `technical_docs/features/outbound-webhooks.md`. Usage: README's "Outbound
 webhooks" section.
 
+### Feature flags (varco_core.flags, Plan 032 / D7)
+
+`AbstractFeatureFlags` is a varco-shaped seam (bool/string/numeric/object resolution) — **not** a
+transcription of OpenFeature's `AbstractProvider`. `NullFeatureFlags` is the scanned `@Singleton`
+default (always returns the caller's own default); `enable_feature_flags(container)` opts in
+`InMemoryFeatureFlags`, same `enable_*` verb shape as `varco_casbin.di.enable_policy_authorizer`.
+
+**Rule**: `FlagEvaluationContext.tenant_id` comes from `current_tenant()`, never
+`RequestContext` — same tenant single-source-of-truth rule as everywhere else in this file.
+
+**No OpenFeature provider yet — deliberately.** The un-park trigger (`openfeature-sdk`, the SDK
+not the spec, reaching 1.0.0) had not fired as of the 2026-09-04 check (SDK 0.10.0, spec 0.9.0).
+An `OpenFeatureFlags` adapter is purely additive once it does. Full version evidence and design:
+`technical_docs/features/feature-flags.md`. Usage: README's "Feature flags" section.
+
+### Recurring schedules (varco_core.schedule, Plan 032 / D6)
+
+`Schedule` (a cron expression + IANA timezone + `GapPolicy`/`OverlapPolicy`/`CatchUpPolicy`) is
+materialized into ordinary `Job` rows by `ScheduleMaterializer` — **no second execution path**;
+the existing `AbstractJobRunner` runs the produced jobs unchanged. Cron parsing is a hand-rolled,
+zero-dependency 5-field parser (`varco_core.schedule.cron`); RRULE/RFC 5545 remains parked (a
+complete implementation needs `dateutil.rrule`, a new runtime dependency).
+
+**Rule**: the materializer does **not** use the job store's fenced-lease primitives
+(`try_claim`/`save(expected_epoch=)`) — a synthetic lease row would corrupt every
+`list_by_status()`/`all_jobs()` caller downstream. Cross-process double-materialization safety is
+a deterministic `uuid5` occurrence `Job.job_id` (idempotent-upsert convergence via
+`AbstractJobStore.save()`) plus `UNIQUE(schedule_id)` on the `Schedule` row; in-process
+exclusivity is a lazily-created, per-schedule `asyncio.Lock`. Never "fix" this by adding a lease
+to `Schedule` to match the job store's model.
+
+Full design (the fenced-lease deviation in detail, a Pitfalls table for DST gaps/catch-up
+surprise/materializer downtime): `technical_docs/features/recurring-schedules.md`. Usage:
+README's "Recurring schedules" section.
+
 ### SBOM and regulatory posture (scripts/sbom.py, Plan 030 / D5)
 
 `scripts/sbom.py` generates **one CycloneDX 1.6 SBOM per distribution** (never workspace-wide —
@@ -1166,8 +1201,18 @@ Am I adding a new capability?
 │     ↳ per-request user zone? → tz/resolve.py
 │     ↳ DST-safe one-shot schedule? → tz/schedule.py + the three Job
 │       columns (D-7)
-│     ↳ recurring/RRULE? → Non-goal — a future Schedule entity that
-│       produces Job rows exactly like these
+│     ↳ recurring cron schedule (cron → Job materialization)?
+│       → varco_core.schedule (Plan 032 / D6) — ScheduleMaterializer,
+│         never a second AbstractJobRunner
+│     ↳ RRULE/RFC 5545? → still parked — needs dateutil.rrule, a new
+│       runtime dependency (technical_docs/features/recurring-schedules.md)
+│
+├─ Feature flag / runtime toggle?
+│  └─ → varco_core.flags.AbstractFeatureFlags (Plan 032 / D7) —
+│       NullFeatureFlags is the DI default; enable_feature_flags()
+│       opts in InMemoryFeatureFlags
+│     ↳ OpenFeature provider? → deferred — un-park trigger not yet
+│       fired (technical_docs/features/feature-flags.md)
 │
 ├─ Resilience pattern (new retry/timeout/breaker variant)?
 │  └─ → varco_core.resilience (decorator + config)
