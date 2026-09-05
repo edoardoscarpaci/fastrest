@@ -141,15 +141,14 @@ class AbstractIdempotencyStore(abc.ABC):
             key:    The same scoped storage key passed to ``reserve()``.
             record: The captured response to persist.
 
-        Raises:
-            None expected under normal operation — implementations should
-            let genuine storage errors propagate (unlike
-            ``AbstractDeadLetterQueue.push()``, there is no "must never
-            raise" contract here: a failure to persist an idempotency
-            record means the *next* retry re-executes, which is merely a
-            loss of the optimization, not data loss).
-
         Edge cases:
+            - No exception is expected under normal operation, but this
+              method deliberately carries no "must never raise" contract
+              (unlike ``AbstractDeadLetterQueue.push()``): implementations
+              should let genuine storage errors propagate. A failure to
+              persist an idempotency record means the *next* retry
+              re-executes, which is merely a loss of the optimization, not
+              data loss.
             - Calling ``complete()`` for a key that was never reserved is
               implementation-defined (in-memory: creates the record anyway;
               durable backends may reject it) — callers (the middleware)

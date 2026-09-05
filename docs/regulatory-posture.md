@@ -99,7 +99,7 @@ wants from us. What we cannot do is discharge your obligation on your behalf.
 
 ## See also
 
-- [`SECURITY.md`](../SECURITY.md) — coordinated disclosure, supported versions, security-bearing
+- [`SECURITY.md`](https://github.com/edoardoscarpaci/varco/blob/main/SECURITY.md) — coordinated disclosure, supported versions, security-bearing
   subsystems.
 - `scripts/sbom.py` — the generator, its pinning discipline, and the per-distribution decision.
 - `design/research/004-flags-asyncapi-and-sbom-tooling.md` §3 — the sourced evidence behind every

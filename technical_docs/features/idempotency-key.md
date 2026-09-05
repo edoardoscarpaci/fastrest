@@ -137,7 +137,7 @@ populated before the scoping logic above reads them. This is asserted by
 
 ## See also
 
-- README's ["Idempotency-Key middleware"](../../README.md#idempotency-key-middleware) section for
+- README's ["Idempotency-Key middleware"](https://github.com/edoardoscarpaci/varco/blob/main/README.md#idempotency-key-middleware) section for
   a runnable usage snippet.
 - `design/research/005-idempotency-webhooks-and-cloudevents.md` §1 — the research brief this
   feature implements.

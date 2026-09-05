@@ -42,7 +42,7 @@ live in each feature's own page under [technical_docs/features/](technical_docs/
 All ten packages are released **in lockstep** — they always share one version number, and a
 breaking change in any one bumps all ten. Install the exact version you need with any package
 manager's usual pin; siblings resolve automatically via a compatible-release pin
-(`varco-core~=3.0`), so `varco-kafka==3.0.0` works with `varco-core` anywhere in the `3.x` line.
+(`varco-core~=3.0`), so `varco-kafka==3.1.0` works with `varco-core` anywhere in the `3.x` line.
 See `CONTRIBUTING.md`'s versioning and deprecation policy for the full contract.
 
 ---
@@ -134,6 +134,8 @@ policy engine, field encryption, observability, profiling, …) — see
   - [The varco CLI](#the-varco-cli)
 - [Beanie Backend](#beanie-backend)
   - [Bootstrap](#bootstrap-beanie)
+- [Exception Hierarchy](#exception-hierarchy)
+- [Running tests](#running-tests)
 - [Cache System](#cache-system)
   - [AsyncCache and CacheBackend](#asynccache-and-cachebackend)
   - [InMemoryCache](#inmemorycache)
@@ -162,7 +164,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [RedisConnectionSettings](#redisconnectionsettings)
   - [HttpConnectionSettings](#httpconnectionsettings)
 - [FastAPI Integration](#fastapi-integration)
-  - [VarcoRouter and VarcoCRUDRouter](#varcorouter-and-varcoCRUDRouter)
+  - [VarcoRouter and VarcoCRUDRouter](#varcorouter-and-varcocrudrouter)
   - [CRUD mixins](#crud-mixins)
   - [Service-free routers — GenericRouter](#service-free-routers--genericrouter)
   - [JWT authentication middleware](#jwt-authentication-middleware)
@@ -178,21 +180,21 @@ policy engine, field encryption, observability, profiling, …) — see
   - [@counter and @histogram](#counter-and-histogram)
   - [TracingServiceMixin](#tracingservicemixin)
   - [OtelConfig and DI wiring](#otelconfig-and-di-wiring)
-- [Health Checks](#health-checks)
-- [Exception Hierarchy](#exception-hierarchy)
 - [Profiling](#profiling)
 - [Background Jobs](#background-jobs)
 - [Database Auditing](#database-auditing)
 - [Dead Letter Queue](#dead-letter-queue)
-- [File watching and hot reload](#file-watching-and-hot-reload)
-- [Composite Deployment](#composite-deployment)
-- [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
 - [Idempotency-Key middleware](#idempotency-key-middleware)
 - [CloudEvents envelope](#cloudevents-envelope)
 - [AsyncAPI export](#asyncapi-export)
 - [Outbound webhooks](#outbound-webhooks)
 - [Feature flags](#feature-flags)
 - [Recurring schedules](#recurring-schedules)
+- [File watching and hot reload](#file-watching-and-hot-reload)
+- [Composite Deployment](#composite-deployment)
+- [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
+- [Changelog summary](#changelog-summary)
+- [Health Checks](#health-checks)
 
 ---
 

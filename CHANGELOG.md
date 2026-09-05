@@ -9,6 +9,8 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-09-05
+
 ### BREAKING (optional extra) — MCP Python SDK bumped to v2 (Plan 029 / N1)
 
 - **`varco-fastapi[mcp]` now requires `mcp>=2,<3`** (was `mcp>=1.28.1,<2`). `pip install mcp`
@@ -335,6 +337,16 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ref-only group, which would otherwise let a merge cancel the nightly run (and its `chaos` job).
   **Test-only release — no runtime package changed.**
 
+- **`scripts/api_surface.py --check` is now a CI gate**, not a tool a contributor had to remember
+  to run by hand. Wired into `make lint`'s no-`PKG` path (`make lint PKG=<one package>` stays
+  narrow and skips it, deliberately), a standalone `make api-check`, and CI's `lint` job (a step
+  after `mypy`). Scope is unchanged and stated honestly in CLAUDE.md: catches removals and
+  *function* signature changes only — a narrowed class `__init__` stays invisible; additions and
+  module moves remain notes, never failures.
+- **`testkit/varco_conformance/COVERAGE.md`** (new) records the conformance-suite coverage audit
+  for all five shared ABCs (`event_bus`, `cache`, `job_store`, `dlq`, `channel_manager`) and every
+  implementation's subclass-or-stated-reason status — test-surface only, no production change.
+
 ### Fixed
 
 - **`bind_cloudevents_serializer()` silently never reached either Redis bus** (Plan 030 / N2
@@ -394,18 +406,6 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `docs` group, so every docs deploy died with `error: Failed to spawn: mike`. Both jobs now pass
   `--group docs` as well (the CI equivalent of `make docs-deps`), keeping `--all-packages
   --all-extras` because mkdocstrings imports the packages live to render the API reference.
-
-### Changed
-
-- **`scripts/api_surface.py --check` is now a CI gate**, not a tool a contributor had to remember
-  to run by hand. Wired into `make lint`'s no-`PKG` path (`make lint PKG=<one package>` stays
-  narrow and skips it, deliberately), a standalone `make api-check`, and CI's `lint` job (a step
-  after `mypy`). Scope is unchanged and stated honestly in CLAUDE.md: catches removals and
-  *function* signature changes only — a narrowed class `__init__` stays invisible; additions and
-  module moves remain notes, never failures.
-- **`testkit/varco_conformance/COVERAGE.md`** (new) records the conformance-suite coverage audit
-  for all five shared ABCs (`event_bus`, `cache`, `job_store`, `dlq`, `channel_manager`) and every
-  implementation's subclass-or-stated-reason status — test-surface only, no production change.
 
 ## [3.0.0] — 2026-08-31
 
@@ -2058,5 +2058,7 @@ breaking changes between alpha versions while the API stabilises.
 ---
 
 <!-- Links -->
+[Unreleased]: https://github.com/edoardoscarpaci/varco/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/edoardoscarpaci/varco/compare/v3.0.0...v3.1.0
+[3.0.0]: https://github.com/edoardoscarpaci/varco/compare/v0.1.0...v3.0.0
 [0.1.0]: https://github.com/edoardoscarpaci/varco/releases/tag/v0.1.0
-[Unreleased]: https://github.com/edoardoscarpaci/varco/compare/v0.1.0...HEAD
