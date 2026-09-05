@@ -9,6 +9,7 @@ and ``RestoreHandle`` (§D-T4-install).
 from __future__ import annotations
 
 import ssl
+from pathlib import Path
 
 import pytest
 from tls_fixtures import PkiBundle
@@ -89,30 +90,40 @@ def test_two_restore_handles_nest_correctly(trust_store) -> None:
 
 
 def test_varco_never_calls_install_process_trust_itself() -> None:
-    # Mechanical form of "varco never calls it" (Step 20's rg check, mirrored here so a
-    # regression is caught by the test suite too, not only by a commit-time grep).
-    import subprocess
+    """
+    Mechanical form of "varco never calls it" (Step 20's rg check, mirrored here so a
+    regression is caught by the test suite too, not only by a commit-time grep).
 
-    result = subprocess.run(
-        [
-            "grep",
-            "-rn",
-            "install_process_trust(",
-            "varco_core/varco_core",
-            "varco_fastapi/varco_fastapi",
-            "varco_sa/varco_sa",
-            "varco_beanie/varco_beanie",
-            "varco_kafka/varco_kafka",
-            "varco_redis/varco_redis",
-            "varco_nats/varco_nats",
-            "varco_memcached/varco_memcached",
-            "varco_ws/varco_ws",
-            "varco_casbin/varco_casbin",
-        ],
-        capture_output=True,
-        text=True,
-        cwd="/home/edoardo/projects/varco",
-        check=False,
+    The scan is pure Python rather than a ``grep`` subprocess: the workspace root is
+    derived from ``__file__`` (this file lives at ``<root>/varco_core/tests/``) so the
+    test passes from any checkout location and in CI, and no external binary is needed.
+
+    Edge cases:
+        - The definition site in ``varco_core/tls/install.py`` is expected and excluded.
+        - A file that is not valid UTF-8 is read with ``errors="ignore"`` rather than
+          failing the test — a binary blob under a package dir is not library code.
+    """
+    # <root>/varco_core/tests/test_tls_install.py -> parents[2] is the workspace root.
+    root = Path(__file__).resolve().parents[2]
+
+    # Derived, not hand-listed, so an eleventh package is covered the day it is added
+    # (same RL-18 discipline as scripts/api_surface.py deriving from scripts/packages.sh):
+    # a distribution's source dir is the same-named directory inside its package dir.
+    package_dirs = sorted(
+        d for d in root.glob("varco_*/varco_*") if d.is_dir() and d.name == d.parent.name
     )
-    hits = [line for line in result.stdout.splitlines() if "def install_process_trust" not in line]
+    assert package_dirs, f"no varco_*/varco_* source dirs found under {root}"
+
+    hits: list[str] = []
+    for package_dir in package_dirs:
+        for path in package_dir.rglob("*.py"):
+            for lineno, line in enumerate(
+                path.read_text(encoding="utf-8", errors="ignore").splitlines(), start=1
+            ):
+                if "install_process_trust(" not in line:
+                    continue
+                if "def install_process_trust" in line:  # the definition itself
+                    continue
+                hits.append(f"{path.relative_to(root)}:{lineno}: {line.strip()}")
+
     assert not hits, f"install_process_trust() is called from library code: {hits}"
