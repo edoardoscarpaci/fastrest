@@ -216,6 +216,40 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bundle's own CA chain is not automatically trusted for server verification unless opted in.
   A wrong password or corrupt bundle raises `Pkcs12LoadError`, never a raw `cryptography`
   traceback.
+- **Outbound webhooks — `varco_core.webhook` + `varco_fastapi.webhook.mount_webhook_admin`
+  (Plan 031 / D4).** A subscription registry (`WebhookSubscription`), signed retried delivery
+  (`WebhookDispatcher`), and an admin surface, assembled entirely from parts varco already ships
+  (`RetryPolicy`, `AbstractDeadLetterQueue`, `DlqRedriver`, `FieldEncryptor`) — no new reliability
+  primitive, no new crypto path. Signing defaults to **Standard Webhooks**
+  (`webhook-id`/`webhook-timestamp`/`webhook-signature`, HMAC-SHA256, space-delimited
+  multi-signature for zero-downtime rotation); RFC 9421 ("HTTP Message Signatures" + RFC 9530
+  `Content-Digest`) is available opt-in via `WebhookSubscription.signer = "rfc9421"` for
+  consumers that require a standards-track scheme. Every delivery target is resolved, validated
+  against the private/loopback/link-local/multicast/unspecified/reserved ranges (including the
+  IPv4-mapped bypass form), and **pinned** to the first resolved address to defeat DNS rebinding
+  (`varco_core.webhook.ssrf.validate_target()`) — `https` only unless a deployment opts into
+  `http` via `WebhookSettings.allow_insecure_http` (never per-tenant), and no redirect following.
+  `WebhookDispatcher` is an `EventConsumer` (never holds `AbstractEventBus`) and runs its own
+  per-subscription retry loop on the existing `RetryPolicy`; exhaustion pushes to the existing
+  DLQ (`push()` never raises) and a subscription auto-disables after
+  `WebhookSettings.disable_after_failures` (default 20) consecutive failures.
+  `WebhookSettings` (env prefix `VARCO_WEBHOOK_`) is the single configuration source —
+  `WebhookDispatcher(settings=...)` forwards the SSRF knobs to `validate_target()`,
+  `signature_tolerance_seconds` to the signer, and the retry/timeout/disable knobs into its own
+  defaults; omitting `settings=` constructs one from the environment, and an explicit
+  `retry_policy=`/`request_timeout_seconds=`/`disable_after_failures=` keyword overrides the
+  corresponding field. ⚠️ The *shipped* retry defaults (`max_attempts=8`, sub-second delays)
+  match Svix's documented attempt-count shape but not its real seconds-scale schedule — a
+  production deployment must raise `VARCO_WEBHOOK_RETRY_BASE_DELAY_SECONDS`/
+  `_RETRY_MAX_DELAY_SECONDS` or pass its own `retry_policy=`. `active_secrets` are encrypted at rest via the
+  existing `FieldEncryptor` when a repository is constructed with `encryptor=`; `encryptor=None`
+  (the default on both `SAWebhookSubscriptionRepository`/`BeanieWebhookSubscriptionRepository`)
+  stores plaintext and is a documented dev/test-only escape hatch. `mount_webhook_admin(app, *,
+  repository=, redriver=None, acknowledge_bundled_admin=True, ...)` follows the same gated shape
+  as `mount_reliability_admin`/`mount_tenant_admin` (RD-9) — never a `create_varco_app()` kwarg,
+  never an env var. Delivery is at-least-once and documented as such; a varco-app receiver should
+  deduplicate on the stable `webhook-id` via plan 029's `Idempotency-Key` middleware. Full design,
+  the SSRF model, and a Pitfalls table: `technical_docs/features/outbound-webhooks.md`.
 
 ### Deprecated
 

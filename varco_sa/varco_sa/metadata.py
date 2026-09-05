@@ -51,6 +51,8 @@ _OWNING_MODULES = (
     "varco_sa.tenancy.models",
     # Plan 029 / D1b — the eleventh framework table.
     "varco_sa.idempotency",
+    # Plan 031 / D4a — the twelfth framework table.
+    "varco_sa.webhook",
 )
 
 

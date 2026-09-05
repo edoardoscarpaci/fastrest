@@ -190,6 +190,7 @@ policy engine, field encryption, observability, profiling, …) — see
 - [Idempotency-Key middleware](#idempotency-key-middleware)
 - [CloudEvents envelope](#cloudevents-envelope)
 - [AsyncAPI export](#asyncapi-export)
+- [Outbound webhooks](#outbound-webhooks)
 
 ---
 
@@ -3926,6 +3927,86 @@ document's own `info.description` explains why. No `servers` block is emitted by
 
 Full detail, including the local `npx @asyncapi/cli validate` invocation and the snapshot gate:
 `technical_docs/features/asyncapi-export.md`.
+
+---
+
+## Outbound webhooks
+
+Plan 031 / D4. A subscription registry, signing, SSRF-hardened delivery, retry into the existing
+DLQ, and an admin surface — assembled from parts varco already ships (`RetryPolicy`,
+`AbstractDeadLetterQueue`, `DlqRedriver`, `FieldEncryptor`), no new reliability primitive and no
+new crypto path. Everything portable lives in `varco_core.webhook`; `varco_sa`/`varco_beanie`
+hold repositories; `varco_fastapi.webhook` holds only the admin mount.
+
+```python
+from varco_core.webhook.base import InMemoryWebhookSubscriptionRepository
+from varco_core.webhook.dispatcher import WebhookDispatcher
+from varco_core.webhook.models import WebhookSubscription
+
+repo = InMemoryWebhookSubscriptionRepository()
+await repo.save(
+    WebhookSubscription(
+        tenant_id="acme",
+        target_url="https://acme.example.com/hooks",
+        event_patterns=["order.*"],
+        active_secrets=["whsec_..."],
+        status="ACTIVE",
+        consecutive_failures=0,
+        signer="standard_webhooks",
+        custom_headers={},
+    )
+)
+
+dispatcher = WebhookDispatcher(repository=repo)
+dispatcher.register_to(bus, dlq=dlq)  # bus: AbstractEventBus, dlq: AbstractDeadLetterQueue
+```
+
+Signing defaults to **Standard Webhooks** (`webhook-id`/`webhook-timestamp`/
+`webhook-signature`, HMAC-SHA256, space-delimited multi-signature for zero-downtime secret
+rotation) — the scheme an off-the-shelf verification snippet actually understands. RFC 9421
+("HTTP Message Signatures" + RFC 9530 `Content-Digest`) is available opt-in via
+`WebhookSubscription.signer = "rfc9421"`.
+
+Every delivery target goes through `varco_core.webhook.ssrf.validate_target()` — resolve, then
+validate every resolved address against the private/loopback/link-local/reserved ranges
+(including the IPv4-mapped bypass form), then **pin the connection to the first resolved
+address**, never a later re-resolution (this is what defeats DNS rebinding). `https` only unless
+`VARCO_WEBHOOK_ALLOW_INSECURE_HTTP=true` — a deployment-wide switch, never per-tenant.
+
+`WebhookSettings` (env prefix `VARCO_WEBHOOK_`) is the single configuration source and
+`WebhookDispatcher` consumes it — omit `settings=` and it constructs one from the environment;
+pass an explicit instance to pin the values. The SSRF knobs (`allow_insecure_http`, `allow_list`,
+`extra_deny_ranges`) reach `validate_target()`, `signature_tolerance_seconds` reaches the signer,
+and the retry/timeout/disable knobs become the dispatcher's defaults. An explicit
+`retry_policy=`/`request_timeout_seconds=`/`disable_after_failures=` keyword overrides the
+corresponding settings field.
+
+Delivery reuses `varco_core.resilience.RetryPolicy` per-subscription, times out at 10s per
+attempt, and pushes to the existing DLQ on exhaustion (`push()` never raises). A subscription
+auto-disables after `disable_after_failures` consecutive failures across distinct events;
+re-enabling is an explicit admin action.
+
+```python
+from varco_fastapi.webhook import mount_webhook_admin
+
+mount_webhook_admin(
+    app,
+    repository=repo,
+    redriver=my_dlq_redriver,       # enables the replay-through-DLQ route
+    acknowledge_bundled_admin=True,  # required — RD-9, same posture as mount_reliability_admin
+    server_auth=my_auth,
+    admin_role="webhook-admin",
+)
+```
+
+Secrets (`WebhookSubscription.active_secrets`) are encrypted at rest via the existing
+`FieldEncryptor` when a repository is constructed with `encryptor=` — ⚠️ `encryptor=None` (the
+default) stores plaintext, a dev/test-only escape hatch. Because delivery is at-least-once,
+point a varco-app receiver at plan 029's `Idempotency-Key` middleware for dedup on the stable
+`webhook-id`.
+
+Full design (the signing-scheme decision, the five-layer SSRF model, the retry-schedule
+convention, a Pitfalls table): `technical_docs/features/outbound-webhooks.md`.
 
 ---
 

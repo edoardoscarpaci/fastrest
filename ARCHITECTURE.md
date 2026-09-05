@@ -210,7 +210,7 @@ generate_asyncapi(consumers | container, ...) -> dict   (varco_core.asyncapi, Pl
   AsyncAPI 3.1.0 from LIVE, registered consumers — never a static import walk, because a
   @listen channel may be Callable[[Any], str] resolved at register_to() time.
   CLI: `varco export-asyncapi [--check]` (varco_core.cli.asyncapi)
-
+```
 ### File watching (Plan 025 / T1)
 
 ```
@@ -1085,6 +1085,59 @@ Alembic revision via `framework_metadata()` — no dedicated migration file.
 
 See `technical_docs/features/multitenancy.md`.
 
+### Outbound webhooks (varco_core.webhook, Plan 031 / D4)
+
+```
+WebhookSubscriptionRepository (ABC) — varco_core.webhook.base
+  ├── save(subscription) → WebhookSubscription
+  ├── find_by_id(pk) → WebhookSubscription | None
+  ├── find_by_tenant(tenant_id) → list[WebhookSubscription]     (never leaks across tenants)
+  ├── find_active_matching(event_type, *, tenant_id=None) → list[WebhookSubscription]
+  └── delete(pk) → None
+
+Implementations (framework-table shape, same convention as the DLQ/idempotency/outbox tables):
+  ├── InMemoryWebhookSubscriptionRepository (varco_core) — single-process, lazily-created lock
+  ├── SAWebhookSubscriptionRepository (varco_sa)          — own Table/MetaData, manual mapping
+  └── BeanieWebhookSubscriptionRepository (varco_beanie)  — self-managed Motor client + init_beanie
+
+Conformance suite: testkit/varco_conformance/webhook_subscription.py's
+WebhookSubscriptionRepositoryConformance, subclassed by all three (COVERAGE.md).
+
+WebhookSigner (ABC) — varco_core.webhook.signing
+  ├── StandardWebhooksSigner (default) — webhook-id / webhook-timestamp / webhook-signature,
+  │                                        HMAC-SHA256 over "{id}.{timestamp}.{payload}",
+  │                                        space-delimited multi-signature (rotation)
+  └── Rfc9421Signer (opt-in)           — Signature-Input / Signature / Content-Digest (RFC 9530),
+                                          covers @method/@target-uri/@authority/content-digest
+
+validate_target(url, ...) — varco_core.webhook.ssrf — the five-layer SSRF guard: scheme
+allowlist, resolve-then-validate-then-PIN (defeats DNS rebinding), blocked-by-default deny list
++ optional exclusive allowlist, no redirect following, explicit IPv6-equivalent coverage
+(including the ::ffff:<private-v4> bypass form).
+
+WebhookDispatcher (EventConsumer) — varco_core.webhook.dispatcher
+  ├── never holds AbstractEventBus — wired via register_to(bus, dlq=...) from @PostConstruct
+  ├── @listen(WebhookTriggerEvent) — an app republishes its own domain events as this envelope
+  ├── runs its own per-subscription retry loop on RetryPolicy (NOT the generic
+  │   @listen(retry_policy=..., dlq=...) wrapper — one event can match N subscriptions that must
+  │   each retry/DLQ/auto-disable independently)
+  └── exhaustion → AbstractDeadLetterQueue.push() (never raises); auto-disable after
+      WebhookSettings.disable_after_failures consecutive failures
+
+WebhookSubscription / WebhookDelivery (DomainModel) — varco_core.webhook.models
+  hand-rolled framework tables (webhook_subscriptions / webhook_deliveries), not the generic
+  @register + AsyncRepository[T] translation layer — same reasoning as the idempotency/DLQ tables.
+
+Admin: varco_fastapi.webhook.mount_webhook_admin(app, *, repository=, redriver=None,
+acknowledge_bundled_admin=True, server_auth=..., admin_role="webhook-admin", prefix="/webhooks")
+— same acknowledge-gated shape as mount_reliability_admin/mount_tenant_admin (RD-9); replay goes
+through the existing DlqRedriver.
+
+Full design (signing-scheme decision, the SSRF model, retry-schedule convention, a Pitfalls
+table): `technical_docs/features/outbound-webhooks.md`. Usage: README's "Outbound webhooks"
+section.
+```
+
 ### WebSocket / SSE Push Adapters (varco_ws)
 
 ```
@@ -1335,6 +1388,7 @@ unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
 | `job/reschedule.py` | T2's opt-in recompute-on-read sweeper | `ScheduleRematerializer` |
 | `query/policy.py` | T3's declared datetime coercion contract | `DatetimeCoercionPolicy` |
 | `idempotency/` | D1a (Plan 029) — HTTP idempotency storage contract, framework-agnostic | `AbstractIdempotencyStore`, `ReserveOutcome`, `IdempotencyRecord`, `InMemoryIdempotencyStore`, `compute_fingerprint()`, `IdempotencySettings` |
+| `webhook/` | D4 (Plan 031) — outbound webhook subscription, signing, SSRF guard, dispatcher | `WebhookSubscription`, `WebhookDelivery`, `WebhookSubscriptionRepository`, `InMemoryWebhookSubscriptionRepository`, `WebhookSigner`, `StandardWebhooksSigner`, `Rfc9421Signer`, `validate_target()`, `WebhookDispatcher`, `WebhookSettings`, `install_webhook_metrics()` |
 
 ---
 

@@ -79,6 +79,18 @@ These are legitimate, permanent absences — not TODOs, not backlog rows.
   to guarantee, run against every backend's own native atomic primitive (`SET NX PX`, a unique
   index + `IntegrityError`/`DuplicateKeyError`, a lazily-created `asyncio.Lock`).
 
+- **`WebhookSubscriptionRepository`** (`varco_core.webhook.base`, Plan 031 / D4) is a **seventh
+  ABC**, same treatment as `AbstractIdempotencyStore` above — three implementations across three
+  packages from day one (`InMemoryWebhookSubscriptionRepository` in `varco_core`,
+  `SAWebhookSubscriptionRepository`, `BeanieWebhookSubscriptionRepository`), so it earns a real
+  cross-package suite: `testkit/varco_conformance/webhook_subscription.py`'s
+  `WebhookSubscriptionRepositoryConformance` is subclassed by all three:
+  `varco_core/tests/test_webhook_conformance_inmemory.py`,
+  `varco_sa/tests/test_webhook_subscription_repository_integration.py`,
+  `varco_beanie/tests/test_webhook_subscription_repository_integration.py`. The tenant-scoping
+  assertion (`test_find_by_tenant_never_leaks_another_tenant`) is the load-bearing one — a
+  subscription belonging to one tenant must never be returned for another, across every backend.
+
 ## What Plan 024 filled
 
 - **`RedisStreamDLQ` → subclassed.** `varco_redis/tests/test_redis_conformance.py` gained

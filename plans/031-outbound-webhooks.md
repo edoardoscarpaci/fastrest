@@ -212,73 +212,73 @@ an env var that mounts it. Routes: CRUD subscriptions, list deliveries, replay a
 
 ### Phase 0 — D4a: entity and storage
 
-1. [ ] `varco_core/varco_core/webhook/` — `models.py` (`WebhookSubscription`, `WebhookDelivery`),
+1. [x] `varco_core/varco_core/webhook/` — `models.py` (`WebhookSubscription`, `WebhookDelivery`),
        `base.py` (`WebhookSubscriptionRepository` ABC), `settings.py`
        (`WebhookSettings(BaseSettings)`, `@Provider`-registered, `VARCO_WEBHOOK_` prefix).
-2. [ ] Secrets encrypted at rest through the existing `FieldEncryptor` — **no new crypto path**.
+2. [x] Secrets encrypted at rest through the existing `FieldEncryptor` — **no new crypto path**.
        Multiple active secrets per subscription (§D-D4-signing).
-3. [ ] `varco_sa` + `varco_beanie` repositories; SA migration revision +
+3. [x] `varco_sa` + `varco_beanie` repositories; SA migration revision +
        `register_framework_metadata()`.
-4. [ ] Unit tests with an in-memory repository; integration tests for both backends.
-5. [ ] API surface snapshot + import budget (`--warn-only`).
+4. [x] Unit tests with an in-memory repository; integration tests for both backends.
+5. [x] API surface snapshot + import budget (`--warn-only`).
 
 ⛔ **CHECKPOINT**
 
 ### Phase 1 — D4b: signing
 
-6. [ ] `WebhookSigner` ABC; `StandardWebhooksSigner` (default) per §D-D4-signing —
+6. [x] `WebhookSigner` ABC; `StandardWebhooksSigner` (default) per §D-D4-signing —
        HMAC-SHA256 over `{id}.{timestamp}.{payload}`, emitting `webhook-id`/`webhook-timestamp`/
        `webhook-signature`, space-delimited multi-signature for rotation.
-7. [ ] `Rfc9421Signer` — `Signature-Input`/`Signature` per RFC 9421 plus RFC 9530 `Content-Digest`;
+7. [x] `Rfc9421Signer` — `Signature-Input`/`Signature` per RFC 9421 plus RFC 9530 `Content-Digest`;
        covered components `@method`, `@target-uri`, `@authority`, `content-digest`; `created`,
        `keyid`, `alg=hmac-sha256`. Signature base built by structured serialization, never string
        concatenation (brief 005 §2 — this is what prevents extension attacks).
-8. [ ] Tests: known-answer vectors for both schemes (**take the Standard Webhooks vectors from the
+8. [x] Tests: known-answer vectors for both schemes (**take the Standard Webhooks vectors from the
        spec itself, not from our own output** — a self-generated vector proves nothing);
        constant-time comparison in any verification helper; rotation produces two valid signatures;
        tolerance-window rejection at ±301s and acceptance at ±299s.
-9. [ ] A `verify()` helper per signer, so a varco app receiving a varco webhook has a supported path
+9. [x] A `verify()` helper per signer, so a varco app receiving a varco webhook has a supported path
        and the test suite can verify what it signs.
 
 ⛔ **CHECKPOINT**
 
 ### Phase 2 — D4c: dispatcher and SSRF hardening
 
-10. [ ] `varco_core/webhook/ssrf.py` — `validate_target()` implementing all five layers of
+10. [x] `varco_core/webhook/ssrf.py` — `validate_target()` implementing all five layers of
         §D-D4-ssrf.
-11. [ ] **SSRF tests first, and they are not optional**: `169.254.169.254`; the IPv4-mapped IPv6
+11. [x] **SSRF tests first, and they are not optional**: `169.254.169.254`; the IPv4-mapped IPv6
         form `::ffff:169.254.169.254`; `127.0.0.1`, `::1`, `10.x`, `172.16.x`, `192.168.x`,
         `fc00::`, `fe80::`; a hostname resolving to a private address; a **DNS-rebinding
         simulation** where resolution 1 is public and resolution 2 is private, asserting the pinned
         connection is used; `http://` rejected unless `allow_insecure_http`; a 302 to a private
         address rejected because redirects are not followed.
-12. [ ] `WebhookDispatcher` as an `EventConsumer` (§D-D4-home) — `@listen`-decorated, wired via
+12. [x] `WebhookDispatcher` as an `EventConsumer` (§D-D4-home) — `@listen`-decorated, wired via
         `register_to()` from `@PostConstruct`, **never holding `AbstractEventBus`**.
-13. [ ] Delivery per §D-D4-delivery: `RetryPolicy` with jitter, 10s timeout, DLQ on exhaustion
+13. [x] Delivery per §D-D4-delivery: `RetryPolicy` with jitter, 10s timeout, DLQ on exhaustion
         (`push()` never raises), consecutive-failure counting and auto-disable.
-14. [ ] The HTTP send path uses a function-body import of `httpx` and takes no hard dependency —
+14. [x] The HTTP send path uses a function-body import of `httpx` and takes no hard dependency —
         the same rule and the same mechanical guard as `varco_core.tls.clients`
         (`test_tls_no_hard_client_deps.py`). Add an equivalent guard test.
-15. [ ] Tests: successful delivery; 5xx retried; timeout retried; exhaustion lands in the DLQ;
+15. [x] Tests: successful delivery; 5xx retried; timeout retried; exhaustion lands in the DLQ;
         auto-disable after N failures; a disabled subscription is skipped.
-16. [ ] `install_webhook_metrics()` following `install_cache_metrics`/`install_reliability_metrics`
+16. [x] `install_webhook_metrics()` following `install_cache_metrics`/`install_reliability_metrics`
         (CLAUDE.md's `install_*` shape (a) — process-global, no container).
 
 ⛔ **CHECKPOINT** — **do not proceed without Step 11 green.**
 
 ### Phase 3 — D4d: admin surface and docs
 
-17. [ ] `varco_fastapi/varco_fastapi/webhook/` — `mount_webhook_admin` per §D-D4-admin.
-18. [ ] Replay through the existing `DlqRedriver`; secret rotation; disable/re-enable.
-19. [ ] Tests: the `acknowledge_bundled_admin` `ValueError`; role enforcement; **a cross-tenant
+17. [x] `varco_fastapi/varco_fastapi/webhook/` — `mount_webhook_admin` per §D-D4-admin.
+18. [x] Replay through the existing `DlqRedriver`; secret rotation; disable/re-enable.
+19. [x] Tests: the `acknowledge_bundled_admin` `ValueError`; role enforcement; **a cross-tenant
         read is refused** (a subscription list must never leak across tenants).
-20. [ ] `technical_docs/features/outbound-webhooks.md` — the signing-scheme choice and why
+20. [x] `technical_docs/features/outbound-webhooks.md` — the signing-scheme choice and why
         (§D-D4-signing), the SSRF model, the retry schedule, consumer-side idempotency guidance
         pointing at plan 029, and a Pitfalls table.
-21. [ ] README section; CLAUDE.md gets a Decision-Tree branch and a one-line pointer only.
-22. [ ] `testkit/varco_conformance` — a suite for `WebhookSubscriptionRepository`, or a
+21. [x] README section; CLAUDE.md gets a Decision-Tree branch and a one-line pointer only.
+22. [x] `testkit/varco_conformance` — a suite for `WebhookSubscriptionRepository`, or a
         `COVERAGE.md` row justifying its absence.
-23. [ ] API surface snapshot; import budget.
+23. [x] API surface snapshot; import budget.
 
 ⛔ **CHECKPOINT** — full `make test`, `make lint`, `make type-check`, plus the integration legs.
 

@@ -490,6 +490,40 @@ recorded in `design/api-freeze-and-standards/measurements/asyncapi-validate.txt`
 
 Usage + the local `npx` invocation: `technical_docs/features/asyncapi-export.md`.
 
+### Outbound webhooks (varco_core.webhook, Plan 031 / D4)
+
+`varco_core.webhook` holds everything portable — the `WebhookSubscription`/`WebhookDelivery`
+entities, `WebhookSubscriptionRepository` ABC (+ `InMemoryWebhookSubscriptionRepository`), the
+`WebhookSigner` ABC (`StandardWebhooksSigner` default, `Rfc9421Signer` opt-in), the SSRF guard
+(`ssrf.validate_target()`), and `WebhookDispatcher`. `varco_sa`/`varco_beanie` hold repositories;
+`varco_fastapi.webhook.mount_webhook_admin` holds only the admin mount.
+
+**Rule**: `WebhookDispatcher` never holds `AbstractEventBus` — it is an `EventConsumer`, wired via
+`register_to()`. It deliberately does NOT use the generic `@listen(retry_policy=..., dlq=...)`
+wrapper (that retries/DLQs one handler call as a whole); it runs its own per-subscription retry
+loop with the existing `RetryPolicy` instead, because one event can match many subscriptions that
+must each retry/DLQ/auto-disable independently.
+
+**Rule**: every delivery target goes through `varco_core.webhook.ssrf.validate_target()` —
+resolve-then-validate-then-**pin** to the first resolved address (never a later re-resolution —
+that is the DNS-rebinding bypass), `https` only unless `allow_insecure_http` is set at the
+deployment level (never per-tenant), and no redirect following.
+
+**Rule**: `WebhookSettings` (env `VARCO_WEBHOOK_`) is the single configuration source —
+`WebhookDispatcher` constructs it when `settings=` is omitted and forwards every knob to the call
+site that needs it (SSRF knobs → `validate_target()`, `signature_tolerance_seconds` → the signer,
+retry/timeout/disable → its own defaults). A new knob goes on `WebhookSettings` and is threaded
+through; never add a constructor-keyword-only or `validate_target`-only option, or the env var
+becomes a lie. Explicit constructor keywords remain per-instance overrides and always win.
+
+**Rule**: `active_secrets` are encrypted via the existing `FieldEncryptor` when a repository is
+constructed with `encryptor=` — no new crypto path. `encryptor=None` is a documented dev/test-only
+default; production wiring must pass a real encryptor.
+
+Full design (signing-scheme choice, the five-layer SSRF model, retry-schedule convention, a
+Pitfalls table): `technical_docs/features/outbound-webhooks.md`. Usage: README's "Outbound
+webhooks" section.
+
 ### SBOM and regulatory posture (scripts/sbom.py, Plan 030 / D5)
 
 `scripts/sbom.py` generates **one CycloneDX 1.6 SBOM per distribution** (never workspace-wide —
@@ -1244,6 +1278,17 @@ Am I adding a new capability?
 │       ↳ New backend? → implement AbstractIdempotencyStore using that
 │                            backend's own atomic set-if-absent primitive;
 │                            never emulate one with exists()+set()
+│
+├─ Outbound webhook feature (subscription, signing, SSRF, delivery, admin) (Plan 031 / D4)?
+│  └─ → varco_core.webhook (WebhookSubscription/WebhookDelivery, the
+│         WebhookSubscriptionRepository ABC, WebhookSigner ABC, ssrf.validate_target(),
+│         WebhookDispatcher — an EventConsumer, never holds AbstractEventBus)
+│       + varco_sa.webhook / varco_beanie.webhook for repositories
+│       ↳ New signing scheme? → implement WebhookSigner; register in get_signer()
+│       ↳ Admin/replay/rotation surface? → varco_fastapi.webhook.mount_webhook_admin()
+│                            (never a create_varco_app kwarg, never an env var — RD-9)
+│       ⚠️ Never weaken ssrf.validate_target()'s resolve-then-pin behaviour — a
+│         validate-the-URL-string-only shortcut reopens DNS rebinding
 │
 └─ ORM/database feature?
    └─ → varco_sa (SQLAlchemy) and/or varco_beanie (MongoDB)
