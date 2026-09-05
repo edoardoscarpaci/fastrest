@@ -31,6 +31,61 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **CloudEvents v1.0.2 structured envelope — `varco_core.event.cloudevents` (Plan 030 / N2).**
+  `CloudEventsJsonSerializer` is a *second* `Serializer[Event]` implementation, so an app can put
+  every published event inside a spec-compliant CloudEvents JSON envelope by binding one object:
+  `bind_cloudevents_serializer(container, CloudEventsSettings(source="/svc/orders"))`. `Event` is
+  unchanged (no field added, no `model_dump()` shape moved — no DLQ/outbox/audit consumer sees a
+  byte move) and no bus is changed. **Opt-in and never auto-active**: the module deliberately
+  carries no `@Singleton`/`@Provider`, because providify's scanner auto-registers both shapes and
+  `container.scan("varco_core", recursive=True)` is an in-use pattern. `source` is required with
+  no default (`VARCO_CLOUDEVENTS_SOURCE`) — there is no correct default for "who am I".
+  `correlationid`/`tenantid` ship as CloudEvents extensions, validated against the spec's
+  `^[a-z0-9]{1,20}$` naming rule; `tenantid` reads `current_tenant()` and is documented and tested
+  as **best-effort** (absent under an `OutboxRelay` publish). Structured mode only — binary mode
+  needs a header channel and `AbstractEventBus.publish()` is promised never to gain `headers=`
+  (reserved-seams RS-2). Zero new runtime dependency: the CNCF `cloudevents` SDK was re-evaluated
+  against research brief 005 §3 and rejected again (it disclaims its own stability). Full design,
+  the three-phase dual-emit migration and a Pitfalls table:
+  `technical_docs/features/cloudevents-envelope.md`.
+  Coverage is uniform: the binding reaches all four buses and every `@Configuration`-wired DLQ.
+  ⚠️ `SADeadLetterQueue` and `OutboxRelay` are hand-constructed — pass `serializer=` explicitly
+  there, and drain an existing DLQ backlog before swapping (stored rows are never converted).
+- **Redis Streams CloudEvents convention (Plan 030 / N2).** `RedisStreamEventBus` now writes the
+  serialized body to the field named by the bound serializer's optional `stream_field` attribute —
+  `"ce"` under `CloudEventsJsonSerializer` (varco's own named, versioned convention: the *whole*
+  envelope in one field, never one field per CloudEvents attribute), and the historical
+  `"payload"` for every other serializer, byte-for-byte unchanged. Reads accept **either** field
+  name, so entries already pending in a stream when the serializer is swapped still drain instead
+  of being acknowledged away as unparseable.
+- **AsyncAPI 3.1.0 export — `varco_core.asyncapi` + `varco export-asyncapi` (Plan 030 / N3).**
+  `generate_asyncapi(consumers_or_container, *, title, version, protocol=…, group_id=…,
+  queue_group=…, servers=…)` renders every wired `@listen` handler as a channel + `action: receive`
+  operation + a message whose payload is Pydantic's `model_json_schema()`. Generation is
+  **runtime, from live registered consumers, never a static import walk** — a `@listen` channel may
+  be `Callable[[Any], str]` resolved at `register_to()` time against a bound `self`. Kafka channel
+  (`topic`) and operation (`groupId`) bindings; NATS operation binding only when a queue group is
+  configured; no Redis binding block at all — with all three choices explained inside the generated
+  document's own `info.description`. No `servers` block by default. Zero new dependency (plain
+  `dict` + `json`), JSON output only. The new `varco export-asyncapi --check` verb gates a
+  committed snapshot inside `make lint`'s no-`PKG` path (`make asyncapi` / `make asyncapi-check`),
+  with **no new CI job** and no Node toolchain in CI; spec conformance was validated once by hand
+  (`@asyncapi/cli` 6.0.2 — valid, no governance issues) and recorded in
+  `design/api-freeze-and-standards/measurements/asyncapi-validate.txt`. Details:
+  `technical_docs/features/asyncapi-export.md`.
+- **CycloneDX SBOMs per release, and a written regulatory posture (Plan 030 / D5).**
+  `scripts/sbom.py` generates **one CycloneDX 1.6 SBOM per distribution** (not one workspace-wide
+  document — that would over-report by ~6× and mislead the regulated consumer it exists to serve)
+  from `uv.lock` via a version-pinned `cyclonedx-bom`. `release.yml` attaches all ten to the GitHub
+  Release and embeds each in its own wheel at `.dist-info/sboms/` per **PEP 770** (verified
+  supported by hatchling 1.31.0). ⚠️ PyPI does not yet serve embedded SBOMs, so the GitHub Release
+  is the canonical location. New `docs/regulatory-posture.md` states varco's CRA/NIS2 position —
+  the non-commercial FOSS exemption, why we believe it applies, and the funding facts that would
+  void it — with an explicit "this is a position, not legal advice" disclaimer and **no claim of
+  CRA compliance**. It also corrects two errors this repo carried: full CRA enforcement is
+  2027-12-11 (not September 2026), and an SBOM is a credibility artifact for downstream consumers,
+  not an obligation on a non-commercial upstream (BACKLOG's D5 row amended accordingly).
+
 - **`Idempotency-Key` HTTP middleware — `varco_core.idempotency` + `IdempotencyMiddleware`
   (Plan 029 / D1).** A retried `POST`/`PATCH` carrying a repeated `Idempotency-Key` header
   replays the first response instead of executing twice. `AbstractIdempotencyStore`
@@ -219,6 +274,26 @@ Varco packages use [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Test-only release — no runtime package changed.**
 
 ### Fixed
+
+- **`bind_cloudevents_serializer()` silently never reached either Redis bus** (Plan 030 / N2
+  follow-up). `RedisEventBusSelectorConfiguration.bus()` produces both Redis implementations from a
+  `@Provider`, and providify injects only what the provider *method* declares — it declared
+  `settings` alone, so the container binding never arrived and each bus fell back to
+  `JsonEventSerializer()`. An app that opted into CloudEvents therefore published envelopes on
+  Kafka/NATS and plain varco JSON on Redis, with no error, and Plan 030's `ce` stream-field
+  convention never engaged outside a hand-constructed bus. Fixed by declaring and forwarding
+  `Serializer[Event]` on the provider, and by widening `RedisStreamEventBus`'s `serializer`
+  annotation from the concrete `JsonEventSerializer | None` to `Serializer[Event] | None`.
+  Guarded by `varco_redis/tests/test_redis_cloudevents_di.py`.
+- **Every dead-letter queue stored a different wire format from the bus it backed.** All five
+  backends (`RedisDLQ`, `KafkaDLQ`, `NatsDLQ`, `SADeadLetterQueue`, `BeanieDeadLetterQueue`)
+  constructed `JsonEventSerializer()` as a literal in `__init__`, so a CloudEvents app wrote
+  envelopes onto the bus and native JSON into the DLQ — two formats for one event, and a redrive
+  that republished the wrong one. Each now takes `serializer` as a parameter; the three
+  `@Configuration`-wired backends forward the container binding and `BeanieDeadLetterQueue` injects
+  it as a scanned `@Singleton`. `OutboxEntry.from_event()` and `OutboxRelay` were widened from
+  `JsonEventSerializer | None` to `Serializer[Event] | None` for the same reason. Not a behaviour
+  change when nothing is bound — the default stays `JsonEventSerializer()`.
 
 
 - **`BeanieMigrator.upgrade()` never reached its `index_mode="create"` block when the migration

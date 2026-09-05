@@ -71,6 +71,14 @@ Issues     = "https://github.com/edoardoscarpaci/varco/issues"
 [project.scripts]
 varco = "varco_core.cli.main:main"
 
+# Plan 022 §D-AA4 / RS-3 reserved the `export-asyncapi` verb in this group.
+# It is contributed through the entry-point group rather than hard-wired into
+# `cli/main.py`'s built-in list, exactly as `varco_sa`/`varco_beanie`/
+# `varco_fastapi` contribute theirs — so the dispatch mechanism has one shape,
+# and the verb stays discoverable by `importlib.metadata` alone.
+[project.entry-points."varco.commands"]
+export-asyncapi = "varco_core.cli.asyncapi:register"
+
 [tool.uv.sources]
 # varco-fastapi is a dev-only, test-time dependency (see the comment below) — this
 # does not create a runtime/published dependency cycle: varco_core's own

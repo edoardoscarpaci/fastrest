@@ -188,6 +188,8 @@ policy engine, field encryption, observability, profiling, …) — see
 - [Composite Deployment](#composite-deployment)
 - [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
 - [Idempotency-Key middleware](#idempotency-key-middleware)
+- [CloudEvents envelope](#cloudevents-envelope)
+- [AsyncAPI export](#asyncapi-export)
 
 ---
 
@@ -3819,6 +3821,111 @@ Stripe's de-facto conventions (24h TTL, 1 MiB body cap, streaming responses neve
 not an RFC. Full design (fingerprint construction, header replay allowlist, tenant/subject
 scoping and its fail-closed rule, streaming/over-ceiling handling, a Pitfalls table):
 `technical_docs/features/idempotency-key.md`.
+
+---
+
+## CloudEvents envelope
+
+Plan 030 / N2. `CloudEventsJsonSerializer` (`varco_core.event.cloudevents`) is a **second**
+`Serializer[Event]` implementation that wraps every published event in a
+[CloudEvents v1.0.2](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md)
+*structured-mode* JSON envelope, so a partner platform, an Eventarc/EventBridge consumer or a
+Knative sink can read varco's events without knowing varco.
+
+⚠️ **Opt-in, never auto-active.** `Event` does not change, no bus changes, and nothing happens
+until you bind it:
+
+```python
+from providify import DIContainer
+from varco_core.event.cloudevents import CloudEventsSettings, bind_cloudevents_serializer
+
+container = DIContainer()
+bind_cloudevents_serializer(container, CloudEventsSettings(source="/svc/orders"))
+```
+
+or, without DI:
+
+```python
+from varco_core.event.cloudevents import CloudEventsJsonSerializer, CloudEventsSettings
+
+serializer = CloudEventsJsonSerializer(CloudEventsSettings(source="/svc/orders"))
+bus = KafkaEventBus(settings, serializer=serializer)
+```
+
+On the wire:
+
+```json
+{
+  "specversion": "1.0",
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "source": "/svc/orders",
+  "type": "order.placed",
+  "time": "2026-01-01T00:00:00+00:00",
+  "datacontenttype": "application/json",
+  "correlationid": "corr-1",
+  "tenantid": "acme",
+  "data": {"order_id": "o-1", "total": 9.5}
+}
+```
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `VARCO_CLOUDEVENTS_SOURCE` | *(none — required)* | Producer identity. There is no correct default for "who am I"; construction raises `ValidationError` without it |
+| `VARCO_CLOUDEVENTS_DATACONTENTTYPE` | `application/json` | Must end in `json`/`+json` — varco emits `data`, never `data_base64` |
+
+⚠️ Four things to know before adopting:
+
+- `tenantid` comes from `current_tenant()` and is **best-effort** — absent on an
+  `OutboxRelay`-driven publish;
+- Kafka's binding also wants a `content-type: application/cloudevents+json` **header**, which
+  varco cannot set today (`publish()` never gains `headers=`);
+- a CloudEvents-serialized and a native-serialized event cannot share a channel mid-migration —
+  roll out in three phases, and **drain any existing DLQ backlog first**, because nothing converts
+  rows that were stored in the old format;
+- the binding reaches every bus (Kafka, NATS, both Redis shapes) and every `@Configuration`-wired
+  DLQ automatically. **`SADeadLetterQueue` and `OutboxRelay` are constructed by hand** — pass
+  `serializer=` explicitly there or they keep the `JsonEventSerializer` default.
+
+Full design, the named Redis Streams `ce`-field convention, the three-phase dual-emit rollout and a
+Pitfalls table: `technical_docs/features/cloudevents-envelope.md`.
+
+---
+
+## AsyncAPI export
+
+Plan 030 / N3. `varco_core.asyncapi.generate_asyncapi()` describes every wired `EventConsumer` as
+an **AsyncAPI 3.1.0** document — channels, `action: receive` operations, and message payloads from
+Pydantic's `model_json_schema()`.
+
+```python
+from varco_core.asyncapi import generate_asyncapi
+
+doc = generate_asyncapi(
+    container,                       # or a list of live EventConsumer instances
+    title="Orders", version="1.0.0",
+    protocol="kafka", group_id="orders-workers",
+)
+```
+
+or from the CLI:
+
+```bash
+varco export-asyncapi --title Orders --version 1.0.0 \
+    --consumer myapp.consumers:OrderConsumer \
+    --protocol kafka --group-id orders-workers \
+    -o asyncapi.json
+
+varco export-asyncapi ... -o asyncapi.json --check   # fail on drift, for CI
+```
+
+⚠️ **Generation is runtime, from *registered* consumers.** A `@listen` channel may be a callable
+resolved at `register_to()` time against a bound `self`, so a static scan would be silently wrong —
+and a consumer that was never wired is deliberately absent from the document. Bindings: Kafka
+(`topic`, `groupId`), NATS only when a queue group is configured, Redis never — the generated
+document's own `info.description` explains why. No `servers` block is emitted by default.
+
+Full detail, including the local `npx @asyncapi/cli validate` invocation and the snapshot gate:
+`technical_docs/features/asyncapi-export.md`.
 
 ---
 

@@ -1759,6 +1759,10 @@
         "kind": "class",
         "module": "varco_redis.config"
       },
+      "RedisIdempotencyStore": {
+        "kind": "class",
+        "module": "varco_redis.idempotency"
+      },
       "RedisJobStore": {
         "kind": "class",
         "module": "varco_redis.job_store"

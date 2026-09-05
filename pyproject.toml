@@ -63,6 +63,9 @@ dev = [
     # tomlkit powers scripts/bump.py's style-preserving TOML edits (Plan 023 /
     # §RL-9-bump) — a regex cannot distinguish a shipped [project].dependencies
     # sibling entry from a [dependency-groups].dev one that must NOT be pinned.
+    # It is also used by scripts/sbom.py (Plan 030 / D5) to inject PEP 770's
+    # `sbom-files` key at release time. Both are release/dev tooling: neither
+    # ships in any distribution's [project].dependencies.
     "mike>=2.2.0",
     "mkdocs-gen-files>=0.6.1",
     "mkdocs-literate-nav>=0.6.3",

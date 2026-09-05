@@ -121,6 +121,8 @@ nav:
       - Schema Migrations: features/schema-migrations.md
       - Multitenancy: features/multitenancy.md
       - A2A Surface: features/a2a-surface.md
+      - CloudEvents Envelope: features/cloudevents-envelope.md
+      - AsyncAPI Export: features/asyncapi-export.md
       - Portable Service Contracts: features/portable-contracts.md
       - Reliability Preset: features/reliability-preset.md
       - TLS Trust & Hot Reload: features/tls-trust-and-hot-reload.md

@@ -207,3 +207,10 @@ todo*.txt
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# CycloneDX SBOMs — generated at release time by scripts/sbom.py into
+# <package>/sbom/ and embedded in the wheel per PEP 770 (Plan 030 / D5).
+# NEVER committed: a checked-in SBOM is stale the moment uv.lock moves, and the
+# script also mutates the package's pyproject.toml (`sbom-files`) on the way,
+# which is likewise a release-time-only change.
+varco_*/sbom/

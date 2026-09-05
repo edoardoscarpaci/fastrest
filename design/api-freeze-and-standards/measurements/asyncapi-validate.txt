@@ -1,0 +1,49 @@
+AsyncAPI spec validation — one manual run, recorded (Plan 030 / Phase 2, Step 16)
+=================================================================================
+
+Why this file exists
+--------------------
+§D-AA4 rules out a Node toolchain in CI: `@asyncapi/cli` needs Node 24+, no Python
+AsyncAPI validator exists, and the assurance gained does not pay for the CI surface.
+So spec conformance is established ONCE, by hand, and recorded here — the gate that
+runs on every `make lint` (`make asyncapi-check`) only proves our document has not
+drifted from our snapshot, never that the snapshot conforms to the spec.
+
+Research 002 §Evidence-gap 1 flagged the specific thing worth checking: AsyncAPI has
+no blessed `schemaFormat` for JSON Schema Draft 2020-12, which is what Pydantic v2's
+`model_json_schema()` emits and what varco puts in `message.payload`. The run below
+settles it — the validator accepts the payload with no `schemaFormat` declared and
+raises no governance issue.
+
+Environment
+-----------
+  date          2026-09-05
+  validator     @asyncapi/cli/6.0.2 wsl-x64 node-v24.15.0
+  document      design/api-freeze-and-standards/measurements/asyncapi-example.json
+                (AsyncAPI 3.1.0, generated from examples/00-full-stack-post-api's
+                 PostEventConsumer — two `receive` operations on channel `posts`)
+
+Command
+-------
+  npx -y @asyncapi/cli@latest validate \
+      design/api-freeze-and-standards/measurements/asyncapi-example.json
+
+Output (npm deprecation warnings and the analytics notice elided)
+-----------------------------------------------------------------
+  WARNING: NODE_ENV value of 'production' did not match any deployment config file names.
+  WARNING: No configurations found in configuration directory:/home/edoardo/projects/varco/config
+
+  File design/api-freeze-and-standards/measurements/asyncapi-example.json is valid!
+  File design/api-freeze-and-standards/measurements/asyncapi-example.json and
+  referenced documents don't have governance issues.
+
+  exit status: 0
+
+Notes
+-----
+- The two WARNING lines come from `node-config` inside the CLI itself (it looks for a
+  `config/` directory in the working directory). They are unrelated to the document.
+- "don't have governance issues" is the CLI's Spectral ruleset result — i.e. the
+  document passes AsyncAPI's own style/lint rules, not just its JSON Schema.
+- Re-run this by hand after a structural change to the generator (a new binding, a new
+  document section). A wiring-only change is already covered by `make asyncapi-check`.

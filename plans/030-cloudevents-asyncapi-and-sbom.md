@@ -184,88 +184,88 @@ document is Open Question 2.
 
 ### Phase 0 — N2: the CloudEvents serializer
 
-1. [ ] `varco_core/varco_core/event/cloudevents.py` — `CloudEventsJsonSerializer(Serializer[Event])`
+1. [x] `varco_core/varco_core/event/cloudevents.py` — `CloudEventsJsonSerializer(Serializer[Event])`
        per §D-CE1, structured mode only, registered at **default** DI priority so it is opt-in and
        never auto-active (contrast `JsonEventSerializer` at `event/serializer.py:116-117`,
        `priority=-sys.maxsize - 1`).
-2. [ ] `CloudEventsSettings` — `source` **required with no default** (§D-CE4: there is no correct
+2. [x] `CloudEventsSettings` — `source` **required with no default** (§D-CE4: there is no correct
        default for "who am I"; construction fails loudly). Registered via `@Provider`, never
        `@Singleton` (RS-3's note and CLAUDE.md's pydantic-BaseSettings rule).
-3. [ ] Attribute mapping exactly per §D-CE4's table, plus §D-N2-attrs' `data`/`data_base64`
+3. [x] Attribute mapping exactly per §D-CE4's table, plus §D-N2-attrs' `data`/`data_base64`
        assertion. `tenantid` from `current_tenant()` only — never `RequestContext`, best-effort,
        absent under an `OutboxRelay`-driven publish (§D-CE4's ⚠️ constraint).
-4. [ ] Unit tests: every REQUIRED attribute present and non-empty; `specversion == "1.0"`;
+4. [x] Unit tests: every REQUIRED attribute present and non-empty; `specversion == "1.0"`;
        RFC 3339 `time`; round-trip through `deserialize`; `tenantid` present with an ambient tenant
        and **absent without one** (the documented best-effort behaviour, asserted so it cannot
        regress silently); construction fails without `source`; extension names match
        `^[a-z0-9]{1,20}$`.
-5. [ ] `technical_docs/features/cloudevents-envelope.md` — the **Redis convention** named and
+5. [x] `technical_docs/features/cloudevents-envelope.md` — the **Redis convention** named and
        versioned (§D-CE4: whole envelope in a single stream field `ce`, never one field per
        attribute), the Kafka structured-mode `content-type` limitation and its §D-CE2 resolution
        path, the three-phase dual-emit migration timeline, and a Pitfalls table.
-6. [ ] Integration test: publish/consume through `varco_kafka` and `varco_redis` with the
+6. [x] Integration test: publish/consume through `varco_kafka` and `varco_redis` with the
        serializer bound, asserting the wire bytes are a valid CloudEvent.
-7. [ ] Import budget (`--warn-only`) + API surface snapshot regeneration.
+7. [x] Import budget (`--warn-only`) + API surface snapshot regeneration.
 
 ⛔ **CHECKPOINT** — N2 is independently shippable here.
 
 ### Phase 1 — N3a: the generator
 
-8. [ ] `varco_core/varco_core/asyncapi/` per §D-AA4's home decision. Generator takes **consumer
+8. [x] `varco_core/varco_core/asyncapi/` per §D-AA4's home decision. Generator takes **consumer
        instances or a container**, never a static import walk — §D-AA1, because `@listen`'s channel
        may be `Callable[[Any], str]` (`event/consumer.py:180`) resolved at `register_to()` time
        against a bound `self`, which a static scan gets silently wrong.
-9. [ ] Map `@listen` metadata → AsyncAPI: channel string → **channel**; decorated handler →
+9. [x] Map `@listen` metadata → AsyncAPI: channel string → **channel**; decorated handler →
        **operation** with `action: receive`; `Event` subclass → **message** with payload from
        `model_json_schema()` (§D-AA1, brief 004 §2).
-10. [ ] Bindings per §D-AA3 — Kafka channel (`topic`) and operation (`groupId`) bindings when a
+10. [x] Bindings per §D-AA3 — Kafka channel (`topic`) and operation (`groupId`) bindings when a
         `KafkaEventBus` is the source; NATS operation binding **only** when a queue group is
         configured; **no** Redis binding block. Record all three choices in the generated
         document's own `info.description`.
-11. [ ] No `servers` block by default; `--server name=protocol://host` supplies one explicitly
+11. [x] No `servers` block by default; `--server name=protocol://host` supplies one explicitly
         (§D-AA2 — a broker URL is deployment config, not source truth).
-12. [ ] Unit tests: callable-channel resolution; two consumers on one channel; an unregistered
+12. [x] Unit tests: callable-channel resolution; two consumers on one channel; an unregistered
         consumer is absent from the document (correct behaviour, asserted); Kafka bindings present
         and Redis bindings absent.
 
 ### Phase 2 — N3b: the CLI verb and the gate
 
-13. [ ] `varco_core/cli/asyncapi.py` — `varco export-asyncapi` with `--check`, registered in the
+13. [x] `varco_core/cli/asyncapi.py` — `varco export-asyncapi` with `--check`, registered in the
         `varco.commands` entry-point group (§D-AA4; precedent `varco_sa/pyproject.toml:67`,
         `varco_fastapi/pyproject.toml:74`, `varco_beanie/pyproject.toml:45`).
-14. [ ] Commit a snapshot generated from `examples/00-full-stack-post-api`'s consumers, so the gate
+14. [x] Commit a snapshot generated from `examples/00-full-stack-post-api`'s consumers, so the gate
         has a real subject rather than a synthetic one.
-15. [ ] Wire `varco export-asyncapi --check` into `make lint`'s **no-`PKG` path** — beside
+15. [x] Wire `varco export-asyncapi --check` into `make lint`'s **no-`PKG` path** — beside
         `api-check` and `import-budget`, and deliberately skipped by `make lint PKG=<one>`
         (CLAUDE.md §D-C5). **No new CI job** (§D-AA4).
-16. [ ] Run `npx @asyncapi/cli validate` **once, by hand**, and record the output in
+16. [x] Run `npx @asyncapi/cli validate` **once, by hand**, and record the output in
         `design/api-freeze-and-standards/measurements/`. §D-AA4 makes this worth doing exactly once
         because brief 002 §Evidence-gap 1 flags no blessed `schemaFormat` for Draft 2020-12. **No
         Node in CI.**
-17. [ ] `technical_docs/features/asyncapi-export.md` — including the local `npx` invocation for
+17. [x] `technical_docs/features/asyncapi-export.md` — including the local `npx` invocation for
         contributors.
-18. [ ] API surface snapshot; import budget.
+18. [x] API surface snapshot; import budget.
 
 ⛔ **CHECKPOINT** — N3 shippable.
 
 ### Phase 3 — D5: SBOM and posture
 
-19. [ ] `.github/workflows/release.yml` — add an SBOM step per §D-D5-tooling:
+19. [x] `.github/workflows/release.yml` — add an SBOM step per §D-D5-tooling:
         `uv export --format requirements-txt` → `cyclonedx-bom` (pin the version, per the repo's
         pinned-dev-dependency discipline). Attach to the GitHub Release.
-20. [ ] PEP 770: emit the SBOM into each wheel's `.dist-info/sboms/`. **Verify hatchling supports
+20. [x] PEP 770: emit the SBOM into each wheel's `.dist-info/sboms/`. **Verify hatchling supports
         this** before committing to it — if it does not, attach to the GitHub Release only and file
         the wheel half as a follow-up row with the blocker named. Do not hand-patch wheels.
-21. [ ] `SECURITY.md` — verify presence and content; add coordinated-disclosure contact if absent.
-22. [ ] `docs/regulatory-posture.md` (or a `SECURITY.md` section) per §D-D5-posture: the CRA
+21. [x] `SECURITY.md` — verify presence and content; add coordinated-disclosure contact if absent.
+22. [x] `docs/regulatory-posture.md` (or a `SECURITY.md` section) per §D-D5-posture: the CRA
         exemption position and *why*, the facts it depends on, what would change it (donations
         exceeding costs, paid support, SLA hosting), the 2027-12-11 full-enforcement date, NIS2's
         non-applicability to authors, and an explicit **"this is a position, not legal advice"**.
         Cite brief 004 §3.
-23. [ ] Amend the BACKLOG D5 row: its "obligation, not a feature" rationale and its "bind from
+23. [x] Amend the BACKLOG D5 row: its "obligation, not a feature" rationale and its "bind from
         September 2026" date are both corrected, with brief 004 §3 cited. Leave the row 🟡 but
         record the changed *reason*.
-24. [ ] Note in the posture doc that PyPI does not yet serve SBOMs as a discoverable artifact
+24. [x] Note in the posture doc that PyPI does not yet serve SBOMs as a discoverable artifact
         (brief 004 §3), so the GitHub Release is the canonical location for now.
 
 ⛔ **CHECKPOINT** — `make lint`, `make type-check`, `make test` green; a dry-run
@@ -287,8 +287,8 @@ document is Open Question 2.
 
 | Risk | Severity | Mitigation |
 |---|---|---|
-| ⚠️ **ASSUMPTION** — hatchling can place files in `.dist-info/sboms/` per PEP 770. Brief 004 §3 confirms the *standard* and its adoption but says nothing about our build backend | Medium — blocks half of Step 20 | Step 20 verifies first and degrades to GitHub-Release-only with a filed follow-up. Never hand-patch wheels |
-| ⚠️ **ASSUMPTION** — `pyyaml` is already available; otherwise YAML output adds a dependency | Low | Step 8 checks; JSON-only is an acceptable v1 |
+| ⚠️ **ASSUMPTION** — hatchling can place files in `.dist-info/sboms/` per PEP 770. Brief 004 §3 confirms the *standard* and its adoption but says nothing about our build backend | Medium — blocks half of Step 20 | ✅ **VERIFIED (Step 20): hatchling 1.31.0 supports it** — `[tool.hatch.build.targets.wheel] sbom-files`, `builders/wheel.py::add_sboms`. No degradation needed; a built `varco_core` wheel carries `.dist-info/sboms/varco-core.cdx.json`. One caveat found and handled: `sbom-files` entries are **literal existing paths** (no globbing, hard error if absent), so `scripts/sbom.py` injects the key at release time instead of committing it. No wheel was hand-patched |
+| ⚠️ **ASSUMPTION** — `pyyaml` is already available; otherwise YAML output adds a dependency | Low | ✅ **CHECKED (Step 8): present in the dev environment (6.0.3, via the docs toolchain) but NOT a `varco_core` runtime dependency.** So YAML was not taken: the exporter is **JSON-only**, the accepted v1. YAML would be an optional extra at most |
 | varco owns CloudEvents spec compliance forever (§D-CE3's accepted drawback) | Low | v1.0.2 stable since 2022, CNCF Graduated, MINOR-only additive changes |
 | The AsyncAPI snapshot gate churns on unrelated changes, training contributors to regenerate blindly | Medium | Snapshot is generated from one example app's consumers, not the whole repo, so it moves only when that app's wiring moves |
 | ⚠️ **ASSUMPTION** — varco is non-commercial FOSS and stays so. The entire §D-D5-posture position depends on this fact, not on a legal reading | Medium | The document states the dependency explicitly and lists what would void it. **We are not lawyers and the document says so** |
@@ -301,8 +301,18 @@ document is Open Question 2.
    `event_payload`. If a CloudEvents-serialized event dead-letters, is the stored payload the
    envelope or the inner `data`? §D-CE1 promises "no DLQ consumer affected", which is true for
    *non-adopters*; adopters need an answer. Decide at Step 3 and test at Step 4.
+   ✅ **DECIDED (Step 3): the WHOLE ENVELOPE.** A dead letter stores exactly the bytes the broker
+   carried, so a redrive re-publishes an identical, still-spec-compliant message and an operator
+   sees `source`/`tenantid`/`correlationid` in the row. Tested in
+   `varco_core/tests/test_cloudevents_serializer.py::TestDeadLetterPayloadIsTheEnvelope`;
+   documented in `technical_docs/features/cloudevents-envelope.md`.
 2. **One SBOM per distribution, or one workspace-wide?** Ten distributions from one lockfile. Per
    distribution is more accurate (each has its own dependency subset) and more work; workspace-wide
    is one artifact that over-reports for any single package. Decide at Step 19 — lean per
    distribution, because an over-reporting SBOM is actively misleading to the consumer it exists
    to serve.
+   ✅ **DECIDED (Step 19): one per distribution.** `uv export --package <name>` already yields
+   exactly that subset, so accuracy costs one flag; measured over-report for the workspace-wide
+   alternative is ~6x (`varco-core` 25 components vs. the workspace's 154). PEP 770 is per-wheel by
+   construction, so a workspace-wide document would be wrong *inside* the wheel regardless.
+   Reasoning recorded in `scripts/sbom.py`'s module DESIGN block.

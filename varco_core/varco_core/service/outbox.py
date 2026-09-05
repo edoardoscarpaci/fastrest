@@ -105,6 +105,7 @@ from uuid import UUID, uuid4
 
 from varco_core.event.base import CHANNEL_DEFAULT, AbstractEventBus, Event
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 if TYPE_CHECKING:
     from varco_core.event.dlq import AbstractDeadLetterQueue
@@ -207,7 +208,7 @@ class OutboxEntry:
         event: Event,
         *,
         channel: str = CHANNEL_DEFAULT,
-        serializer: JsonEventSerializer | None = None,
+        serializer: Serializer[Event] | None = None,
     ) -> OutboxEntry:
         """
         Construct an ``OutboxEntry`` from a domain ``Event``.
@@ -526,7 +527,7 @@ class OutboxRelay:
         *,
         outbox: OutboxRepository,
         bus: AbstractEventBus,
-        serializer: JsonEventSerializer | None = None,
+        serializer: Serializer[Event] | None = None,
         poll_interval: float = _DEFAULT_POLL_INTERVAL,
         batch_size: int = _DEFAULT_BATCH_SIZE,
         retry_policy: RetryPolicy | None = None,
@@ -597,7 +598,7 @@ class OutboxRelay:
         self._bus = bus
         # Use provided serializer or fall back to JSON (matches the default
         # in OutboxEntry.from_event so round-trip is consistent).
-        self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
         self._poll_interval = poll_interval
         self._batch_size = batch_size
         self._retry_policy = retry_policy

@@ -50,19 +50,21 @@ import logging
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 from uuid import UUID, uuid4
 
 from beanie import Document
-from providify import Singleton
+from providify import InjectMeta, Singleton
 from pydantic import Field
 from pymongo.errors import DuplicateKeyError
+from varco_core.event.base import Event
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from ._bson_time import ceil_to_bson_millisecond
 
@@ -129,6 +131,11 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
             implication; the index itself must still be built via
             ``varco migrate index --create`` (declaring it here does not
             build it).
+        serializer: Serializer for the ``Event`` stored in the ``payload``
+            field.  Optionally injected from the container under
+            ``Serializer[Event]``, so an app that binds
+            ``CloudEventsJsonSerializer`` gets CloudEvents envelopes in its dead
+            letters too.  Defaults to ``JsonEventSerializer()``.
 
     Edge cases:
         - ``push()`` on a ``DuplicateKeyError`` is treated as success
@@ -143,8 +150,23 @@ class BeanieDeadLetterQueue(AbstractDeadLetterQueue):
 
     supports_random_access = True
 
-    def __init__(self, *, ttl_seconds: int | None = None) -> None:
-        self._serializer = JsonEventSerializer()
+    def __init__(
+        self,
+        *,
+        ttl_seconds: int | None = None,
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
+    ) -> None:
+        # DESIGN: the nested Event's serializer is injected, not hard-coded
+        #   A dead letter stores the event as bytes, and those bytes must be
+        #   readable by whoever redrives them.  Constructing `JsonEventSerializer()`
+        #   here meant a CloudEvents-configured app wrote CloudEvents envelopes onto
+        #   the bus but plain varco JSON into the DLQ — two wire formats for the
+        #   same event, and a redrive that republished the wrong one.
+        #   ✅ The DLQ now round-trips in whatever format the bus speaks.
+        #   ✅ `None` keeps the previous behaviour exactly.
+        #   ❌ A DLQ populated before a serializer swap holds the old format; drain
+        #      its backlog before swapping (see the feature doc's migration timeline).
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
         self._ttl_seconds = ttl_seconds
         if ttl_seconds is not None:
             _logger.warning(

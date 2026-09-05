@@ -152,6 +152,15 @@ differed by interpreter would make `--check` unrunnable in CI. So `--check` catc
 heap addresses in sentinel default values are stripped, or every run would report a spurious
 change — see `_ADDRESS_RE`.) Additions and module moves are reported as notes and never fail.
 
+### AsyncAPI snapshot gate (`varco export-asyncapi --check`)
+
+`make asyncapi` regenerates `design/api-freeze-and-standards/measurements/asyncapi-example.json`
+from the example app's live consumers; `make asyncapi-check` diffs it and fails on drift. Wired
+into `make lint`'s no-`PKG` path only (the same §D-C5 rule as `api-check`), and into **no new CI
+job** — it rides in `test.yml`'s existing `lint` job. Regenerate and commit whenever
+`examples/00-full-stack-post-api`'s consumer wiring moves. Details:
+`technical_docs/features/asyncapi-export.md`.
+
 ### Import-time budget (`scripts/import_budget.py`)
 
 `scripts/import_budget.py` (Plan 028 / P1b) measures each distribution package's
@@ -429,6 +438,68 @@ primitive (`SET NX PX` / `UNIQUE` + `IntegrityError` / `DuplicateKeyError` / a l
 Usage: README's "Idempotency-Key middleware" section. Full design (fingerprint construction,
 header replay allowlist, tenant/subject scoping's fail-closed rule, streaming/over-ceiling
 handling, a Pitfalls table): `technical_docs/features/idempotency-key.md`.
+
+### CloudEvents envelope (varco_core.event.cloudevents, Plan 030 / N2)
+
+`CloudEventsJsonSerializer` is a **second** `Serializer[Event]` — CloudEvents v1.0.2 *structured*
+mode. `Event` does not change, no bus changes, and nothing happens unless an app opts in with
+`bind_cloudevents_serializer(container, CloudEventsSettings(source=...))`.
+
+**Rule**: never put a module-level `@Singleton` or `@Provider` in `varco_core.event.cloudevents` —
+providify's scanner auto-registers *both* shapes, and `container.scan("varco_core",
+recursive=True)` is a documented, in-use pattern, so a decorator there would silently change the
+wire bytes of every app that scans `varco_core`.
+
+**Rule**: `tenantid` comes from `current_tenant()` and is **best-effort** — absent under an
+`OutboxRelay`-driven publish. Do not "fix" that by adding a tenant field to `Event`.
+
+**Rule**: structured mode only. `AbstractEventBus.publish()` never gains `headers=` (RS-2), so
+CloudEvents *binary* mode is out of scope until a separate `MessageEncoder` Protocol lands.
+
+**Rule**: a `@Provider`-produced bus or DLQ must **declare `serializer` on the provider method** —
+providify injects only what the method itself declares, so an undeclared `Serializer[Event]` binding
+silently never arrives (wrong wire format, no error). This bit `varco_redis`'s bus selector and all
+five DLQ backends; `RedisEventBusSelectorConfiguration.bus()` is the worked example. Guarded by
+`varco_redis/tests/test_redis_cloudevents_di.py`. Never "fix" a missing binding by decorating
+`cloudevents.py`.
+
+⚠️ `SADeadLetterQueue` and `OutboxRelay` are hand-constructed, not DI-wired — pass `serializer=`
+explicitly or they keep the `JsonEventSerializer` default. A DLQ backlog stored before a serializer
+swap is never converted; drain it first.
+
+Usage: README's "CloudEvents envelope" section. Full design (attribute mapping, the named Redis
+Streams `ce`-field convention, the Kafka `content-type` limitation, the three-phase dual-emit
+migration, a Pitfalls table): `technical_docs/features/cloudevents-envelope.md`.
+
+### AsyncAPI export (varco_core.asyncapi + `varco export-asyncapi`, Plan 030 / N3)
+
+`generate_asyncapi(consumers_or_container, *, title, version, ...)` emits an AsyncAPI 3.1.0
+document as a plain `dict`; `varco export-asyncapi --check` gates a committed snapshot inside
+`make lint`'s no-`PKG` path (beside `api-check` and `import-budget`, skipped by `make lint
+PKG=<one>`).
+
+**Rule**: generation is **runtime, from live registered consumers — never a static import walk**.
+A `@listen` channel may be `Callable[[Any], str]` resolved at `register_to()` time against a bound
+`self`, which a static scan gets silently wrong. An unregistered consumer is deliberately absent.
+
+**Rule**: no new dependency for this — plain `dict` + `json` + `model_json_schema()`. Output is
+**JSON only**; `pyyaml` is not a `varco_core` runtime dependency and must not become one.
+
+**Rule**: ⛔ no Node in CI. `npx @asyncapi/cli validate` is run by hand, once, and the result is
+recorded in `design/api-freeze-and-standards/measurements/asyncapi-validate.txt`.
+
+Usage + the local `npx` invocation: `technical_docs/features/asyncapi-export.md`.
+
+### SBOM and regulatory posture (scripts/sbom.py, Plan 030 / D5)
+
+`scripts/sbom.py` generates **one CycloneDX 1.6 SBOM per distribution** (never workspace-wide —
+that over-reports ~6× and misleads the regulated consumer it exists to serve), attaches them to the
+GitHub Release, and embeds them in each wheel at `.dist-info/sboms/` per PEP 770. Release-time
+only: the documents and the `sbom-files` pyproject key are **never committed** (`.gitignore`).
+
+**Rule**: never claim CRA compliance or certification anywhere. `docs/regulatory-posture.md` states
+a *position* — the non-commercial FOSS exemption, why we believe it applies, and the funding facts
+that would void it — and says explicitly that it is not legal advice.
 
 ### Observability (varco_core.observability)
 
@@ -1086,6 +1157,17 @@ Am I adding a new capability?
 │  │  └─ → implement MemoryProfilerBackend + register_memory_backend()
 │  └─ New profiling primitive (service mixin, consumer wrapper)?
 │     └─ → varco_core.profiling (use ProfileSession as the engine)
+│
+├─ Event wire format / interop envelope (CloudEvents, a partner's schema)?
+│  └─ → a new Serializer[Event] implementation, NEVER a change to Event
+│     ↳ CloudEvents? → already exists: varco_core.event.cloudevents (structured mode)
+│     ↳ needs transport headers? → blocked on the MessageEncoder Protocol (RS-2),
+│       never a headers= parameter on AbstractEventBus.publish()
+│
+├─ Describing the event surface to another team/tool (AsyncAPI, a schema registry)?
+│  └─ → varco_core.asyncapi (runtime introspection of wired consumers)
+│     + varco_core/cli/asyncapi.py for a CLI verb
+│     ↳ ⛔ never a static import walk, and never a new AsyncAPI dependency
 │
 ├─ Authentication/JWT feature?
 │  └─ → varco_core.authority (protocol) + varco_core.authority.sources (key sources)

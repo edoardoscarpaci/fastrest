@@ -533,6 +533,7 @@ class RedisEventBusSelectorConfiguration:
     def bus(
         self,
         settings: Inject[RedisEventBusSettings],
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> AbstractEventBus:
         """
         Select and construct the active Redis event bus implementation.
@@ -540,8 +541,29 @@ class RedisEventBusSelectorConfiguration:
         Returns ``RedisStreamEventBus`` when ``settings.use_streams`` is ``True``
         (i.e. ``VARCO_REDIS_USE_STREAMS=true``), otherwise ``RedisEventBus``.
 
+        DESIGN: the provider forwards ``Serializer[Event]`` explicitly
+            Kafka and NATS bind their buses as scanned ``@Singleton`` classes, so
+            providify injects each constructor parameter — including the optional
+            ``serializer`` — directly.  Redis is the outlier: both implementations
+            are produced by *this* ``@Provider``, and providify only injects what
+            the **provider method** declares.  Omitting the parameter here (as this
+            method did before) meant ``bind_cloudevents_serializer()`` silently had
+            no effect on either Redis bus while working on the other two backends.
+            ✅ Restores the documented "every backend resolves ``Serializer[Event]``
+               through DI" contract, so a serializer swap is uniform across
+               Kafka / NATS / Redis.
+            ✅ ``optional=True`` keeps the parameter inert when nothing is bound —
+               each bus still falls back to ``JsonEventSerializer()`` internally.
+            ❌ One more thing to remember when a third Redis bus shape is added.
+               Accepted: the alternative (scanning the concrete classes) would
+               register *both* implementations under ``AbstractEventBus`` and
+               reintroduce the ambiguity this selector exists to remove.
+
         Args:
-            settings: ``RedisEventBusSettings`` singleton injected from the container.
+            settings:   ``RedisEventBusSettings`` singleton injected from the container.
+            serializer: Optionally-injected ``Serializer[Event]``.  ``None`` when no
+                        application serializer is bound, in which case the selected
+                        bus falls back to ``JsonEventSerializer()``.
 
         Returns:
             The appropriate bus implementation as ``AbstractEventBus``.
@@ -551,6 +573,12 @@ class RedisEventBusSelectorConfiguration:
               is resolved once at warm-up and cached for the container's lifetime.
             - Both implementations share the same ``RedisEventBusSettings`` object —
               ``url``, ``channel_prefix``, etc. apply to whichever is active.
+            - No ``Serializer[Event]`` bound → ``serializer`` is ``None`` and each
+              bus constructs its own ``JsonEventSerializer()``; behaviour is
+              byte-identical to before this parameter existed.
+            - Binding ``CloudEventsJsonSerializer`` also changes the Redis Streams
+              field name to ``ce`` (``streams.py``'s ``_stream_field()``); Pub/Sub
+              carries raw bytes and is unaffected by the field-name question.
 
         Thread safety:  ✅ Called once; result is a shared singleton.
         Async safety:   ✅ No I/O at construction time.
@@ -560,8 +588,8 @@ class RedisEventBusSelectorConfiguration:
         from varco_redis.streams import RedisStreamEventBus  # noqa: PLC0415
 
         if settings.use_streams:
-            return RedisStreamEventBus(config=settings)
-        return RedisEventBus(config=settings)
+            return RedisStreamEventBus(config=settings, serializer=serializer)
+        return RedisEventBus(config=settings, serializer=serializer)
 
     @Disposes(AbstractEventBus)
     async def close_bus(self, bus: RedisEventBus | RedisStreamEventBus) -> None:

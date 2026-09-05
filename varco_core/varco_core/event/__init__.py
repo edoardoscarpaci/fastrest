@@ -16,8 +16,13 @@ All public symbols are importable directly from ``varco_core.event``::
     # Configuration
     from varco_core.event import EventBusSettings
 
-    # Serializer
-    from varco_core.event import JsonEventSerializer, JsonEventSerializer
+    # Serializer (JsonEventSerializer is the DI default; CloudEvents is opt-in)
+    from varco_core.event import JsonEventSerializer
+    from varco_core.event import (
+        CloudEventsJsonSerializer,
+        CloudEventsSettings,
+        bind_cloudevents_serializer,
+    )
 
     # Producer side
     from varco_core.event import AbstractEventProducer
@@ -78,6 +83,11 @@ from varco_core.event.base import (
     Subscription,
 )
 from varco_core.event.channel import ChannelManager
+from varco_core.event.cloudevents import (
+    CloudEventsJsonSerializer,
+    CloudEventsSettings,
+    bind_cloudevents_serializer,
+)
 from varco_core.event.config import EventBusSettings
 from varco_core.event.consumer import EventConsumer, listen
 from varco_core.event.dlq import (
@@ -131,6 +141,10 @@ __all__ = [
     "NoopEventBus",
     # ── Serializer ──────────────────────────────────────────────────────────
     "JsonEventSerializer",
+    # ── CloudEvents envelope (opt-in — never auto-active) ────────────────────
+    "CloudEventsJsonSerializer",
+    "CloudEventsSettings",
+    "bind_cloudevents_serializer",
     # ── Producer ────────────────────────────────────────────────────────────
     "AbstractEventProducer",
     "BusEventProducer",

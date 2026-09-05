@@ -84,20 +84,22 @@ import json
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from nats import connect
 from nats.errors import TimeoutError as NatsTimeoutError
 from nats.js.api import RetentionPolicy
 from nats.js.errors import NotFoundError
-from providify import Configuration, Disposes, Inject, Provider
+from providify import Configuration, Disposes, Inject, InjectMeta, Provider
+from varco_core.event.base import Event
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_nats.config import NatsEventBusSettings
 
@@ -179,6 +181,7 @@ class NatsDLQ(AbstractDeadLetterQueue):
         dlq_subject: str | None = None,
         dlq_stream: str | None = None,
         dlq_durable: str = _DEFAULT_DLQ_DURABLE,
+        serializer: Serializer[Event] | None = None,
     ) -> None:
         """
         Args:
@@ -188,6 +191,11 @@ class NatsDLQ(AbstractDeadLetterQueue):
                          ``{subject_prefix}.{channel_prefix}__dlq__``.
             dlq_stream:  Override for the DLQ stream name.  If ``None``, defaults
                          to ``{stream_name}-dlq``.
+            serializer:  Serializer for the ``Event`` nested inside each
+                         ``DeadLetterEntry``.  Must match the bus's serializer or
+                         a redrive republishes the wrong wire format.  Defaults to
+                         ``JsonEventSerializer()``; ``NatsDLQConfiguration``
+                         forwards the container-bound ``Serializer[Event]``.
             dlq_durable: Durable name for the relay pull consumer.
 
         Edge cases:
@@ -214,7 +222,20 @@ class NatsDLQ(AbstractDeadLetterQueue):
         )
         self._dlq_durable = dlq_durable
 
-        self._serializer = JsonEventSerializer()
+        # DESIGN: the nested Event's serializer is injected, not hard-coded
+        #   A dead letter stores the event as bytes (`event_payload`), and those
+        #   bytes must be readable by whoever redrives them.  Constructing
+        #   `JsonEventSerializer()` here meant a CloudEvents-configured app wrote
+        #   CloudEvents envelopes onto the bus but plain varco JSON into the DLQ —
+        #   two wire formats for the same event, and a redrive that republished
+        #   the wrong one.
+        #   ✅ The DLQ now round-trips in whatever format the bus speaks.
+        #   ✅ `None` keeps the previous behaviour exactly, so nothing changes for
+        #      an app that never binds a serializer.
+        #   ❌ A DLQ populated before a serializer swap holds the old format; its
+        #      backlog must be drained before the swap (documented in the feature
+        #      doc's migration timeline).
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         # NATS client + JetStream context — created in start().
         self._nc: Any | None = None
@@ -754,12 +775,17 @@ class NatsDLQConfiguration:
     async def nats_dlq(
         self,
         settings: Inject[NatsEventBusSettings],
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> AbstractDeadLetterQueue:
         """
         Create and start the ``NatsDLQ`` singleton.
 
         Args:
             settings: ``NatsEventBusSettings`` — injected from the container.
+            serializer: Optionally-injected ``Serializer[Event]``.  Forwarded so the
+                        DLQ stores dead letters in the same wire format the bus
+                        publishes; ``None`` when nothing is bound, in which case
+                        the DLQ falls back to ``JsonEventSerializer()``.
 
         Returns:
             A started ``NatsDLQ`` bound to ``AbstractDeadLetterQueue``.
@@ -771,7 +797,7 @@ class NatsDLQConfiguration:
             "NatsDLQConfiguration: starting NatsDLQ (servers=%s)",
             settings.servers,
         )
-        dlq = NatsDLQ(settings)
+        dlq = NatsDLQ(settings, serializer=serializer)
         await dlq.start()
         return dlq
 

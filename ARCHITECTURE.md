@@ -191,6 +191,26 @@ AbstractDeadLetterQueue (ABC)
 DeadLetterEntry (Plan 005 Phase 3) — event: DomainEvent | None, source: DeadLetterSource
   (CONSUMER default / OUTBOX_RELAY / JOB), source_ref, payload — one shape for all three
 
+Serializer[Event] (Protocol, varco_core.serialization)
+  ├── JsonEventSerializer          (varco_core.event.serializer) — DEFAULT, @Singleton at
+  │                                  priority=-sys.maxsize-1, so it loses to any app-supplied one
+  └── CloudEventsJsonSerializer    (varco_core.event.cloudevents, Plan 030 / N2) — CloudEvents
+                                     v1.0.2 STRUCTURED mode; OPT-IN only, no DI decorator at all
+                                     (a module-level @Singleton/@Provider would be auto-registered
+                                     by container.scan("varco_core", recursive=True)).
+                                     Wire it with bind_cloudevents_serializer(container, settings).
+                                     Every bus resolves Serializer[Event]: Kafka/NATS inject it
+                                     as scanned singletons, both Redis shapes get it forwarded by
+                                     RedisEventBusSelectorConfiguration.bus(). All five DLQ
+                                     backends + the outbox take it as a parameter.
+                                     ⚠️ SADeadLetterQueue and OutboxRelay are hand-constructed —
+                                     pass serializer= explicitly there
+
+generate_asyncapi(consumers | container, ...) -> dict   (varco_core.asyncapi, Plan 030 / N3)
+  AsyncAPI 3.1.0 from LIVE, registered consumers — never a static import walk, because a
+  @listen channel may be Callable[[Any], str] resolved at register_to() time.
+  CLI: `varco export-asyncapi [--check]` (varco_core.cli.asyncapi)
+
 ### File watching (Plan 025 / T1)
 
 ```

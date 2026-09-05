@@ -5,6 +5,7 @@
 #   make install          — sync all workspace deps
 #   make lint              — ruff check (whole repo; PKG= narrows to one package's source dirs)
 #   make format             — ruff format + fix (same PKG= narrowing as lint)
+#   make asyncapi-check   — AsyncAPI 3.1.0 snapshot gate (Plan 030 / N3b)
 #   make import-budget    — -X importtime budget per package (warn-only today;
 #                            also run by `make lint` with no PKG=)
 #   make type-check        — mypy (all ten source dirs; PKG= narrows to one package)
@@ -101,6 +102,8 @@ help:
 	@echo "  make lint                    ruff check + format --check + api-check (whole repo)"
 	@echo "  make lint PKG=varco_redis    ruff check (one package's source dirs; no api-check)"
 	@echo "  make api-check               api_surface.py --check (removals + fn signature changes)"
+	@echo "  make asyncapi                regenerate the committed AsyncAPI 3.1.0 snapshot"
+	@echo "  make asyncapi-check          diff the AsyncAPI snapshot against live consumer wiring"
 	@echo "  make format                  ruff format + fix (whole repo)"
 	@echo "  make format PKG=varco_redis  ruff format + fix (one package's source dirs)"
 	@echo "  make type-check              mypy (all ten source dirs)"
@@ -160,6 +163,7 @@ lint:
 ifeq ($(strip $(PKG)),)
 	$(MAKE) api-check
 	$(MAKE) import-budget
+	$(MAKE) asyncapi-check
 endif
 
 # ── API surface gate ──────────────────────────────────────────────────────────
@@ -191,6 +195,36 @@ api-check:
 .PHONY: import-budget
 import-budget:
 	uv run --all-packages --all-extras python scripts/import_budget.py --check --warn-only
+
+# ── AsyncAPI document gate ────────────────────────────────────────────────────
+# Plan 030 / Phase 2 (N3b), §D-AA4. Regenerates the AsyncAPI 3.1.0 document from
+# the example app's LIVE, registered consumers and diffs it against the committed
+# snapshot, exiting non-zero on drift — the same snapshot-plus-`--check` shape
+# `api-check` uses.
+#
+# The subject is deliberately ONE example app's consumers, not the whole repo, so
+# the snapshot moves only when that app's wiring moves — a gate that churned on
+# unrelated changes would train contributors to regenerate blindly.
+#
+# ⚠️ No Node in CI (§D-AA4): this checks OUR document against OUR snapshot. Spec
+# conformance was validated once, by hand, with `npx @asyncapi/cli validate` —
+# see design/api-freeze-and-standards/measurements/asyncapi-validate.txt.
+#
+# Wired into `make lint`'s no-PKG path only, beside `api-check`/`import-budget`
+# — `make lint PKG=<one>` stays narrow and fast (the §D-C5 rule).
+ASYNCAPI_SNAPSHOT := design/api-freeze-and-standards/measurements/asyncapi-example.json
+ASYNCAPI_ARGS := --title "varco example — full-stack post API" --version 0.1.0 \
+	--path examples/00-full-stack-post-api \
+	--consumer example.consumer:PostEventConsumer \
+	-o $(ASYNCAPI_SNAPSHOT)
+
+.PHONY: asyncapi-check
+asyncapi-check:
+	uv run --all-packages --all-extras varco export-asyncapi $(ASYNCAPI_ARGS) --check
+
+.PHONY: asyncapi
+asyncapi:
+	uv run --all-packages --all-extras varco export-asyncapi $(ASYNCAPI_ARGS)
 
 # ── Benchmarks ────────────────────────────────────────────────────────────────
 # Plan 028 / Phase 3 (P2), §D-P2-harness. Runs benchmarks/ as plain pytest
