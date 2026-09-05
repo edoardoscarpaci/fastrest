@@ -12,6 +12,14 @@ serializer bound round-trips them back into the original event.
 ``application/cloudevents`` — unreachable today because ``publish()`` gains no
 ``headers=`` (RS-2).  That is explicitly out of scope; only the body is asserted.
 
+⚠️ Topic pre-creation: any test here that subscribes *before* publishing must
+declare its topic through ``KafkaChannelManager`` first (the package-wide
+convention — see ``test_kafka_integration.py``'s ``test_publish_and_consume``).
+A ``KafkaEventBus`` consumer that joins a group for a not-yet-existent topic
+gets no partition metadata and stays idle until ``metadata_max_age_ms``
+(5 minutes), which no sleep margin in a test can outwait; the full mechanism is
+documented on ``test_round_trip_through_a_consumer_with_the_serializer_bound``.
+
 Requires Docker.  Run with ``-m integration``.
 """
 
@@ -44,6 +52,25 @@ class KafkaCloudEvent(Event):
 def run_id() -> str:
     # Per-test namespacing — the Kafka container is session-scoped and shared.
     return uuid4().hex[:8]
+
+
+@pytest.fixture
+async def channel_manager(kafka_bootstrap: str) -> Any:
+    """
+    ``KafkaChannelManager`` for pre-creating topics before a consumer subscribes.
+
+    Same fixture shape as ``test_kafka_integration.py``'s — admin operations
+    live here, not on the bus, so the bus stays credential-free.
+    """
+    from varco_kafka import (  # noqa: PLC0415
+        KafkaChannelManager,
+        KafkaChannelManagerSettings,
+    )
+
+    async with KafkaChannelManager(
+        KafkaChannelManagerSettings(bootstrap_servers=kafka_bootstrap)
+    ) as manager:
+        yield manager
 
 
 @pytest.fixture
@@ -90,19 +117,56 @@ class TestKafkaCloudEventsWire:
         assert "data_base64" not in envelope
 
     async def test_round_trip_through_a_consumer_with_the_serializer_bound(
-        self, kafka_bootstrap: str, run_id: str, serializer: Any
+        self,
+        kafka_bootstrap: str,
+        run_id: str,
+        serializer: Any,
+        channel_manager: Any,
     ) -> None:
+        """
+        A bus-bound consumer round-trips a CloudEvents envelope back into the event.
+
+        DESIGN — why the topic is pre-created, and why a longer sleep would not
+        have worked (regression guard, see the module docstring):
+        ``KafkaEventBus.start()`` starts its ``AIOKafkaConsumer`` with **no**
+        topics and only then calls ``consumer.subscribe(...)`` (``bus.py:305``).
+        That path skips aiokafka's ``_wait_topics()`` (``consumer.py:365``),
+        which is the *only* thing that blocks until an auto-created topic's
+        metadata exists, and — because a ``group_id`` is set — it also skips the
+        ``force_metadata_update()`` in ``AIOKafkaConsumer.subscribe()``
+        (``consumer.py:1058-1064``, guarded by ``if self._group_id is None``).
+        A group that joins with no partition metadata for a not-yet-existent
+        topic is therefore stuck until the next periodic metadata refresh —
+        ``metadata_max_age_ms``, default **5 minutes** (``consumer.py:244``),
+        an order of magnitude beyond any sane test budget, and unaffected by
+        ``auto_offset_reset``.  Declaring the channel first removes the race
+        entirely; this mirrors ``test_kafka_integration.py``'s
+        ``test_publish_and_consume``.
+        """
         from varco_kafka import KafkaEventBus, KafkaEventBusSettings  # noqa: PLC0415
 
         topic = f"ce-orders-rt-{run_id}"
         settings = KafkaEventBusSettings(
-            bootstrap_servers=kafka_bootstrap, group_id=f"ce-rt-{run_id}"
+            bootstrap_servers=kafka_bootstrap,
+            group_id=f"ce-rt-{run_id}",
+            # earliest — the publish below must be readable even if partition
+            # assignment lands after it; this test asserts the serializer
+            # round-trip, never the group-join timing.
+            auto_offset_reset="earliest",
         )
         received: list[Event] = []
 
+        # Pre-create the topic before subscribing (see the DESIGN note above).
+        await channel_manager.declare_channel(topic)
+        assert await channel_manager.channel_exists(topic), (
+            f"precondition failed: {topic} was not created before subscribing"
+        )
+
         async with KafkaEventBus(settings, serializer=serializer) as bus:
             bus.subscribe(KafkaCloudEvent, lambda e: received.append(e), channel=topic)
-            await asyncio.sleep(2)
+            # Settle window for consumer-group coordinator formation, matching
+            # test_kafka_integration.py's 5 s.
+            await asyncio.sleep(5)
             await bus.publish(KafkaCloudEvent(order_id="o-2"), channel=topic)
 
             for _ in range(60):
