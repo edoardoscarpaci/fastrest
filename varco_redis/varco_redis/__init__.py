@@ -66,6 +66,7 @@ from varco_redis.channel import RedisChannelManager, RedisChannelManagerSettings
 from varco_redis.config import RedisEventBusSettings
 from varco_redis.conversation import RedisConversationStore
 from varco_redis.dlq import RedisDLQ, RedisDLQConfiguration
+from varco_redis.idempotency import RedisIdempotencyStore
 from varco_redis.job_store import RedisJobStore
 from varco_redis.rate_limit import RedisRateLimiter
 from varco_redis.stream_dlq import RedisStreamDLQ, RedisStreamDLQConfiguration
@@ -98,4 +99,6 @@ __all__ = [
     # ── Concurrency limiting (a different primitive from rate limiting) ───────
     "RedisBulkhead",
     "RedisBulkheadConfiguration",
+    # ── Idempotency ──
+    "RedisIdempotencyStore",
 ]

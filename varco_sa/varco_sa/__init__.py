@@ -50,6 +50,7 @@ from varco_sa.dlq import dead_letters_metadata
 from varco_sa.encryption_store import encryption_metadata
 from varco_sa.factory import SAModelFactory, SAModelRegistry
 from varco_sa.health import SAHealthCheck, SAPoolSaturationCheck
+from varco_sa.idempotency import SAIdempotencyStore, idempotency_metadata
 from varco_sa.inbox import (
     InboxEntryModel,
     SAInboxRepository,
@@ -143,4 +144,7 @@ __all__ = [
     "audit_metadata",
     "dead_letters_metadata",
     "encryption_metadata",
+    # ── Idempotency store (Plan 029 / D1b) ────────────────────────────────────
+    "SAIdempotencyStore",
+    "idempotency_metadata",
 ]

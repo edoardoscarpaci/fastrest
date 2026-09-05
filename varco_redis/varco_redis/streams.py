@@ -17,6 +17,9 @@ Architecture
         bus.publish(event, channel="orders")
             → JsonEventSerializer.serialize(event)
             → redis.xadd("{prefix}orders", {"payload": bytes})
+              (the field is "ce" when a CloudEvents serializer is bound —
+               varco's named Redis Streams convention, see
+               technical_docs/features/cloudevents-envelope.md)
 
     Consumer side (background):
         redis.xreadgroup(GROUP group CONSUMER name STREAMS stream ">")
@@ -95,6 +98,7 @@ from varco_core.event.base import (
 )
 from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_redis.config import RedisEventBusSettings
 
@@ -108,6 +112,47 @@ _logger = logging.getLogger(__name__)
 #   ❌ Not human-readable in redis-cli XRANGE output — use JsonEventSerializer
 #      externally to decode for debugging.
 _PAYLOAD_FIELD: str = "payload"
+
+# Field names this bus is willing to READ an entry from, newest convention
+# first.  Writing picks exactly one (see `_stream_field()`); reading accepts
+# either so a stream written before a serializer swap still drains.
+#
+# DESIGN: dual-read, single-write over a hard cutover
+#   ✅ Flipping to the CloudEvents serializer leaves the pending entries of the
+#      *previous* format readable — otherwise every un-acked message written
+#      before the swap would be logged as "no payload field" and acknowledged
+#      away (i.e. silently dropped).
+#   ✅ Costs one dict lookup per message on the miss path only.
+#   ❌ A stream can carry a mix of both field names.  Accepted, and bounded:
+#      the mix only exists for the duration of a rollout.
+_READ_FIELDS: tuple[str, ...] = (_PAYLOAD_FIELD, "ce")
+
+
+def _read_payload(fields: dict[bytes, bytes], preferred: str) -> bytes | None:
+    """
+    Extract the serialized event body from one Redis Streams entry.
+
+    Args:
+        fields:    The entry's field mapping as returned by ``XREADGROUP``.
+                   Keys are ``bytes`` with ``decode_responses=False`` (this
+                   bus's setting), but ``str`` keys are tolerated so a caller
+                   with a decoding client is not silently broken.
+        preferred: The field name this bus writes today — tried first.
+
+    Returns:
+        The raw body bytes, or ``None`` when the entry carries neither the
+        preferred field nor any other known field name.
+
+    Edge cases:
+        - An entry whose body is empty bytes is reported as ``None``; the
+          caller treats that identically to a missing field (unparseable).
+    """
+    for name in (preferred, *(f for f in _READ_FIELDS if f != preferred)):
+        value = fields.get(name.encode()) or fields.get(name)  # type: ignore[call-overload]
+        if value:
+            return bytes(value)
+    return None
+
 
 # How long to block on XREADGROUP when no messages are available.
 # 100 ms balances responsiveness and CPU usage.
@@ -203,7 +248,7 @@ class RedisStreamEventBus(AbstractEventBus):
         dlq: AbstractDeadLetterQueue | None = None,
         error_policy: ErrorPolicy = ErrorPolicy.COLLECT_ALL,
         middleware: Instance[EventMiddleware] | list[EventMiddleware] | None = None,
-        serializer: Annotated[JsonEventSerializer | None, InjectMeta(optional=True)] = None,
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> None:
         """
         Args:
@@ -221,7 +266,11 @@ class RedisStreamEventBus(AbstractEventBus):
                                 exhaust ``max_delivery_count`` attempts.
             error_policy:       Handler error policy.
             middleware:         DI instance handle for ``EventMiddleware`` bindings.
-            serializer:         Pluggable event serializer.  Defaults to
+            serializer:         Pluggable event serializer.  Injected optionally
+                                from the container under ``Serializer[Event]``,
+                                so binding ``CloudEventsJsonSerializer`` swaps
+                                the wire format (and, with it, the stream field
+                                name — see ``_stream_field()``).  Defaults to
                                 ``JsonEventSerializer()``.
         """
         import os  # deferred — only needed once at construction time
@@ -243,7 +292,7 @@ class RedisStreamEventBus(AbstractEventBus):
             self._middleware = middleware
         else:
             self._middleware = list(middleware.get_all()) if middleware.resolvable() else []
-        self._serializer: JsonEventSerializer = serializer or JsonEventSerializer()
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         self._subscriptions: list[_SubscriptionEntry] = []
 
@@ -348,6 +397,39 @@ class RedisStreamEventBus(AbstractEventBus):
 
     # ── AbstractEventBus interface ─────────────────────────────────────────────
 
+    def _stream_field(self) -> str:
+        """
+        Return the stream field name the bound serializer wants for its body.
+
+        Duck-typed on the serializer's optional ``stream_field`` attribute
+        (``CloudEventsJsonSerializer.stream_field == "ce"``), so varco_redis
+        never imports the CloudEvents module and any third-party serializer can
+        declare its own convention the same way.
+
+        Returns:
+            ``"ce"`` under a CloudEvents serializer — varco's own named,
+            versioned Redis Streams convention (Plan 022 §D-CE4 convention 1:
+            the WHOLE envelope in one field, never one field per CloudEvents
+            attribute, so ``XADD`` field names can never collide with a future
+            varco field) — and ``"payload"`` otherwise.
+
+        Edge cases:
+            - A serializer with no ``stream_field`` attribute (the default
+              ``JsonEventSerializer``, and every pre-3.1 custom one) keeps the
+              historical ``"payload"`` field byte-for-byte.
+
+        Thread safety:  ✅ Pure attribute read.
+        """
+        # DESIGN: duck-typed attribute over `isinstance(serializer, CloudEvents…)`
+        #   ✅ No import of varco_core.event.cloudevents from a backend package —
+        #      the transport stays ignorant of the envelope format.
+        #   ✅ An out-of-tree serializer can adopt the convention by declaring one
+        #      class attribute.
+        #   ❌ A typo in the attribute name degrades silently to "payload".
+        #      Bounded: the integration test asserts the written field name.
+        field = getattr(self._serializer, "stream_field", _PAYLOAD_FIELD)
+        return field if isinstance(field, str) and field else _PAYLOAD_FIELD
+
     async def publish(
         self,
         event: Event,
@@ -381,8 +463,10 @@ class RedisStreamEventBus(AbstractEventBus):
         stream_key = self._config.channel_name(channel)
         value = self._serializer.serialize(event)
 
-        # XADD with auto-ID (*) and a single "payload" field.
-        await self._redis.xadd(stream_key, {_PAYLOAD_FIELD: value})
+        # XADD with auto-ID (*) and a SINGLE field carrying the whole
+        # serialized body — "payload" by default, "ce" when a CloudEvents
+        # serializer is bound (see _stream_field()).
+        await self._redis.xadd(stream_key, {self._stream_field(): value})
         _logger.debug("Published %s to Redis stream %s", type(event).__name__, stream_key)
         return None
 
@@ -594,21 +678,21 @@ class RedisStreamEventBus(AbstractEventBus):
                              handler matching.
 
         Edge cases:
-            - Missing ``_PAYLOAD_FIELD`` in ``fields`` logs an ERROR and
+            - An entry carrying none of the known body fields logs an ERROR and
               the message is acknowledged to avoid infinite retry.
             - ``asyncio.CancelledError`` from dispatch propagates without
               acknowledging the message.
         """
         assert self._redis is not None
 
-        payload = fields.get(_PAYLOAD_FIELD.encode()) or fields.get(_PAYLOAD_FIELD)  # type: ignore[call-overload]
+        payload = _read_payload(fields, self._stream_field())
         if not payload:
             _logger.error(
                 "RedisStreamEventBus: message %s on stream %s has no '%s' field — "
                 "acknowledging to avoid infinite retry loop.",
                 msg_id,
                 stream_key,
-                _PAYLOAD_FIELD,
+                self._stream_field(),
             )
             await self._redis.xack(stream_key, self._consumer_group, msg_id)
             return

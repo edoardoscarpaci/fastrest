@@ -51,9 +51,14 @@ from __future__ import annotations
 import os
 import ssl
 from pathlib import Path
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel, ConfigDict, model_validator
+
+from varco_core.tls.discovery import iter_cert_files
+
+if TYPE_CHECKING:
+    from varco_core.tls.store import TrustStore
 
 # ── SSLConfig ─────────────────────────────────────────────────────────────────
 
@@ -90,6 +95,14 @@ class SSLConfig(BaseModel):
         - ``ca_cert`` + ``ca_folder`` can both be set — both are loaded.
         - Paths are validated for existence only at ``build_ssl_context()`` time —
           constructing an ``SSLConfig`` with a non-existent path does not raise.
+
+    **Deliberately absent: encrypted-key passwords and PKCS#12 (Plan 027 / §D-T6-password
+    ❌).** ``SSLConfig`` is a pydantic ``BaseModel`` populated by ``env_nested_delimiter`` from
+    environment variables — a secret field here (``key_password``) would land in
+    ``model_dump()``, in DI logging, and in any settings echo. Neither ``key_password`` nor
+    ``pkcs12_file``/``pkcs12_password`` are settings fields on this type, and never will be.
+    Use ``to_trust_store()`` below to convert to a ``varco_core.tls.TrustStore`` and set
+    those fields in code instead, where the secret is never routed through a settings model.
 
     Example::
 
@@ -133,6 +146,17 @@ class SSLConfig(BaseModel):
 
     check_hostname: bool = True
     """Enforce hostname verification.  Env var: ``{PREFIX}SSL__CHECK_HOSTNAME``."""
+
+    cert_patterns: tuple[str, ...] = ("*.pem", "*.crt")
+    """``ca_folder`` glob patterns.  Defaults to 3.0's exact patterns — opt-in only (Plan 026 /
+    T7, ``BACKLOG.md:30``).  A wider set (``varco_core.tls.CERT_FILE_PATTERNS``) is available
+    for new configs; existing deployments never widen on upgrade unless they opt in."""
+
+    recursive: bool = False
+    """Whether ``ca_folder`` is scanned recursively.  Defaults to 3.0's exact behaviour
+    (non-recursive) — opt-in only.  ``varco_core.tls.TrustStore`` (the unified type this
+    ``SSLConfig`` converts to via ``to_trust_store()``) defaults to ``True`` instead; this
+    field lets an existing ``SSLConfig`` opt into the same behaviour without migrating."""
 
     # ── Validators ────────────────────────────────────────────────────────────
 
@@ -223,7 +247,9 @@ class SSLConfig(BaseModel):
         1. Create context from system CAs (``ssl.create_default_context()``) when
            ``verify=True``, or a blank client context when ``verify=False``.
         2. Disable hostname checking if ``check_hostname=False``.
-        3. Glob ``ca_folder`` for ``*.pem``/``*.crt`` → load each file.
+        3. Enumerate ``ca_folder`` via ``varco_core.tls.discovery.iter_cert_files`` using
+           ``cert_patterns``/``recursive`` (defaults: ``("*.pem","*.crt")``, non-recursive —
+           byte-identical to 3.0) → load each file.
         4. Load explicit ``ca_cert`` file.
         5. Load ``client_cert`` + ``client_key`` for mTLS.
 
@@ -255,10 +281,14 @@ class SSLConfig(BaseModel):
             # verify=True + check_hostname=False: valid — e.g. IP-based connections
             ctx.check_hostname = False
 
-        # Step 3: load ca_folder
+        # Step 3: load ca_folder — via the shared iter_cert_files() helper (Plan 026 / T7),
+        # not a hand-rolled glob, so this site and every other cert-file call site in the
+        # repo can no longer silently disagree about what counts as a certificate file.
         if self.ca_folder is not None:
             folder = Path(self.ca_folder)
-            for cert_path in sorted(list(folder.glob("*.pem")) + list(folder.glob("*.crt"))):
+            for cert_path in iter_cert_files(
+                folder, patterns=self.cert_patterns, recursive=self.recursive
+            ):
                 ctx.load_verify_locations(cafile=str(cert_path))
 
         # Step 4: load explicit ca_cert
@@ -274,6 +304,44 @@ class SSLConfig(BaseModel):
             )
 
         return ctx
+
+    def to_trust_store(self) -> TrustStore:
+        """
+        Convert this ``SSLConfig`` to a ``varco_core.tls.TrustStore`` — the lossless bridge
+        (§D-T3-bridge, Plan 026). Prefer this over
+        ``varco_fastapi.connection.HttpConnectionSettings.to_trust_store()``, which returns
+        the deprecated ``varco_fastapi.auth.TrustStore`` and drops ``verify=False`` silently
+        (documented there as a caveat) — this method carries both ``verify`` **and**
+        ``check_hostname`` across, and is not tied to any HTTP-client type.
+
+        Returns:
+            A ``varco_core.tls.TrustStore`` with equivalent CA/client-cert/verify
+            configuration. ``ca_folder`` (singular) becomes a one-entry ``ca_folders`` tuple.
+
+        Edge cases:
+            - ``ca_folder=None`` → ``ca_folders=None`` on the result (not an empty tuple).
+            - ``include_system_cas`` has no ``SSLConfig`` equivalent — the result always uses
+              ``include_system_cas=True`` (``SSLConfig`` has no way to express otherwise;
+              round-tripping through ``TrustStore.to_ssl_config()`` loses this the same way).
+
+        Example::
+
+            ssl_cfg = SSLConfig(verify=False, check_hostname=False)
+            store = ssl_cfg.to_trust_store()
+            ctx = store.build_ssl_context()  # CERT_NONE, check_hostname=False — preserved
+        """
+        from varco_core.tls.store import TrustStore  # noqa: PLC0415 — see module docstring
+
+        return TrustStore(
+            ca_cert=self.ca_cert,
+            ca_folders=self.ca_folder,
+            cert_patterns=self.cert_patterns,
+            recursive=self.recursive,
+            client_cert=self.client_cert,
+            client_key=self.client_key,
+            verify=self.verify,
+            check_hostname=self.check_hostname,
+        )
 
 
 __all__ = ["SSLConfig"]

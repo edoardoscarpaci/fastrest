@@ -61,6 +61,7 @@ plugins:
   - gen-files:
       scripts:
         - scripts/gen_ref_pages.py
+        - scripts/gen_guide_pages.py
   - literate-nav:
       nav_file: SUMMARY.md
   - section-index
@@ -115,14 +116,30 @@ nav:
       - Database Auditing: features/database-auditing.md
       - Dead Letter Queues: features/dead-letter-queues.md
       - Job Scheduling & Leases: features/job-scheduling-and-leases.md
+      - Recurring Schedules: features/recurring-schedules.md
       - Distributed Locks: features/distributed-locks.md
       - Crypto-Shredding: features/crypto-shredding.md
       - Postgres RLS: features/postgres-rls.md
       - Schema Migrations: features/schema-migrations.md
       - Multitenancy: features/multitenancy.md
       - A2A Surface: features/a2a-surface.md
+      - CloudEvents Envelope: features/cloudevents-envelope.md
+      - AsyncAPI Export: features/asyncapi-export.md
       - Portable Service Contracts: features/portable-contracts.md
       - Reliability Preset: features/reliability-preset.md
+      - Idempotency-Key Middleware: features/idempotency-key.md
+      - Outbound Webhooks: features/outbound-webhooks.md
+      - TLS Trust & Hot Reload: features/tls-trust-and-hot-reload.md
+      - Cache Hardening: features/cache-hardening.md
+      - Error Taxonomy & i18n: features/error-taxonomy-and-i18n.md
+      - i18n & Localization: features/i18n-and-localization.md
+      - Timezone Handling: features/timezone-handling.md
+      - Feature Flags: features/feature-flags.md
+  - Guides:
+      - "Calling another service — client_for": guides/client.md
+      - "Typed client code generation": guides/client-code-generation.md
+      - "Peer service integration": guides/peer-service-integration.md
+      - "Regulatory posture — SBOM, CRA, NIS2": guides/regulatory-posture.md
   - Known Issues:
       - Plan 002 Follow-ups: known-issues/plan-002-followups.md
   - Migration Notes:

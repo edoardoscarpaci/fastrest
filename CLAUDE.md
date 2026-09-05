@@ -152,6 +152,73 @@ differed by interpreter would make `--check` unrunnable in CI. So `--check` catc
 heap addresses in sentinel default values are stripped, or every run would report a spurious
 change — see `_ADDRESS_RE`.) Additions and module moves are reported as notes and never fail.
 
+### AsyncAPI snapshot gate (`varco export-asyncapi --check`)
+
+`make asyncapi` regenerates `design/api-freeze-and-standards/measurements/asyncapi-example.json`
+from the example app's live consumers; `make asyncapi-check` diffs it and fails on drift. Wired
+into `make lint`'s no-`PKG` path only (the same §D-C5 rule as `api-check`), and into **no new CI
+job** — it rides in `test.yml`'s existing `lint` job. Regenerate and commit whenever
+`examples/00-full-stack-post-api`'s consumer wiring moves. Details:
+`technical_docs/features/asyncapi-export.md`.
+
+### Import-time budget (`scripts/import_budget.py`)
+
+`scripts/import_budget.py` (Plan 028 / P1b) measures each distribution package's
+`python -X importtime` cost **above a bare-interpreter baseline measured in the same job**
+(best-of-5, fresh subprocesses, self-times summed) and compares it against a hard ceiling
+committed in `design/async-performance-patterns/measurements/import-budget.json`. Same
+RL-18 package derivation as `api_surface.py`/`bump.py` — it executes `scripts/packages.sh`.
+
+```bash
+uv run python scripts/import_budget.py --check --warn-only   # what make lint / CI run today
+uv run python scripts/import_budget.py --check               # the same, as a gate
+uv run python scripts/import_budget.py --update              # rewrite measured_ms, never ceilings
+make import-budget                                           # the warn-only form
+```
+
+**Rule: a new top-level `import` in a `varco_*` `__init__.py` needs a budget check, not a hunch.**
+`varco_core/__init__.py` is PEP 562 lazy as of 3.1 (289.6 ms → 6.6 ms); re-eagerising even one of
+the four measured contributors (`lark`, `jwt`, `psutil`, `opentelemetry.sdk`) undoes it. Run the
+script before assuming an import is free.
+
+⚠️ **Warn-only today, a gate tomorrow.** It is wired into `make lint`'s no-`PKG` path (beside
+`api-check` — `make lint PKG=<one>` stays narrow, the §D-C5 rule) and into `test.yml`'s `lint` job,
+in both cases **with `--warn-only`**: a breach prints loudly and exits 0. The flip to a real gate
+is Plan 028's Phase 2 (Steps 13-14) and is deliberately blocked on ≥10 real CI observations
+recorded in each entry's `observations` array, because the ~2× ceiling headroom is an assumption
+about GitHub-runner variance that no source quantifies. Until those exist, **do not drop
+`--warn-only`** — and never "fix" a breach by raising a ceiling silently; a ceiling only moves in a
+reviewed diff with the observations as justification.
+
+⚠️ **Contrast with the benchmark harness, which is never a gate** (see below). Import time is a
+structural property measured in a fresh subprocess with best-of-N, whose failure mode is "someone
+added a top-level import" — reproducible and actionable. A microbenchmark on a shared GitHub
+runner is neither. The asymmetry is deliberate; do not "unify" it in either direction.
+
+### Benchmarks (`make bench`, `benchmarks/`, CodSpeed)
+
+`benchmarks/` (Plan 028 / P2) holds seven in-process, Docker-free, deterministic benchmarks over
+the paths varco pays per request — query parse, AST build + SA compile, DTO roundtrip,
+`AsyncService.create()`, event publish, cache get/set, and a subprocess `import varco_core`. They
+are collected by their own `benchmarks/pytest.ini` (`python_files = bench_*.py`), so
+`scripts/unit_tests.sh` — which iterates an explicit suite list — never picks them up and the unit
+legs never slow down. `pytest-codspeed` lives in a root `bench` dependency group deliberately
+**excluded from `dev`**, so a normal `uv sync` never installs it.
+
+```bash
+make bench                                   # plain pytest, uninstrumented, no token needed
+uv run --group bench pytest benchmarks/ -q   # the same thing
+```
+
+⛔ **Rule: `bench` is never a required check and must never appear in `all-green`'s `needs:`.**
+`.github/workflows/bench.yml` is a separate workflow, comment-only, and skips (never fails) on a
+fork PR with no `CODSPEED_TOKEN`. Adding it to branch protection, or to `test.yml`'s `needs:`,
+converts an unquantified-noise signal into a merge blocker. Full rules: `benchmarks/README.md`.
+
+⛔ **Rule: a benchmark must never import a backend that needs a container**, and must never assert
+anything about time. Timing is CodSpeed's job; correctness assertions belong in a package's
+`tests/`.
+
 ### Lockstep version bump (`scripts/bump.py`)
 
 `scripts/bump.py` (Plan 023 / Phase 1, §RL-9-bump) is the **only** mechanism that writes a version
@@ -225,6 +292,10 @@ workflows that never gate a PR (Plan 023 / Phase 5):
   `Signed-Releases`).
 - **`docs.yml`** — versioned docs via `mike`, see the "Versioned documentation" section below.
   Never a required check.
+- **`bench.yml`** — CodSpeed benchmarks (Plan 028 / P2). `pull_request` + `push: [main]`,
+  `permissions: {}` at top level, a `concurrency` group scoped by `github.event_name` as well as
+  `github.ref`, and an `if:` that **skips** a fork PR (no `CODSPEED_TOKEN`) rather than failing it.
+  Comment-only. Not in `test.yml`'s `needs:`; ⛔ must never become a required check.
 
 **Branch protection (repository setting, not in the repo tree) — APPLIED.** Plan 023's Phase 9 +
 Appendix A ruleset shape is live: branch ruleset `main-branch-protection` (Settings → Branches →
@@ -351,6 +422,154 @@ be silently deleted (no TTL index by default).
 Usage: README's "Dead Letter Queue" section. Full detail (redrive policy, retention, tenancy,
 REST admin): `technical_docs/features/dead-letter-queues.md`.
 
+### Idempotency-Key middleware (varco_core.idempotency + varco_fastapi.middleware.idempotency, Plan 029 / D1)
+
+`AbstractIdempotencyStore` (`reserve`/`complete`/`get`/`release`/`delete_expired`) is the seam —
+contract + `InMemoryIdempotencyStore` in `varco_core`, the HTTP adapter
+(`IdempotencyMiddleware`) in `varco_fastapi`, four backends (`InMemoryIdempotencyStore`,
+`RedisIdempotencyStore`, `SAIdempotencyStore`, `BeanieIdempotencyStore`).
+
+**Rule**: `reserve()` is the one atomic primitive every implementation must offer — never add a
+set-if-absent method to `AsyncCache` for this (Plan 011 D-11 forbids it); the atomicity
+requirement is pushed up into this ABC instead, and each backend uses its own native atomic
+primitive (`SET NX PX` / `UNIQUE` + `IntegrityError` / `DuplicateKeyError` / a lazily-created
+`asyncio.Lock`).
+
+Usage: README's "Idempotency-Key middleware" section. Full design (fingerprint construction,
+header replay allowlist, tenant/subject scoping's fail-closed rule, streaming/over-ceiling
+handling, a Pitfalls table): `technical_docs/features/idempotency-key.md`.
+
+### CloudEvents envelope (varco_core.event.cloudevents, Plan 030 / N2)
+
+`CloudEventsJsonSerializer` is a **second** `Serializer[Event]` — CloudEvents v1.0.2 *structured*
+mode. `Event` does not change, no bus changes, and nothing happens unless an app opts in with
+`bind_cloudevents_serializer(container, CloudEventsSettings(source=...))`.
+
+**Rule**: never put a module-level `@Singleton` or `@Provider` in `varco_core.event.cloudevents` —
+providify's scanner auto-registers *both* shapes, and `container.scan("varco_core",
+recursive=True)` is a documented, in-use pattern, so a decorator there would silently change the
+wire bytes of every app that scans `varco_core`.
+
+**Rule**: `tenantid` comes from `current_tenant()` and is **best-effort** — absent under an
+`OutboxRelay`-driven publish. Do not "fix" that by adding a tenant field to `Event`.
+
+**Rule**: structured mode only. `AbstractEventBus.publish()` never gains `headers=` (RS-2), so
+CloudEvents *binary* mode is out of scope until a separate `MessageEncoder` Protocol lands.
+
+**Rule**: a `@Provider`-produced bus or DLQ must **declare `serializer` on the provider method** —
+providify injects only what the method itself declares, so an undeclared `Serializer[Event]` binding
+silently never arrives (wrong wire format, no error). This bit `varco_redis`'s bus selector and all
+five DLQ backends; `RedisEventBusSelectorConfiguration.bus()` is the worked example. Guarded by
+`varco_redis/tests/test_redis_cloudevents_di.py`. Never "fix" a missing binding by decorating
+`cloudevents.py`.
+
+⚠️ `SADeadLetterQueue` and `OutboxRelay` are hand-constructed, not DI-wired — pass `serializer=`
+explicitly or they keep the `JsonEventSerializer` default. A DLQ backlog stored before a serializer
+swap is never converted; drain it first.
+
+Usage: README's "CloudEvents envelope" section. Full design (attribute mapping, the named Redis
+Streams `ce`-field convention, the Kafka `content-type` limitation, the three-phase dual-emit
+migration, a Pitfalls table): `technical_docs/features/cloudevents-envelope.md`.
+
+### AsyncAPI export (varco_core.asyncapi + `varco export-asyncapi`, Plan 030 / N3)
+
+`generate_asyncapi(consumers_or_container, *, title, version, ...)` emits an AsyncAPI 3.1.0
+document as a plain `dict`; `varco export-asyncapi --check` gates a committed snapshot inside
+`make lint`'s no-`PKG` path (beside `api-check` and `import-budget`, skipped by `make lint
+PKG=<one>`).
+
+**Rule**: generation is **runtime, from live registered consumers — never a static import walk**.
+A `@listen` channel may be `Callable[[Any], str]` resolved at `register_to()` time against a bound
+`self`, which a static scan gets silently wrong. An unregistered consumer is deliberately absent.
+
+**Rule**: no new dependency for this — plain `dict` + `json` + `model_json_schema()`. Output is
+**JSON only**; `pyyaml` is not a `varco_core` runtime dependency and must not become one.
+
+**Rule**: ⛔ no Node in CI. `npx @asyncapi/cli validate` is run by hand, once, and the result is
+recorded in `design/api-freeze-and-standards/measurements/asyncapi-validate.txt`.
+
+Usage + the local `npx` invocation: `technical_docs/features/asyncapi-export.md`.
+
+### Outbound webhooks (varco_core.webhook, Plan 031 / D4)
+
+`varco_core.webhook` holds everything portable — the `WebhookSubscription`/`WebhookDelivery`
+entities, `WebhookSubscriptionRepository` ABC (+ `InMemoryWebhookSubscriptionRepository`), the
+`WebhookSigner` ABC (`StandardWebhooksSigner` default, `Rfc9421Signer` opt-in), the SSRF guard
+(`ssrf.validate_target()`), and `WebhookDispatcher`. `varco_sa`/`varco_beanie` hold repositories;
+`varco_fastapi.webhook.mount_webhook_admin` holds only the admin mount.
+
+**Rule**: `WebhookDispatcher` never holds `AbstractEventBus` — it is an `EventConsumer`, wired via
+`register_to()`. It deliberately does NOT use the generic `@listen(retry_policy=..., dlq=...)`
+wrapper (that retries/DLQs one handler call as a whole); it runs its own per-subscription retry
+loop with the existing `RetryPolicy` instead, because one event can match many subscriptions that
+must each retry/DLQ/auto-disable independently.
+
+**Rule**: every delivery target goes through `varco_core.webhook.ssrf.validate_target()` —
+resolve-then-validate-then-**pin** to the first resolved address (never a later re-resolution —
+that is the DNS-rebinding bypass), `https` only unless `allow_insecure_http` is set at the
+deployment level (never per-tenant), and no redirect following.
+
+**Rule**: `WebhookSettings` (env `VARCO_WEBHOOK_`) is the single configuration source —
+`WebhookDispatcher` constructs it when `settings=` is omitted and forwards every knob to the call
+site that needs it (SSRF knobs → `validate_target()`, `signature_tolerance_seconds` → the signer,
+retry/timeout/disable → its own defaults). A new knob goes on `WebhookSettings` and is threaded
+through; never add a constructor-keyword-only or `validate_target`-only option, or the env var
+becomes a lie. Explicit constructor keywords remain per-instance overrides and always win.
+
+**Rule**: `active_secrets` are encrypted via the existing `FieldEncryptor` when a repository is
+constructed with `encryptor=` — no new crypto path. `encryptor=None` is a documented dev/test-only
+default; production wiring must pass a real encryptor.
+
+Full design (signing-scheme choice, the five-layer SSRF model, retry-schedule convention, a
+Pitfalls table): `technical_docs/features/outbound-webhooks.md`. Usage: README's "Outbound
+webhooks" section.
+
+### Feature flags (varco_core.flags, Plan 032 / D7)
+
+`AbstractFeatureFlags` is a varco-shaped seam (bool/string/numeric/object resolution) — **not** a
+transcription of OpenFeature's `AbstractProvider`. `NullFeatureFlags` is the scanned `@Singleton`
+default (always returns the caller's own default); `enable_feature_flags(container)` opts in
+`InMemoryFeatureFlags`, same `enable_*` verb shape as `varco_casbin.di.enable_policy_authorizer`.
+
+**Rule**: `FlagEvaluationContext.tenant_id` comes from `current_tenant()`, never
+`RequestContext` — same tenant single-source-of-truth rule as everywhere else in this file.
+
+**No OpenFeature provider yet — deliberately.** The un-park trigger (`openfeature-sdk`, the SDK
+not the spec, reaching 1.0.0) had not fired as of the 2026-09-04 check (SDK 0.10.0, spec 0.9.0).
+An `OpenFeatureFlags` adapter is purely additive once it does. Full version evidence and design:
+`technical_docs/features/feature-flags.md`. Usage: README's "Feature flags" section.
+
+### Recurring schedules (varco_core.schedule, Plan 032 / D6)
+
+`Schedule` (a cron expression + IANA timezone + `GapPolicy`/`OverlapPolicy`/`CatchUpPolicy`) is
+materialized into ordinary `Job` rows by `ScheduleMaterializer` — **no second execution path**;
+the existing `AbstractJobRunner` runs the produced jobs unchanged. Cron parsing is a hand-rolled,
+zero-dependency 5-field parser (`varco_core.schedule.cron`); RRULE/RFC 5545 remains parked (a
+complete implementation needs `dateutil.rrule`, a new runtime dependency).
+
+**Rule**: the materializer does **not** use the job store's fenced-lease primitives
+(`try_claim`/`save(expected_epoch=)`) — a synthetic lease row would corrupt every
+`list_by_status()`/`all_jobs()` caller downstream. Cross-process double-materialization safety is
+a deterministic `uuid5` occurrence `Job.job_id` (idempotent-upsert convergence via
+`AbstractJobStore.save()`) plus `UNIQUE(schedule_id)` on the `Schedule` row; in-process
+exclusivity is a lazily-created, per-schedule `asyncio.Lock`. Never "fix" this by adding a lease
+to `Schedule` to match the job store's model.
+
+Full design (the fenced-lease deviation in detail, a Pitfalls table for DST gaps/catch-up
+surprise/materializer downtime): `technical_docs/features/recurring-schedules.md`. Usage:
+README's "Recurring schedules" section.
+
+### SBOM and regulatory posture (scripts/sbom.py, Plan 030 / D5)
+
+`scripts/sbom.py` generates **one CycloneDX 1.6 SBOM per distribution** (never workspace-wide —
+that over-reports ~6× and misleads the regulated consumer it exists to serve), attaches them to the
+GitHub Release, and embeds them in each wheel at `.dist-info/sboms/` per PEP 770. Release-time
+only: the documents and the `sbom-files` pyproject key are **never committed** (`.gitignore`).
+
+**Rule**: never claim CRA compliance or certification anywhere. `docs/regulatory-posture.md` states
+a *position* — the non-commercial FOSS exemption, why we believe it applies, and the funding facts
+that would void it — and says explicitly that it is not legal advice.
+
 ### Observability (varco_core.observability)
 
 `@span`/`@counter`/`@histogram` decorators, `TracingServiceMixin`/`TracingRepositoryMixin`,
@@ -451,6 +670,55 @@ subclass. Hierarchy: ARCHITECTURE.md's "Cache System". Usage: README's "Cache Sy
 Stampede protection (`Singleflight`, per-process only) and bulk operations (`BulkCache`, a
 **separate** Protocol from `AsyncCache` — see the pitfall table) are covered in
 `technical_docs/features/cache-hardening.md`.
+
+### File watching and hot reload (varco_core.watch / varco_core.reload, Plan 025 / T1, T2)
+
+`AbstractPathWatcher` (`StatPollWatcher` default, `WatchfilesWatcher` opt-in via
+`varco-core[watch]`) watches a set of directories and notifies subscribers; `ReloadableResource[T]`
+loads a value from a watcher (or any manual trigger) and swaps it under a lock with keep-last-good
+semantics. Usage: README's "File watching and hot reload". Type hierarchy: ARCHITECTURE.md's
+"File watching".
+
+**Rule**: a watcher's fingerprint is `(st_mtime_ns, st_size, st_ino)` of the **resolved** path,
+and enumeration skips `..`-prefixed names — because Kubernetes delivers rotated
+Secrets/ConfigMaps as a `..data` symlink swap, and a watcher that stats the symlink itself (or a
+hand-rolled mtime-only dict) never sees it change. Never "fix" a watcher to stat the symlink
+itself.
+
+### TLS trust store (varco_core.tls, Plan 026 / T3, T5, T7; client injection + mTLS hardening Plan 027 / T4, T6)
+
+`TrustStore` unifies the two pre-3.1 TLS models (`SSLConfig`'s `verify=False` escape hatch +
+the old `varco_fastapi.auth.TrustStore`'s `include_system_cas`/`bytes`-CA support) into one
+frozen-dataclass superset, reachable from any backend; `ReloadingTrustStore` makes it hot-
+reloadable on top of Plan 025's `watch`/`reload` primitives. `varco_core.tls.clients` adds four
+zero-hard-dependency adapters (`to_httpx_verify`/`to_aiohttp_connector`/
+`to_urllib3_poolmanager`/`to_requests_adapter`) and `varco_core.tls.install` adds the opt-in
+`install_process_trust()`; `TrustStore.key_password`/`pkcs12_file` add encrypted-key and
+PKCS#12 mTLS support. Usage: README's "TLS trust store" section (including the mTLS/client-
+injection/`install_process_trust` subsections). Type hierarchy + module listing:
+ARCHITECTURE.md's "TLS trust". Full design (mutate-vs-swap, the additive `SSL_CERT_FILE`/
+`SSL_CERT_DIR` divergence, the deprecation-subclass asymmetry, the PKCS#12 temp-file
+discipline, a Pitfalls table): `technical_docs/features/tls-trust-and-hot-reload.md`.
+
+**Rule**: TLS trust lives in `varco_core.tls` — `varco_fastapi` may import it (the deprecated
+`varco_fastapi.auth.TrustStore` shim does), never the reverse. Same seam rule as
+`AbstractEventBus`/`AbstractMigrator`.
+
+**Rule**: never add a scanned `@Configuration` to `varco_core.tls` — `container.scan(
+"varco_core", recursive=True)` is a documented, in-use pattern that auto-activates every scanned
+`@Configuration`, which would start a filesystem watcher in every app that scans `varco_core`.
+`varco_core.tls.bind_trust_store(container, store)` registers an already-constructed,
+already-owned store instead — no lifecycle side effect.
+
+**Rule**: never add a hard dependency on httpx/aiohttp/urllib3/requests to any `varco_*`
+package's `[project.dependencies]`/extras for the adapters' sake — `varco_core.tls.clients`
+imports each of the four inside the function body that needs it, never at module scope, guarded
+mechanically by `varco_core/tests/test_tls_no_hard_client_deps.py`.
+
+**Rule**: never call `install_process_trust()` from library code — it is an application-level,
+explicit, `acknowledge_global_mutation=True`-gated decision only (§D-T4-install). varco itself
+never calls it; `rg -n "install_process_trust" varco_*/varco_*` should only ever hit the
+definition and its export.
 
 ### Query system (varco_core.query)
 
@@ -933,11 +1201,33 @@ Am I adding a new capability?
 │     ↳ per-request user zone? → tz/resolve.py
 │     ↳ DST-safe one-shot schedule? → tz/schedule.py + the three Job
 │       columns (D-7)
-│     ↳ recurring/RRULE? → Non-goal — a future Schedule entity that
-│       produces Job rows exactly like these
+│     ↳ recurring cron schedule (cron → Job materialization)?
+│       → varco_core.schedule (Plan 032 / D6) — ScheduleMaterializer,
+│         never a second AbstractJobRunner
+│     ↳ RRULE/RFC 5545? → still parked — needs dateutil.rrule, a new
+│       runtime dependency (technical_docs/features/recurring-schedules.md)
+│
+├─ Feature flag / runtime toggle?
+│  └─ → varco_core.flags.AbstractFeatureFlags (Plan 032 / D7) —
+│       NullFeatureFlags is the DI default; enable_feature_flags()
+│       opts in InMemoryFeatureFlags
+│     ↳ OpenFeature provider? → deferred — un-park trigger not yet
+│       fired (technical_docs/features/feature-flags.md)
 │
 ├─ Resilience pattern (new retry/timeout/breaker variant)?
 │  └─ → varco_core.resilience (decorator + config)
+│
+├─ File/dir change detection (config reload, cert rotation, anything watching a path)?
+│  └─ → varco_core.watch — never a hand-rolled mtime dict (misses the K8s `..data` rotation)
+│     ↳ Load → swap → notify subscribers on change? → varco_core.reload.ReloadableResource[T]
+│
+├─ TLS/CA/mTLS trust config, or a hot-reloading trust store?
+│  └─ → varco_core.tls.TrustStore (+ ReloadingTrustStore for hot reload)
+│     ↳ a settings-embedded fragment (nested in a ConnectionSettings)?
+│                            → varco_core.connection.SSLConfig, which converts via
+│                              to_trust_store()/TrustStore.to_ssl_config() (lossy the second way)
+│     ↳ Need a varco trust store in httpx/aiohttp/urllib3/requests?
+│                            → varco_core.tls.clients, never a hand-built context
 │
 ├─ Profiling / performance diagnostic?
 │  ├─ New CPU backend (pyinstrument, py-spy)?
@@ -946,6 +1236,17 @@ Am I adding a new capability?
 │  │  └─ → implement MemoryProfilerBackend + register_memory_backend()
 │  └─ New profiling primitive (service mixin, consumer wrapper)?
 │     └─ → varco_core.profiling (use ProfileSession as the engine)
+│
+├─ Event wire format / interop envelope (CloudEvents, a partner's schema)?
+│  └─ → a new Serializer[Event] implementation, NEVER a change to Event
+│     ↳ CloudEvents? → already exists: varco_core.event.cloudevents (structured mode)
+│     ↳ needs transport headers? → blocked on the MessageEncoder Protocol (RS-2),
+│       never a headers= parameter on AbstractEventBus.publish()
+│
+├─ Describing the event surface to another team/tool (AsyncAPI, a schema registry)?
+│  └─ → varco_core.asyncapi (runtime introspection of wired consumers)
+│     + varco_core/cli/asyncapi.py for a CLI verb
+│     ↳ ⛔ never a static import walk, and never a new AsyncAPI dependency
 │
 ├─ Authentication/JWT feature?
 │  └─ → varco_core.authority (protocol) + varco_core.authority.sources (key sources)
@@ -1012,6 +1313,27 @@ Am I adding a new capability?
 │                            (never a create_varco_app kwarg — RD-9, same rule
 │                            as mount_tenant_admin())
 │       ↳ New CLI verb? → varco_core.cli.dlq / varco_core.cli.retention
+│
+├─ HTTP idempotency / dedup-a-retried-request feature (Plan 029 / D1)?
+│  └─ → varco_core.idempotency (AbstractIdempotencyStore, reserve/complete/
+│         get/release/delete_expired — reserve() MUST be atomic)
+│       + varco_fastapi.middleware.idempotency.IdempotencyMiddleware (opt-in,
+│         never create_varco_app default — install via install_middleware_stack
+│         INSIDE ErrorMiddleware, INSIDE RequestContextMiddleware)
+│       ↳ New backend? → implement AbstractIdempotencyStore using that
+│                            backend's own atomic set-if-absent primitive;
+│                            never emulate one with exists()+set()
+│
+├─ Outbound webhook feature (subscription, signing, SSRF, delivery, admin) (Plan 031 / D4)?
+│  └─ → varco_core.webhook (WebhookSubscription/WebhookDelivery, the
+│         WebhookSubscriptionRepository ABC, WebhookSigner ABC, ssrf.validate_target(),
+│         WebhookDispatcher — an EventConsumer, never holds AbstractEventBus)
+│       + varco_sa.webhook / varco_beanie.webhook for repositories
+│       ↳ New signing scheme? → implement WebhookSigner; register in get_signer()
+│       ↳ Admin/replay/rotation surface? → varco_fastapi.webhook.mount_webhook_admin()
+│                            (never a create_varco_app kwarg, never an env var — RD-9)
+│       ⚠️ Never weaken ssrf.validate_target()'s resolve-then-pin behaviour — a
+│         validate-the-URL-string-only shortcut reopens DNS rebinding
 │
 └─ ORM/database feature?
    └─ → varco_sa (SQLAlchemy) and/or varco_beanie (MongoDB)

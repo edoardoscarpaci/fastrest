@@ -69,8 +69,7 @@ def ceil_to_bson_millisecond(moment: datetime) -> datetime:
         the next millisecond boundary after it. The result is always
         ``>= moment`` and ``< moment + 1ms``.
 
-    Raises:
-        Nothing.
+    Never raises — every input is representable.
 
     Edge cases:
         - Already aligned (``.003000``) → returned unchanged, so an aligned

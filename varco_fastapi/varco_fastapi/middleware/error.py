@@ -290,6 +290,17 @@ class ErrorMiddleware(BaseHTTPMiddleware):
         response = JSONResponse(status_code=status_code, content=body)
         if self._set_content_language and locale:
             response.headers["Content-Language"] = locale
+
+        # Plan 029 / D1, §D-D1-fingerprint's open question 2: a 409 raised by
+        # IdempotencyMiddleware (IdempotencyKeyConflictError) carries a
+        # `retry_after_seconds` attribute so a caller retrying too
+        # aggressively against an in-flight reservation gets a concrete
+        # backoff hint. `getattr` with a `None` default means any OTHER
+        # ServiceException — including out-of-tree subclasses that predate
+        # this attribute — renders byte-identically to before this change.
+        retry_after = getattr(exc, "retry_after_seconds", None)
+        if retry_after is not None:
+            response.headers["Retry-After"] = str(retry_after)
         return response
 
     def _internal_error_response(self, exc: Exception) -> JSONResponse:

@@ -65,9 +65,8 @@ def framework_rls_upgrade(
                        here aborts the revision with ``operator does not
                        exist: character varying = uuid``.
 
-    Raises:
-        Nothing directly — DDL errors surface from ``op.execute`` at
-        migration-apply time.
+    Never raises directly — DDL errors surface from ``op.execute`` at
+    migration-apply time.
 
     Edge cases:
         - Re-running against a table that already has the policy fails with

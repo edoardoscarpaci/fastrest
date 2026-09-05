@@ -5,6 +5,9 @@
 #   make install          — sync all workspace deps
 #   make lint              — ruff check (whole repo; PKG= narrows to one package's source dirs)
 #   make format             — ruff format + fix (same PKG= narrowing as lint)
+#   make asyncapi-check   — AsyncAPI 3.1.0 snapshot gate (Plan 030 / N3b)
+#   make import-budget    — -X importtime budget per package (warn-only today;
+#                            also run by `make lint` with no PKG=)
 #   make type-check        — mypy (all ten source dirs; PKG= narrows to one package)
 #   make test              — unit tests, all ten packages + the example suite
 #                            (scripts/unit_tests.sh — accumulates pass/fail/skip
@@ -37,6 +40,8 @@
 #   make docs-deps        — install documentation tooling (mkdocs + mkdocstrings)
 #   make docs             — build the static HTML docs site into ./site
 #   make docs-serve       — live-reload docs preview at http://127.0.0.1:8000
+#   make bench            — run benchmarks/ uninstrumented (never a gate; see
+#                            benchmarks/README.md and .github/workflows/bench.yml)
 #   make clean            — remove all dist/ directories and the built docs site
 
 .DEFAULT_GOAL := help
@@ -97,6 +102,8 @@ help:
 	@echo "  make lint                    ruff check + format --check + api-check (whole repo)"
 	@echo "  make lint PKG=varco_redis    ruff check (one package's source dirs; no api-check)"
 	@echo "  make api-check               api_surface.py --check (removals + fn signature changes)"
+	@echo "  make asyncapi                regenerate the committed AsyncAPI 3.1.0 snapshot"
+	@echo "  make asyncapi-check          diff the AsyncAPI snapshot against live consumer wiring"
 	@echo "  make format                  ruff format + fix (whole repo)"
 	@echo "  make format PKG=varco_redis  ruff format + fix (one package's source dirs)"
 	@echo "  make type-check              mypy (all ten source dirs)"
@@ -155,6 +162,8 @@ lint:
 	$(RUFF) format --check $(_LINT_TARGET)
 ifeq ($(strip $(PKG)),)
 	$(MAKE) api-check
+	$(MAKE) import-budget
+	$(MAKE) asyncapi-check
 endif
 
 # ── API surface gate ──────────────────────────────────────────────────────────
@@ -167,6 +176,74 @@ endif
 .PHONY: api-check
 api-check:
 	uv run --all-packages --all-extras python scripts/api_surface.py --check
+
+# ── Import-time budget ────────────────────────────────────────────────────────
+# Plan 028 / Phase 1 (P1b), §D-P1-oq4. Measures each distribution package's
+# `-X importtime` cost above a bare-interpreter baseline (best-of-5, fresh
+# subprocesses) and compares it against the hard ceiling committed in
+# design/async-performance-patterns/measurements/import-budget.json.
+#
+# ⚠️ `--warn-only` is deliberate and temporary: the ~2x ceiling headroom is an
+# assumption about runner variance that no source quantifies, so Plan 028's
+# Steps 13-14 collect >= 10 real CI observations before the flag is dropped
+# here and in .github/workflows/test.yml. Until then a breach prints loudly and
+# exits 0.
+#
+# Wired into `make lint`'s no-PKG path only, beside `api-check` — `make lint
+# PKG=<one>` stays narrow and fast (the §D-C5 rule Plan 024 set for api-check).
+# Runs `uv run python` directly because it imports every package live.
+.PHONY: import-budget
+import-budget:
+	uv run --all-packages --all-extras python scripts/import_budget.py --check --warn-only
+
+# ── AsyncAPI document gate ────────────────────────────────────────────────────
+# Plan 030 / Phase 2 (N3b), §D-AA4. Regenerates the AsyncAPI 3.1.0 document from
+# the example app's LIVE, registered consumers and diffs it against the committed
+# snapshot, exiting non-zero on drift — the same snapshot-plus-`--check` shape
+# `api-check` uses.
+#
+# The subject is deliberately ONE example app's consumers, not the whole repo, so
+# the snapshot moves only when that app's wiring moves — a gate that churned on
+# unrelated changes would train contributors to regenerate blindly.
+#
+# ⚠️ No Node in CI (§D-AA4): this checks OUR document against OUR snapshot. Spec
+# conformance was validated once, by hand, with `npx @asyncapi/cli validate` —
+# see design/api-freeze-and-standards/measurements/asyncapi-validate.txt.
+#
+# Wired into `make lint`'s no-PKG path only, beside `api-check`/`import-budget`
+# — `make lint PKG=<one>` stays narrow and fast (the §D-C5 rule).
+ASYNCAPI_SNAPSHOT := design/api-freeze-and-standards/measurements/asyncapi-example.json
+ASYNCAPI_ARGS := --title "varco example — full-stack post API" --version 0.1.0 \
+	--path examples/00-full-stack-post-api \
+	--consumer example.consumer:PostEventConsumer \
+	-o $(ASYNCAPI_SNAPSHOT)
+
+.PHONY: asyncapi-check
+asyncapi-check:
+	uv run --all-packages --all-extras varco export-asyncapi $(ASYNCAPI_ARGS) --check
+
+.PHONY: asyncapi
+asyncapi:
+	uv run --all-packages --all-extras varco export-asyncapi $(ASYNCAPI_ARGS)
+
+# ── Benchmarks ────────────────────────────────────────────────────────────────
+# Plan 028 / Phase 3 (P2), §D-P2-harness. Runs benchmarks/ as plain pytest
+# tests with no instrumentation and no CODSPEED_TOKEN — the local, uninstrumented
+# run that stops an ungated benchmark from rotting.
+#
+# ⚠️ These are NEVER a gate. .github/workflows/bench.yml is a separate workflow,
+# is not in test.yml's `needs:`, must never be added to `all-green`'s `needs:`,
+# and must never be selected as a required status check. The asymmetry with
+# `make import-budget` (which IS wired into `make lint`) is deliberate and is
+# argued in §D-P1-oq4 and benchmarks/README.md.
+#
+# `--group bench` rather than the `dev` group: pytest-codspeed must not be
+# installed by a normal `uv sync`, so its plugin can never affect the unit legs.
+# scripts/unit_tests.sh iterates an explicit suite list (each package's tests/
+# plus examples/00-full-stack-post-api) and so never collects benchmarks/.
+.PHONY: bench
+bench:
+	uv run --group bench --all-packages --all-extras pytest benchmarks/
 
 # ── Format ────────────────────────────────────────────────────────────────────
 .PHONY: format

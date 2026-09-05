@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import ssl
 import urllib.error
 import urllib.request
 from typing import Any
@@ -65,6 +66,12 @@ class OidcDiscoverySource:
         min_refresh_interval: Forwarded to the internal ``JwksUrlSource``.
         timeout:              HTTP timeout in seconds for both the discovery
                               fetch and all subsequent JWKS fetches.
+        ssl_context:          Optional ``ssl.SSLContext`` used for BOTH the discovery-document
+                              fetch and the delegate ``JwksUrlSource`` it constructs (Plan 026
+                              / T5) — an internal PKI issuer needs the same trust for its
+                              ``.well-known`` document and its JWKS endpoint.  ``None`` (the
+                              default) means ``urlopen``'s own stdlib default — byte-identical
+                              to pre-Plan-026 behaviour.
 
     Edge cases:
         - If ``issuer_url`` already ends with
@@ -91,6 +98,7 @@ class OidcDiscoverySource:
         "_cache_ttl",
         "_min_refresh_interval",
         "_timeout",
+        "_ssl_context",
         "_delegate",
     )
 
@@ -101,6 +109,7 @@ class OidcDiscoverySource:
         cache_ttl: float = 3600.0,
         min_refresh_interval: float = 10.0,
         timeout: float = 10.0,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         # Strip trailing slash for consistent URL construction
         self._issuer_url: str = issuer_url.rstrip("/")
@@ -115,6 +124,7 @@ class OidcDiscoverySource:
         self._cache_ttl: float = cache_ttl
         self._min_refresh_interval: float = min_refresh_interval
         self._timeout: float = timeout
+        self._ssl_context: ssl.SSLContext | None = ssl_context
 
         # Delegate is None until first load() — discovery is lazy so startup
         # does not block on a remote request when the issuer is offline.
@@ -148,6 +158,7 @@ class OidcDiscoverySource:
                 cache_ttl=self._cache_ttl,
                 min_refresh_interval=self._min_refresh_interval,
                 timeout=self._timeout,
+                ssl_context=self._ssl_context,
             )
         return await self._delegate.load()
 
@@ -186,7 +197,9 @@ class OidcDiscoverySource:
                           ``jwks_uri`` is absent from the document.
         """
         try:
-            with urllib.request.urlopen(self._discovery_url, timeout=self._timeout) as resp:
+            with urllib.request.urlopen(
+                self._discovery_url, timeout=self._timeout, context=self._ssl_context
+            ) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as e:
             raise KeyLoadError(

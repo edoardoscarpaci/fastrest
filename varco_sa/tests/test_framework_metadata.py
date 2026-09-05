@@ -39,6 +39,14 @@ EXPECTED_FRAMEWORK_TABLE_NAMES = frozenset(
         # Plan 007, Phase 4, step 2 — the tenant catalog, the tenth
         # framework table (varco_sa/tenancy/models.py).
         "varco_tenants",
+        # Plan 029 / D1b — the eleventh framework table
+        # (varco_sa/idempotency.py).
+        "varco_idempotency",
+        # Plan 031 / D4a — the twelfth framework table (varco_sa/webhook.py).
+        "webhook_subscriptions",
+        # Plan 032 / D6, Step 10 — the thirteenth framework table
+        # (varco_sa/schedule.py).
+        "schedules",
     }
 )
 

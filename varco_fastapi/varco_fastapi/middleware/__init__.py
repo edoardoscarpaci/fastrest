@@ -27,6 +27,14 @@ Recommended middleware order (outermost to innermost)::
     # 6. Request context — sets auth + tenant ContextVars
     app.add_middleware(RequestContextMiddleware, server_auth=my_auth)
 
+    # 6.5. Idempotency-Key — opt-in (Plan 029 / D1). MUST sit inside
+    #      ErrorMiddleware (so its 409/422/400 render through the normal
+    #      error path) and inside RequestContextMiddleware (so
+    #      current_tenant()/the auth subject are populated before its
+    #      §D-D1-scope key-scoping logic reads them). Not part of the
+    #      default stack — register it explicitly.
+    app.add_middleware(IdempotencyMiddleware, store=my_store)
+
     # 7. Session — DI container per request (optional, advanced)
     app.add_middleware(SessionMiddleware, container=my_container)
 
@@ -50,6 +58,7 @@ from typing import Any
 
 from varco_fastapi.middleware.cors import CORSConfig, install_cors
 from varco_fastapi.middleware.error import ErrorMiddleware
+from varco_fastapi.middleware.idempotency import IdempotencyMiddleware
 from varco_fastapi.middleware.logging import RequestLoggingMiddleware
 from varco_fastapi.middleware.metrics import MetricsMiddleware
 from varco_fastapi.middleware.profiling import ProfilingMiddleware, ProfilingSettings
@@ -157,6 +166,7 @@ def install_middleware_stack(
 
 __all__ = [
     "ErrorMiddleware",
+    "IdempotencyMiddleware",
     "MetricsMiddleware",
     "ProfilingMiddleware",
     "ProfilingSettings",

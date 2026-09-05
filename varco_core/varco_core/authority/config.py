@@ -47,6 +47,7 @@ Async safety:   ✅ No I/O — to_registry() is synchronous construction only.
 from __future__ import annotations
 
 import os
+import ssl
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -183,12 +184,18 @@ class AuthorizationConfig:
 
         return cls(issuers=tuple(configs))
 
-    def to_registry(self) -> TrustedIssuerRegistry:
+    def to_registry(self, *, ssl_context: ssl.SSLContext | None = None) -> TrustedIssuerRegistry:
         """
         Construct a ``TrustedIssuerRegistry`` from this config.
 
         For each ``IssuerConfig``, calls ``IssuerSourceFactory.from_string()``
         to build the appropriate source, then registers it in the registry.
+
+        Args:
+            ssl_context: Forwarded to ``IssuerSourceFactory.from_string()`` for every issuer
+                (Plan 026 / T5) — applies uniformly to the two URL-based source kinds
+                (``jwks::``/``oidc::``) and is ignored for PEM-based ones.  ``None`` (the
+                default) is byte-identical to pre-Plan-026 behaviour.
 
         Returns:
             Populated ``TrustedIssuerRegistry``.  Keysets are NOT loaded yet —
@@ -210,7 +217,9 @@ class AuthorizationConfig:
         registry = TrustedIssuerRegistry()
 
         for issuer_config in self.issuers:
-            source = IssuerSourceFactory.from_string(issuer_config.url_value)
+            source = IssuerSourceFactory.from_string(
+                issuer_config.url_value, ssl_context=ssl_context
+            )
             registry.register(
                 label=issuer_config.label,
                 iss=issuer_config.iss,

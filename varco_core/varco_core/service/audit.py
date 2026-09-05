@@ -320,10 +320,15 @@ class AuditRepository(ABC):
         ``build_audit_router()``'s ``GET /audit/entries``.
 
         Args:
-            actor_id, action, entity_type, entity_id, tenant_id, correlation_id:
-                Optional equality filters.
-            occurred_from, occurred_to: Optional ``occurred_at`` range.
-            limit:  Maximum entries to return.
+            actor_id: Optional equality filter on the acting principal.
+            action: Optional equality filter on the mutation kind.
+            entity_type: Optional equality filter on the entity's type.
+            entity_id: Optional equality filter on the entity's primary key.
+            tenant_id: Optional equality filter on the owning tenant.
+            correlation_id: Optional equality filter on the correlation id.
+            occurred_from: Optional lower bound of the ``occurred_at`` range.
+            occurred_to: Optional upper bound of the ``occurred_at`` range.
+            limit: Maximum entries to return.
             offset: Pagination offset.
 
         Raises:

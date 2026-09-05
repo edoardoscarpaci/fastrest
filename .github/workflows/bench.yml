@@ -1,0 +1,75 @@
+# CI — CodSpeed benchmarks. Comment-only, NEVER a gate.
+#
+# DESIGN §D-P2-harness (plans/028-import-budget-and-benchmark-harness.md):
+# a separate workflow, never in test.yml's `needs:`.
+#   ✅ Numbers on PRs without any merge-blocking risk. `all-green` (test.yml)
+#      is and remains the ONLY required status check; this workflow's contract
+#      is that adding it to branch protection would be a mistake, and keeping
+#      it in its own file makes that impossible to do by accident.
+#   ✅ Brief 002 §5: CodSpeed is the 2025/2026 table stakes (pydantic, FastAPI,
+#      polars) and its "simulation" mode runs in an instrumented VM for
+#      reproducible timing; comment-not-gate is the mainstream posture, and
+#      GitHub-hosted runner noise is "acknowledged but unquantified".
+#   ❌ A benchmark that is never gated can rot. Mitigated by `make bench`,
+#      which runs the same directory uninstrumented as plain pytest tests, and
+#      by the `if:` below, which skips rather than fails when there is no token.
+#
+# ⚠️ The asymmetry with scripts/import_budget.py is deliberate, not an
+# oversight — see §D-P1-oq4. Import time is a structural property measured in a
+# fresh subprocess with best-of-N, whose failure mode is "someone added a
+# top-level import": reproducible and actionable, so it is wired into `lint`.
+# A microbenchmark on a shared runner is neither. Do not "fix" this asymmetry.
+#
+# ⚠️ OUT-OF-REPO OPERATOR STEP: this needs a `CODSPEED_TOKEN` repository secret
+# and the repo connected on codspeed.io — same class as the ten PyPI
+# environments, recorded in design/varco-1-0-release/release-runbook.md.
+
+name: Benchmarks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+# Group by event_name as well as ref — the lesson Plan 024 recorded for
+# integration.yml (design/research/001-github-actions-concurrency-semantics.md
+# §3): a ref-only group collides across triggers that all report the same
+# github.ref. Safe to cancel here in a way it is not for a required check,
+# because this workflow is never required — a cancelled run resolving as
+# neither success nor failure cannot leave a PR pending on it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  bench:
+    name: CodSpeed benchmarks
+    runs-on: ubuntu-latest
+    # Fork PRs have no access to CODSPEED_TOKEN. Skip, never fail — and
+    # because this workflow is never a required check, a skip is inert.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - name: Install workspace + the bench group (locked)
+        run: uv sync --locked --all-packages --all-extras --group bench
+      # SHA-pinned like every other action in this repo (§RL-5-pinning, guarded
+      # by varco_core/tests/test_repo_ci_invariants.py). The `v4` tag is an
+      # annotated tag object (6e3823cc...), so the pin is the *commit* it points
+      # at, which is what `uses:` resolves.
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@f22792bfac16f3e14eb9fbea76f4a48e9cc22b93 # v4
+        with:
+          token: ${{ secrets.CODSPEED_TOKEN }}
+          run: uv run --no-sync --group bench --all-packages --all-extras pytest benchmarks/ --codspeed

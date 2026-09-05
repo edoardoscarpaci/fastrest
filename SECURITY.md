@@ -48,6 +48,16 @@ in any report or review:
 A report about any of these is treated with the highest priority regardless of severity
 self-assessment.
 
+## SBOM and regulatory posture
+
+Every release publishes a **CycloneDX 1.6 SBOM per distribution** — attached to the GitHub Release
+and embedded in each wheel at `.dist-info/sboms/` per **PEP 770**. ⚠️ PyPI does not yet serve those
+embedded documents as a discoverable artifact, so the **GitHub Release is the canonical location**.
+
+varco's position on the EU Cyber Resilience Act and NIS2 — what we believe applies, *why*, and the
+facts that position depends on — is written down in [`docs/regulatory-posture.md`](docs/regulatory-posture.md).
+It is a position, **not legal advice**, and it makes no claim of CRA compliance or certification.
+
 ## What this document does not claim
 
 Neither the presence of a branch/tag ruleset on this repository nor PEP 740 build attestations on

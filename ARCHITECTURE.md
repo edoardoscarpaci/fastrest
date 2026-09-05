@@ -28,6 +28,31 @@ varco_core/              — Domain model, service layer, event system, resilien
   │                        eviction/duration/stampede_suppressed/stale_served + backplane
   │                        published/received/dropped counters (Plan 010 / C3)
   ├── lock.py            — AbstractDistributedLock, InMemoryLock, LockHandle
+  ├── watch/              — AbstractPathWatcher ABC, StatPollWatcher (default), WatchfilesWatcher
+  │                         (opt-in `varco-core[watch]`); WatchEvent/WatchKind/WatchTarget
+  ├── reload.py           — ReloadableResource[T] — load → swap under a lock → notify
+  │                         subscribers, keep-last-good on any post-startup load failure
+  ├── tls/                — TrustStore (unified TLS trust, superset of SSLConfig + the old
+  │   │                     varco_fastapi.auth.TrustStore), ReloadingTrustStore (on watch/
+  │   │                     reload above), iter_cert_files, bind_trust_store (Plan 026)
+  │   ├── store.py        — TrustStore — the frozen-dataclass superset value object
+  │   ├── discovery.py    — CERT_FILE_PATTERNS, iter_cert_files() — the one cert-glob helper
+  │   ├── reload.py       — ReloadStrategy, ReloadingTrustStore
+  │   └── di.py           — bind_trust_store() — no @Configuration, ever (see below)
+  ├── idempotency/        — AbstractIdempotencyStore ABC, ReserveOutcome, IdempotencyRecord,
+  │                         InMemoryIdempotencyStore (default), compute_fingerprint(),
+  │                         IdempotencySettings (Plan 029 / D1a — HTTP adapter lives in
+  │                         varco_fastapi.middleware.idempotency, not here)
+  ├── webhook/            — WebhookSubscription, WebhookDelivery, WebhookSubscriptionRepository,
+  │                         WebhookSigner, validate_target(), WebhookDispatcher (Plan 031 / D4 —
+  │                         admin mount lives in varco_fastapi.webhook, not here)
+  ├── flags/              — AbstractFeatureFlags, FlagEvaluationContext, InMemoryFeatureFlags,
+  │                         NullFeatureFlags (Plan 032 / D7 — opt-in via
+  │                         varco_core.flags.di.enable_feature_flags(); OpenFeature provider
+  │                         deferred, see technical_docs/features/feature-flags.md)
+  ├── schedule/           — Schedule, CatchUpPolicy, parse_cron()/CronSchedule,
+  │                         ScheduleMaterializer, AbstractScheduleRepository (Plan 032 / D6 — no
+  │                         execution path; the existing AbstractJobRunner runs materialized jobs)
   ├── authority/         — JwtAuthority, TrustedIssuerRegistry, key rotation
   ├── auth/              — AbstractAuthorizer, user/role/permission models
   ├── repository.py      — AsyncRepository[D, PK] protocol
@@ -63,6 +88,7 @@ varco_redis/             — Redis Pub/Sub event bus + cache backend (redis.asyn
   ├── streams.py         — Redis streams utilities (for channels)
   ├── channel.py         — RedisChannel (pubsub or stream routing)
   ├── dlq.py             — RedisDLQ (dead letter queue)
+  ├── idempotency.py     — RedisIdempotencyStore(AbstractIdempotencyStore) — SET NX PX (Plan 029 / D1b)
   ├── config.py          — RedisConfig, CacheConfig (frozen dataclasses)
   └── di.py              — bootstrap() scan helper; RedisCacheConfiguration (opt-in cache)
 
@@ -78,8 +104,16 @@ varco_sa/                — SQLAlchemy async ORM backend
   ├── advisory_lock.py   — SAAdvisoryLock (PostgreSQL pg_try_advisory_lock / pg_advisory_unlock)
   ├── schema_guard.py    — SchemaGuard, SchemaDrift, SchemaDriftReport
   ├── encryption_store.py — SAEncryptionKeyStore (varco_encryption_keys table)
+  ├── idempotency.py     — SAIdempotencyStore(AbstractIdempotencyStore) — UNIQUE(key) +
+  │                        IntegrityError; table: varco_idempotency (Plan 029 / D1b, the
+  │                        eleventh framework table)
   ├── audit.py           — SAAuditRepository (AuditEntryModel; table: varco_audit_log;
   │                        Postgres ON CONFLICT DO NOTHING on entry_id, plain INSERT elsewhere)
+  ├── webhook.py         — SAWebhookSubscriptionRepository (table: webhook_subscriptions;
+  │                        Plan 031 / D4a, the twelfth framework table)
+  ├── schedule.py        — SAScheduleRepository (table: schedules; UNIQUE(schedule_id);
+  │                        Plan 032 / D6, the thirteenth framework table, migration
+  │                        0007_schedules_table)
   ├── health.py          — SAHealthCheck (SELECT 1 probe)
   ├── di.py              — SAModule (@Configuration)
   └── (auto-generated)   — ORM models created from DomainModel subclasses at import time
@@ -94,6 +128,12 @@ varco_beanie/            — Beanie/MongoDB async ODM backend
   ├── saga.py            — BeanieSagaRepository (SagaDocument, varco_sagas collection)
   ├── audit.py           — BeanieAuditRepository (AuditDocument; collection: varco_audit_log;
   │                        plain insert() — no conflict handling, raises DuplicateKeyError)
+  ├── idempotency.py     — BeanieIdempotencyStore(AbstractIdempotencyStore) — unique index +
+  │                        DuplicateKeyError; collection: varco_idempotency (Plan 029 / D1b)
+  ├── webhook.py         — BeanieWebhookSubscriptionRepository (WebhookSubscriptionDocument;
+  │                        Plan 031 / D4a)
+  ├── schedule.py        — BeanieScheduleRepository (ScheduleDocument; unique index on
+  │                        schedule_id; Plan 032 / D6)
   ├── query/aggregation.py — BeanieAggregationApplicator (MongoDB aggregation pipeline)
   ├── index_guard.py     — BeanieIndexGuard, IndexDrift, IndexDriftReport
   ├── health.py          — BeanieHealthCheck (server_info() probe)
@@ -169,6 +209,49 @@ AbstractDeadLetterQueue (ABC)
 
 DeadLetterEntry (Plan 005 Phase 3) — event: DomainEvent | None, source: DeadLetterSource
   (CONSUMER default / OUTBOX_RELAY / JOB), source_ref, payload — one shape for all three
+
+Serializer[Event] (Protocol, varco_core.serialization)
+  ├── JsonEventSerializer          (varco_core.event.serializer) — DEFAULT, @Singleton at
+  │                                  priority=-sys.maxsize-1, so it loses to any app-supplied one
+  └── CloudEventsJsonSerializer    (varco_core.event.cloudevents, Plan 030 / N2) — CloudEvents
+                                     v1.0.2 STRUCTURED mode; OPT-IN only, no DI decorator at all
+                                     (a module-level @Singleton/@Provider would be auto-registered
+                                     by container.scan("varco_core", recursive=True)).
+                                     Wire it with bind_cloudevents_serializer(container, settings).
+                                     Every bus resolves Serializer[Event]: Kafka/NATS inject it
+                                     as scanned singletons, both Redis shapes get it forwarded by
+                                     RedisEventBusSelectorConfiguration.bus(). All five DLQ
+                                     backends + the outbox take it as a parameter.
+                                     ⚠️ SADeadLetterQueue and OutboxRelay are hand-constructed —
+                                     pass serializer= explicitly there
+
+generate_asyncapi(consumers | container, ...) -> dict   (varco_core.asyncapi, Plan 030 / N3)
+  AsyncAPI 3.1.0 from LIVE, registered consumers — never a static import walk, because a
+  @listen channel may be Callable[[Any], str] resolved at register_to() time.
+  CLI: `varco export-asyncapi [--check]` (varco_core.cli.asyncapi)
+```
+### File watching (Plan 025 / T1)
+
+```
+AbstractPathWatcher (ABC)       — subscribe(cb) -> unsubscribe, async start()/stop(),
+  │                                abstract async _run(); shared _notify() debounce/error
+  │                                handling (§D-T1-errors)
+  ├── StatPollWatcher            — default, stdlib-only; polls a 3-field stat fingerprint
+  │                                (st_mtime_ns, st_size, st_ino) — correct on NFS/Docker
+  │                                bind mounts and Kubernetes `..data` symlink swaps
+  └── WatchfilesWatcher          — opt-in (`varco-core[watch]`); backed by the Rust `notify`
+                                   crate via watchfiles, but still re-derives events from the
+                                   same stat-fingerprint diff (never from watchfiles' own
+                                   Change enum), so both implementations are behaviourally
+                                   identical and share one contract test suite
+                                   (varco_core/tests/watch_contract.py)
+
+Both implementations structurally satisfy varco_fastapi.lifespan.AbstractLifecycle (a
+runtime_checkable Protocol) — zero import from varco_core to varco_fastapi.
+
+ReloadableResource[T] (varco_core.reload) — loader + optional AbstractPathWatcher +
+  generation counter + subscribers. Keep-last-good on any post-startup reload() failure;
+  the first start() load is fail-fast. Also structurally satisfies AbstractLifecycle.
   producers (EventConsumer retry exhaustion, OutboxRelay, JobRunner)
 
 ChannelManager (ABC) — admin-level create/delete/exists/list, separate from AbstractEventBus
@@ -189,6 +272,87 @@ EventMiddleware (Callable[[Event, str, next] → Awaitable[None]])
       ├── records exception + sets ERROR status on failure
       └── graceful fallback: no-op if opentelemetry is not installed
 ```
+
+### TLS trust (Plan 026 / T3, T5, T7; client injection + mTLS hardening Plan 027 / T4, T6)
+
+One unified TLS trust model, plus its reloading wrapper, four HTTP-client injection adapters,
+an opt-in process-global installer, and encrypted-key/PKCS#12 mTLS support. Full design
+(mutate-vs-swap reload strategy, the additive `SSL_CERT_FILE`/`SSL_CERT_DIR` divergence, the
+deprecation shim, the PKCS#12 temp-file discipline, a Pitfalls table):
+`technical_docs/features/tls-trust-and-hot-reload.md`.
+
+```
+TrustStore (varco_core.tls.store, @dataclass(frozen=True))
+  ├── ca_cert: Path | bytes | None,  ca_folders: Path | Sequence[Path] | None
+  ├── cert_patterns: tuple[str, ...] = CERT_FILE_PATTERNS,  recursive: bool = True
+  ├── client_cert / client_key,  include_system_cas,  verify,  check_hostname
+  ├── key_password: str | bytes | Callable[[], str | bytes] | None    (repr=False, Plan 027 / T6a)
+  ├── pkcs12_file / pkcs12_password (repr=False) / pkcs12_trust_ca    (Plan 027 / T6b)
+  ├── from_env()            — VARCO_* names + SSL_CERT_FILE/SSL_CERT_DIR (additive, §D-T3-env)
+  ├── build_ssl_context()   → ssl.SSLContext — union of the two predecessor orderings, plus
+  │                           key_password/PKCS#12 branches (§D-T6-password, §D-T6-pkcs12)
+  ├── to_ssl_config()       ⇄ SSLConfig.to_trust_store()   (lossless bridge, §D-T3-bridge)
+  └── to_httpx_verify() / to_aiohttp_connector() / to_urllib3_poolmanager() /
+      to_requests_adapter()                        — thin delegations to tls.clients (below)
+        │
+        └── varco_fastapi.auth.trust_store.TrustStore (subclass, §D-T3-oq1)
+              — ⚠️ DEPRECATED, removed in 4.0.0. Pins 3.0 semantics: recursive=False,
+                cert_patterns=("*.pem","*.crt"), deferred (not eager) mTLS-pairing check.
+                isinstance(legacy, core.TrustStore) is True; the reverse is False.
+
+ReloadingTrustStore (varco_core.tls.reload — composes, does not inherit)
+  ├── spec: TrustStore                                (frozen; the config)
+  ├── _resource: ReloadableResource[ssl.SSLContext]    (Plan 025 / T2 — keep-last-good)
+  ├── _watcher: AbstractPathWatcher                    (Plan 025 / T1 — over ca_folders + cert/key)
+  ├── .context / .generation / async start()/stop()/reload() / subscribe(cb)
+  ├── to_httpx_verify() / to_aiohttp_connector() / to_urllib3_poolmanager() /
+  │   to_requests_adapter()                        — same four delegations, reading .context live
+  └── ReloadStrategy: AUTO (default) | MUTATE | SWAP
+        AUTO → additions-only batch: MUTATE the live ssl.SSLContext (adds trust, never revokes —
+               ssl.SSLContext has no unload API); anything removed/replaced: SWAP + bump generation
+
+iter_cert_files(root, *, patterns, recursive)   (varco_core.tls.discovery, §D-T7)
+  — the one cert-glob helper for 4 call sites that used to disagree silently:
+    SSLConfig.build_ssl_context, the legacy TrustStore.build_ssl_context,
+    PemFolderSource._has_changes/_scan. A file matching the wider CERT_FILE_PATTERNS set but
+    not a site's own patterns is skipped AND logged once at WARNING per (root, patterns).
+
+varco_core.tls.clients (Plan 027 / T4b, §D-T4-adapters) — zero hard client dependencies
+  ├── to_httpx_verify(store)              → ssl.SSLContext          (httpx 0.28+)
+  ├── to_aiohttp_connector(store, **kw)   → aiohttp.TCPConnector    (aiohttp 3.14+, async def)
+  ├── to_urllib3_poolmanager(store, **kw) → urllib3.PoolManager     (urllib3 v2.x)
+  ├── to_requests_adapter(store)          → requests.adapters.HTTPAdapter subclass (requests 2.32.3+)
+  └── MissingClientDependencyError(ImportError)  — raised by any of the above if uninstalled
+  — every httpx/aiohttp/urllib3/requests import is function-body-only; enforced by
+    test_tls_no_hard_client_deps.py (ast walk + subprocess sys.modules check)
+
+varco_core.tls.install (Plan 027 / T4c, §D-T4-install)
+  ├── install_process_trust(store, *, acknowledge_global_mutation)  → RestoreHandle
+  │     — patches ssl._create_default_https_context; ValueError without the ack kwarg;
+  │       RuntimeError if the private hook is absent on the running interpreter
+  └── RestoreHandle(previous_hook)   — .restore(), also usable as a context manager
+  — varco itself never calls install_process_trust (mechanically checked by `rg`, Step 20)
+
+varco_core.tls.pkcs12 (Plan 027 / T6b, §D-T6-pkcs12)
+  ├── load_pkcs12_identity(path, password) → Pkcs12Identity(key_pem, cert_pem, ca_pems)
+  │     — decodes via cryptography.hazmat...pkcs12, entirely in memory
+  ├── materialize_chain()  → contextmanager yielding a private (0700 dir/0600 file,
+  │     /dev/shm-preferred) temp Path; unlinked in `finally` on every exit path
+  └── Pkcs12LoadError(ValueError)  — wrong password, corrupt bundle, or no private key
+```
+
+**Rule**: `varco_core.tls` imports **nothing** from `varco_core.connection`, `varco_fastapi`, or
+any backend package — mechanically enforced by `varco_core/tests/test_tls_layering.py` (an AST
+walk over module-level, non-`TYPE_CHECKING` imports; a `sys.modules` walk cannot work here
+because the full test suite runs in one process and countless other tests already import
+`varco_core.connection` before `test_tls_layering.py` ever runs, so `varco_core.connection`
+would already be in `sys.modules` regardless of whether `varco_core.tls` itself imports it —
+note this is no longer caused by `varco_core/__init__.py` itself, which is PEP 562-lazy as of
+Plan 028/P1a and does not eagerly import `connection`). The bridge the other direction,
+`SSLConfig.to_trust_store()`, lives in `varco_core.connection.ssl`, not in `varco_core.tls`,
+precisely so this package stays a leaf.
+
+**Rule**: no scanned `@Configuration` in `varco_core.tls`, ever (§D-T3-oq3) — see CLAUDE.md.
 
 ### Service Layer
 
@@ -642,6 +806,46 @@ Rule: Always check is_duplicate() before processing — idempotency guard for at
 Rule: record() inside the same DB transaction as the business operation to avoid partial commits
 ```
 
+### Idempotency-Key store (Plan 029 / D1a, D1b)
+
+```
+AbstractIdempotencyStore (ABC) — varco_core.idempotency.base
+  ├── reserve(key, fingerprint, *, ttl) → ReserveOutcome   (the one atomic primitive — MUST be
+  │                                                          atomic; every implementation's
+  │                                                          native set-if-absent, never
+  │                                                          exists()+set())
+  ├── complete(key, record: IdempotencyRecord) → None      (store the final captured response)
+  ├── get(key) → IdempotencyRecord | None                  (fetch a completed record, or None)
+  ├── release(key) → None                                  (free an un-completable reservation —
+  │                                                          streaming/over-ceiling responses)
+  └── delete_expired() → int                                (best-effort sweep; no-op where the
+                                                              backend has native TTL)
+
+ReserveOutcome (Enum): ACQUIRED | IN_FLIGHT | REPLAY
+IdempotencyRecord (frozen dataclass): status, body: bytes, headers, fingerprint, created_at
+
+Implementations, each using its own backend's native atomic primitive:
+  ├── InMemoryIdempotencyStore (varco_core)   — a lazily-created asyncio.Lock; single-process
+  │                                              only (same warning as InMemoryRateLimiter)
+  ├── RedisIdempotencyStore (varco_redis)     — SET key value NX PX ttl
+  ├── SAIdempotencyStore (varco_sa)           — varco_idempotency table; UNIQUE(key) +
+  │                                              IntegrityError on a losing INSERT
+  └── BeanieIdempotencyStore (varco_beanie)   — IdempotencyDocument; unique index +
+                                                 DuplicateKeyError on a losing insert
+
+Conformance suite: testkit/varco_conformance/idempotency_store.py's IdempotencyStoreConformance,
+subclassed by all four — including a genuine asyncio.gather() concurrency race asserting exactly
+one ACQUIRED (§D-D1-atomic's load-bearing guarantee).
+
+Distinct from the Inbox Pattern above: the inbox persists an *incoming event* before a handler
+runs (bus → handler gap) and deletes the entry once processed; this store persists an *outgoing
+response* to suppress re-execution and the record must *survive* processing for its full TTL —
+opposite lifecycles, not two implementations of the same idea.
+
+HTTP adapter: IdempotencyMiddleware (varco_fastapi.middleware.idempotency) — the only piece that
+knows about headers/status codes/streaming detection. Full design: `technical_docs/features/idempotency-key.md`.
+```
+
 ### Job Store
 
 ```
@@ -900,6 +1104,135 @@ Alembic revision via `framework_metadata()` — no dedicated migration file.
 
 See `technical_docs/features/multitenancy.md`.
 
+### Outbound webhooks (varco_core.webhook, Plan 031 / D4)
+
+```
+WebhookSubscriptionRepository (ABC) — varco_core.webhook.base
+  ├── save(subscription) → WebhookSubscription
+  ├── find_by_id(pk) → WebhookSubscription | None
+  ├── find_by_tenant(tenant_id) → list[WebhookSubscription]     (never leaks across tenants)
+  ├── find_active_matching(event_type, *, tenant_id=None) → list[WebhookSubscription]
+  └── delete(pk) → None
+
+Implementations (framework-table shape, same convention as the DLQ/idempotency/outbox tables):
+  ├── InMemoryWebhookSubscriptionRepository (varco_core) — single-process, lazily-created lock
+  ├── SAWebhookSubscriptionRepository (varco_sa)          — own Table/MetaData, manual mapping
+  └── BeanieWebhookSubscriptionRepository (varco_beanie)  — self-managed Motor client + init_beanie
+
+Conformance suite: testkit/varco_conformance/webhook_subscription.py's
+WebhookSubscriptionRepositoryConformance, subclassed by all three (COVERAGE.md).
+
+WebhookSigner (ABC) — varco_core.webhook.signing
+  ├── StandardWebhooksSigner (default) — webhook-id / webhook-timestamp / webhook-signature,
+  │                                        HMAC-SHA256 over "{id}.{timestamp}.{payload}",
+  │                                        space-delimited multi-signature (rotation)
+  └── Rfc9421Signer (opt-in)           — Signature-Input / Signature / Content-Digest (RFC 9530),
+                                          covers @method/@target-uri/@authority/content-digest
+
+validate_target(url, ...) — varco_core.webhook.ssrf — the five-layer SSRF guard: scheme
+allowlist, resolve-then-validate-then-PIN (defeats DNS rebinding), blocked-by-default deny list
++ optional exclusive allowlist, no redirect following, explicit IPv6-equivalent coverage
+(including the ::ffff:<private-v4> bypass form).
+
+WebhookDispatcher (EventConsumer) — varco_core.webhook.dispatcher
+  ├── never holds AbstractEventBus — wired via register_to(bus, dlq=...) from @PostConstruct
+  ├── @listen(WebhookTriggerEvent) — an app republishes its own domain events as this envelope
+  ├── runs its own per-subscription retry loop on RetryPolicy (NOT the generic
+  │   @listen(retry_policy=..., dlq=...) wrapper — one event can match N subscriptions that must
+  │   each retry/DLQ/auto-disable independently)
+  └── exhaustion → AbstractDeadLetterQueue.push() (never raises); auto-disable after
+      WebhookSettings.disable_after_failures consecutive failures
+
+WebhookSubscription / WebhookDelivery (DomainModel) — varco_core.webhook.models
+  hand-rolled framework tables (webhook_subscriptions / webhook_deliveries), not the generic
+  @register + AsyncRepository[T] translation layer — same reasoning as the idempotency/DLQ tables.
+
+Admin: varco_fastapi.webhook.mount_webhook_admin(app, *, repository=, redriver=None,
+acknowledge_bundled_admin=True, server_auth=..., admin_role="webhook-admin", prefix="/webhooks")
+— same acknowledge-gated shape as mount_reliability_admin/mount_tenant_admin (RD-9); replay goes
+through the existing DlqRedriver.
+
+Full design (signing-scheme decision, the SSRF model, retry-schedule convention, a Pitfalls
+table): `technical_docs/features/outbound-webhooks.md`. Usage: README's "Outbound webhooks"
+section.
+```
+
+### Feature flags (varco_core.flags, Plan 032 / D7)
+
+```
+AbstractFeatureFlags (ABC) — varco_core.flags.base
+  ├── resolve_bool(key, default, *, context=None)   → FlagResolution[bool]
+  ├── resolve_string(key, default, *, context=None) → FlagResolution[str]
+  ├── resolve_numeric(key, default, *, context=None)→ FlagResolution[float]
+  └── resolve_object(key, default, *, context=None) → FlagResolution[Any]
+  (every resolver degrades to the caller's own `default` on an unconfigured key — never raises)
+
+FlagEvaluationContext (frozen dataclass) — varco_core.flags.base
+  ├── tenant_id: str | None    — from current_tenant(), NEVER RequestContext (tenant SSOT rule)
+  ├── attributes: dict[str, str] — from current_request_context().extras
+  └── .current() — builds one from ambient state
+
+FlagResolution[T] (frozen dataclass, Generic) — value + optional `reason` string
+
+Implementations:
+  ├── NullFeatureFlags (varco_core) — scanned @Singleton, priority=-sys.maxsize-1, the DI default;
+  │                                    every resolver returns the caller's default, reason="NULL"
+  └── InMemoryFeatureFlags (varco_core) — dict-backed, optional per-tenant overrides;
+                                           tenant override → global value → caller's default
+
+DI: varco_core.flags.di.enable_feature_flags(container) — opt-in @Provider binding
+InMemoryFeatureFlags → AbstractFeatureFlags, shadowing NullFeatureFlags. Deliberately NOT a
+scanned @Configuration (would auto-activate on any `container.scan("varco_core", recursive=True)`).
+
+Un-park trigger for an OpenFeatureFlags adapter: `openfeature-sdk` (the SDK, not the spec)
+reaches 1.0.0 — checked NOT fired as of 2026-09-04 (SDK 0.10.0, spec 0.9.0). Full version
+evidence: `technical_docs/features/feature-flags.md`. Usage: README's "Feature flags" section.
+```
+
+### Recurring schedules (varco_core.schedule, Plan 032 / D6)
+
+```
+Schedule (DomainModel) — varco_core.schedule.entity
+  schedule_id: UUID (stable domain identity, independent of `pk`)
+  tenant_id: str | None       cron_expr: str        timezone: str (IANA)
+  enabled: bool = True
+  gap_policy: GapPolicy = NEXT_VALID       overlap_policy: OverlapPolicy = FIRST
+  catchup_policy: CatchUpPolicy = SKIP     max_backfill: int = 100
+  last_materialized_at: datetime | None    payload: dict[str, Any]   callback_url: str | None
+  (no execution path here — the existing AbstractJobRunner runs materialized Job rows unchanged)
+
+CatchUpPolicy (StrEnum) — varco_core.schedule.entity
+  SKIP (default) | FIRE_ONCE | BACKFILL_ALL (bounded by max_backfill)
+
+parse_cron(expr) → CronSchedule — varco_core.schedule.cron
+  hand-rolled, zero-dependency 5-field parser + next_after()/at_or_before(); RRULE parked
+  (§D-D6-cron — a complete RFC 5545 engine means a new dateutil.rrule runtime dependency)
+
+ScheduleMaterializer(job_store=) — varco_core.schedule.materializer
+  .materialize(schedule, *, now=None) → list[Job]
+  ├── computes due occurrence(s) per catchup_policy, resolves each through resolve_zoned()
+  │   (varco_core.tz.schedule) → Job.run_at (UTC) + run_at_wall/run_at_tz/run_at_fold (intent)
+  └── ⚠️ deviates from the plan's draft mechanism — does NOT use the job store's fenced-lease
+      primitives (a synthetic lease row would corrupt list_by_status()/all_jobs() counts).
+      Instead: a deterministic uuid5 occurrence Job.job_id (cross-process idempotent-upsert
+      convergence via AbstractJobStore.save()) + a lazily-created, per-schedule-id asyncio.Lock
+      (in-process exclusivity only). UNIQUE(schedule_id) on the Schedule row backstops identity;
+      occurrence-level uniqueness lives entirely in the deterministic job id, not a
+      UNIQUE(schedule_id, run_at) index (Schedule has no run_at column).
+
+AbstractScheduleRepository (ABC) — varco_core.schedule.repository
+  ├── save(schedule) → Schedule      ├── find_by_id(pk) → Schedule | None
+  ├── find_all_enabled() → list[Schedule]   └── delete(pk) → None
+  Implementations:
+  ├── InMemoryScheduleRepository (varco_core) — single-process, lazily-created lock
+  ├── SAScheduleRepository (varco_sa)          — own Table/MetaData, migration 0007_schedules_table
+  └── BeanieScheduleRepository (varco_beanie)  — self-managed Motor client + init_beanie
+
+Full design (the fenced-lease deviation, a Pitfalls table for DST gaps/catch-up surprise/
+materializer downtime): `technical_docs/features/recurring-schedules.md`. Usage: README's
+"Recurring schedules" section.
+```
+
 ### WebSocket / SSE Push Adapters (varco_ws)
 
 ```
@@ -1149,6 +1482,10 @@ unresolvable return annotation) and `varco_core/tests/test_observability_di.py`.
 | `tz/format.py` | D-9 — RFC 9557 output-only formatting | `format_rfc9557()` |
 | `job/reschedule.py` | T2's opt-in recompute-on-read sweeper | `ScheduleRematerializer` |
 | `query/policy.py` | T3's declared datetime coercion contract | `DatetimeCoercionPolicy` |
+| `idempotency/` | D1a (Plan 029) — HTTP idempotency storage contract, framework-agnostic | `AbstractIdempotencyStore`, `ReserveOutcome`, `IdempotencyRecord`, `InMemoryIdempotencyStore`, `compute_fingerprint()`, `IdempotencySettings` |
+| `webhook/` | D4 (Plan 031) — outbound webhook subscription, signing, SSRF guard, dispatcher | `WebhookSubscription`, `WebhookDelivery`, `WebhookSubscriptionRepository`, `InMemoryWebhookSubscriptionRepository`, `WebhookSigner`, `StandardWebhooksSigner`, `Rfc9421Signer`, `validate_target()`, `WebhookDispatcher`, `WebhookSettings`, `install_webhook_metrics()` |
+| `flags/` | D7 (Plan 032) — feature-flag evaluation seam, varco-shaped (not OpenFeature-shaped); OpenFeature provider deferred | `AbstractFeatureFlags`, `FlagEvaluationContext`, `FlagResolution`, `InMemoryFeatureFlags`, `NullFeatureFlags`, `enable_feature_flags()` |
+| `schedule/` | D6 (Plan 032) — recurring cron `Schedule` → `Job` materialization, zero new dependencies | `Schedule`, `CatchUpPolicy`, `parse_cron()`, `CronSchedule`, `ScheduleMaterializer`, `AbstractScheduleRepository`, `InMemoryScheduleRepository` |
 
 ---
 
@@ -1667,8 +2004,8 @@ adapter.mount(app)  # registers GET {path}/sse + POST {path}/messages/
 
 # Option B: run as standalone stdio MCP server (for local LLMs)
 server = adapter.to_mcp_server()
-# server is a low-level mcp.server.lowlevel.Server — run it over a transport,
-# e.g. mcp.server.stdio.stdio_server() + server.run(read, write, options)
+# server is a low-level mcp.server.Server (v2 import path) — run it over a
+# transport, e.g. mcp.server.stdio.stdio_server() + server.run(read, write, options)
 
 # DI-friendly usage
 bind_mcp_adapter(container, OrderRouter, client_cls=OrderClient)
@@ -1679,19 +2016,53 @@ bind_mcp_adapter(container, OrderRouter, client_cls=OrderClient)
 from path parameters, request body model (`model_json_schema()`), and pagination/filter
 params for list routes.
 
-⚠️ **BREAKING (Plan 020 / KI-11)**: `to_mcp_server()` returns a low-level
-`mcp.server.lowlevel.Server`, not a `FastMCP` instance — the high-level `FastMCP.add_tool()`
+⚠️ **BREAKING (Plan 020 / KI-11)**: `to_mcp_server()` returns a low-level `Server`
+(imported from `mcp.server.lowlevel` under v1; from `mcp.server` since the Plan 029 / N1 bump to
+`mcp>=2,<3`), not a `FastMCP` instance — the high-level `FastMCP.add_tool()`
 has never accepted an `input_schema=` parameter (SDK issue #761), so `to_mcp_server()`/`mount()`
 were both dead code (`TypeError` on every call) before this fix. `_to_mcp_tools()`
 (`varco_fastapi.router.mcp`) builds `mcp.types.Tool` objects carrying varco's JSON Schema
 verbatim. Anyone calling `to_mcp_server()` directly and relying on `FastMCP`-specific methods
 (`.run()`'s no-arg stdio shortcut, `.add_tool()`, `.sse_app()`) must update to the low-level
-`Server` API.
+`Server` API. The v1→v2 portability this decision predicted held: only the *registration* lines
+changed, and `_to_mcp_tools()` was untouched.
 
-**Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=1.28.1,<2` — upper-bounded because
-v2 removes the low-level `Server` decorator API this adapter is built on; filed forward as
-BACKLOG row MCP-v2). The adapter is constructible without the extra — `to_mcp_server()` and
-`mount()` raise `ImportError` with a clear install message if the SDK is absent.
+**Optional extra**: `pip install varco-fastapi[mcp]` (`mcp>=2,<3` as of 3.1 — Plan 029 / N1
+migrated off the v1 low-level `Server` decorator API, which v2 removed). `to_mcp_server()` now
+builds `mcp.server.Server(name=..., on_list_tools=..., on_call_tool=...)`: handlers are passed as
+constructor arguments, each takes a `ctx` first argument, and `on_call_tool` receives a single
+`CallToolRequestParams` rather than `(name, arguments)` positionals. `on_list_tools` returns a
+`ListToolsResult` carrying the v2-required `ttl_ms` (from `MCPAdapter(ttl_ms=60_000)`) and
+`cache_scope="private"` — verified by experiment against mcp 2.1.1, not inferred; see
+`design/research/003-mcp-python-sdk-v2-migration.md`'s evidence addendum. `_to_mcp_tools()`'s
+`Tool(name=, description=, input_schema=)` shape is unchanged across the major, which is the
+payoff of the original low-level-`Server` choice. `mount()` is structurally unchanged —
+`mcp.server.sse.SseServerTransport` + `connect_sse` still exist in v2, though HTTP+SSE is
+deprecated in favour of Streamable HTTP (a filed BACKLOG follow-up, not this migration's scope).
+The adapter is constructible without the extra — `to_mcp_server()` and `mount()` raise
+`ImportError` with a clear install message if the SDK is absent.
+⚠️ **BREAKING for that extra only**: an app pinned to mcp 1.x cannot take varco 3.1's
+`varco-fastapi[mcp]`. Nothing changes for anyone not installing it.
+
+**`IdempotencyMiddleware`** (`varco_fastapi.middleware.idempotency` — Plan 029 / D1b): replays
+the stored response for a repeated `Idempotency-Key` on `POST`/`PATCH` instead of executing
+twice. Opt-in — `create_varco_app()` never adds it; register it through
+`install_middleware_stack` or `app.add_middleware(IdempotencyMiddleware, store=...)`. It holds an
+`AbstractIdempotencyStore` (above) and is the only piece that knows about headers, status codes,
+and streaming detection.
+
+⚠️ **Its stack position is a correctness requirement, not a preference** — it must sit *inside*
+`ErrorMiddleware` (so its 409/422/400 render through the RFC 9457 problem+json path rather than
+escaping as a 500) and *inside* `RequestContextMiddleware` (so `current_tenant()` and the ambient
+`AuthContext` are populated before the storage key is built). An explicit ordering test guards
+this. Note Starlette's `add_middleware()` **prepends** — the last call ends up outermost — so an
+outermost-first reading of the call sequence is backwards.
+
+Storage key is `idempotency:{tenant}:{subject}:{key}` and **fails closed**: with tenancy enabled
+and no ambient tenant it raises rather than falling back to a global key, since a cross-tenant
+collision would replay one tenant's response to another. Streaming responses and bodies over
+`max_stored_body_bytes` (1 MiB default) pass through and *release* the reservation, so a retry
+re-executes. Full design + Pitfalls: `technical_docs/features/idempotency-key.md`.
 
 **Localization / timezone middleware** (`varco_fastapi.middleware.localization`,
 `varco_fastapi.i18n` — Plan 011): `LocalizationMiddleware` resolves locale (I2) and/or

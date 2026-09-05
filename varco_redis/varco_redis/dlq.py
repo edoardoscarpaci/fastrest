@@ -109,13 +109,15 @@ import json
 import logging
 import sys
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 import redis.asyncio as aioredis
-from providify import Configuration, Disposes, Inject, Provider
+from providify import Configuration, Disposes, Inject, InjectMeta, Provider
+from varco_core.event.base import Event
 from varco_core.event.dlq import AbstractDeadLetterQueue, DeadLetterEntry
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_redis.config import RedisEventBusSettings
 
@@ -183,12 +185,26 @@ class RedisDLQ(AbstractDeadLetterQueue):
     # RD-4 — Redis Hash+ZSET is addressable (unlike Kafka/NATS streams).
     supports_random_access = True
 
-    def __init__(self, settings: RedisEventBusSettings | None = None) -> None:
+    def __init__(
+        self,
+        settings: RedisEventBusSettings | None = None,
+        *,
+        serializer: Serializer[Event] | None = None,
+    ) -> None:
         """
         Args:
-            settings: Redis connection settings.  Defaults to
-                      ``RedisEventBusSettings.from_env()`` (reads
-                      ``VARCO_REDIS_*`` env vars or ``redis://localhost:6379/0``).
+            settings:   Redis connection settings.  Defaults to
+                        ``RedisEventBusSettings.from_env()`` (reads
+                        ``VARCO_REDIS_*`` env vars or ``redis://localhost:6379/0``).
+            serializer: Serializer for the ``Event`` nested inside each
+                        ``DeadLetterEntry``.  Must match the bus's serializer or a
+                        redrive republishes the wrong wire format.  Defaults to
+                        ``JsonEventSerializer()``; ``RedisDLQConfiguration``
+                        forwards the container-bound ``Serializer[Event]``.
+
+        Edge cases:
+            - ``serializer=None`` → ``JsonEventSerializer()``, byte-identical to
+              the behaviour before this parameter existed.
         """
         self._settings = settings or RedisEventBusSettings.from_env()
         # Key names derived from channel_prefix — namespaced to avoid
@@ -196,9 +212,20 @@ class RedisDLQ(AbstractDeadLetterQueue):
         self._entries_key = f"{self._settings.channel_prefix}{_ENTRIES_SUFFIX}"
         self._queue_key = f"{self._settings.channel_prefix}{_QUEUE_SUFFIX}"
 
-        # Serializer for the nested Event inside DeadLetterEntry.
-        # The same serializer used by the bus — ensures round-trip consistency.
-        self._serializer = JsonEventSerializer()
+        # DESIGN: the nested Event's serializer is injected, not hard-coded
+        #   A dead letter stores the event as bytes (`event_payload`), and those
+        #   bytes must be readable by whoever redrives them.  Constructing
+        #   `JsonEventSerializer()` here meant a CloudEvents-configured app wrote
+        #   CloudEvents envelopes onto the bus but plain varco JSON into the DLQ —
+        #   two wire formats for the same event, and a redrive that republished
+        #   the wrong one.
+        #   ✅ The DLQ now round-trips in whatever format the bus speaks.
+        #   ✅ `None` keeps the previous behaviour exactly, so nothing changes for
+        #      an app that never binds a serializer.
+        #   ❌ A DLQ populated before a serializer swap holds the old format; its
+        #      backlog must be drained before the swap (documented in the feature
+        #      doc's migration timeline).
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         # Redis client created lazily in connect() — must not be instantiated
         # outside a running event loop (redis.asyncio requirement).
@@ -729,12 +756,17 @@ class RedisDLQConfiguration:
     async def redis_dlq(
         self,
         settings: Inject[RedisEventBusSettings],
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> AbstractDeadLetterQueue:
         """
         Create, connect, and return the ``RedisDLQ`` singleton.
 
         Args:
             settings: ``RedisEventBusSettings`` — injected from the container.
+            serializer: Optionally-injected ``Serializer[Event]``.  Forwarded so the
+                        DLQ stores dead letters in the same wire format the bus
+                        publishes; ``None`` when nothing is bound, in which case
+                        the DLQ falls back to ``JsonEventSerializer()``.
 
         Returns:
             A connected ``RedisDLQ`` bound to ``AbstractDeadLetterQueue``.
@@ -746,7 +778,7 @@ class RedisDLQConfiguration:
             "RedisDLQConfiguration: connecting RedisDLQ (url=%s)",
             settings.url,
         )
-        dlq = RedisDLQ(settings)
+        dlq = RedisDLQ(settings, serializer=serializer)
         await dlq.connect()
         return dlq
 

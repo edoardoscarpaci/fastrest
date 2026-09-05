@@ -52,6 +52,7 @@ from varco_beanie.di import BeanieModule, BeanieSettings, bind_repositories
 from varco_beanie.dlq import BeanieDeadLetterQueue, DeadLetterDocument
 from varco_beanie.factory import BeanieDocRegistry, BeanieModelFactory
 from varco_beanie.health import BeanieHealthCheck
+from varco_beanie.idempotency import BeanieIdempotencyStore, IdempotencyDocument
 from varco_beanie.inbox import BeanieInboxRepository, InboxDocument
 from varco_beanie.index_guard import BeanieIndexGuard, IndexDrift, IndexDriftReport
 from varco_beanie.job_store import BeanieJobStore, JobDocument
@@ -110,6 +111,9 @@ __all__ = [
     # ── Deduplication ─────────────────────────────────────────────────────────
     "BeanieDeduplicator",
     "DeduplicationDocument",
+    # ── Idempotency store (Plan 029 / D1b) ────────────────────────────────────
+    "BeanieIdempotencyStore",
+    "IdempotencyDocument",
     # ── Migrations ────────────────────────────────────────────────────────────
     "Migration",
     "MigrationRegistry",

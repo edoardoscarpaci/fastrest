@@ -10,8 +10,9 @@
 # invalidates every one of the ten publisher configs (brief 005 §1). Do not
 # rename it without re-doing all ten PyPI-side configs.
 #
-# DESIGN: three jobs — packages (derive matrix) → build (once per package,
-# artifact per package) → publish (matrix over the ten names)
+# DESIGN: four jobs — packages (derive matrix) → build (once per package,
+# artifact per package) → publish (matrix over the ten names), plus
+# release-assets (attach the ten CycloneDX SBOMs to the GitHub Release)
 #   ✅ `gh-action-pypi-publish` over `uv publish --trusted-publishing`: emits
 #      PEP 740 attestations by default since v1.11.0 with no extra input,
 #      and is PyPI's own documented recommendation; `uv publish` emits none
@@ -103,6 +104,22 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
+      # Plan 030 / Phase 3 (D5), §D-D5-tooling. One CycloneDX 1.6 document per
+      # DISTRIBUTION (Open question 2, decided in scripts/sbom.py's DESIGN
+      # block): `uv export --package <name>` yields that package's own resolved
+      # dependency subset, so the document does not over-report — an SBOM that
+      # lists components the consumer never installs is actively misleading to
+      # the regulated downstream it exists to serve.
+      #
+      # The step also writes `sbom-files` into the package's pyproject.toml, so
+      # the wheel built in the NEXT step carries the document at
+      # `.dist-info/sboms/` per PEP 770. That mutation is release-time only and
+      # is never committed (see .gitignore and the script's DESIGN block).
+      #
+      # ⚠️ Must run BEFORE `uv build` — hatchling resolves `sbom-files` as
+      # literal, existing paths and fails the build if one is missing.
+      - name: Generate the CycloneDX SBOM (PEP 770 + Release artifact)
+        run: uv run python scripts/sbom.py --packages ${{ matrix.package.dir }}
       - name: Build (uv build --package <dir>, Makefile:227-228's own invocation shape)
         run: uv build --package ${{ matrix.package.dir }} --out-dir ${{ matrix.package.dir }}/dist
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -110,6 +127,46 @@ jobs:
           name: ${{ matrix.package.name }}
           path: ${{ matrix.package.dir }}/dist
           if-no-files-found: error
+      # A second, separate artifact: the SBOM must NOT land in `dist/`, because
+      # the publish job uploads everything in `packages-dir` to PyPI and PyPI
+      # rejects a non-distribution file.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom-${{ matrix.package.name }}
+          path: ${{ matrix.package.dir }}/sbom
+          if-no-files-found: error
+
+  release-assets:
+    name: Attach SBOMs to the GitHub Release
+    needs: build
+    # Only a real tag push has a Release to attach to; a workflow_dispatch run
+    # builds and publishes but has no Release object to decorate.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to upload assets onto the Release — this job only
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: sbom-*
+          merge-multiple: true
+          path: sboms/
+      # PyPI does not (yet) serve PEP 770 SBOMs as a discoverable artifact —
+      # research 004 §3 — so the GitHub Release is the canonical location for a
+      # consumer who wants them without downloading and unzipping ten wheels.
+      # See docs/regulatory-posture.md.
+      #
+      # DESIGN: `gh release upload` over a third-party release action
+      #   ✅ No new third-party action to pin, review and keep pinned — this
+      #      workflow's threat model is a supply-chain one, and `gh` ships on
+      #      every GitHub-hosted runner.
+      #   ✅ `--clobber` makes a re-run of a failed leg idempotent, which the
+      #      release runbook's "re-run the failed leg, NEVER re-tag" rule needs.
+      #   ❌ A shell step instead of a declarative `with:` block. Accepted.
+      - name: Upload the ten SBOMs as Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" sboms/*.cdx.json --clobber
 
   publish:
     name: Publish ${{ matrix.package.name }}

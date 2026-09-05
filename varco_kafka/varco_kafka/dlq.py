@@ -106,18 +106,20 @@ import logging
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.structs import TopicPartition
-from providify import Configuration, Disposes, Inject, Provider
+from providify import Configuration, Disposes, Inject, InjectMeta, Provider
+from varco_core.event.base import Event
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_kafka.config import KafkaEventBusSettings
 
@@ -199,6 +201,7 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         *,
         dlq_topic: str | None = None,
         dlq_consumer_group: str = _DEFAULT_DLQ_GROUP,
+        serializer: Serializer[Event] | None = None,
     ) -> None:
         """
         Args:
@@ -208,6 +211,12 @@ class KafkaDLQ(AbstractDeadLetterQueue):
             dlq_consumer_group: Consumer group ID for pop/ack operations.
                                 Override when running multiple relay instances
                                 that need independent positions in the DLQ.
+            serializer:         Serializer for the ``Event`` nested inside each
+                                ``DeadLetterEntry``.  Must match the bus's
+                                serializer or a redrive republishes the wrong wire
+                                format.  Defaults to ``JsonEventSerializer()``;
+                                ``KafkaDLQConfiguration`` forwards the
+                                container-bound ``Serializer[Event]``.
 
         Edge cases:
             - If ``dlq_topic`` is provided, ``topic_prefix`` is NOT prepended —
@@ -223,7 +232,20 @@ class KafkaDLQ(AbstractDeadLetterQueue):
         )
         self._dlq_consumer_group = dlq_consumer_group
 
-        self._serializer = JsonEventSerializer()
+        # DESIGN: the nested Event's serializer is injected, not hard-coded
+        #   A dead letter stores the event as bytes (`event_payload`), and those
+        #   bytes must be readable by whoever redrives them.  Constructing
+        #   `JsonEventSerializer()` here meant a CloudEvents-configured app wrote
+        #   CloudEvents envelopes onto the bus but plain varco JSON into the DLQ —
+        #   two wire formats for the same event, and a redrive that republished
+        #   the wrong one.
+        #   ✅ The DLQ now round-trips in whatever format the bus speaks.
+        #   ✅ `None` keeps the previous behaviour exactly, so nothing changes for
+        #      an app that never binds a serializer.
+        #   ❌ A DLQ populated before a serializer swap holds the old format; its
+        #      backlog must be drained before the swap (documented in the feature
+        #      doc's migration timeline).
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
         # Producer used by push() — created in start().
         self._producer: Any | None = None
@@ -766,12 +788,17 @@ class KafkaDLQConfiguration:
     async def kafka_dlq(
         self,
         settings: Inject[KafkaEventBusSettings],
+        serializer: Annotated[Serializer[Event] | None, InjectMeta(optional=True)] = None,
     ) -> AbstractDeadLetterQueue:
         """
         Create and start the ``KafkaDLQ`` singleton.
 
         Args:
             settings: ``KafkaEventBusSettings`` — injected from the container.
+            serializer: Optionally-injected ``Serializer[Event]``.  Forwarded so the
+                        DLQ stores dead letters in the same wire format the bus
+                        publishes; ``None`` when nothing is bound, in which case
+                        the DLQ falls back to ``JsonEventSerializer()``.
 
         Returns:
             A started ``KafkaDLQ`` bound to ``AbstractDeadLetterQueue``.
@@ -785,7 +812,7 @@ class KafkaDLQConfiguration:
             settings.bootstrap_servers,
             settings.channel_prefix,
         )
-        dlq = KafkaDLQ(settings)
+        dlq = KafkaDLQ(settings, serializer=serializer)
         await dlq.start()
         return dlq
 

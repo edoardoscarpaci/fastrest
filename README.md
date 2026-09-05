@@ -42,7 +42,7 @@ live in each feature's own page under [technical_docs/features/](technical_docs/
 All ten packages are released **in lockstep** — they always share one version number, and a
 breaking change in any one bumps all ten. Install the exact version you need with any package
 manager's usual pin; siblings resolve automatically via a compatible-release pin
-(`varco-core~=3.0`), so `varco-kafka==3.0.0` works with `varco-core` anywhere in the `3.x` line.
+(`varco-core~=3.0`), so `varco-kafka==3.1.0` works with `varco-core` anywhere in the `3.x` line.
 See `CONTRIBUTING.md`'s versioning and deprecation policy for the full contract.
 
 ---
@@ -134,6 +134,8 @@ policy engine, field encryption, observability, profiling, …) — see
   - [The varco CLI](#the-varco-cli)
 - [Beanie Backend](#beanie-backend)
   - [Bootstrap](#bootstrap-beanie)
+- [Exception Hierarchy](#exception-hierarchy)
+- [Running tests](#running-tests)
 - [Cache System](#cache-system)
   - [AsyncCache and CacheBackend](#asynccache-and-cachebackend)
   - [InMemoryCache](#inmemorycache)
@@ -158,10 +160,11 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Verification hardening (VARCO_JWT_*)](#verification-hardening-varco_jwt_)
 - [Connection Settings](#connection-settings)
   - [SSLConfig](#sslconfig)
+  - [TLS trust store](#tls-trust-store)
   - [RedisConnectionSettings](#redisconnectionsettings)
   - [HttpConnectionSettings](#httpconnectionsettings)
 - [FastAPI Integration](#fastapi-integration)
-  - [VarcoRouter and VarcoCRUDRouter](#varcorouter-and-varcoCRUDRouter)
+  - [VarcoRouter and VarcoCRUDRouter](#varcorouter-and-varcocrudrouter)
   - [CRUD mixins](#crud-mixins)
   - [Service-free routers — GenericRouter](#service-free-routers--genericrouter)
   - [JWT authentication middleware](#jwt-authentication-middleware)
@@ -169,6 +172,7 @@ policy engine, field encryption, observability, profiling, …) — see
   - [Middleware stack](#middleware-stack)
   - [Job runner — async mode](#job-runner--async-mode)
   - [Bootstrap helpers](#bootstrap-helpers)
+  - [MCP — exposing a VarcoRouter as an MCP server](#mcp--exposing-a-varcorouter-as-an-mcp-server)
   - [A2A — exposing a non-router subject](#a2a--exposing-a-non-router-subject)
   - [Calling other varco services — client_for](#calling-other-varco-services--client_for)
 - [Observability](#observability)
@@ -176,14 +180,21 @@ policy engine, field encryption, observability, profiling, …) — see
   - [@counter and @histogram](#counter-and-histogram)
   - [TracingServiceMixin](#tracingservicemixin)
   - [OtelConfig and DI wiring](#otelconfig-and-di-wiring)
-- [Health Checks](#health-checks)
-- [Exception Hierarchy](#exception-hierarchy)
 - [Profiling](#profiling)
 - [Background Jobs](#background-jobs)
 - [Database Auditing](#database-auditing)
 - [Dead Letter Queue](#dead-letter-queue)
+- [Idempotency-Key middleware](#idempotency-key-middleware)
+- [CloudEvents envelope](#cloudevents-envelope)
+- [AsyncAPI export](#asyncapi-export)
+- [Outbound webhooks](#outbound-webhooks)
+- [Feature flags](#feature-flags)
+- [Recurring schedules](#recurring-schedules)
+- [File watching and hot reload](#file-watching-and-hot-reload)
 - [Composite Deployment](#composite-deployment)
 - [Durability preset (one-line opt-in)](#durability-preset-one-line-opt-in)
+- [Changelog summary](#changelog-summary)
+- [Health Checks](#health-checks)
 
 ---
 
@@ -2762,6 +2773,168 @@ ssl = SSLConfig(
 ssl = SSLConfig(verify=False, check_hostname=False)
 ```
 
+### TLS trust store
+
+`varco_core.tls.TrustStore` (Plan 026) is a strict superset of `SSLConfig` and unifies TLS
+trust configuration across every backend — recursive, multi-folder CA search, `include_system_cas`,
+in-memory `bytes` CAs, and mTLS, in one type reachable from `varco_kafka`/`varco_redis`/`varco_sa`
+as well as `varco_fastapi`. Full design (mutate-vs-swap reload strategy, the deprecation shim,
+env-var reference): `technical_docs/features/tls-trust-and-hot-reload.md`.
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore
+
+# Private CA, recursive folder scan (the default on this type)
+store = TrustStore(ca_folders=Path("/etc/ssl/private-ca"))
+ctx = store.build_ssl_context()
+
+# From environment variables — VARCO_TRUST_STORE_DIR / VARCO_CA_CERT / VARCO_CLIENT_CERT /
+# VARCO_CLIENT_KEY, plus SSL_CERT_FILE / SSL_CERT_DIR (additive — see the table below)
+store = TrustStore.from_env()
+```
+
+**Bridge with `SSLConfig`** (lossless — carries both `verify` and `check_hostname`, unlike
+`HttpConnectionSettings.to_trust_store()`, which keeps returning the deprecated
+`varco_fastapi.auth.TrustStore` and drops `verify=False`):
+
+```python
+from varco_core.connection.ssl import SSLConfig
+
+store = SSLConfig(verify=False, check_hostname=False).to_trust_store()
+cfg = store.to_ssl_config()  # lossy in the other direction — see the feature doc
+```
+
+**Hot reload** — `ReloadingTrustStore` composes `varco_core.watch`/`varco_core.reload` (see
+["File watching and hot reload"](#file-watching-and-hot-reload)) to pick up certificate rotation
+without a process restart:
+
+```python
+from varco_core.tls import ReloadingTrustStore, bind_trust_store
+from varco_fastapi.lifespan import VarcoLifespan
+
+store = ReloadingTrustStore(TrustStore(ca_folders=Path("/etc/ssl/private-ca")))
+
+lifespan = VarcoLifespan()
+lifespan.register(store)  # starts/stops the watcher for you
+
+# DI: makes an already-constructed, already-owned store resolvable — no lifecycle side effect
+bind_trust_store(container, store)
+```
+
+**`ssl_context=` on the JWT issuer sources** (Plan 026 / T5) — point `JwksUrlSource`/
+`OidcDiscoverySource` at an internal PKI:
+
+```python
+from varco_core.authority.sources import JwksUrlSource
+
+ctx = TrustStore(ca_folders=Path("/etc/ssl/internal-pki")).build_ssl_context()
+jwks = JwksUrlSource("https://idp.internal/.well-known/jwks.json", ssl_context=ctx)
+```
+
+⚠️ `ssl_context=` fixes certificate *verification*, not proxy handling — `HTTP_PROXY`/
+`HTTPS_PROXY` still apply exactly as before. This does not make "JWKS through a proxy" work; it
+was already unaffected either way.
+
+| Env var | Effect | Additive? |
+|---|---|---|
+| `VARCO_TRUST_STORE_DIR` | entry in `ca_folders` | ✅ |
+| `VARCO_CA_CERT` | `ca_cert` | ✅ |
+| `VARCO_CLIENT_CERT` | `client_cert` | ✅ |
+| `VARCO_CLIENT_KEY` | `client_key` | ✅ |
+| `SSL_CERT_FILE` | `ca_cert` (only if `VARCO_CA_CERT` left it unset) | ✅ — **diverges from OpenSSL**, which replaces the default trust store entirely |
+| `SSL_CERT_DIR` | entry in `ca_folders` | ✅ — **diverges from OpenSSL** the same way |
+
+⚠️ **`SSL_CERT_FILE`/`SSL_CERT_DIR` are additive in varco, not replace-semantics like OpenSSL/
+`uv`/`requests`.** Both are merged on top of `include_system_cas`'s default of `True` — varco
+never silently drops the system trust store because a sidecar exported one of these names. If
+you need the OpenSSL behaviour, set `include_system_cas=False` explicitly.
+
+#### mTLS — encrypted private keys and PKCS#12 (Plan 027 / T6)
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore
+
+# Encrypted PEM client key — str/bytes, or a callable (recommended: fetched lazily, never
+# held in memory until build_ssl_context() actually needs it)
+store = TrustStore(
+    client_cert=Path("/etc/ssl/client.crt"),
+    client_key=Path("/etc/ssl/client-encrypted.key"),
+    key_password=lambda: vault_client.read_secret("client-key-password"),
+)
+
+# PKCS#12 / .pfx bundle — zero new dependencies, built on cryptography (already a hard
+# varco_core dependency). pkcs12_trust_ca defaults to False: the bundle's own CAs are not
+# automatically trusted for server verification.
+store = TrustStore(
+    pkcs12_file=Path("/etc/ssl/client-identity.p12"),
+    pkcs12_password="s3cret",
+    pkcs12_trust_ca=False,
+)
+ctx = store.build_ssl_context()
+```
+
+`pkcs12_file` is mutually exclusive with `client_cert`/`client_key`. Neither `key_password` nor
+`pkcs12_file`/`pkcs12_password` are `SSLConfig` settings fields — a secret does not belong in a
+pydantic settings model populated from env vars. Full design (the temp-file window,
+`/dev/shm` preference, the `password=b""` OpenSSL-prompt-avoidance deviation):
+`technical_docs/features/tls-trust-and-hot-reload.md`.
+
+#### Client injection — httpx, aiohttp, urllib3, requests (Plan 027 / T4)
+
+Four adapters convert a `TrustStore`/`ReloadingTrustStore` into the shape each mainstream
+HTTP client wants, with **no new hard dependency** on any of them (function-body imports only):
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore
+
+store = TrustStore(ca_folders=Path("/etc/ssl/private-ca"))
+
+import httpx
+client = httpx.Client(verify=store.to_httpx_verify())  # httpx 0.28+
+
+import aiohttp
+# must be built inside the event loop that will use it
+connector = await store.to_aiohttp_connector()  # aiohttp 3.14+
+async with aiohttp.ClientSession(connector=connector) as session:
+    ...
+
+import urllib3
+pool = store.to_urllib3_poolmanager()  # urllib3 v2.x
+
+import requests
+session = requests.Session()
+session.mount("https://", store.to_requests_adapter())  # requests 2.32.3+
+```
+
+A missing library raises `MissingClientDependencyError` naming the `pip install` package. All
+four also exist as module-level functions in `varco_core.tls.clients`
+(`to_httpx_verify(store)`, etc.) — the methods above are thin delegations for discoverability.
+Every adapter reads the store's context **at call time** — under `ReloadStrategy.SWAP`, a
+client built before a rotation keeps the old context until rebuilt via `store.subscribe(cb)`;
+under `MUTATE` it picks up the rotation with no action.
+
+#### `install_process_trust()` — process-wide trust, explicit and never automatic (Plan 027 / T4)
+
+```python
+from pathlib import Path
+from varco_core.tls import TrustStore, install_process_trust
+
+store = TrustStore(ca_folders=Path("/etc/ssl/private-ca"))
+
+# ⚠️ Call this ONCE, at your application's entry point, before constructing/importing any
+# HTTP client. It patches ssl._create_default_https_context process-wide — every stdlib-ssl-
+# backed client built AFTER this call (via a create_default_context()-consuming path) picks
+# up `store`'s trust. varco itself never calls this on your behalf; it is an application-level
+# decision only, and omitting acknowledge_global_mutation=True raises ValueError with no
+# mutation at all.
+handle = install_process_trust(store, acknowledge_global_mutation=True)
+...
+handle.restore()  # or use install_process_trust(...) as a context manager
+```
+
 ### RedisConnectionSettings
 
 ```python
@@ -3105,6 +3278,41 @@ fastapi_bootstrap(container, setup_producer=True)
 
 app = FastAPI(lifespan=VarcoLifespan(container))
 ```
+
+### MCP — exposing a `VarcoRouter` as an MCP server
+
+`MCPAdapter` (`varco_fastapi.router.mcp`) converts any `VarcoRouter` into a Model Context
+Protocol server, built against **MCP Python SDK v2.x** (`pip install "varco-fastapi[mcp]"` — the
+package now requires `mcp>=2,<3`, since `pip install mcp` already resolves to the v2 line and
+v1.x is maintenance-only; see CHANGELOG's **BREAKING (optional extra)** entry, Plan 029 / N1, if
+upgrading from an app pinned to varco-fastapi's old `mcp<2` requirement).
+
+```python
+from varco_fastapi.router.mcp import MCPAdapter
+from myapp.routers import OrderRouter
+from myapp.clients import OrderClient
+
+adapter = MCPAdapter(
+    OrderRouter,
+    client=OrderClient(base_url="http://localhost:8080"),
+    ttl_ms=60_000,  # tools/list client-side cache TTL (2026-07-28 wire requirement)
+)
+
+# Mount as an HTTP+SSE endpoint on an existing FastAPI app
+adapter.mount(app)   # adds GET {path}/sse + POST {path}/messages/
+
+# Or run as a standalone stdio MCP server (for local LLMs)
+server = adapter.to_mcp_server()   # an mcp.server.Server (v2)
+from mcp.server.stdio import stdio_server
+async with stdio_server() as (read, write):
+    await server.run(read, write, server.create_initialization_options())
+```
+
+Every route flagged `mcp_enabled=True` (via `_create_mcp = True` etc. on the router, or
+`@route(mcp_enabled=True)`) becomes one MCP tool; execution is delegated to the already-injected
+`AsyncVarcoClient`, so no handler logic is duplicated. Full migration rationale (why v1/v2 dual
+support was rejected, the `ListToolsResult`/`ttl_ms`/`cache_scope` requirement, and the
+HTTP+SSE-vs-Streamable-HTTP follow-up): `design/research/003-mcp-python-sdk-v2-migration.md`.
 
 ### A2A — exposing a non-router subject
 
@@ -3557,6 +3765,407 @@ async def on_order(self, event: OrderPlacedEvent) -> None: ...
 
 Redrive, retention, tenancy, a Beanie backend, and a bundled REST admin surface
 (`mount_reliability_admin()`) are covered in `technical_docs/features/dead-letter-queues.md`.
+
+---
+
+## Idempotency-Key middleware
+
+Plan 029 / D1. `IdempotencyMiddleware` (`varco_fastapi.middleware.idempotency`) makes a retried
+`POST`/`PATCH` carrying a repeated `Idempotency-Key` header replay the first response instead of
+executing twice. The storage contract, the fingerprint function, and the in-memory default
+implementation live in `varco_core.idempotency` (framework-agnostic — no FastAPI dependency);
+only the HTTP adapter lives in `varco_fastapi`.
+
+⚠️ **Opt-in, off by default.** Not added by `create_varco_app()` — register it explicitly, and it
+**must** sit inside `ErrorMiddleware` (so its 409/422/400 render through the normal error path)
+and inside `RequestContextMiddleware` (so `current_tenant()`/the auth subject are populated
+before its scoping logic reads them):
+
+```python
+from varco_core.idempotency.memory import InMemoryIdempotencyStore
+from varco_fastapi.middleware import (
+    ErrorMiddleware,
+    IdempotencyMiddleware,
+    RequestContextMiddleware,
+    install_middleware_stack,
+)
+
+install_middleware_stack(app, [
+    ErrorMiddleware,
+    (RequestContextMiddleware, {"server_auth": my_auth}),
+    (IdempotencyMiddleware, {"store": InMemoryIdempotencyStore()}),
+])
+```
+
+```python
+import httpx
+
+headers = {"Idempotency-Key": "order-42-retry-1"}
+first = httpx.post("http://api/orders", json={"sku": "abc"}, headers=headers)
+second = httpx.post("http://api/orders", json={"sku": "abc"}, headers=headers)
+# second.status_code == first.status_code
+# second.headers["Idempotency-Replayed"] == "true"
+# the handler executed exactly once
+```
+
+Outcomes: no header on a `POST`/`PATCH` → executes normally (unless `require_key=True`, then
+400); a fresh key → executes, stores, returns the real response; a completed key with a matching
+fingerprint (method + path + query + body hash) → replays the stored response; a completed key
+with a **different** fingerprint → **422**; a key whose first request is still running → **409**
+(with a `Retry-After` header); an empty or over-length key → **400**.
+
+Four `AbstractIdempotencyStore` implementations ship: `InMemoryIdempotencyStore` (`varco_core` —
+⚠️ single-process only, same warning as `InMemoryRateLimiter`), `RedisIdempotencyStore`
+(`varco_redis`, `SET NX PX`), `SAIdempotencyStore` (`varco_sa`, a unique index +
+`IntegrityError`), `BeanieIdempotencyStore` (`varco_beanie`, a unique index +
+`DuplicateKeyError`). Each uses its own backend's atomic primitive for the load-bearing
+`reserve()` call — never emulated with a separate `exists()` + `set()`.
+
+⚠️ This implements the expired IETF draft (`draft-ietf-httpapi-idempotency-key-header-07`) plus
+Stripe's de-facto conventions (24h TTL, 1 MiB body cap, streaming responses never captured) —
+not an RFC. Full design (fingerprint construction, header replay allowlist, tenant/subject
+scoping and its fail-closed rule, streaming/over-ceiling handling, a Pitfalls table):
+`technical_docs/features/idempotency-key.md`.
+
+---
+
+## CloudEvents envelope
+
+Plan 030 / N2. `CloudEventsJsonSerializer` (`varco_core.event.cloudevents`) is a **second**
+`Serializer[Event]` implementation that wraps every published event in a
+[CloudEvents v1.0.2](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md)
+*structured-mode* JSON envelope, so a partner platform, an Eventarc/EventBridge consumer or a
+Knative sink can read varco's events without knowing varco.
+
+⚠️ **Opt-in, never auto-active.** `Event` does not change, no bus changes, and nothing happens
+until you bind it:
+
+```python
+from providify import DIContainer
+from varco_core.event.cloudevents import CloudEventsSettings, bind_cloudevents_serializer
+
+container = DIContainer()
+bind_cloudevents_serializer(container, CloudEventsSettings(source="/svc/orders"))
+```
+
+or, without DI:
+
+```python
+from varco_core.event.cloudevents import CloudEventsJsonSerializer, CloudEventsSettings
+
+serializer = CloudEventsJsonSerializer(CloudEventsSettings(source="/svc/orders"))
+bus = KafkaEventBus(settings, serializer=serializer)
+```
+
+On the wire:
+
+```json
+{
+  "specversion": "1.0",
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "source": "/svc/orders",
+  "type": "order.placed",
+  "time": "2026-01-01T00:00:00+00:00",
+  "datacontenttype": "application/json",
+  "correlationid": "corr-1",
+  "tenantid": "acme",
+  "data": {"order_id": "o-1", "total": 9.5}
+}
+```
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `VARCO_CLOUDEVENTS_SOURCE` | *(none — required)* | Producer identity. There is no correct default for "who am I"; construction raises `ValidationError` without it |
+| `VARCO_CLOUDEVENTS_DATACONTENTTYPE` | `application/json` | Must end in `json`/`+json` — varco emits `data`, never `data_base64` |
+
+⚠️ Four things to know before adopting:
+
+- `tenantid` comes from `current_tenant()` and is **best-effort** — absent on an
+  `OutboxRelay`-driven publish;
+- Kafka's binding also wants a `content-type: application/cloudevents+json` **header**, which
+  varco cannot set today (`publish()` never gains `headers=`);
+- a CloudEvents-serialized and a native-serialized event cannot share a channel mid-migration —
+  roll out in three phases, and **drain any existing DLQ backlog first**, because nothing converts
+  rows that were stored in the old format;
+- the binding reaches every bus (Kafka, NATS, both Redis shapes) and every `@Configuration`-wired
+  DLQ automatically. **`SADeadLetterQueue` and `OutboxRelay` are constructed by hand** — pass
+  `serializer=` explicitly there or they keep the `JsonEventSerializer` default.
+
+Full design, the named Redis Streams `ce`-field convention, the three-phase dual-emit rollout and a
+Pitfalls table: `technical_docs/features/cloudevents-envelope.md`.
+
+---
+
+## AsyncAPI export
+
+Plan 030 / N3. `varco_core.asyncapi.generate_asyncapi()` describes every wired `EventConsumer` as
+an **AsyncAPI 3.1.0** document — channels, `action: receive` operations, and message payloads from
+Pydantic's `model_json_schema()`.
+
+```python
+from varco_core.asyncapi import generate_asyncapi
+
+doc = generate_asyncapi(
+    container,                       # or a list of live EventConsumer instances
+    title="Orders", version="1.0.0",
+    protocol="kafka", group_id="orders-workers",
+)
+```
+
+or from the CLI:
+
+```bash
+varco export-asyncapi --title Orders --version 1.0.0 \
+    --consumer myapp.consumers:OrderConsumer \
+    --protocol kafka --group-id orders-workers \
+    -o asyncapi.json
+
+varco export-asyncapi ... -o asyncapi.json --check   # fail on drift, for CI
+```
+
+⚠️ **Generation is runtime, from *registered* consumers.** A `@listen` channel may be a callable
+resolved at `register_to()` time against a bound `self`, so a static scan would be silently wrong —
+and a consumer that was never wired is deliberately absent from the document. Bindings: Kafka
+(`topic`, `groupId`), NATS only when a queue group is configured, Redis never — the generated
+document's own `info.description` explains why. No `servers` block is emitted by default.
+
+Full detail, including the local `npx @asyncapi/cli validate` invocation and the snapshot gate:
+`technical_docs/features/asyncapi-export.md`.
+
+---
+
+## Outbound webhooks
+
+Plan 031 / D4. A subscription registry, signing, SSRF-hardened delivery, retry into the existing
+DLQ, and an admin surface — assembled from parts varco already ships (`RetryPolicy`,
+`AbstractDeadLetterQueue`, `DlqRedriver`, `FieldEncryptor`), no new reliability primitive and no
+new crypto path. Everything portable lives in `varco_core.webhook`; `varco_sa`/`varco_beanie`
+hold repositories; `varco_fastapi.webhook` holds only the admin mount.
+
+```python
+from varco_core.webhook.base import InMemoryWebhookSubscriptionRepository
+from varco_core.webhook.dispatcher import WebhookDispatcher
+from varco_core.webhook.models import WebhookSubscription
+
+repo = InMemoryWebhookSubscriptionRepository()
+await repo.save(
+    WebhookSubscription(
+        tenant_id="acme",
+        target_url="https://acme.example.com/hooks",
+        event_patterns=["order.*"],
+        active_secrets=["whsec_..."],
+        status="ACTIVE",
+        consecutive_failures=0,
+        signer="standard_webhooks",
+        custom_headers={},
+    )
+)
+
+dispatcher = WebhookDispatcher(repository=repo)
+dispatcher.register_to(bus, dlq=dlq)  # bus: AbstractEventBus, dlq: AbstractDeadLetterQueue
+```
+
+Signing defaults to **Standard Webhooks** (`webhook-id`/`webhook-timestamp`/
+`webhook-signature`, HMAC-SHA256, space-delimited multi-signature for zero-downtime secret
+rotation) — the scheme an off-the-shelf verification snippet actually understands. RFC 9421
+("HTTP Message Signatures" + RFC 9530 `Content-Digest`) is available opt-in via
+`WebhookSubscription.signer = "rfc9421"`.
+
+Every delivery target goes through `varco_core.webhook.ssrf.validate_target()` — resolve, then
+validate every resolved address against the private/loopback/link-local/reserved ranges
+(including the IPv4-mapped bypass form), then **pin the connection to the first resolved
+address**, never a later re-resolution (this is what defeats DNS rebinding). `https` only unless
+`VARCO_WEBHOOK_ALLOW_INSECURE_HTTP=true` — a deployment-wide switch, never per-tenant.
+
+`WebhookSettings` (env prefix `VARCO_WEBHOOK_`) is the single configuration source and
+`WebhookDispatcher` consumes it — omit `settings=` and it constructs one from the environment;
+pass an explicit instance to pin the values. The SSRF knobs (`allow_insecure_http`, `allow_list`,
+`extra_deny_ranges`) reach `validate_target()`, `signature_tolerance_seconds` reaches the signer,
+and the retry/timeout/disable knobs become the dispatcher's defaults. An explicit
+`retry_policy=`/`request_timeout_seconds=`/`disable_after_failures=` keyword overrides the
+corresponding settings field.
+
+Delivery reuses `varco_core.resilience.RetryPolicy` per-subscription, times out at 10s per
+attempt, and pushes to the existing DLQ on exhaustion (`push()` never raises). A subscription
+auto-disables after `disable_after_failures` consecutive failures across distinct events;
+re-enabling is an explicit admin action.
+
+```python
+from varco_fastapi.webhook import mount_webhook_admin
+
+mount_webhook_admin(
+    app,
+    repository=repo,
+    redriver=my_dlq_redriver,       # enables the replay-through-DLQ route
+    acknowledge_bundled_admin=True,  # required — RD-9, same posture as mount_reliability_admin
+    server_auth=my_auth,
+    admin_role="webhook-admin",
+)
+```
+
+Secrets (`WebhookSubscription.active_secrets`) are encrypted at rest via the existing
+`FieldEncryptor` when a repository is constructed with `encryptor=` — ⚠️ `encryptor=None` (the
+default) stores plaintext, a dev/test-only escape hatch. Because delivery is at-least-once,
+point a varco-app receiver at plan 029's `Idempotency-Key` middleware for dedup on the stable
+`webhook-id`.
+
+Full design (the signing-scheme decision, the five-layer SSRF model, the retry-schedule
+convention, a Pitfalls table): `technical_docs/features/outbound-webhooks.md`.
+
+---
+
+## Feature flags
+
+Plan 032 / D7. `varco_core.flags` is a varco-shaped `AbstractFeatureFlags` seam — **not** a
+transcription of OpenFeature's `AbstractProvider`. The OpenFeature Python SDK sits at 0.10.0 and
+the spec itself at 0.9.0 (verified 2026-09-04); both pre-1.0, and 0.10.0 itself shipped a
+breaking change inside a minor release. So the seam ships now and an `OpenFeatureFlags` adapter
+is deferred until the SDK — not the spec — reaches 1.0. Full version evidence and the un-park
+trigger: `technical_docs/features/feature-flags.md`.
+
+Four typed resolutions (bool/string/numeric/object), each degrading to the caller's own
+`default` on any "flag not found" condition — never an exception:
+
+```python
+from varco_core.flags import AbstractFeatureFlags, FlagEvaluationContext, InMemoryFeatureFlags
+
+flags = InMemoryFeatureFlags(
+    flags={"new_checkout": False},
+    tenant_overrides={"acme": {"new_checkout": True}},
+)
+
+ctx = FlagEvaluationContext.current()  # tenant_id from current_tenant(), attributes from RequestContext
+resolution = await flags.resolve_bool("new_checkout", default=False, context=ctx)
+resolution.value    # True inside tenant "acme"'s ambient context, False elsewhere
+resolution.reason   # "TENANT_OVERRIDE" / "STATIC" / "DEFAULT"
+```
+
+`NullFeatureFlags` (a scanned `@Singleton`, lowest priority) is the DI default — importing or
+scanning `varco_core.flags` never changes behaviour for an app that has not opted in. Opt in
+explicitly:
+
+```python
+from varco_core.flags.di import enable_feature_flags
+
+container.scan("varco_core.flags", recursive=True)  # NullFeatureFlags bound
+enable_feature_flags(container)                       # opt-in: InMemoryFeatureFlags
+```
+
+`FlagEvaluationContext.tenant_id` comes from `current_tenant()` — never `RequestContext`, same
+single-source-of-truth rule the rest of the codebase follows for tenancy.
+
+---
+
+## Recurring schedules
+
+Plan 032 / D6. `varco_core.schedule` closes the loop the job subsystem's zoned fields
+(`Job.run_at_wall`/`run_at_tz`/`run_at_fold`) were built for: a `Schedule` entity describes a
+recurring cron expression, and `ScheduleMaterializer` turns its next-due occurrence(s) into
+ordinary `Job` rows. **No new execution path** — the existing `AbstractJobRunner` runs the
+produced jobs exactly as it always has.
+
+```python
+from varco_core.schedule.entity import CatchUpPolicy, Schedule
+from varco_core.schedule.materializer import ScheduleMaterializer
+from varco_core.tz.schedule import GapPolicy, OverlapPolicy
+
+schedule = Schedule(
+    cron_expr="0 9 * * 1-5",           # 09:00, weekdays
+    timezone="America/New_York",
+    gap_policy=GapPolicy.NEXT_VALID,    # spring-forward
+    overlap_policy=OverlapPolicy.FIRST, # fall-back
+    catchup_policy=CatchUpPolicy.SKIP,  # default — see the Pitfalls table
+    payload={"report": "daily-digest"},
+)
+
+materializer = ScheduleMaterializer(job_store=job_store)
+jobs = await materializer.materialize(schedule)  # [] if not yet due or already materialized
+```
+
+Cron parsing is a hand-rolled, zero-dependency 5-field parser (`varco_core.schedule.cron`) —
+RRULE/RFC 5545 is explicitly out of scope (a complete implementation means a `dateutil` runtime
+dependency for a 🟢 backlog row). Three catch-up policies govern what a materializer that missed
+occurrences does about it (`SKIP` default, `FIRE_ONCE`, `BACKFILL_ALL` bounded by
+`max_backfill`) — see the Pitfalls table in `technical_docs/features/recurring-schedules.md` for
+the surprising cases.
+
+`AbstractScheduleRepository` (`varco_core.schedule.repository`) is the storage contract —
+`InMemoryScheduleRepository` for tests, `SAScheduleRepository`/`BeanieScheduleRepository` for
+Postgres/Mongo, both with a `UNIQUE(schedule_id)` constraint.
+
+⚠️ Cross-process double-materialization safety does **not** reuse the job store's fenced-lease
+primitives — see `technical_docs/features/recurring-schedules.md` for what the materializer
+actually does instead (a deterministic occurrence id + a per-schedule in-process lock) and why.
+
+---
+
+## File watching and hot reload
+
+`varco_core.watch` (`AbstractPathWatcher`) watches a set of directories for changes and calls
+subscribers back — correct under atomic rename and under the Kubernetes `..data` symlink swap
+kubelet uses to deliver a rotated Secret/ConfigMap. `varco_core.reload.ReloadableResource[T]`
+loads a value from that watcher (or from any manual trigger) and swaps it under a lock, with
+**keep-last-good** semantics on any post-startup load failure.
+
+```python
+from pathlib import Path
+
+from varco_core.reload import ReloadableResource
+from varco_core.watch import WatchTarget, default_watcher
+
+watcher = default_watcher([WatchTarget(root=Path("/etc/certs"))])
+
+
+def load_bundle() -> bytes:
+    return Path("/etc/certs/ca.pem").read_bytes()
+
+
+bundle = ReloadableResource(loader=load_bundle, watcher=watcher, name="ca-bundle")
+await bundle.start()  # first load is fail-fast — propagates if it fails
+bundle.current  # -> bytes, updated automatically on every settled rotation
+```
+
+**Watcher implementations**:
+- `StatPollWatcher` (default, stdlib-only) — polls a stat fingerprint
+  (`st_mtime_ns`, `st_size`, `st_ino`) of every matching file, `interval=5.0` by default.
+  Correct on NFS and Docker bind mounts, where inotify never fires. `default_watcher(...)`
+  always returns one of these — prefer it when you just want "the default", not a specific
+  implementation.
+- `WatchfilesWatcher` (opt-in, `pip install "varco-core[watch]"`) — lower-latency local
+  dev-loop watching backed by the Rust `notify` crate (the same library uvicorn's
+  `--reload` uses). Still re-derives events from the same stat-fingerprint diff, never from
+  watchfiles' own event kind, so both implementations emit identical event streams.
+
+Both debounce: after any detected change, a watcher waits for the target to be stable for one
+`quiet_period` (default `0.25s`) before notifying, coalescing an entire rotation into **one**
+callback.
+
+**`ReloadableResource[T]` keep-last-good contract**: the *first* `start()` load is fail-fast — a
+service that cannot load its initial CA bundle refuses to start. Every load *after* that keeps
+serving `current`/`generation` unchanged on failure and returns
+`ReloadOutcome(changed=False, error=exc)` — a truncated or half-written file during rotation
+never takes the service down.
+
+**SIGHUP composition** — `reload()` is always independently callable, with or without a
+watcher:
+
+```python
+import signal
+
+loop = asyncio.get_running_loop()
+loop.add_signal_handler(signal.SIGHUP, lambda: asyncio.create_task(bundle.reload()))
+```
+
+**`VarcoLifespan` wiring** — both `AbstractPathWatcher` and `ReloadableResource` structurally
+satisfy `varco_fastapi.lifespan.AbstractLifecycle` (a `runtime_checkable` Protocol), so they
+register with zero import from `varco_core` into `varco_fastapi`:
+
+```python
+from varco_fastapi.lifespan import VarcoLifespan
+
+lifespan = VarcoLifespan()
+lifespan.register(bundle)  # starts the watcher too — ReloadableResource.start()/stop() own it
+```
 
 ---
 

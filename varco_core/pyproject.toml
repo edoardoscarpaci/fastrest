@@ -1,6 +1,6 @@
 [project]
 name          = "varco-core"
-version       = "3.0.0"
+version       = "3.1.0"
 description   = "Backend-agnostic domain model, service layer, authorization, query AST and DTOs for varco"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
@@ -53,6 +53,15 @@ dependencies = [
 tz = [
     "tzdata>=2024.1; sys_platform == 'win32' or sys_platform == 'linux'",
 ]
+# Plan 025 / T1b — opt-in, not a hard dependency: StatPollWatcher (stdlib-only) is the
+# default AbstractPathWatcher implementation, correct on NFS and Docker bind mounts where
+# inotify never fires (locked decision, BACKLOG.md:34, research brief 001 §1). watchfiles
+# is for callers who want lower dev-loop latency on a local, non-networked filesystem.
+# Floor 1.2.0 per brief 001's version table: Python 3.10+, Rust `notify` backend, the same
+# library uvicorn's `--reload` uses.
+watch = [
+    "watchfiles>=1.2.0",
+]
 
 [project.urls]
 Homepage   = "https://github.com/edoardoscarpaci/varco"
@@ -61,6 +70,14 @@ Issues     = "https://github.com/edoardoscarpaci/varco/issues"
 
 [project.scripts]
 varco = "varco_core.cli.main:main"
+
+# Plan 022 §D-AA4 / RS-3 reserved the `export-asyncapi` verb in this group.
+# It is contributed through the entry-point group rather than hard-wired into
+# `cli/main.py`'s built-in list, exactly as `varco_sa`/`varco_beanie`/
+# `varco_fastapi` contribute theirs — so the dispatch mechanism has one shape,
+# and the verb stays discoverable by `importlib.metadata` alone.
+[project.entry-points."varco.commands"]
+export-asyncapi = "varco_core.cli.asyncapi:register"
 
 [tool.uv.sources]
 # varco-fastapi is a dev-only, test-time dependency (see the comment below) — this

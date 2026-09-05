@@ -1,6 +1,6 @@
 [project]
 name          = "varco-fastapi"
-version       = "3.0.0"
+version       = "3.1.0"
 description   = "FastAPI adapter for varco — routing, auth middleware, job running, typed HTTP client, and DI wiring"
 authors       = [{ name = "edoardo.scarpaci", email = "edoardo.scarpaci@gmail.com" }]
 readme        = "README.md"
@@ -41,12 +41,20 @@ dependencies = [
 ws  = ["varco-ws~=3.0"]
 # MCP (Model Context Protocol) adapter support
 # Enables MCPAdapter.to_mcp_server() and MCPAdapter.mount()
-# Upper-bounded <2 (Plan 020 / KI-11-pin, research brief 003): unbounded
-# `>=1.0` would auto-upgrade to the v2 line, which removes the low-level
-# `Server` decorator API `to_mcp_server()`/`mount()` are built on (constructor-
-# based handler registration instead — filed forward as BACKLOG row MCP-v2).
-# Lower-bounded 1.28.1 per brief 003's stated stable-v1 floor for this API.
-mcp = ["mcp>=1.28.1,<2"]
+# Bumped to `>=2,<3` (Plan 029 / N1a, §D-N1-pin, research brief 003): `pip
+# install mcp` already resolves to the v2 line (brief 003 §1) and v1.x is
+# maintenance-only (security fixes alone) — the old `<2` pin protected
+# nobody, it only stranded users on an abandoned branch. `to_mcp_server()`
+# now builds `mcp.server.Server(name=..., on_list_tools=..., on_call_tool=...)`
+# (constructor-based handler registration) instead of the v1 low-level
+# `Server` + `@server.list_tools()`/`@server.call_tool()` decorator pair —
+# the migration this pin bump enables is §D-N1-rewrite. Dual v1/v2 support
+# was evaluated and rejected (§D-N1-pin): registration is structurally
+# different between the two lines, so one codebase cannot cleanly serve
+# both, and the ecosystem precedent (IBM mcp-context-forge,
+# langchain-mcp-adapters) is "pin, then migrate wholesale" — exactly this.
+# BREAKING (optional extra) — see CHANGELOG.
+mcp = ["mcp>=2,<3"]
 # A2A (Agent-to-Agent / Google A2A protocol) support
 # SkillAdapter works without this extra (it uses FastAPI directly);
 # install for the google-a2a SDK types if you need A2A client utilities.

@@ -51,6 +51,46 @@ These are legitimate, permanent absences — not TODOs, not backlog rows.
   all — the only package of the ten deliberately without one. Confirmed present in all nine
   others.
 
+## New ABC outside the five (Plan 025)
+
+- **`AbstractPathWatcher`** (`varco_core.watch.base`, Plan 025 / T1) is a **new ABC that is not
+  one of the five** this page audits. Both implementations (`StatPollWatcher`,
+  `WatchfilesWatcher`) live in `varco_core` itself, so its shared contract base —
+  `varco_core/tests/watch_contract.py::PathWatcherContract` — lives next to them rather than in
+  `testkit/varco_conformance`, which exists specifically to reach *across* packages. If a future
+  backend package ever ships a third implementation, promote the contract module into
+  `testkit/varco_conformance` at that point. This row pre-empts the "why is there no suite for
+  this?" audit question this page exists to answer.
+
+## New ABC outside the five, with a shared suite (Plan 029)
+
+- **`AbstractIdempotencyStore`** (`varco_core.idempotency.base`, Plan 029 / D1) is a **sixth ABC**,
+  outside the original five this page audits, but — unlike `AbstractPathWatcher` above — it has
+  **four** implementations across **three** packages from day one
+  (`InMemoryIdempotencyStore` in `varco_core`, `RedisIdempotencyStore`, `SAIdempotencyStore`,
+  `BeanieIdempotencyStore`), so it earns a real cross-package suite in this directory rather than
+  a same-package contract module. `testkit/varco_conformance/idempotency_store.py`'s
+  `IdempotencyStoreConformance` is subclassed by all four:
+  `varco_core/tests/test_idempotency_conformance_inmemory.py`,
+  `varco_redis/tests/test_idempotency_store_conformance.py`,
+  `varco_sa/tests/test_idempotency_store_conformance.py`,
+  `varco_beanie/tests/test_idempotency_store_conformance.py`. The load-bearing assertion —
+  `test_concurrent_reserve_race_yields_exactly_one_acquired` — is exactly what §D-D1-atomic exists
+  to guarantee, run against every backend's own native atomic primitive (`SET NX PX`, a unique
+  index + `IntegrityError`/`DuplicateKeyError`, a lazily-created `asyncio.Lock`).
+
+- **`WebhookSubscriptionRepository`** (`varco_core.webhook.base`, Plan 031 / D4) is a **seventh
+  ABC**, same treatment as `AbstractIdempotencyStore` above — three implementations across three
+  packages from day one (`InMemoryWebhookSubscriptionRepository` in `varco_core`,
+  `SAWebhookSubscriptionRepository`, `BeanieWebhookSubscriptionRepository`), so it earns a real
+  cross-package suite: `testkit/varco_conformance/webhook_subscription.py`'s
+  `WebhookSubscriptionRepositoryConformance` is subclassed by all three:
+  `varco_core/tests/test_webhook_conformance_inmemory.py`,
+  `varco_sa/tests/test_webhook_subscription_repository_integration.py`,
+  `varco_beanie/tests/test_webhook_subscription_repository_integration.py`. The tenant-scoping
+  assertion (`test_find_by_tenant_never_leaks_another_tenant`) is the load-bearing one — a
+  subscription belonging to one tenant must never be returned for another, across every backend.
+
 ## What Plan 024 filled
 
 - **`RedisStreamDLQ` → subclassed.** `varco_redis/tests/test_redis_conformance.py` gained

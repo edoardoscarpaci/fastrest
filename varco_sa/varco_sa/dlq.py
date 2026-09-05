@@ -77,12 +77,14 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.ext.asyncio import AsyncEngine
+from varco_core.event.base import Event
 from varco_core.event.dlq import (
     AbstractDeadLetterQueue,
     DeadLetterEntry,
     DeadLetterSource,
 )
 from varco_core.event.serializer import JsonEventSerializer
+from varco_core.serialization import Serializer
 
 from varco_sa.metadata import register_framework_metadata as _register_fw_metadata
 
@@ -164,9 +166,36 @@ class SADeadLetterQueue(AbstractDeadLetterQueue):
     # RD-4 — SA supports single-entry random access (unlike Kafka/NATS).
     supports_random_access = True
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        serializer: Serializer[Event] | None = None,
+    ) -> None:
+        """
+        Args:
+            engine:     Async SQLAlchemy engine for the target database.
+            serializer: Serializer for the ``Event`` stored in the ``payload``
+                        column.  Must match the bus's serializer or a redrive
+                        republishes the wrong wire format.  Defaults to
+                        ``JsonEventSerializer()``.
+
+        Edge cases:
+            - ``serializer=None`` → ``JsonEventSerializer()``, byte-identical to
+              the behaviour before this parameter existed.
+        """
         self._engine = engine
-        self._serializer = JsonEventSerializer()
+        # DESIGN: the nested Event's serializer is injected, not hard-coded
+        #   A dead letter stores the event as bytes, and those bytes must be
+        #   readable by whoever redrives them.  Constructing `JsonEventSerializer()`
+        #   here meant a CloudEvents-configured app wrote CloudEvents envelopes onto
+        #   the bus but plain varco JSON into the DLQ — two wire formats for the
+        #   same event, and a redrive that republished the wrong one.
+        #   ✅ The DLQ now round-trips in whatever format the bus speaks.
+        #   ✅ `None` keeps the previous behaviour exactly.
+        #   ❌ A DLQ populated before a serializer swap holds the old format; drain
+        #      its backlog before swapping (see the feature doc's migration timeline).
+        self._serializer: Serializer[Event] = serializer or JsonEventSerializer()
 
     async def ensure_table(self) -> None:
         """

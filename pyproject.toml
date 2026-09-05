@@ -30,12 +30,42 @@ lint = [
     "ruff==0.16.4",
     "mypy==2.3.1",
 ]
+# Plan 027 / T4a (§Phase 2, Step 9) — TEST-ONLY. These four HTTP clients back
+# varco_core.tls.clients' adapter tests (test_tls_clients.py, test_tls_clients_integration.py)
+# and MUST NEVER appear in any varco_*/pyproject.toml [project].dependencies or
+# [project.optional-dependencies] — the adapters are function-body imports with zero hard
+# dependency on any of them (locked, BACKLOG.md:37). Floors are brief 001 §4's evidence:
+# requests 2.32.3 is the release that fixed custom-SSLContext HTTPAdapter subclasses;
+# urllib3 v2 because v1.26 is EOL; httpx 0.28 is where `verify=` accepts an SSLContext and
+# `cert=` is deprecated; aiohttp 3.14 for its TCPConnector(ssl=) shape.
+clients = [
+    "aiohttp>=3.14",
+    "urllib3>=2",
+    "requests>=2.32.3",
+    "httpx>=0.28",
+]
+# Plan 028 / Phase 3 (P2), Step 16. Deliberately NOT included in `dev`: a
+# normal `uv sync` must not install it, so pytest-codspeed's plugin can never
+# alter collection or timing on the unit legs. Benchmarks run only through
+# `make bench` (uv run --group bench) and .github/workflows/bench.yml.
+# Brief 002 §5: CodSpeed is the 2025/2026 table stakes (pydantic, FastAPI,
+# polars) and its "simulation" mode runs in an instrumented VM for
+# reproducible timing; comment-not-gate is the mainstream posture. It is also
+# API-compatible with pytest-benchmark, so `benchmarks/` runs as plain pytest
+# tests locally with no instrumentation and no token.
+bench = [
+    "pytest-codspeed>=3",
+]
 dev = [
     "asyncpg>=0.31.0",
     { include-group = "lint" },   # PEP 735 — `uv sync` installs lint tooling by default
+    { include-group = "clients" },   # Plan 027 / T4a — test-only HTTP clients, see above
     # tomlkit powers scripts/bump.py's style-preserving TOML edits (Plan 023 /
     # §RL-9-bump) — a regex cannot distinguish a shipped [project].dependencies
     # sibling entry from a [dependency-groups].dev one that must NOT be pinned.
+    # It is also used by scripts/sbom.py (Plan 030 / D5) to inject PEP 770's
+    # `sbom-files` key at release time. Both are release/dev tooling: neither
+    # ships in any distribution's [project].dependencies.
     "mike>=2.2.0",
     "mkdocs-gen-files>=0.6.1",
     "mkdocs-literate-nav>=0.6.3",
